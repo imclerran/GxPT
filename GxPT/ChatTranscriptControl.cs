@@ -666,11 +666,21 @@ namespace XpChat
             int h = BubblePadding; // top padding
             int wUsed = 0;
 
-            foreach (var blk in it.Blocks)
+            for (int i = 0; i < it.Blocks.Count; i++)
             {
+                var blk = it.Blocks[i];
                 Size sz = MeasureBlock(blk, textMax);
                 h += sz.Height;
-                h += 4; // inter-block gap
+
+                // Add spacing that matches the drawing code
+                if (blk.Type == BlockType.Heading)
+                    h += 4;
+                else if (blk.Type == BlockType.Paragraph)
+                    h += 2;
+                else if (blk.Type == BlockType.CodeBlock)
+                    h += 4;
+                // Lists don't add extra spacing after themselves
+
                 wUsed = Math.Max(wUsed, sz.Width);
             }
 
@@ -781,7 +791,6 @@ namespace XpChat
 
             maxLineWidth = Math.Max(maxLineWidth, x);
 
-            if (addBottomGap) y += 2;
             return new Size(Math.Min(maxWidth, maxLineWidth), y);
         }
 
