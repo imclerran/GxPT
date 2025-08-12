@@ -91,7 +91,7 @@ namespace XpChat
         private readonly List<MessageItem> _items = new List<MessageItem>();
 
         // ---------- Markdown model ----------
-        private enum BlockType { Paragraph, Heading, CodeBlock, BulletList }
+        private enum BlockType { Paragraph, Heading, CodeBlock, BulletList, NumberedList }
         private enum InlineStyle { Normal = 0, Bold = 1, Italic = 2, Code = 4 }
 
         [Flags]
@@ -120,7 +120,18 @@ namespace XpChat
 
         private sealed class BulletListBlock : Block
         {
-            public List<List<InlineRun>> Items = new List<List<InlineRun>>();
+            public List<ListItem> Items = new List<ListItem>();
+        }
+
+        private sealed class NumberedListBlock : Block
+        {
+            public List<ListItem> Items = new List<ListItem>();
+        }
+
+        private sealed class ListItem
+        {
+            public List<InlineRun> Content;
+            public int IndentLevel; // 0 = top level, 1 = nested once, etc.
         }
 
         private sealed class InlineRun
@@ -227,17 +238,58 @@ namespace XpChat
         }
 
         // ---------- Markdown parsing ----------
-        private static bool IsBullet(string line, out string content)
+        private static bool IsBullet(string line, out string content, out int indentLevel)
         {
             content = null;
-            if (line.Length >= 2)
+            indentLevel = 0;
+
+            // Count leading spaces/tabs for nesting
+            int i = 0;
+            while (i < line.Length && (line[i] == ' ' || line[i] == '\t'))
             {
-                char c = line[0];
-                if ((c == '-' || c == '*' || c == '+') && line.Length > 1 && (line[1] == ' ' || line[1] == '\t'))
-                {
-                    content = line.Substring(2).TrimEnd();
-                    return true;
-                }
+                if (line[i] == ' ') indentLevel++;
+                else indentLevel += 4; // treat tab as 4 spaces
+                i++;
+            }
+            indentLevel = indentLevel / 2; // 2 spaces = 1 indent level
+
+            if (i >= line.Length) return false;
+
+            char c = line[i];
+            if ((c == '-' || c == '*' || c == '+') && i + 1 < line.Length && (line[i + 1] == ' ' || line[i + 1] == '\t'))
+            {
+                content = line.Substring(i + 2).TrimEnd();
+                return true;
+            }
+            return false;
+        }
+
+        private static bool IsNumberedItem(string line, out string content, out int indentLevel)
+        {
+            content = null;
+            indentLevel = 0;
+
+            // Count leading spaces/tabs for nesting
+            int i = 0;
+            while (i < line.Length && (line[i] == ' ' || line[i] == '\t'))
+            {
+                if (line[i] == ' ') indentLevel++;
+                else indentLevel += 4; // treat tab as 4 spaces
+                i++;
+            }
+            indentLevel = indentLevel / 2; // 2 spaces = 1 indent level
+
+            if (i >= line.Length) return false;
+
+            // Look for number followed by . or )
+            int start = i;
+            while (i < line.Length && char.IsDigit(line[i])) i++;
+
+            if (i > start && i < line.Length && (line[i] == '.' || line[i] == ')') &&
+                i + 1 < line.Length && (line[i + 1] == ' ' || line[i + 1] == '\t'))
+            {
+                content = line.Substring(i + 2).TrimEnd();
+                return true;
             }
             return false;
         }
@@ -259,7 +311,8 @@ namespace XpChat
             bool inCode = false;
             var codeAccum = new System.Text.StringBuilder();
             var paraAccum = new System.Text.StringBuilder();
-            List<string> bulletAccum = null;
+            List<ListItem> bulletAccum = null;
+            List<ListItem> numberedAccum = null;
 
             Action flushParagraph = delegate
             {
@@ -274,10 +327,20 @@ namespace XpChat
                 if (bulletAccum != null && bulletAccum.Count > 0)
                 {
                     var bl = new BulletListBlock { Type = BlockType.BulletList };
-                    foreach (var li in bulletAccum)
-                        bl.Items.Add(ParseInlines(li));
+                    bl.Items.AddRange(bulletAccum);
                     blocks.Add(bl);
                     bulletAccum = null;
+                }
+            };
+
+            Action flushNumbered = delegate
+            {
+                if (numberedAccum != null && numberedAccum.Count > 0)
+                {
+                    var nl = new NumberedListBlock { Type = BlockType.NumberedList };
+                    nl.Items.AddRange(numberedAccum);
+                    blocks.Add(nl);
+                    numberedAccum = null;
                 }
             };
 
@@ -326,6 +389,7 @@ namespace XpChat
                 {
                     flushParagraph();
                     flushBullets();
+                    flushNumbered();
                     continue;
                 }
 
@@ -335,6 +399,7 @@ namespace XpChat
                 {
                     flushParagraph();
                     flushBullets();
+                    flushNumbered();
                     string content = line.Substring(h + 1).TrimEnd();
                     blocks.Add(new HeadingBlock { Type = BlockType.Heading, Level = h, Inlines = ParseInlines(content) });
                     continue;
@@ -342,11 +407,25 @@ namespace XpChat
 
                 // bullet?
                 string bulletText;
-                if (IsBullet(line, out bulletText))
+                int bulletIndent;
+                if (IsBullet(line, out bulletText, out bulletIndent))
                 {
                     flushParagraph();
-                    if (bulletAccum == null) bulletAccum = new List<string>();
-                    bulletAccum.Add(bulletText);
+                    flushNumbered(); // switch list types
+                    if (bulletAccum == null) bulletAccum = new List<ListItem>();
+                    bulletAccum.Add(new ListItem { Content = ParseInlines(bulletText), IndentLevel = bulletIndent });
+                    continue;
+                }
+
+                // numbered item?
+                string numberedText;
+                int numberedIndent;
+                if (IsNumberedItem(line, out numberedText, out numberedIndent))
+                {
+                    flushParagraph();
+                    flushBullets(); // switch list types
+                    if (numberedAccum == null) numberedAccum = new List<ListItem>();
+                    numberedAccum.Add(new ListItem { Content = ParseInlines(numberedText), IndentLevel = numberedIndent });
                     continue;
                 }
 
@@ -360,6 +439,7 @@ namespace XpChat
             flushCode();
             flushParagraph();
             flushBullets();
+            flushNumbered();
 
             if (blocks.Count == 0)
                 blocks.Add(new ParagraphBlock { Type = BlockType.Paragraph, Inlines = new List<InlineRun>() });
@@ -443,9 +523,19 @@ namespace XpChat
                 foreach (var it in _items)
                 {
                     Size bubbleSize = MeasureBubble(it, usableWidth);
-                    int xLeft = (it.Role == MessageRole.User)
-                        ? MarginOuter + innerWidth - bubbleSize.Width
-                        : MarginOuter;
+                    int xLeft;
+                    if (it.Role == MessageRole.User)
+                    {
+                        // User messages: right-aligned, but ensure minimum width
+                        int minUserWidth = Math.Min(usableWidth, Math.Max(200, usableWidth / 2));
+                        bubbleSize.Width = Math.Max(bubbleSize.Width, minUserWidth);
+                        xLeft = MarginOuter + innerWidth - bubbleSize.Width;
+                    }
+                    else
+                    {
+                        // Assistant/System messages: left-aligned
+                        xLeft = MarginOuter;
+                    }
 
                     it.MeasuredHeight = bubbleSize.Height;
                     it.Bounds = new Rectangle(xLeft, y, bubbleSize.Width, bubbleSize.Height);
@@ -475,7 +565,11 @@ namespace XpChat
             }
 
             h += BubblePadding; // bottom padding
+
+            // Ensure minimum width and don't exceed maximum
+            wUsed = Math.Max(wUsed, 100); // minimum content width
             int bubbleW = Math.Min(maxBubbleWidth, wUsed + 2 * BubblePadding);
+
             return new Size(bubbleW, Math.Max(24, h));
         }
 
@@ -502,11 +596,31 @@ namespace XpChat
                         foreach (var item in list.Items)
                         {
                             // measure bullet glyph + indented paragraph
-                            int bulletWidth = BulletIndent;
-                            Size sz = MeasureInlineParagraph(item, _baseFont, maxWidth - bulletWidth, true);
+                            int bulletWidth = BulletIndent + (item.IndentLevel * BulletIndent);
+                            Size sz = MeasureInlineParagraph(item.Content, _baseFont, maxWidth - bulletWidth, true);
                             y += Math.Max(sz.Height, _baseFont.Height);
                             y += 2;
                             w = Math.Max(w, bulletWidth + sz.Width);
+                        }
+                        return new Size(Math.Min(maxWidth, w), y);
+                    }
+                case BlockType.NumberedList:
+                    {
+                        var list = (NumberedListBlock)blk;
+                        int y = 0;
+                        int w = 0;
+                        int itemNumber = 1;
+                        foreach (var item in list.Items)
+                        {
+                            // measure number + indented paragraph
+                            string numberText = itemNumber.ToString() + ".";
+                            Size numberSize = TextRenderer.MeasureText(numberText, _baseFont);
+                            int numberWidth = numberSize.Width + 4 + (item.IndentLevel * BulletIndent); // 4px gap after number
+                            Size sz = MeasureInlineParagraph(item.Content, _baseFont, maxWidth - numberWidth, true);
+                            y += Math.Max(sz.Height, _baseFont.Height);
+                            y += 2;
+                            w = Math.Max(w, numberWidth + sz.Width);
+                            itemNumber++;
                         }
                         return new Size(Math.Min(maxWidth, w), y);
                     }
@@ -519,7 +633,7 @@ namespace XpChat
                             c.Text.Length == 0 ? " " : c.Text,
                             _monoFont,
                             proposed,
-                            TextFormatFlags.NoPrefix | TextFormatFlags.TextBoxControl | TextFormatFlags.WordBreak);
+                            TextFormatFlags.TextBoxControl | TextFormatFlags.WordBreak);
 
                         int width = Math.Min(maxWidth, text.Width + 2 * CodeBlockPadding);
                         int height = Math.Max(_monoFont.Height + 2 * CodeBlockPadding, text.Height + 2 * CodeBlockPadding);
@@ -541,14 +655,15 @@ namespace XpChat
                 if (seg.IsNewLine)
                 {
                     y += lineHeight;
+                    maxLineWidth = Math.Max(maxLineWidth, x);
                     x = 0;
-                    maxLineWidth = Math.Max(maxLineWidth, seg.LineWidth);
                     lineHeight = baseFont.Height;
                     continue;
                 }
 
                 // track tallest on the current line
                 lineHeight = Math.Max(lineHeight, seg.Font.Height);
+                x += seg.Rect.Width;
             }
 
             // add last line
@@ -603,8 +718,7 @@ namespace XpChat
                         continue;
                     }
 
-                    Size sz = TextRenderer.MeasureText(text.Length == 0 ? " " : text, f, new Size(int.MaxValue, int.MaxValue),
-                        TextFormatFlags.NoPrefix);
+                    Size sz = TextRenderer.MeasureText(text.Length == 0 ? " " : text, f);
 
                     int partWidth = sz.Width;
                     int partHeight = f.Height;
@@ -639,28 +753,26 @@ namespace XpChat
             var parts = new List<string>();
             if (string.IsNullOrEmpty(s)) { parts.Add(""); return parts; }
 
-            int i = 0;
-            var sb = new System.Text.StringBuilder();
-            while (i < s.Length)
+            // Split on spaces, but attach space to the preceding word (except the last word)
+            string[] words = s.Split(new char[] { ' ' }, StringSplitOptions.None);
+            for (int i = 0; i < words.Length; i++)
             {
-                char c = s[i];
-                if (c == ' ')
+                if (i == words.Length - 1)
                 {
-                    // flush word
-                    if (sb.Length > 0) { parts.Add(sb.ToString()); sb.Length = 0; }
-                    // accumulate consecutive spaces as one
-                    int j = i;
-                    while (j < s.Length && s[j] == ' ') j++;
-                    parts.Add(s.Substring(i, j - i));
-                    i = j;
+                    // Last word - no trailing space
+                    if (words[i].Length > 0 || i == 0) parts.Add(words[i]);
                 }
                 else
                 {
-                    sb.Append(c);
-                    i++;
+                    // Add word with trailing space (handles empty strings from multiple spaces)
+                    if (words[i].Length > 0)
+                        parts.Add(words[i] + " ");
+                    else
+                        parts.Add(" "); // Handle multiple consecutive spaces
                 }
             }
-            if (sb.Length > 0) parts.Add(sb.ToString());
+
+            if (parts.Count == 0) parts.Add("");
             return parts;
         }
 
@@ -677,6 +789,8 @@ namespace XpChat
             e.Graphics.Clear(BackColor);
 
             Rectangle clip = e.ClipRectangle;
+
+            // Apply scroll transform to everything
             e.Graphics.TranslateTransform(0, -_scrollOffset);
 
             foreach (var it in _items)
@@ -688,6 +802,7 @@ namespace XpChat
                 DrawBubble(e.Graphics, it);
             }
 
+            // Reset transform
             e.Graphics.ResetTransform();
             base.OnPaint(e);
         }
@@ -740,16 +855,42 @@ namespace XpChat
                     var list = (BulletListBlock)blk;
                     foreach (var item in list.Items)
                     {
+                        int indentX = x0 + (item.IndentLevel * BulletIndent);
                         // bullet glyph
-                        int bulletYTop = y + (_baseFont.Height - _baseFont.Height) / 2;
                         using (var b = new SolidBrush(ForeColor))
                         {
-                            // simple bullet
-                            g.FillEllipse(b, x0, y + _baseFont.Height / 2 - 2, 4, 4);
+                            // simple bullet - different styles for different nesting levels
+                            if (item.IndentLevel == 0)
+                                g.FillEllipse(b, indentX, y + _baseFont.Height / 2 - 2, 4, 4);
+                            else if (item.IndentLevel == 1)
+                            {
+                                using (var pen = new Pen(ForeColor))
+                                    g.DrawEllipse(pen, indentX, y + _baseFont.Height / 2 - 2, 4, 4);
+                            }
+                            else
+                                g.FillRectangle(b, indentX, y + _baseFont.Height / 2 - 1, 3, 3);
                         }
-                        int textX = x0 + BulletIndent;
-                        int used = DrawInlineParagraph(g, textX, y, maxWidth - BulletIndent, item, _baseFont);
+                        int textX = indentX + BulletIndent;
+                        int used = DrawInlineParagraph(g, textX, y, maxWidth - (textX - x0), item.Content, _baseFont);
                         y += Math.Max(used, _baseFont.Height) + 2;
+                    }
+                }
+                else if (blk.Type == BlockType.NumberedList)
+                {
+                    var list = (NumberedListBlock)blk;
+                    int itemNumber = 1;
+                    foreach (var item in list.Items)
+                    {
+                        int indentX = x0 + (item.IndentLevel * BulletIndent);
+                        // number
+                        string numberText = itemNumber.ToString() + ".";
+                        Size numberSize = TextRenderer.MeasureText(numberText, _baseFont);
+                        TextRenderer.DrawText(g, numberText, _baseFont, new Point(indentX, y), ForeColor, TextFormatFlags.PreserveGraphicsTranslateTransform);
+
+                        int textX = indentX + numberSize.Width + 4; // 4px gap after number
+                        int used = DrawInlineParagraph(g, textX, y, maxWidth - (textX - x0), item.Content, _baseFont);
+                        y += Math.Max(used, _baseFont.Height) + 2;
+                        itemNumber++;
                     }
                 }
                 else if (blk.Type == BlockType.CodeBlock)
@@ -773,7 +914,7 @@ namespace XpChat
 
                     Rectangle textRect = new Rectangle(box.X + CodeBlockPadding, box.Y + CodeBlockPadding, box.Width - 2 * CodeBlockPadding, box.Height - 2 * CodeBlockPadding);
                     TextRenderer.DrawText(g, c.Text.Length == 0 ? " " : c.Text, _monoFont, textRect,
-                        ForeColor, TextFormatFlags.NoPrefix | TextFormatFlags.TextBoxControl | TextFormatFlags.WordBreak);
+                        ForeColor, TextFormatFlags.TextBoxControl | TextFormatFlags.WordBreak | TextFormatFlags.PreserveGraphicsTranslateTransform);
 
                     y += box.Height + 4;
                 }
@@ -811,7 +952,7 @@ namespace XpChat
                     }
                 }
 
-                TextRenderer.DrawText(g, seg.Text, seg.Font, r, ForeColor, TextFormatFlags.NoPrefix);
+                TextRenderer.DrawText(g, seg.Text, seg.Font, r, ForeColor, TextFormatFlags.PreserveGraphicsTranslateTransform);
                 xCursor += r.Width;
                 lineWidth += r.Width;
                 lineHeight = Math.Max(lineHeight, seg.Font.Height);
