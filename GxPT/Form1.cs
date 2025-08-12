@@ -63,7 +63,7 @@ Hello! I support various **markdown features**:
 ## Code Blocks
 Here's a code example:
 
-```
+```cs
 public void HelloWorld()
 {
     Console.WriteLine(""Hello, World!"");

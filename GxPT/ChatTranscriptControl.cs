@@ -35,7 +35,86 @@ namespace XpChat
     [ToolboxItem(true)]
     public sealed partial class ChatTranscriptControl : UserControl
     {
-        // ---------- Layout constants (tweak to taste) ----------
+        // ---------- Syntax highlighting ----------
+        private static Color GetTokenColor(TokenType tokenType)
+        {
+            switch (tokenType)
+            {
+                case TokenType.Keyword:
+                    return Color.FromArgb(0, 0, 255);      // Blue
+                case TokenType.String:
+                    return Color.FromArgb(163, 21, 21);    // Dark red
+                case TokenType.Comment:
+                    return Color.FromArgb(0, 128, 0);      // Green
+                case TokenType.Number:
+                    return Color.FromArgb(255, 140, 0);    // Orange
+                case TokenType.Type:
+                    return Color.FromArgb(43, 145, 175);   // Teal
+                case TokenType.Method:
+                    return Color.FromArgb(255, 20, 147);   // Deep pink
+                case TokenType.Normal:
+                default:
+                    return SystemColors.WindowText;        // Default text color
+            }
+        }
+
+        private List<ColoredSegment> GetColoredSegments(string code, string language)
+        {
+            var segments = new List<ColoredSegment>();
+
+            if (string.IsNullOrEmpty(code))
+                return segments;
+
+            // Get the appropriate syntax highlighter
+            ISyntaxHighlighter highlighter = SyntaxHighlighter.GetHighlighter(language);
+            if (highlighter == null)
+            {
+                // No syntax highlighting - return the entire text as one segment
+                segments.Add(new ColoredSegment(code, SystemColors.WindowText, _monoFont, 0));
+                return segments;
+            }
+
+            // Tokenize the code
+            var tokens = highlighter.Tokenize(code);
+
+            if (tokens.Count == 0)
+            {
+                // Tokenization failed - return the entire text as one segment
+                segments.Add(new ColoredSegment(code, SystemColors.WindowText, _monoFont, 0));
+                return segments;
+            }
+
+            // Fill in any gaps between tokens with normal text
+            var allSegments = new List<ColoredSegment>();
+            int lastEnd = 0;
+
+            foreach (var token in tokens)
+            {
+                // Add any gap before this token as normal text
+                if (token.StartIndex > lastEnd)
+                {
+                    string gapText = code.Substring(lastEnd, token.StartIndex - lastEnd);
+                    allSegments.Add(new ColoredSegment(gapText, SystemColors.WindowText, _monoFont, lastEnd));
+                }
+
+                // Add the colored token
+                Color tokenColor = GetTokenColor(token.Type);
+                allSegments.Add(new ColoredSegment(token.Text, tokenColor, _monoFont, token.StartIndex));
+
+                lastEnd = token.StartIndex + token.Length;
+            }
+
+            // Add any remaining text after the last token
+            if (lastEnd < code.Length)
+            {
+                string remainingText = code.Substring(lastEnd);
+                allSegments.Add(new ColoredSegment(remainingText, SystemColors.WindowText, _monoFont, lastEnd));
+            }
+
+            return allSegments;
+        }
+
+        // ---------- Layout and rendering ----------
         private const int MarginOuter = 8;
         private const int GapBetweenBubbles = 6;
         private const int BubblePadding = 8;
@@ -116,6 +195,7 @@ namespace XpChat
         private sealed class CodeBlock : Block
         {
             public string Text;
+            public string Language; // Language for syntax highlighting
         }
 
         private sealed class BulletListBlock : Block
@@ -138,6 +218,25 @@ namespace XpChat
         {
             public string Text;
             public RunStyle Style;
+        }
+
+        // Structure for syntax-highlighted text segments
+        private struct ColoredSegment
+        {
+            public string Text;
+            public Color Color;
+            public Font Font;
+            public int StartIndex;
+            public int Length;
+
+            public ColoredSegment(string text, Color color, Font font, int startIndex)
+            {
+                Text = text;
+                Color = color;
+                Font = font;
+                StartIndex = startIndex;
+                Length = text != null ? text.Length : 0;
+            }
         }
 
         // ---------- ctor ----------
@@ -309,6 +408,7 @@ namespace XpChat
 
             var lines = md.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
             bool inCode = false;
+            string codeLanguage = null; // Track the language for current code block
             var codeAccum = new System.Text.StringBuilder();
             var paraAccum = new System.Text.StringBuilder();
             List<ListItem> bulletAccum = null;
@@ -352,8 +452,9 @@ namespace XpChat
                     // Trim one leading/trailing newline if present
                     if (text.StartsWith("\n")) text = text.Substring(1);
                     if (text.EndsWith("\n")) text = text.Substring(0, text.Length - 1);
-                    blocks.Add(new CodeBlock { Type = BlockType.CodeBlock, Text = text });
+                    blocks.Add(new CodeBlock { Type = BlockType.CodeBlock, Text = text, Language = codeLanguage });
                     codeAccum.Length = 0;
+                    codeLanguage = null;
                 }
             };
 
@@ -367,7 +468,16 @@ namespace XpChat
                         // enter code: first flush any open containers
                         flushParagraph();
                         flushBullets();
+                        flushNumbered();
                         inCode = true;
+
+                        // Extract language from opening fence (e.g., "```csharp")
+                        if (line.Length > 3)
+                        {
+                            codeLanguage = line.Substring(3).Trim().ToLowerInvariant();
+                            if (string.IsNullOrEmpty(codeLanguage))
+                                codeLanguage = null;
+                        }
                     }
                     else
                     {
@@ -902,6 +1012,11 @@ namespace XpChat
                 else if (blk.Type == BlockType.CodeBlock)
                 {
                     var c = (CodeBlock)blk;
+
+                    // Get colored segments for syntax highlighting
+                    var coloredSegments = GetColoredSegments(c.Text, c.Language);
+
+                    // Measure the code block dimensions using TextRenderer for consistency
                     Size proposed = new Size(maxWidth - 2 * CodeBlockPadding, int.MaxValue);
                     Size text = TextRenderer.MeasureText(
                         c.Text.Length == 0 ? " " : c.Text,
@@ -919,8 +1034,9 @@ namespace XpChat
                     }
 
                     Rectangle textRect = new Rectangle(box.X + CodeBlockPadding, box.Y + CodeBlockPadding, box.Width - 2 * CodeBlockPadding, box.Height - 2 * CodeBlockPadding);
-                    TextRenderer.DrawText(g, c.Text.Length == 0 ? " " : c.Text, _monoFont, textRect,
-                        ForeColor, TextFormatFlags.TextBoxControl | TextFormatFlags.WordBreak | TextFormatFlags.PreserveGraphicsTranslateTransform);
+
+                    // Draw syntax-highlighted text
+                    DrawColoredSegments(g, coloredSegments, textRect);
 
                     y += box.Height + 4;
                 }
@@ -1136,6 +1252,66 @@ namespace XpChat
             gp.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
             gp.CloseFigure();
             return gp;
+        }
+
+        private void DrawColoredSegments(Graphics g, List<ColoredSegment> segments, Rectangle bounds)
+        {
+            if (segments.Count == 0)
+                return;
+
+            // Use StringFormat.GenericTypographic to minimize GDI+ padding
+            using (var stringFormat = StringFormat.GenericTypographic)
+            {
+                stringFormat.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+                stringFormat.Trimming = StringTrimming.None;
+
+                float x = bounds.X;
+                float y = bounds.Y;
+                float lineHeight = _monoFont.Height;
+                float maxWidth = bounds.Width;
+
+                foreach (var segment in segments)
+                {
+                    if (string.IsNullOrEmpty(segment.Text))
+                        continue;
+
+                    // Handle newlines
+                    string[] lines = segment.Text.Split('\n');
+
+                    for (int lineIndex = 0; lineIndex < lines.Length; lineIndex++)
+                    {
+                        string line = lines[lineIndex];
+
+                        if (lineIndex > 0)
+                        {
+                            // Move to next line
+                            y += lineHeight;
+                            x = bounds.X;
+                        }
+
+                        if (!string.IsNullOrEmpty(line))
+                        {
+                            // Measure and draw the text using Graphics.DrawString with GenericTypographic
+                            using (var brush = new SolidBrush(segment.Color))
+                            {
+                                // Check if text fits on current line
+                                SizeF textSize = g.MeasureString(line, segment.Font, PointF.Empty, stringFormat);
+
+                                if (x + textSize.Width > bounds.Right && x > bounds.X)
+                                {
+                                    // Word wrap - move to next line
+                                    y += lineHeight;
+                                    x = bounds.X;
+                                }
+
+                                // Draw the text
+                                g.DrawString(line, segment.Font, brush, new PointF(x, y), stringFormat);
+                                x += textSize.Width;
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         private static void SafeClipboardSetText(string s)
