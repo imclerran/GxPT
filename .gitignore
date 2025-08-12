@@ -1,0 +1,68 @@
+## Ignore Visual Studio user-specific files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+## Build results
+[Bb]in/
+[Oo]bj/
+Debug*/
+Release*/
+x64/
+x86/
+
+## Auto-generated files
+*_i.c
+*_p.c
+*_h.h
+*.ilk
+*.meta
+*.obj
+*.pch
+*.pdb
+*.pgc
+*.pgd
+*.rsp
+*.sbr
+*.tlb
+*.tli
+*.tlh
+*.tmp
+*.tmp_proj
+*.log
+*.vspscc
+*.vssscc
+*.cachefile
+
+## Test results
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+
+## Visual Studio profiler
+*.psess
+*.vsp
+*.vspx
+*.sap
+
+## Backup & temporary files
+*~
+*.bak
+*.swp
+*.swn
+*.swo
+*.tmp
+*.temp
+*.old
+
+## Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+## Recycle Bin
+$RECYCLE.BIN/
+
+## Other
+*.dbmdl
+*.dbproj.schemaview
