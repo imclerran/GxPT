@@ -654,7 +654,7 @@ namespace XpChat
             {
                 if (seg.IsNewLine)
                 {
-                    y += lineHeight;
+                    y += lineHeight + 2; // Match the drawing spacing
                     maxLineWidth = Math.Max(maxLineWidth, x);
                     x = 0;
                     lineHeight = baseFont.Height;
@@ -667,7 +667,8 @@ namespace XpChat
             }
 
             // add last line
-            y += lineHeight;
+            y += lineHeight + 2; // Match the drawing spacing
+
             maxLineWidth = Math.Max(maxLineWidth, x);
 
             if (addBottomGap) y += 2;
@@ -722,7 +723,7 @@ namespace XpChat
 
                         SizeF szF = g.MeasureString(text.Length == 0 ? " " : text, f);
                         int partWidth = (int)Math.Ceiling(szF.Width);
-                        int partHeight = f.Height;
+                        int partHeight = (int)Math.Ceiling(szF.Height);
 
                         bool needsBreak = (x > 0 && x + partWidth > maxWidth);
                         if (needsBreak)
@@ -933,11 +934,50 @@ namespace XpChat
             int lineHeight = baseFont.Height;
             int lineWidth = 0;
 
+            // Collect segments for processing
+            var segments = new List<LayoutSeg>();
             foreach (var seg in WordWrapRuns(runs, baseFont, maxWidth))
+            {
+                segments.Add(seg);
+            }
+
+            // Draw inline code backgrounds first (for each line)
+            int currentLine = 0;
+            int lineStartY = yCursor;
+            for (int i = 0; i < segments.Count; i++)
+            {
+                var seg = segments[i];
+
+                if (seg.IsNewLine)
+                {
+                    // Process inline code backgrounds for the current line
+                    DrawInlineCodeBackgrounds(g, segments, currentLine, i, x, lineStartY);
+
+                    lineStartY += lineHeight + 2;
+                    currentLine = i + 1;
+                    lineHeight = baseFont.Height;
+                    continue;
+                }
+
+                lineHeight = Math.Max(lineHeight, seg.Font.Height);
+            }
+
+            // Process the last line
+            if (currentLine < segments.Count)
+            {
+                DrawInlineCodeBackgrounds(g, segments, currentLine, segments.Count, x, lineStartY);
+            }
+
+            // Now draw the text
+            xCursor = x;
+            yCursor = y;
+            lineHeight = baseFont.Height;
+
+            foreach (var seg in segments)
             {
                 if (seg.IsNewLine)
                 {
-                    yCursor += lineHeight;
+                    yCursor += lineHeight + 2;
                     xCursor = x;
                     lineWidth = 0;
                     lineHeight = baseFont.Height;
@@ -945,17 +985,6 @@ namespace XpChat
                 }
 
                 Rectangle r = new Rectangle(xCursor, yCursor, seg.Rect.Width, seg.Rect.Height);
-
-                if (seg.IsInlineCode)
-                {
-                    Rectangle bg = new Rectangle(r.X - InlineCodePaddingX, r.Y - InlineCodePaddingY, r.Width + 2 * InlineCodePaddingX, r.Height + 2 * InlineCodePaddingY);
-                    using (var sb = new SolidBrush(InlineCodeBack))
-                    using (var pen = new Pen(InlineCodeBorder))
-                    {
-                        g.FillRectangle(sb, bg);
-                        g.DrawRectangle(pen, bg);
-                    }
-                }
 
                 using (var brush = new SolidBrush(ForeColor))
                 {
@@ -967,8 +996,53 @@ namespace XpChat
             }
 
             // last line height
-            yCursor += lineHeight;
+            yCursor += lineHeight + 2;
             return yCursor - y;
+        }
+
+        private void DrawInlineCodeBackgrounds(Graphics g, List<LayoutSeg> segments, int lineStart, int lineEnd, int x, int y)
+        {
+            int currentX = x;
+
+            for (int i = lineStart; i < lineEnd; i++)
+            {
+                var seg = segments[i];
+
+                if (seg.IsInlineCode)
+                {
+                    // Find the extent of consecutive inline code segments
+                    int startX = currentX;
+                    int endX = currentX + seg.Rect.Width;
+                    int j = i + 1;
+
+                    // Look ahead for more inline code segments
+                    while (j < lineEnd && segments[j].IsInlineCode)
+                    {
+                        endX += segments[j].Rect.Width;
+                        j++;
+                    }
+
+                    // Draw background for the entire inline code run
+                    Rectangle bg = new Rectangle(
+                        startX - InlineCodePaddingX,
+                        y - InlineCodePaddingY,
+                        endX - startX + 2 * InlineCodePaddingX,
+                        seg.Font.Height + 2 * InlineCodePaddingY);
+
+                    using (var sb = new SolidBrush(InlineCodeBack))
+                    using (var pen = new Pen(InlineCodeBorder))
+                    {
+                        g.FillRectangle(sb, bg);
+                        g.DrawRectangle(pen, bg);
+                    }
+
+                    // Skip the segments we just processed
+                    i = j - 1; // -1 because the loop will increment
+                }
+
+                if (i < lineEnd)
+                    currentX += segments[i].Rect.Width;
+            }
         }
 
         private Font GetHeadingFont(int level)
