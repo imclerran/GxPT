@@ -6,7 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 
-namespace XpChat
+namespace GxPT
 {
     /// <summary>
     /// Represents different types of code tokens for syntax highlighting

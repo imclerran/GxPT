@@ -6,7 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
-namespace XpChat
+namespace GxPT
 {
     /// <summary>
     /// Base class for regex-based syntax highlighters

@@ -1,24 +1,4 @@
-﻿//using System;
-//using System.Collections.Generic;
-//using System.ComponentModel;
-//using System.Drawing;
-//using System.Data;
-//using System.Linq;
-//using System.Text;
-//using System.Windows.Forms;
-
-//namespace GxPT
-//{
-//    public partial class ChatTranscriptControl : UserControl
-//    {
-//        public ChatTranscriptControl()
-//        {
-//            InitializeComponent();
-//        }
-//    }
-//}
-
-// ChatTranscriptControl_Markdown.cs
+﻿// ChatTranscriptControl_Markdown.cs
 // WinForms owner-drawn chat transcript with basic Markdown rendering
 // Target: .NET 3.5, Windows XP compatible (no external deps)
 
@@ -28,7 +8,7 @@ using System.ComponentModel;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace XpChat
+namespace GxPT
 {
     public enum MessageRole { User, Assistant, System }
 

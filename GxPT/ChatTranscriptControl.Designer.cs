@@ -1,4 +1,4 @@
-﻿namespace XpChat
+﻿namespace GxPT
 {
     partial class ChatTranscriptControl
     {
