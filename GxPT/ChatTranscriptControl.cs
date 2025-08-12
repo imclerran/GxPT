@@ -701,49 +701,51 @@ namespace XpChat
             int lineWidth = 0;
             int lineHeight = baseFont.Height;
 
-            foreach (var r in runs)
+            using (Graphics g = CreateGraphics())
             {
-                bool isCode = (r.Style & RunStyle.Code) != 0;
-                Font f = isCode ? _monoFont : GetRunFont(r.Style, baseFont);
-                // Split by spaces, keep separators
-                var parts = SplitWordsPreserveSpaces(r.Text);
-                foreach (string part in parts)
+                foreach (var r in runs)
                 {
-                    string text = part;
-                    if (text == "\n")
+                    bool isCode = (r.Style & RunStyle.Code) != 0;
+                    Font f = isCode ? _monoFont : GetRunFont(r.Style, baseFont);
+                    // Split by spaces, keep separators
+                    var parts = SplitWordsPreserveSpaces(r.Text);
+                    foreach (string part in parts)
                     {
-                        // Hard line break
-                        yield return new LayoutSeg { IsNewLine = true, LineWidth = lineWidth };
-                        x = 0; lineWidth = 0; lineHeight = baseFont.Height;
-                        continue;
+                        string text = part;
+                        if (text == "\n")
+                        {
+                            // Hard line break
+                            yield return new LayoutSeg { IsNewLine = true, LineWidth = lineWidth };
+                            x = 0; lineWidth = 0; lineHeight = baseFont.Height;
+                            continue;
+                        }
+
+                        SizeF szF = g.MeasureString(text.Length == 0 ? " " : text, f);
+                        int partWidth = (int)Math.Ceiling(szF.Width);
+                        int partHeight = f.Height;
+
+                        bool needsBreak = (x > 0 && x + partWidth > maxWidth);
+                        if (needsBreak)
+                        {
+                            // break line
+                            yield return new LayoutSeg { IsNewLine = true, LineWidth = lineWidth };
+                            x = 0; lineWidth = 0; lineHeight = baseFont.Height;
+                        }
+
+                        // emit segment
+                        yield return new LayoutSeg
+                        {
+                            IsNewLine = false,
+                            Font = f,
+                            Text = text,
+                            Rect = new Rectangle(x, 0, partWidth, partHeight),
+                            IsInlineCode = isCode
+                        };
+
+                        x += partWidth;
+                        lineWidth += partWidth;
+                        lineHeight = Math.Max(lineHeight, partHeight);
                     }
-
-                    Size sz = TextRenderer.MeasureText(text.Length == 0 ? " " : text, f);
-
-                    int partWidth = sz.Width;
-                    int partHeight = f.Height;
-
-                    bool needsBreak = (x > 0 && x + partWidth > maxWidth);
-                    if (needsBreak)
-                    {
-                        // break line
-                        yield return new LayoutSeg { IsNewLine = true, LineWidth = lineWidth };
-                        x = 0; lineWidth = 0; lineHeight = baseFont.Height;
-                    }
-
-                    // emit segment
-                    yield return new LayoutSeg
-                    {
-                        IsNewLine = false,
-                        Font = f,
-                        Text = text,
-                        Rect = new Rectangle(x, 0, partWidth, partHeight),
-                        IsInlineCode = isCode
-                    };
-
-                    x += partWidth;
-                    lineWidth += partWidth;
-                    lineHeight = Math.Max(lineHeight, partHeight);
                 }
             }
         }
@@ -885,7 +887,10 @@ namespace XpChat
                         // number
                         string numberText = itemNumber.ToString() + ".";
                         Size numberSize = TextRenderer.MeasureText(numberText, _baseFont);
-                        TextRenderer.DrawText(g, numberText, _baseFont, new Point(indentX, y), ForeColor, TextFormatFlags.PreserveGraphicsTranslateTransform);
+                        using (var brush = new SolidBrush(ForeColor))
+                        {
+                            g.DrawString(numberText, _baseFont, brush, indentX, y);
+                        }
 
                         int textX = indentX + numberSize.Width + 4; // 4px gap after number
                         int used = DrawInlineParagraph(g, textX, y, maxWidth - (textX - x0), item.Content, _baseFont);
@@ -952,7 +957,10 @@ namespace XpChat
                     }
                 }
 
-                TextRenderer.DrawText(g, seg.Text, seg.Font, r, ForeColor, TextFormatFlags.PreserveGraphicsTranslateTransform);
+                using (var brush = new SolidBrush(ForeColor))
+                {
+                    g.DrawString(seg.Text, seg.Font, brush, r.Location);
+                }
                 xCursor += r.Width;
                 lineWidth += r.Width;
                 lineHeight = Math.Max(lineHeight, seg.Font.Height);
