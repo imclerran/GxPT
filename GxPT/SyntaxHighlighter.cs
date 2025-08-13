@@ -142,22 +142,24 @@ namespace GxPT
         {
             switch (tokenType)
             {
+                // Catppuccin Latte palette mapping
+                // Reference: https://github.com/catppuccin/catppuccin (Latte)
                 case TokenType.Keyword:
-                    return Color.FromArgb(0, 0, 255);      // Blue
+                    return Color.FromArgb(0x88, 0x39, 0xEF); // mauve
                 case TokenType.String:
-                    return Color.FromArgb(163, 21, 21);    // Dark red
+                    return Color.FromArgb(0x40, 0xA0, 0x2B); // green
                 case TokenType.Comment:
-                    return Color.FromArgb(0, 128, 0);      // Green
+                    return Color.FromArgb(0x8C, 0x8F, 0xA1); // overlay1 (subtle)
                 case TokenType.Number:
-                    return Color.FromArgb(255, 140, 0);    // Orange
+                    return Color.FromArgb(0xFE, 0x64, 0x0B); // peach
                 case TokenType.Operator:
-                    return Color.FromArgb(128, 128, 128);  // Gray
+                    return Color.FromArgb(0xEa, 0x76, 0xCB); // pink
                 case TokenType.Punctuation:
-                    return Color.FromArgb(128, 128, 128);  // Gray
+                    return Color.FromArgb(0x7C, 0x7F, 0x93); // overlay2
                 case TokenType.Type:
-                    return Color.FromArgb(43, 145, 175);   // Teal
+                    return Color.FromArgb(0x20, 0x9F, 0xB5); // sapphire
                 case TokenType.Method:
-                    return Color.FromArgb(255, 20, 147);   // Deep pink
+                    return Color.FromArgb(0x1E, 0x66, 0xF5); // blue (functions)
                 case TokenType.Normal:
                 default:
                     return SystemColors.WindowText; // Align with renderer default
