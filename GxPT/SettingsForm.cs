@@ -21,7 +21,7 @@ namespace GxPT
 
             // Compute settings paths under %AppData%\GxPT
             _settingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GxPT");
-            _settingsFile = Path.Combine(_settingsDir, "settings.yaml");
+            _settingsFile = Path.Combine(_settingsDir, "settings.json");
 
             // Wire events (in case not hooked up in designer)
             this.Load += SettingsForm_Load;
@@ -34,7 +34,7 @@ namespace GxPT
             try
             {
                 EnsureSettingsFileExists();
-                // Load YAML content into the editor textbox
+                // Load JSON content into the editor textbox
                 this.textBox1.Text = File.ReadAllText(_settingsFile, Encoding.UTF8);
             }
             catch (Exception ex)
@@ -52,18 +52,27 @@ namespace GxPT
 
             if (!File.Exists(_settingsFile))
             {
-                var defaultYaml = BuildDefaultYaml();
-                File.WriteAllText(_settingsFile, defaultYaml, Encoding.UTF8);
+                var defaultJson = BuildDefaultJson();
+                File.WriteAllText(_settingsFile, defaultJson, Encoding.UTF8);
             }
         }
 
-        private static string BuildDefaultYaml()
+        private static string BuildDefaultJson()
         {
+            // defaults: empty key, sensible model list, and default model
             var sb = new StringBuilder();
-            sb.AppendLine("# GxPT Settings");
-            sb.AppendLine("");
-            sb.AppendLine("# openrouter_api_key: sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxx");
-            sb.AppendLine("openrouter_api_key: ");
+            sb.AppendLine("{");
+            sb.AppendLine("  \"openrouter_api_key\": \"\",");
+            sb.AppendLine("  \"models\": [");
+            sb.AppendLine("    \"anthropic/claude-3.7-sonnet\",");
+            sb.AppendLine("    \"anthropic/claude-sonnet-4\",");
+            sb.AppendLine("    \"google/gemini-2.5-flash\",");
+            sb.AppendLine("    \"google/gemini-2.5-pro\",");
+            sb.AppendLine("    \"openai/gpt-4o\",");
+            sb.AppendLine("    \"openai/gpt-5\"");
+            sb.AppendLine("  ],");
+            sb.AppendLine("  \"default_model\": \"openai/gpt-4o\"");
+            sb.AppendLine("}");
             return sb.ToString();
         }
 

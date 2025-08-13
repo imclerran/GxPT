@@ -61,8 +61,8 @@ namespace GxPT
 
         private void InitializeClient()
         {
-            // Read API key from settings.yaml in %AppData%\GxPT
-            string apiKey = AppSettings.Get("openrouter_api_key");
+            // Read API key from settings.json in %AppData%\GxPT
+            string apiKey = AppSettings.GetString("openrouter_api_key");
             // curl.exe expected next to executable (bin/Debug)
             string curlPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "curl.exe");
             _client = new OpenRouterClient(apiKey, curlPath);
@@ -77,7 +77,8 @@ namespace GxPT
                 }
                 catch { }
             };
-            // Reflect any change in configuration
+            // Populate models from settings and reflect configuration
+            PopulateModelsFromSettings();
             UpdateApiKeyBanner();
         }
 
@@ -284,6 +285,32 @@ namespace GxPT
             }
         }
 
+        private void PopulateModelsFromSettings()
+        {
+            try
+            {
+                var list = AppSettings.GetList("models");
+                string def = AppSettings.GetString("default_model");
+
+                if (list != null && list.Count > 0 && this.cmbModel != null)
+                {
+                    this.cmbModel.BeginUpdate();
+                    try
+                    {
+                        this.cmbModel.Items.Clear();
+                        foreach (var m in list) this.cmbModel.Items.Add(m);
+                        if (!string.IsNullOrEmpty(def)) this.cmbModel.Text = def;
+                        else this.cmbModel.SelectedIndex = 0;
+                    }
+                    finally
+                    {
+                        this.cmbModel.EndUpdate();
+                    }
+                }
+            }
+            catch { }
+        }
+
         private void txtMessage_TextChanged(object sender, EventArgs e)
         {
             AdjustInputBoxHeight();
@@ -383,7 +410,7 @@ namespace GxPT
         {
             try
             {
-                string key = AppSettings.Get("openrouter_api_key");
+                string key = AppSettings.GetString("openrouter_api_key");
                 bool hasKey = (key != null && key.Trim().Length > 0);
                 if (this.apiKeyBannerPanel != null)
                     this.apiKeyBannerPanel.Visible = !hasKey;

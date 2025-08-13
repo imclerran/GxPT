@@ -2,10 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Web.Script.Serialization;
 
 namespace GxPT
 {
-    // Minimal YAML reader for simple key: value pairs (no nesting), XP/.NET 3.5 compatible
+    // JSON-based app settings (XP/.NET 3.5 compatible via JavaScriptSerializer)
     internal static class AppSettings
     {
         public static string SettingsDirectory
@@ -18,40 +19,69 @@ namespace GxPT
 
         public static string SettingsPath
         {
-            get { return Path.Combine(SettingsDirectory, "settings.yaml"); }
+            get { return Path.Combine(SettingsDirectory, "settings.json"); }
         }
 
-        public static Dictionary<string, string> Load()
+        private static Dictionary<string, object> LoadJson()
         {
-            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var json = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
             try
             {
-                if (!File.Exists(SettingsPath)) return map;
-                string[] lines = File.ReadAllLines(SettingsPath, Encoding.UTF8);
-                foreach (var raw in lines)
+                if (!File.Exists(SettingsPath)) return json;
+                string text = File.ReadAllText(SettingsPath, Encoding.UTF8);
+                if (string.IsNullOrEmpty(text)) return json;
+                var ser = new JavaScriptSerializer();
+                var obj = ser.DeserializeObject(text) as Dictionary<string, object>;
+                if (obj != null)
                 {
-                    string line = raw.Trim();
-                    if (line.Length == 0) continue;
-                    if (line.StartsWith("#")) continue;
-                    int idx = line.IndexOf(':');
-                    if (idx <= 0) continue;
-                    string key = line.Substring(0, idx).Trim();
-                    string value = line.Substring(idx + 1).Trim();
-                    // remove optional quotes
-                    if (value.StartsWith("\"") && value.EndsWith("\""))
-                        value = value.Substring(1, value.Length - 2);
-                    map[key] = value;
+                    foreach (var kv in obj) json[kv.Key] = kv.Value;
                 }
             }
             catch { }
-            return map;
+            return json;
         }
 
-        public static string Get(string key)
+        public static string GetString(string key)
         {
-            var all = Load();
-            string val;
-            return all.TryGetValue(key, out val) ? val : null;
+            var all = LoadJson();
+            object val;
+            if (all.TryGetValue(key, out val) && val != null)
+                return Convert.ToString(val);
+            return null;
+        }
+
+        public static List<string> GetList(string key)
+        {
+            var result = new List<string>();
+            var all = LoadJson();
+            object val;
+            if (all.TryGetValue(key, out val) && val != null)
+            {
+                try
+                {
+                    var arr = val as object[];
+                    if (arr != null)
+                    {
+                        foreach (var item in arr)
+                        {
+                            if (item != null) result.Add(Convert.ToString(item));
+                        }
+                    }
+                    else
+                    {
+                        var list = val as System.Collections.ArrayList;
+                        if (list != null)
+                        {
+                            foreach (var item in list)
+                            {
+                                if (item != null) result.Add(Convert.ToString(item));
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+            return result;
         }
     }
 }

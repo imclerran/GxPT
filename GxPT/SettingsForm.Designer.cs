@@ -42,14 +42,14 @@
             this.flowLayoutPanel1.Controls.Add(this.btnApply);
             this.flowLayoutPanel1.Dock = System.Windows.Forms.DockStyle.Bottom;
             this.flowLayoutPanel1.FlowDirection = System.Windows.Forms.FlowDirection.RightToLeft;
-            this.flowLayoutPanel1.Location = new System.Drawing.Point(0, 243);
+            this.flowLayoutPanel1.Location = new System.Drawing.Point(0, 343);
             this.flowLayoutPanel1.Name = "flowLayoutPanel1";
-            this.flowLayoutPanel1.Size = new System.Drawing.Size(392, 23);
+            this.flowLayoutPanel1.Size = new System.Drawing.Size(592, 23);
             this.flowLayoutPanel1.TabIndex = 0;
             // 
             // btnSave
             // 
-            this.btnSave.Location = new System.Drawing.Point(317, 0);
+            this.btnSave.Location = new System.Drawing.Point(517, 0);
             this.btnSave.Margin = new System.Windows.Forms.Padding(0);
             this.btnSave.Name = "btnSave";
             this.btnSave.Size = new System.Drawing.Size(75, 23);
@@ -60,7 +60,7 @@
             // 
             // btnApply
             // 
-            this.btnApply.Location = new System.Drawing.Point(242, 0);
+            this.btnApply.Location = new System.Drawing.Point(442, 0);
             this.btnApply.Margin = new System.Windows.Forms.Padding(0);
             this.btnApply.Name = "btnApply";
             this.btnApply.Size = new System.Drawing.Size(75, 23);
@@ -76,14 +76,14 @@
             this.textBox1.Multiline = true;
             this.textBox1.Name = "textBox1";
             this.textBox1.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.textBox1.Size = new System.Drawing.Size(392, 243);
+            this.textBox1.Size = new System.Drawing.Size(592, 343);
             this.textBox1.TabIndex = 1;
             // 
             // SettingsForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(392, 266);
+            this.ClientSize = new System.Drawing.Size(592, 366);
             this.Controls.Add(this.textBox1);
             this.Controls.Add(this.flowLayoutPanel1);
             this.Name = "SettingsForm";

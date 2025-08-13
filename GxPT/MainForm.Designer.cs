@@ -56,7 +56,7 @@
             this.miFile});
             this.msMain.Location = new System.Drawing.Point(0, 0);
             this.msMain.Name = "msMain";
-            this.msMain.Size = new System.Drawing.Size(738, 24);
+            this.msMain.Size = new System.Drawing.Size(736, 24);
             this.msMain.TabIndex = 1;
             this.msMain.Text = "menuStrip1";
             // 
@@ -95,10 +95,10 @@
             this.panel1.Controls.Add(this.txtMessage);
             this.panel1.Controls.Add(this.panel2);
             this.panel1.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.panel1.Location = new System.Drawing.Point(0, 787);
+            this.panel1.Location = new System.Drawing.Point(0, 785);
             this.panel1.MinimumSize = new System.Drawing.Size(0, 75);
             this.panel1.Name = "panel1";
-            this.panel1.Size = new System.Drawing.Size(738, 75);
+            this.panel1.Size = new System.Drawing.Size(736, 75);
             this.panel1.TabIndex = 2;
             // 
             // txtMessage
@@ -110,7 +110,7 @@
             this.txtMessage.Margin = new System.Windows.Forms.Padding(0);
             this.txtMessage.Multiline = true;
             this.txtMessage.Name = "txtMessage";
-            this.txtMessage.Size = new System.Drawing.Size(601, 75);
+            this.txtMessage.Size = new System.Drawing.Size(599, 75);
             this.txtMessage.TabIndex = 1;
             this.txtMessage.KeyDown += new System.Windows.Forms.KeyEventHandler(this.txtMessage_KeyDown);
             // 
@@ -119,7 +119,7 @@
             this.panel2.Controls.Add(this.btnSend);
             this.panel2.Controls.Add(this.cmbModel);
             this.panel2.Dock = System.Windows.Forms.DockStyle.Right;
-            this.panel2.Location = new System.Drawing.Point(600, 0);
+            this.panel2.Location = new System.Drawing.Point(598, 0);
             this.panel2.Name = "panel2";
             this.panel2.Size = new System.Drawing.Size(138, 75);
             this.panel2.TabIndex = 3;
@@ -160,7 +160,7 @@
             this.pnlCenter.Dock = System.Windows.Forms.DockStyle.Fill;
             this.pnlCenter.Location = new System.Drawing.Point(0, 24);
             this.pnlCenter.Name = "pnlCenter";
-            this.pnlCenter.Size = new System.Drawing.Size(738, 763);
+            this.pnlCenter.Size = new System.Drawing.Size(736, 761);
             this.pnlCenter.TabIndex = 3;
             // 
             // apiKeyBannerPanel
@@ -169,10 +169,10 @@
             this.apiKeyBannerPanel.Controls.Add(this.lnkOpenSettings);
             this.apiKeyBannerPanel.Controls.Add(this.lblNoApiKey);
             this.apiKeyBannerPanel.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.apiKeyBannerPanel.Location = new System.Drawing.Point(0, 735);
+            this.apiKeyBannerPanel.Location = new System.Drawing.Point(0, 733);
             this.apiKeyBannerPanel.Name = "apiKeyBannerPanel";
             this.apiKeyBannerPanel.Padding = new System.Windows.Forms.Padding(6, 4, 6, 4);
-            this.apiKeyBannerPanel.Size = new System.Drawing.Size(738, 28);
+            this.apiKeyBannerPanel.Size = new System.Drawing.Size(736, 28);
             this.apiKeyBannerPanel.TabIndex = 1;
             // 
             // lnkOpenSettings
@@ -199,19 +199,19 @@
             // chatTranscript
             // 
             this.chatTranscript.AccessibleName = "Chat transcript";
-            this.chatTranscript.BackColor = System.Drawing.SystemColors.Window;
+            this.chatTranscript.BackColor = System.Drawing.Color.WhiteSmoke;
             this.chatTranscript.Dock = System.Windows.Forms.DockStyle.Fill;
             this.chatTranscript.ForeColor = System.Drawing.SystemColors.WindowText;
             this.chatTranscript.Location = new System.Drawing.Point(0, 0);
             this.chatTranscript.Name = "chatTranscript";
-            this.chatTranscript.Size = new System.Drawing.Size(738, 735);
+            this.chatTranscript.Size = new System.Drawing.Size(736, 733);
             this.chatTranscript.TabIndex = 0;
             // 
             // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(738, 862);
+            this.ClientSize = new System.Drawing.Size(736, 860);
             this.Controls.Add(this.pnlCenter);
             this.Controls.Add(this.panel1);
             this.Controls.Add(this.msMain);
