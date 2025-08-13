@@ -125,5 +125,13 @@ namespace GxPT
 
             chatTranscript.AddMessage(MessageRole.Assistant, fallbackMessage);
         }
+
+        private void miSettings_Click(object sender, EventArgs e)
+        {
+            using (var dlg = new SettingsForm())
+            {
+                dlg.ShowDialog(this);
+            }
+        }
     }
 }

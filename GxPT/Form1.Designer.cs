@@ -34,8 +34,8 @@
             this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.miExit = new System.Windows.Forms.ToolStripMenuItem();
             this.panel1 = new System.Windows.Forms.Panel();
-            this.btnSend = new System.Windows.Forms.Button();
             this.txtMessage = new System.Windows.Forms.TextBox();
+            this.btnSend = new System.Windows.Forms.Button();
             this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.msMain.SuspendLayout();
             this.panel1.SuspendLayout();
@@ -66,6 +66,7 @@
             this.miSettings.Name = "miSettings";
             this.miSettings.Size = new System.Drawing.Size(152, 22);
             this.miSettings.Text = "&Settings";
+            this.miSettings.Click += new System.EventHandler(this.miSettings_Click);
             // 
             // toolStripSeparator1
             // 
@@ -90,6 +91,15 @@
             this.panel1.Size = new System.Drawing.Size(742, 75);
             this.panel1.TabIndex = 2;
             // 
+            // txtMessage
+            // 
+            this.txtMessage.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.txtMessage.Location = new System.Drawing.Point(0, 0);
+            this.txtMessage.Multiline = true;
+            this.txtMessage.Name = "txtMessage";
+            this.txtMessage.Size = new System.Drawing.Size(667, 75);
+            this.txtMessage.TabIndex = 1;
+            // 
             // btnSend
             // 
             this.btnSend.Dock = System.Windows.Forms.DockStyle.Right;
@@ -99,15 +109,6 @@
             this.btnSend.TabIndex = 0;
             this.btnSend.Text = "Send";
             this.btnSend.UseVisualStyleBackColor = true;
-            // 
-            // txtMessage
-            // 
-            this.txtMessage.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.txtMessage.Location = new System.Drawing.Point(0, 0);
-            this.txtMessage.Multiline = true;
-            this.txtMessage.Name = "txtMessage";
-            this.txtMessage.Size = new System.Drawing.Size(667, 75);
-            this.txtMessage.TabIndex = 1;
             // 
             // chatTranscript
             // 
