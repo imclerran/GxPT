@@ -452,6 +452,33 @@ namespace GxPT
             Invalidate();
         }
 
+        protected override void SetBoundsCore(int x, int y, int width, int height, BoundsSpecified specified)
+        {
+            base.SetBoundsCore(x, y, width, height, specified);
+            // Ensure scrollbar is updated when bounds change
+            if (IsHandleCreated && (specified & (BoundsSpecified.Width | BoundsSpecified.Height)) != 0)
+            {
+                UpdateScrollbar();
+            }
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            // Ensure scrollbar is properly initialized when handle is created
+            UpdateScrollbar();
+        }
+
+        protected override void OnVisibleChanged(EventArgs e)
+        {
+            base.OnVisibleChanged(e);
+            if (Visible)
+            {
+                // Ensure scrollbar is updated when control becomes visible
+                Reflow();
+            }
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             e.Graphics.Clear(BackColor);
@@ -778,7 +805,9 @@ namespace GxPT
         {
             int view = Math.Max(0, ClientSize.Height);
             int max = Math.Max(0, _contentHeight - view);
-            if (max <= 0)
+
+            // If view is 0 (control not properly sized yet), disable scrollbar
+            if (view <= 0 || max <= 0)
             {
                 _vbar.Enabled = false;
                 _vbar.Minimum = 0;
