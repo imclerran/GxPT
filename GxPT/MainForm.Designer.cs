@@ -1,6 +1,6 @@
 ﻿namespace GxPT
 {
-    partial class Form1
+    partial class MainForm
     {
         /// <summary>
         /// Required designer variable.
@@ -154,7 +154,7 @@
             this.chatTranscript.Size = new System.Drawing.Size(742, 767);
             this.chatTranscript.TabIndex = 0;
             // 
-            // Form1
+            // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
@@ -163,7 +163,7 @@
             this.Controls.Add(this.panel1);
             this.Controls.Add(this.msMain);
             this.MainMenuStrip = this.msMain;
-            this.Name = "Form1";
+            this.Name = "MainForm";
             this.Text = "GxPT";
             this.msMain.ResumeLayout(false);
             this.msMain.PerformLayout();

@@ -10,13 +10,13 @@ using GxPT;
 
 namespace GxPT
 {
-    public partial class Form1 : Form
+    public partial class MainForm : Form
     {
         private readonly List<ChatMessage> _history = new List<ChatMessage>();
         private OpenRouterClient _client;
         private string _model = "openai/gpt-4o";
 
-        public Form1()
+        public MainForm()
         {
             InitializeComponent();
             HookEvents();
