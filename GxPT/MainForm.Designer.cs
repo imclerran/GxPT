@@ -114,6 +114,7 @@
             this.btnSend.TabIndex = 0;
             this.btnSend.Text = "Send";
             this.btnSend.UseVisualStyleBackColor = true;
+            this.btnSend.Click += new System.EventHandler(this.btnSend_Click);
             // 
             // cmbModel
             // 
@@ -135,12 +136,14 @@
             // 
             // txtMessage
             // 
+            this.txtMessage.AcceptsReturn = true;
             this.txtMessage.Dock = System.Windows.Forms.DockStyle.Fill;
             this.txtMessage.Location = new System.Drawing.Point(0, 0);
             this.txtMessage.Multiline = true;
             this.txtMessage.Name = "txtMessage";
             this.txtMessage.Size = new System.Drawing.Size(742, 75);
             this.txtMessage.TabIndex = 1;
+            this.txtMessage.KeyDown += new System.Windows.Forms.KeyEventHandler(this.txtMessage_KeyDown);
             // 
             // chatTranscript
             // 

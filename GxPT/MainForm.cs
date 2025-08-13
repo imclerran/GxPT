@@ -25,8 +25,7 @@ namespace GxPT
 
         private void HookEvents()
         {
-            // Ensure send button is wired
-            this.btnSend.Click += btnSend_Click;
+            this.txtMessage.KeyDown += txtMessage_KeyDown;
         }
 
         private string GetSelectedModel()
@@ -236,6 +235,17 @@ namespace GxPT
                     BeginInvoke((MethodInvoker)delegate { chatTranscript.UpdateLastMessage("Error: " + ex.Message); _sending = false; });
                 }
             });
+        }
+
+        private void txtMessage_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter && !e.Shift)
+            {
+                // Prevent newline and trigger send
+                e.SuppressKeyPress = true;
+                e.Handled = true;
+                btnSend.PerformClick();
+            }
         }
     }
 }
