@@ -41,6 +41,19 @@ namespace GxPT
                 "- *Italic text* using *single asterisks*\n" +
                 "- `Inline code` using backticks\n" +
                 "- ***Bold and italic*** combined\n\n" +
+                "## Lists\n" +
+                "### Bullet Lists:\n" +
+                "- First bullet item\n" +
+                "  - Nested bullet (hollow circle)\n" +
+                "    - Deeply nested (square)\n" +
+                "- Second bullet item\n" +
+                "- Third bullet item\n\n" +
+                "### Numbered Lists:\n" +
+                "1. First numbered item\n" +
+                "2. Second numbered item\n" +
+                "  1. Nested numbered item\n" +
+                "  2. Another nested number\n" +
+                "3. Third numbered item\n\n" +
                 "## Code Blocks with Syntax Highlighting\n\n" +
                 "### C# Example:\n" +
                 "```cs\n" +
