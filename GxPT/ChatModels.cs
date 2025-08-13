@@ -18,21 +18,21 @@ namespace GxPT
     internal sealed class ChatCompletionChunk
     {
         // For streaming parse
-        public string id;
-        public string @object;
-        public long created;
-        public string model;
-        public List<Choice> choices;
+        public string id { get; set; }
+        public string @object { get; set; }
+        public long created { get; set; }
+        public string model { get; set; }
+        public List<Choice> choices { get; set; }
 
         internal sealed class Choice
         {
-            public Delta delta;
+            public Delta delta { get; set; }
         }
 
         internal sealed class Delta
         {
-            public string role;
-            public string content;
+            public string role { get; set; }
+            public string content { get; set; }
         }
     }
 }
