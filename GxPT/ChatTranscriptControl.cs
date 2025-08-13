@@ -597,16 +597,11 @@ namespace GxPT
 
                     // Get colored segments for syntax highlighting
                     var coloredSegments = SyntaxHighlightingRenderer.GetColoredSegments(c.Text, c.Language, _monoFont);
-
-                    // Measure the code block dimensions using TextRenderer for consistency
-                    Size proposed = new Size(maxWidth - 2 * CodeBlockPadding, int.MaxValue);
-                    Size text = TextRenderer.MeasureText(
-                        c.Text.Length == 0 ? " " : c.Text,
-                        _monoFont,
-                        proposed,
-                        TextFormatFlags.NoPrefix | TextFormatFlags.TextBoxControl | TextFormatFlags.WordBreak);
-
-                    Rectangle box = new Rectangle(x0, y, Math.Min(maxWidth, text.Width + 2 * CodeBlockPadding), Math.Max(_monoFont.Height, text.Height) + 2 * CodeBlockPadding);
+                    // Measure using renderer's measurement to align with drawing
+                    Size measured = SyntaxHighlightingRenderer.MeasureColoredSegments(g, coloredSegments, maxWidth - 2 * CodeBlockPadding);
+                    if (measured.Width <= 0) measured.Width = _monoFont.Height; // fallback minimal
+                    if (measured.Height <= 0) measured.Height = _monoFont.Height;
+                    Rectangle box = new Rectangle(x0, y, Math.Min(maxWidth, measured.Width + 2 * CodeBlockPadding), measured.Height + 2 * CodeBlockPadding);
 
                     using (var sb = new SolidBrush(CodeBlockBack))
                     using (var pen = new Pen(CodeBlockBorder))

@@ -143,43 +143,24 @@ namespace GxPT
             switch (tokenType)
             {
                 case TokenType.Keyword:
-                    return Color.Blue;
+                    return Color.FromArgb(0, 0, 255);      // Blue
                 case TokenType.String:
-                    return Color.FromArgb(163, 21, 21); // Dark red
+                    return Color.FromArgb(163, 21, 21);    // Dark red
                 case TokenType.Comment:
-                    return Color.Green;
+                    return Color.FromArgb(0, 128, 0);      // Green
                 case TokenType.Number:
-                    return Color.FromArgb(0, 0, 255); // Blue
+                    return Color.FromArgb(255, 140, 0);    // Orange
                 case TokenType.Operator:
-                    return Color.FromArgb(128, 128, 128); // Gray
+                    return Color.FromArgb(128, 128, 128);  // Gray
                 case TokenType.Punctuation:
-                    return Color.FromArgb(128, 128, 128); // Gray
+                    return Color.FromArgb(128, 128, 128);  // Gray
                 case TokenType.Type:
-                    return Color.FromArgb(43, 145, 175); // Teal
+                    return Color.FromArgb(43, 145, 175);   // Teal
                 case TokenType.Method:
-                    return Color.FromArgb(128, 0, 128); // Purple
+                    return Color.FromArgb(255, 20, 147);   // Deep pink
                 case TokenType.Normal:
                 default:
-                    return Color.Black;
-            }
-        }
-
-        /// <summary>
-        /// Gets the font style for a specific token type
-        /// </summary>
-        /// <param name="tokenType">The type of token</param>
-        /// <returns>The font style to use for rendering this token type</returns>
-        public static FontStyle GetTokenFontStyle(TokenType tokenType)
-        {
-            switch (tokenType)
-            {
-                case TokenType.Keyword:
-                case TokenType.Type:
-                    return FontStyle.Bold;
-                case TokenType.Comment:
-                    return FontStyle.Italic;
-                default:
-                    return FontStyle.Regular;
+                    return SystemColors.WindowText; // Align with renderer default
             }
         }
 

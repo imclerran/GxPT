@@ -30,28 +30,6 @@ namespace GxPT
 
     public static class SyntaxHighlightingRenderer
     {
-        // ---------- Token color mapping ----------
-        public static Color GetTokenColor(TokenType tokenType)
-        {
-            switch (tokenType)
-            {
-                case TokenType.Keyword:
-                    return Color.FromArgb(0, 0, 255);      // Blue
-                case TokenType.String:
-                    return Color.FromArgb(163, 21, 21);    // Dark red
-                case TokenType.Comment:
-                    return Color.FromArgb(0, 128, 0);      // Green
-                case TokenType.Number:
-                    return Color.FromArgb(255, 140, 0);    // Orange
-                case TokenType.Type:
-                    return Color.FromArgb(43, 145, 175);   // Teal
-                case TokenType.Method:
-                    return Color.FromArgb(255, 20, 147);   // Deep pink
-                case TokenType.Normal:
-                default:
-                    return SystemColors.WindowText;        // Default text color
-            }
-        }
 
         // ---------- Segment generation ----------
         public static List<ColoredSegment> GetColoredSegments(string code, string language, Font monoFont)
@@ -61,21 +39,9 @@ namespace GxPT
             if (string.IsNullOrEmpty(code))
                 return segments;
 
-            // Get the appropriate syntax highlighter
-            ISyntaxHighlighter highlighter = SyntaxHighlighter.GetHighlighter(language);
-            if (highlighter == null)
+            var tokens = SyntaxHighlighter.Highlight(language, code);
+            if (tokens == null || tokens.Count == 0)
             {
-                // No syntax highlighting - return the entire text as one segment
-                segments.Add(new ColoredSegment(code, SystemColors.WindowText, monoFont, 0));
-                return segments;
-            }
-
-            // Tokenize the code
-            var tokens = highlighter.Tokenize(code);
-
-            if (tokens.Count == 0)
-            {
-                // Tokenization failed - return the entire text as one segment
                 segments.Add(new ColoredSegment(code, SystemColors.WindowText, monoFont, 0));
                 return segments;
             }
@@ -94,7 +60,7 @@ namespace GxPT
                 }
 
                 // Add the colored token
-                Color tokenColor = GetTokenColor(token.Type);
+                Color tokenColor = SyntaxHighlighter.GetTokenColor(token.Type);
                 allSegments.Add(new ColoredSegment(token.Text, tokenColor, monoFont, token.StartIndex));
 
                 lastEnd = token.StartIndex + token.Length;
@@ -172,6 +138,62 @@ namespace GxPT
                         }
                     }
                 }
+            }
+        }
+
+        /// <summary>
+        /// Measures the rendered size of the colored segments inside a given width.
+        /// This mirrors DrawColoredSegments line-wrap logic so measurement matches drawing.
+        /// </summary>
+        public static Size MeasureColoredSegments(Graphics g, List<ColoredSegment> segments, int maxWidth)
+        {
+            if (segments == null || segments.Count == 0)
+                return Size.Empty;
+
+            using (var stringFormat = StringFormat.GenericTypographic)
+            {
+                stringFormat.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+                stringFormat.Trimming = StringTrimming.None;
+
+                float x = 0f;
+                float y = 0f;
+                float lineHeight = segments[0].Font != null ? segments[0].Font.Height : 0f;
+                float maxLineWidth = 0f;
+
+                foreach (var segment in segments)
+                {
+                    if (string.IsNullOrEmpty(segment.Text))
+                        continue;
+
+                    var font = segment.Font;
+                    string[] lines = segment.Text.Split('\n');
+                    for (int lineIndex = 0; lineIndex < lines.Length; lineIndex++)
+                    {
+                        string line = lines[lineIndex];
+                        if (lineIndex > 0)
+                        {
+                            // new visual line
+                            maxLineWidth = Math.Max(maxLineWidth, x);
+                            y += lineHeight;
+                            x = 0f;
+                        }
+                        if (line.Length == 0)
+                            continue;
+
+                        // basic wrap (same as draw path)
+                        SizeF textSize = g.MeasureString(line, font, PointF.Empty, stringFormat);
+                        if (x + textSize.Width > maxWidth && x > 0f)
+                        {
+                            // wrap
+                            maxLineWidth = Math.Max(maxLineWidth, x);
+                            y += lineHeight;
+                            x = 0f;
+                        }
+                        x += textSize.Width;
+                    }
+                }
+                maxLineWidth = Math.Max(maxLineWidth, x);
+                return new Size((int)Math.Ceiling(Math.Min(maxLineWidth, maxWidth)), (int)Math.Ceiling(y + lineHeight));
             }
         }
     }
