@@ -34,10 +34,10 @@
             this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.miExit = new System.Windows.Forms.ToolStripMenuItem();
             this.panel1 = new System.Windows.Forms.Panel();
+            this.txtMessage = new System.Windows.Forms.TextBox();
             this.panel2 = new System.Windows.Forms.Panel();
             this.btnSend = new System.Windows.Forms.Button();
             this.cmbModel = new System.Windows.Forms.ComboBox();
-            this.txtMessage = new System.Windows.Forms.TextBox();
             this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.msMain.SuspendLayout();
             this.panel1.SuspendLayout();
@@ -95,6 +95,19 @@
             this.panel1.Size = new System.Drawing.Size(738, 75);
             this.panel1.TabIndex = 2;
             // 
+            // txtMessage
+            // 
+            this.txtMessage.AcceptsReturn = true;
+            this.txtMessage.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
+                        | System.Windows.Forms.AnchorStyles.Right)));
+            this.txtMessage.Location = new System.Drawing.Point(0, 0);
+            this.txtMessage.Margin = new System.Windows.Forms.Padding(0);
+            this.txtMessage.Multiline = true;
+            this.txtMessage.Name = "txtMessage";
+            this.txtMessage.Size = new System.Drawing.Size(601, 75);
+            this.txtMessage.TabIndex = 1;
+            this.txtMessage.KeyDown += new System.Windows.Forms.KeyEventHandler(this.txtMessage_KeyDown);
+            // 
             // panel2
             // 
             this.panel2.Controls.Add(this.btnSend);
@@ -133,19 +146,6 @@
             this.cmbModel.Sorted = true;
             this.cmbModel.TabIndex = 2;
             this.cmbModel.Text = "openai/gpt-4o";
-            // 
-            // txtMessage
-            // 
-            this.txtMessage.AcceptsReturn = true;
-            this.txtMessage.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
-                        | System.Windows.Forms.AnchorStyles.Right)));
-            this.txtMessage.Location = new System.Drawing.Point(0, 0);
-            this.txtMessage.Margin = new System.Windows.Forms.Padding(0);
-            this.txtMessage.Multiline = true;
-            this.txtMessage.Name = "txtMessage";
-            this.txtMessage.Size = new System.Drawing.Size(601, 75);
-            this.txtMessage.TabIndex = 1;
-            this.txtMessage.KeyDown += new System.Windows.Forms.KeyEventHandler(this.txtMessage_KeyDown);
             // 
             // chatTranscript
             // 

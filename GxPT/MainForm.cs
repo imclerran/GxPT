@@ -12,9 +12,10 @@ namespace GxPT
 {
     public partial class MainForm : Form
     {
-        private readonly List<ChatMessage> _history = new List<ChatMessage>();
+        private Conversation _conversation;
         private OpenRouterClient _client;
         private const int MinInputHeightPx = 75; // initial and minimum height for input panel
+        // future conversation-related helpers can go here
 
 
         public MainForm()
@@ -59,6 +60,17 @@ namespace GxPT
             // curl.exe expected next to executable (bin/Debug)
             string curlPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "curl.exe");
             _client = new OpenRouterClient(apiKey, curlPath);
+            _conversation = new Conversation(_client);
+            _conversation.NameGenerated += delegate(string name)
+            {
+                try
+                {
+                    // Ensure UI-thread update
+                    if (this.IsHandleCreated)
+                        this.BeginInvoke((MethodInvoker)delegate { this.Text = "GxPT - " + name; });
+                }
+                catch { }
+            };
         }
 
         private void AddDemoMessages()
@@ -193,9 +205,15 @@ namespace GxPT
 
             // Add to UI and history
             chatTranscript.AddMessage(MessageRole.User, text);
-            _history.Add(new ChatMessage("user", text));
+            _conversation.AddUserMessage(text);
             txtMessage.Clear();
             ResetInputBoxHeight();
+
+            // If this is the first message, request a conversation name in the background
+            if (_conversation.History.Count == 1)
+            {
+                _conversation.EnsureNameGenerated(text);
+            }
 
             // Add placeholder assistant message to stream into
             chatTranscript.AddMessage(MessageRole.Assistant, "");
@@ -221,7 +239,7 @@ namespace GxPT
                     //var modelToUse = GetSelectedModel();
                     _client.CreateCompletionStream(
                         modelToUse,
-                        _history.ToArray(),
+                        _conversation.History.ToArray(),
                         delegate(string d)
                         {
                             assistantBuilder.Append(d);
@@ -231,7 +249,7 @@ namespace GxPT
                         {
                             // finalize
                             string finalText = assistantBuilder.ToString();
-                            _history.Add(new ChatMessage("assistant", finalText));
+                            _conversation.AddAssistantMessage(finalText);
                             BeginInvoke((MethodInvoker)delegate { _sending = false; });
                         },
                         delegate(string err)
@@ -309,5 +327,7 @@ namespace GxPT
             if (txtMessage.ScrollBars != newScroll)
                 txtMessage.ScrollBars = newScroll;
         }
+
+        // future conversation-related helpers can go here
     }
 }

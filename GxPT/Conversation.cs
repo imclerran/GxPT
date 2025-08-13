@@ -1,0 +1,105 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Web.Script.Serialization;
+
+namespace GxPT
+{
+    // Represents a single conversation instance: messages history and optional generated name.
+    internal sealed class Conversation
+    {
+        private readonly OpenRouterClient _client;
+        private volatile bool _nameRequested;
+
+        private readonly List<ChatMessage> _history = new List<ChatMessage>();
+        public List<ChatMessage> History { get { return _history; } }
+        public string Name { get; private set; }
+        public event Action<string> NameGenerated;
+
+        public Conversation(OpenRouterClient client)
+        {
+            _client = client;
+        }
+
+        public void AddUserMessage(string content)
+        {
+            History.Add(new ChatMessage("user", content ?? string.Empty));
+        }
+
+        public void AddAssistantMessage(string content)
+        {
+            History.Add(new ChatMessage("assistant", content ?? string.Empty));
+        }
+
+        // Generate a short title after the first user message using mistralai/mistral-nemo.
+        public void EnsureNameGenerated(string firstUserMessage)
+        {
+            if (_client == null || !_client.IsConfigured) return;
+            if (!string.IsNullOrEmpty(Name)) return;
+            if (_nameRequested) return;
+            _nameRequested = true;
+
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    var msgs = new List<ChatMessage>();
+                    msgs.Add(new ChatMessage("system",
+                        "You generate short, descriptive conversation titles based on the first user message. Return only the title. 2 to 5 words. Title Case. No quotes. No trailing punctuation."));
+                    msgs.Add(new ChatMessage("user", firstUserMessage ?? string.Empty));
+
+                    string json = _client.CreateCompletion("google/gemini-2.0-flash-lite-001", msgs);
+                    string title = ExtractTitleFromJson(json);
+                    title = CleanTitle(title);
+                    if (!string.IsNullOrEmpty(title))
+                    {
+                        Name = title;
+                        var handler = NameGenerated;
+                        if (handler != null) handler(title);
+                    }
+                }
+                catch { }
+            });
+        }
+
+        private static string ExtractTitleFromJson(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return null;
+            try
+            {
+                var ser = new JavaScriptSerializer();
+                var root = ser.DeserializeObject(json) as Dictionary<string, object>;
+                if (root == null || !root.ContainsKey("choices")) return null;
+                var choices = root["choices"] as object[];
+                if (choices == null || choices.Length == 0) return null;
+                var first = choices[0] as Dictionary<string, object>;
+                if (first == null) return null;
+                if (first.ContainsKey("message"))
+                {
+                    var msg = first["message"] as Dictionary<string, object>;
+                    if (msg != null && msg.ContainsKey("content"))
+                        return msg["content"] as string;
+                }
+                if (first.ContainsKey("text"))
+                    return first["text"] as string;
+            }
+            catch { }
+            return null;
+        }
+
+        private static string CleanTitle(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return null;
+            s = s.Replace('\r', '\n');
+            int nl = s.IndexOf('\n');
+            if (nl >= 0) s = s.Substring(0, nl);
+            s = s.Trim();
+            if (s.Length >= 2 && ((s[0] == '"' && s[s.Length - 1] == '"') || (s[0] == '\'' && s[s.Length - 1] == '\'')))
+            {
+                s = s.Substring(1, s.Length - 2).Trim();
+            }
+            while (s.Length > 0 && ".!?\u201d\u2019".IndexOf(s[s.Length - 1]) >= 0) s = s.Substring(0, s.Length - 1);
+            if (s.Length > 80) s = s.Substring(0, 80).Trim();
+            return s;
+        }
+    }
+}
