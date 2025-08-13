@@ -38,11 +38,11 @@
             this.panel2 = new System.Windows.Forms.Panel();
             this.btnSend = new System.Windows.Forms.Button();
             this.cmbModel = new System.Windows.Forms.ComboBox();
-            this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.pnlCenter = new System.Windows.Forms.Panel();
             this.apiKeyBannerPanel = new System.Windows.Forms.Panel();
-            this.lblNoApiKey = new System.Windows.Forms.Label();
             this.lnkOpenSettings = new System.Windows.Forms.LinkLabel();
+            this.lblNoApiKey = new System.Windows.Forms.Label();
+            this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.msMain.SuspendLayout();
             this.panel1.SuspendLayout();
             this.panel2.SuspendLayout();
@@ -153,17 +153,6 @@
             this.cmbModel.TabIndex = 2;
             this.cmbModel.Text = "openai/gpt-4o";
             // 
-            // chatTranscript
-            // 
-            this.chatTranscript.AccessibleName = "Chat transcript";
-            this.chatTranscript.BackColor = System.Drawing.SystemColors.Window;
-            this.chatTranscript.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.chatTranscript.ForeColor = System.Drawing.SystemColors.WindowText;
-            this.chatTranscript.Location = new System.Drawing.Point(0, 0);
-            this.chatTranscript.Name = "chatTranscript";
-            this.chatTranscript.Size = new System.Drawing.Size(738, 735);
-            this.chatTranscript.TabIndex = 0;
-            // 
             // pnlCenter
             // 
             this.pnlCenter.Controls.Add(this.chatTranscript);
@@ -186,26 +175,37 @@
             this.apiKeyBannerPanel.Size = new System.Drawing.Size(738, 28);
             this.apiKeyBannerPanel.TabIndex = 1;
             // 
-            // lblNoApiKey
-            // 
-            this.lblNoApiKey.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
-                        | System.Windows.Forms.AnchorStyles.Left)));
-            this.lblNoApiKey.AutoSize = true;
-            this.lblNoApiKey.Location = new System.Drawing.Point(12, 11);
-            this.lblNoApiKey.Name = "lblNoApiKey";
-            this.lblNoApiKey.Size = new System.Drawing.Size(114, 13);
-            this.lblNoApiKey.TabIndex = 0;
-            this.lblNoApiKey.Text = "No API key configured";
-            // 
             // lnkOpenSettings
             // 
             this.lnkOpenSettings.AutoSize = true;
-            this.lnkOpenSettings.Location = new System.Drawing.Point(132, 11);
+            this.lnkOpenSettings.Location = new System.Drawing.Point(132, 8);
             this.lnkOpenSettings.Name = "lnkOpenSettings";
             this.lnkOpenSettings.Size = new System.Drawing.Size(74, 13);
             this.lnkOpenSettings.TabIndex = 1;
             this.lnkOpenSettings.TabStop = true;
             this.lnkOpenSettings.Text = "Open Settings";
+            // 
+            // lblNoApiKey
+            // 
+            this.lblNoApiKey.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
+                        | System.Windows.Forms.AnchorStyles.Left)));
+            this.lblNoApiKey.AutoSize = true;
+            this.lblNoApiKey.Location = new System.Drawing.Point(12, 8);
+            this.lblNoApiKey.Name = "lblNoApiKey";
+            this.lblNoApiKey.Size = new System.Drawing.Size(114, 13);
+            this.lblNoApiKey.TabIndex = 0;
+            this.lblNoApiKey.Text = "No API key configured";
+            // 
+            // chatTranscript
+            // 
+            this.chatTranscript.AccessibleName = "Chat transcript";
+            this.chatTranscript.BackColor = System.Drawing.SystemColors.Window;
+            this.chatTranscript.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.chatTranscript.ForeColor = System.Drawing.SystemColors.WindowText;
+            this.chatTranscript.Location = new System.Drawing.Point(0, 0);
+            this.chatTranscript.Name = "chatTranscript";
+            this.chatTranscript.Size = new System.Drawing.Size(738, 735);
+            this.chatTranscript.TabIndex = 0;
             // 
             // MainForm
             // 
