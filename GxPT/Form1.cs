@@ -191,20 +191,22 @@ namespace GxPT
             {
                 try
                 {
-                    _client.CreateCompletionStream(_model, _history.ToArray(),
-                        onDelta: delegate(string d)
+                    _client.CreateCompletionStream(
+                        _model,
+                        _history.ToArray(),
+                        delegate(string d)
                         {
                             assistantBuilder.Append(d);
                             BeginInvoke((MethodInvoker)delegate { chatTranscript.UpdateLastMessage(assistantBuilder.ToString()); });
                         },
-                        onDone: delegate
+                        delegate
                         {
                             // finalize
                             string finalText = assistantBuilder.ToString();
                             _history.Add(new ChatMessage("assistant", finalText));
                             BeginInvoke((MethodInvoker)delegate { _sending = false; });
                         },
-                        onError: delegate(string err)
+                        delegate(string err)
                         {
                             if (string.IsNullOrEmpty(err)) return;
                             BeginInvoke((MethodInvoker)delegate { chatTranscript.UpdateLastMessage("Error: " + err); _sending = false; });
