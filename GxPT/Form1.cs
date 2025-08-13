@@ -12,26 +12,17 @@ namespace GxPT
 {
     public partial class Form1 : Form
     {
-        private ChatTranscriptControl chatControl;
 
         public Form1()
         {
             InitializeComponent();
-            InitializeChatControl();
             AddDemoMessages();
-        }
-
-        private void InitializeChatControl()
-        {
-            chatControl = new ChatTranscriptControl();
-            chatControl.Dock = DockStyle.Fill;
-            this.Controls.Add(chatControl);
         }
 
         private void AddDemoMessages()
         {
             // Add a user message
-            chatControl.AddMessage(MessageRole.User, "Hello! Can you show me what markdown features you support, including syntax highlighting?");
+            chatTranscript.AddMessage(MessageRole.User, "Hello! Can you show me what markdown features you support, including syntax highlighting?");
 
             // Add an assistant message demonstrating various markdown features
             string assistantMessage = "# Markdown Demo with Syntax Highlighting\n\n" +
@@ -115,10 +106,10 @@ namespace GxPT
                 "```\n\n" +
                 "That covers the main features including **syntax highlighting** for C#, JavaScript, JSON, and Python!";
 
-            chatControl.AddMessage(MessageRole.Assistant, assistantMessage);
+            chatTranscript.AddMessage(MessageRole.Assistant, assistantMessage);
 
             // Add another message showing unsupported language (should fallback to normal text)
-            chatControl.AddMessage(MessageRole.User, "What about other languages?");
+            chatTranscript.AddMessage(MessageRole.User, "What about other languages?");
 
             string fallbackMessage = "For unsupported languages, the code is displayed as plain text:\n\n" +
                 "```rust\n" +
@@ -132,7 +123,7 @@ namespace GxPT
                 "```\n\n" +
                 "But the core languages (C#, JavaScript, JSON, Python) get full syntax highlighting!";
 
-            chatControl.AddMessage(MessageRole.Assistant, fallbackMessage);
+            chatTranscript.AddMessage(MessageRole.Assistant, fallbackMessage);
         }
     }
 }
