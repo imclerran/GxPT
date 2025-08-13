@@ -8,7 +8,8 @@ namespace GxPT
     internal sealed class Conversation
     {
         private readonly OpenRouterClient _client;
-        private volatile bool _nameRequested;
+        private volatile bool _nameRequested; // legacy flag; kept for safety
+        private volatile bool _namingInProgress;
 
         private readonly List<ChatMessage> _history = new List<ChatMessage>();
         public List<ChatMessage> History { get { return _history; } }
@@ -18,11 +19,14 @@ namespace GxPT
         public Conversation(OpenRouterClient client)
         {
             _client = client;
+            Name = "New Conversation"; // initialize to generic name
         }
 
         public void AddUserMessage(string content)
         {
             History.Add(new ChatMessage("user", content ?? string.Empty));
+            // Attempt (re)generation if still generic
+            MaybeTriggerNaming();
         }
 
         public void AddAssistantMessage(string content)
@@ -30,13 +34,14 @@ namespace GxPT
             History.Add(new ChatMessage("assistant", content ?? string.Empty));
         }
 
-        // Generate a short title after the first user message using mistralai/mistral-nemo.
+        // Generate or refine a short title using mistralai/mistral-nemo.
         public void EnsureNameGenerated(string firstUserMessage)
         {
             if (_client == null || !_client.IsConfigured) return;
-            if (!string.IsNullOrEmpty(Name)) return;
-            if (_nameRequested) return;
-            _nameRequested = true;
+            // Only generate when name is still generic; otherwise keep
+            if (!string.IsNullOrEmpty(Name) && Name != "New Conversation") return;
+            if (_namingInProgress) return;
+            _namingInProgress = true;
 
             System.Threading.ThreadPool.QueueUserWorkItem(delegate
             {
@@ -44,10 +49,18 @@ namespace GxPT
                 {
                     var msgs = new List<ChatMessage>();
                     msgs.Add(new ChatMessage("system",
-                        "You generate short, descriptive conversation titles based on the first user message. Return only the title. 2 to 5 words. Title Case. No quotes. No trailing punctuation."));
-                    msgs.Add(new ChatMessage("user", firstUserMessage ?? string.Empty));
+                        "You generate short, descriptive conversation titles from the conversation so far. If the conversation so far is only a greeting (e.g., 'hi', 'hello', 'hey there') or lacks any clear topical content, return exactly: New Conversation. Otherwise, return only the title: 3 to 6 words, Title Case, no quotes, no trailing punctuation."));
+                    // Include all messages so far for context
+                    for (int i = 0; i < History.Count; i++)
+                    {
+                        var m = History[i];
+                        msgs.Add(new ChatMessage(m.Role, m.Content));
+                    }
+                    // Also include the immediate user message if provided (defensive)
+                    if (!string.IsNullOrEmpty(firstUserMessage))
+                        msgs.Add(new ChatMessage("user", firstUserMessage));
 
-                    string json = _client.CreateCompletion("google/gemini-2.0-flash-lite-001", msgs);
+                    string json = _client.CreateCompletion("mistralai/mistral-nemo", msgs);
                     string title = ExtractTitleFromJson(json);
                     title = CleanTitle(title);
                     if (!string.IsNullOrEmpty(title))
@@ -58,7 +71,18 @@ namespace GxPT
                     }
                 }
                 catch { }
+                finally { _namingInProgress = false; }
             });
+        }
+
+        private void MaybeTriggerNaming()
+        {
+            if (_client == null || !_client.IsConfigured) return;
+            if (_namingInProgress) return;
+            if (string.IsNullOrEmpty(Name) || Name == "New Conversation")
+            {
+                EnsureNameGenerated(null);
+            }
         }
 
         private static string ExtractTitleFromJson(string json)

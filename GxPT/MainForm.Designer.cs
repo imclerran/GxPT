@@ -168,7 +168,7 @@
             this.Controls.Add(this.msMain);
             this.MainMenuStrip = this.msMain;
             this.Name = "MainForm";
-            this.Text = "GxPT";
+            this.Text = "GxPT - New Conversation";
             this.msMain.ResumeLayout(false);
             this.msMain.PerformLayout();
             this.panel1.ResumeLayout(false);
