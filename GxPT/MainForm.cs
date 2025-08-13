@@ -14,6 +14,7 @@ namespace GxPT
     {
         private readonly List<ChatMessage> _history = new List<ChatMessage>();
         private OpenRouterClient _client;
+        private const int MinInputHeightPx = 75; // initial and minimum height for input panel
 
 
         public MainForm()
@@ -21,11 +22,20 @@ namespace GxPT
             InitializeComponent();
             HookEvents();
             InitializeClient();
+            // Ensure baseline sizing and behavior
+            if (this.txtMessage != null)
+            {
+                this.txtMessage.Multiline = true;
+                this.txtMessage.AcceptsReturn = true;
+                this.txtMessage.ScrollBars = ScrollBars.None;
+            }
         }
 
         private void HookEvents()
         {
             this.txtMessage.KeyDown += txtMessage_KeyDown;
+            this.txtMessage.TextChanged += txtMessage_TextChanged;
+            this.Resize += MainForm_Resize;
         }
 
         private string GetSelectedModel()
@@ -185,6 +195,7 @@ namespace GxPT
             chatTranscript.AddMessage(MessageRole.User, text);
             _history.Add(new ChatMessage("user", text));
             txtMessage.Clear();
+            ResetInputBoxHeight();
 
             // Add placeholder assistant message to stream into
             chatTranscript.AddMessage(MessageRole.Assistant, "");
@@ -246,6 +257,57 @@ namespace GxPT
                 e.Handled = true;
                 btnSend.PerformClick();
             }
+        }
+
+        private void txtMessage_TextChanged(object sender, EventArgs e)
+        {
+            AdjustInputBoxHeight();
+        }
+
+        private void MainForm_Resize(object sender, EventArgs e)
+        {
+            AdjustInputBoxHeight();
+        }
+
+        private void ResetInputBoxHeight()
+        {
+            if (txtMessage == null) return;
+            txtMessage.Height = MinInputHeightPx;
+            txtMessage.ScrollBars = ScrollBars.None;
+        }
+
+        private void AdjustInputBoxHeight()
+        {
+            if (txtMessage == null) return;
+
+            // Available area: client area minus menu strip height (chatTranscript + input panel share this)
+            int menuH = (msMain != null ? msMain.Height : 0);
+            int available = Math.Max(0, this.ClientSize.Height - menuH);
+            int maxHeight = Math.Max(MinInputHeightPx, (int)Math.Floor(available * 0.5));
+
+            // Measure required height for current text within the textbox width
+            int width = Math.Max(10, txtMessage.ClientSize.Width);
+            var proposed = new Size(width, int.MaxValue);
+            var flags = TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl | TextFormatFlags.NoPadding;
+            string text = txtMessage.Text;
+            if (string.IsNullOrEmpty(text)) text = " ";
+            Size measured = TextRenderer.MeasureText(text, txtMessage.Font, proposed, flags);
+
+            // Add a small padding to avoid clipping last line
+            int desired = measured.Height + 8;
+
+            // Clamp to [MinInputHeightPx, maxHeight]
+            int newHeight = Math.Max(MinInputHeightPx, Math.Min(desired, maxHeight));
+
+            // Apply height to the textbox; panel will auto-size accordingly
+            if (txtMessage.Height != newHeight)
+                txtMessage.Height = newHeight;
+
+            // Manage scrollbars: only show when content exceeds cap
+            bool exceedsCap = desired > maxHeight;
+            var newScroll = exceedsCap ? ScrollBars.Vertical : ScrollBars.None;
+            if (txtMessage.ScrollBars != newScroll)
+                txtMessage.ScrollBars = newScroll;
         }
     }
 }
