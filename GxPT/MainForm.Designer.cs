@@ -34,10 +34,10 @@
             this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.miExit = new System.Windows.Forms.ToolStripMenuItem();
             this.panel1 = new System.Windows.Forms.Panel();
-            this.txtMessage = new System.Windows.Forms.TextBox();
+            this.panel2 = new System.Windows.Forms.Panel();
             this.btnSend = new System.Windows.Forms.Button();
             this.cmbModel = new System.Windows.Forms.ComboBox();
-            this.panel2 = new System.Windows.Forms.Panel();
+            this.txtMessage = new System.Windows.Forms.TextBox();
             this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.msMain.SuspendLayout();
             this.panel1.SuspendLayout();
@@ -95,14 +95,15 @@
             this.panel1.Size = new System.Drawing.Size(742, 75);
             this.panel1.TabIndex = 2;
             // 
-            // txtMessage
+            // panel2
             // 
-            this.txtMessage.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.txtMessage.Location = new System.Drawing.Point(0, 0);
-            this.txtMessage.Multiline = true;
-            this.txtMessage.Name = "txtMessage";
-            this.txtMessage.Size = new System.Drawing.Size(742, 75);
-            this.txtMessage.TabIndex = 1;
+            this.panel2.Controls.Add(this.btnSend);
+            this.panel2.Controls.Add(this.cmbModel);
+            this.panel2.Dock = System.Windows.Forms.DockStyle.Right;
+            this.panel2.Location = new System.Drawing.Point(604, 0);
+            this.panel2.Name = "panel2";
+            this.panel2.Size = new System.Drawing.Size(138, 75);
+            this.panel2.TabIndex = 3;
             // 
             // btnSend
             // 
@@ -124,8 +125,7 @@
             "google/gemini-2.5-flash",
             "google/gemini-2.5-pro",
             "openai/gpt-4o",
-            "openai/gpt-5",
-            "openai/gpt-oss-120b"});
+            "openai/gpt-5"});
             this.cmbModel.Location = new System.Drawing.Point(0, 54);
             this.cmbModel.Name = "cmbModel";
             this.cmbModel.Size = new System.Drawing.Size(138, 21);
@@ -133,15 +133,14 @@
             this.cmbModel.TabIndex = 2;
             this.cmbModel.Text = "openai/gpt-4o";
             // 
-            // panel2
+            // txtMessage
             // 
-            this.panel2.Controls.Add(this.btnSend);
-            this.panel2.Controls.Add(this.cmbModel);
-            this.panel2.Dock = System.Windows.Forms.DockStyle.Right;
-            this.panel2.Location = new System.Drawing.Point(604, 0);
-            this.panel2.Name = "panel2";
-            this.panel2.Size = new System.Drawing.Size(138, 75);
-            this.panel2.TabIndex = 3;
+            this.txtMessage.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.txtMessage.Location = new System.Drawing.Point(0, 0);
+            this.txtMessage.Multiline = true;
+            this.txtMessage.Name = "txtMessage";
+            this.txtMessage.Size = new System.Drawing.Size(742, 75);
+            this.txtMessage.TabIndex = 1;
             // 
             // chatTranscript
             // 
