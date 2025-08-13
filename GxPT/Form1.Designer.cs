@@ -36,9 +36,12 @@
             this.panel1 = new System.Windows.Forms.Panel();
             this.txtMessage = new System.Windows.Forms.TextBox();
             this.btnSend = new System.Windows.Forms.Button();
+            this.cmbModel = new System.Windows.Forms.ComboBox();
+            this.panel2 = new System.Windows.Forms.Panel();
             this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.msMain.SuspendLayout();
             this.panel1.SuspendLayout();
+            this.panel2.SuspendLayout();
             this.SuspendLayout();
             // 
             // msMain
@@ -64,27 +67,27 @@
             // miSettings
             // 
             this.miSettings.Name = "miSettings";
-            this.miSettings.Size = new System.Drawing.Size(152, 22);
+            this.miSettings.Size = new System.Drawing.Size(124, 22);
             this.miSettings.Text = "&Settings";
             this.miSettings.Click += new System.EventHandler(this.miSettings_Click);
             // 
             // toolStripSeparator1
             // 
             this.toolStripSeparator1.Name = "toolStripSeparator1";
-            this.toolStripSeparator1.Size = new System.Drawing.Size(149, 6);
+            this.toolStripSeparator1.Size = new System.Drawing.Size(121, 6);
             // 
             // miExit
             // 
             this.miExit.Name = "miExit";
-            this.miExit.Size = new System.Drawing.Size(152, 22);
+            this.miExit.Size = new System.Drawing.Size(124, 22);
             this.miExit.Text = "E&xit";
             this.miExit.Click += new System.EventHandler(this.miExit_Click);
             // 
             // panel1
             // 
             this.panel1.AutoSize = true;
+            this.panel1.Controls.Add(this.panel2);
             this.panel1.Controls.Add(this.txtMessage);
-            this.panel1.Controls.Add(this.btnSend);
             this.panel1.Dock = System.Windows.Forms.DockStyle.Bottom;
             this.panel1.Location = new System.Drawing.Point(0, 791);
             this.panel1.MinimumSize = new System.Drawing.Size(0, 75);
@@ -98,18 +101,47 @@
             this.txtMessage.Location = new System.Drawing.Point(0, 0);
             this.txtMessage.Multiline = true;
             this.txtMessage.Name = "txtMessage";
-            this.txtMessage.Size = new System.Drawing.Size(667, 75);
+            this.txtMessage.Size = new System.Drawing.Size(742, 75);
             this.txtMessage.TabIndex = 1;
             // 
             // btnSend
             // 
-            this.btnSend.Dock = System.Windows.Forms.DockStyle.Right;
-            this.btnSend.Location = new System.Drawing.Point(667, 0);
+            this.btnSend.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.btnSend.Location = new System.Drawing.Point(0, 0);
             this.btnSend.Name = "btnSend";
-            this.btnSend.Size = new System.Drawing.Size(75, 75);
+            this.btnSend.Size = new System.Drawing.Size(138, 54);
             this.btnSend.TabIndex = 0;
             this.btnSend.Text = "Send";
             this.btnSend.UseVisualStyleBackColor = true;
+            // 
+            // cmbModel
+            // 
+            this.cmbModel.Dock = System.Windows.Forms.DockStyle.Bottom;
+            this.cmbModel.FormattingEnabled = true;
+            this.cmbModel.Items.AddRange(new object[] {
+            "anthropic/claude-3.7-sonnet",
+            "anthropic/claude-sonnet-4",
+            "google/gemini-2.5-flash",
+            "google/gemini-2.5-pro",
+            "openai/gpt-4o",
+            "openai/gpt-5",
+            "openai/gpt-oss-120b"});
+            this.cmbModel.Location = new System.Drawing.Point(0, 54);
+            this.cmbModel.Name = "cmbModel";
+            this.cmbModel.Size = new System.Drawing.Size(138, 21);
+            this.cmbModel.Sorted = true;
+            this.cmbModel.TabIndex = 2;
+            this.cmbModel.Text = "openai/gpt-4o";
+            // 
+            // panel2
+            // 
+            this.panel2.Controls.Add(this.btnSend);
+            this.panel2.Controls.Add(this.cmbModel);
+            this.panel2.Dock = System.Windows.Forms.DockStyle.Right;
+            this.panel2.Location = new System.Drawing.Point(604, 0);
+            this.panel2.Name = "panel2";
+            this.panel2.Size = new System.Drawing.Size(138, 75);
+            this.panel2.TabIndex = 3;
             // 
             // chatTranscript
             // 
@@ -137,6 +169,7 @@
             this.msMain.PerformLayout();
             this.panel1.ResumeLayout(false);
             this.panel1.PerformLayout();
+            this.panel2.ResumeLayout(false);
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -153,6 +186,8 @@
         private System.Windows.Forms.Panel panel1;
         private System.Windows.Forms.Button btnSend;
         private System.Windows.Forms.TextBox txtMessage;
+        private System.Windows.Forms.Panel panel2;
+        private System.Windows.Forms.ComboBox cmbModel;
 
 
     }
