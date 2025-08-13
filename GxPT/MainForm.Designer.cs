@@ -39,9 +39,15 @@
             this.btnSend = new System.Windows.Forms.Button();
             this.cmbModel = new System.Windows.Forms.ComboBox();
             this.chatTranscript = new GxPT.ChatTranscriptControl();
+            this.pnlCenter = new System.Windows.Forms.Panel();
+            this.apiKeyBannerPanel = new System.Windows.Forms.Panel();
+            this.lblNoApiKey = new System.Windows.Forms.Label();
+            this.lnkOpenSettings = new System.Windows.Forms.LinkLabel();
             this.msMain.SuspendLayout();
             this.panel1.SuspendLayout();
             this.panel2.SuspendLayout();
+            this.pnlCenter.SuspendLayout();
+            this.apiKeyBannerPanel.SuspendLayout();
             this.SuspendLayout();
             // 
             // msMain
@@ -153,17 +159,60 @@
             this.chatTranscript.BackColor = System.Drawing.SystemColors.Window;
             this.chatTranscript.Dock = System.Windows.Forms.DockStyle.Fill;
             this.chatTranscript.ForeColor = System.Drawing.SystemColors.WindowText;
-            this.chatTranscript.Location = new System.Drawing.Point(0, 24);
+            this.chatTranscript.Location = new System.Drawing.Point(0, 0);
             this.chatTranscript.Name = "chatTranscript";
-            this.chatTranscript.Size = new System.Drawing.Size(738, 763);
+            this.chatTranscript.Size = new System.Drawing.Size(738, 735);
             this.chatTranscript.TabIndex = 0;
+            // 
+            // pnlCenter
+            // 
+            this.pnlCenter.Controls.Add(this.chatTranscript);
+            this.pnlCenter.Controls.Add(this.apiKeyBannerPanel);
+            this.pnlCenter.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.pnlCenter.Location = new System.Drawing.Point(0, 24);
+            this.pnlCenter.Name = "pnlCenter";
+            this.pnlCenter.Size = new System.Drawing.Size(738, 763);
+            this.pnlCenter.TabIndex = 3;
+            // 
+            // apiKeyBannerPanel
+            // 
+            this.apiKeyBannerPanel.BackColor = System.Drawing.Color.Gold;
+            this.apiKeyBannerPanel.Controls.Add(this.lnkOpenSettings);
+            this.apiKeyBannerPanel.Controls.Add(this.lblNoApiKey);
+            this.apiKeyBannerPanel.Dock = System.Windows.Forms.DockStyle.Bottom;
+            this.apiKeyBannerPanel.Location = new System.Drawing.Point(0, 735);
+            this.apiKeyBannerPanel.Name = "apiKeyBannerPanel";
+            this.apiKeyBannerPanel.Padding = new System.Windows.Forms.Padding(6, 4, 6, 4);
+            this.apiKeyBannerPanel.Size = new System.Drawing.Size(738, 28);
+            this.apiKeyBannerPanel.TabIndex = 1;
+            // 
+            // lblNoApiKey
+            // 
+            this.lblNoApiKey.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
+                        | System.Windows.Forms.AnchorStyles.Left)));
+            this.lblNoApiKey.AutoSize = true;
+            this.lblNoApiKey.Location = new System.Drawing.Point(12, 11);
+            this.lblNoApiKey.Name = "lblNoApiKey";
+            this.lblNoApiKey.Size = new System.Drawing.Size(114, 13);
+            this.lblNoApiKey.TabIndex = 0;
+            this.lblNoApiKey.Text = "No API key configured";
+            // 
+            // lnkOpenSettings
+            // 
+            this.lnkOpenSettings.AutoSize = true;
+            this.lnkOpenSettings.Location = new System.Drawing.Point(132, 11);
+            this.lnkOpenSettings.Name = "lnkOpenSettings";
+            this.lnkOpenSettings.Size = new System.Drawing.Size(74, 13);
+            this.lnkOpenSettings.TabIndex = 1;
+            this.lnkOpenSettings.TabStop = true;
+            this.lnkOpenSettings.Text = "Open Settings";
             // 
             // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(738, 862);
-            this.Controls.Add(this.chatTranscript);
+            this.Controls.Add(this.pnlCenter);
             this.Controls.Add(this.panel1);
             this.Controls.Add(this.msMain);
             this.MainMenuStrip = this.msMain;
@@ -174,6 +223,9 @@
             this.panel1.ResumeLayout(false);
             this.panel1.PerformLayout();
             this.panel2.ResumeLayout(false);
+            this.pnlCenter.ResumeLayout(false);
+            this.apiKeyBannerPanel.ResumeLayout(false);
+            this.apiKeyBannerPanel.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -192,6 +244,10 @@
         private System.Windows.Forms.TextBox txtMessage;
         private System.Windows.Forms.Panel panel2;
         private System.Windows.Forms.ComboBox cmbModel;
+        private System.Windows.Forms.Panel pnlCenter;
+        private System.Windows.Forms.Panel apiKeyBannerPanel;
+        private System.Windows.Forms.Label lblNoApiKey;
+        private System.Windows.Forms.LinkLabel lnkOpenSettings;
 
 
     }

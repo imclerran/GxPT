@@ -16,6 +16,9 @@ namespace GxPT
         private OpenRouterClient _client;
         private const int MinInputHeightPx = 75; // initial and minimum height for input panel
         // future conversation-related helpers can go here
+        private Panel _apiKeyBanner;
+        private LinkLabel _lnkOpenSettings;
+        private Panel _centerHost;
 
 
         public MainForm()
@@ -23,6 +26,9 @@ namespace GxPT
             InitializeComponent();
             HookEvents();
             InitializeClient();
+            EnsureCenterHost();
+            CreateApiKeyBanner();
+            this.Load += (s, e) => UpdateApiKeyBanner();
             // Ensure baseline sizing and behavior
             if (this.txtMessage != null)
             {
@@ -71,6 +77,8 @@ namespace GxPT
                 }
                 catch { }
             };
+            // Reflect any change in configuration
+            UpdateApiKeyBanner();
         }
 
         private void AddDemoMessages()
@@ -187,6 +195,7 @@ namespace GxPT
                 dlg.ShowDialog(this);
                 // Re-init client in case API key changed
                 InitializeClient();
+                UpdateApiKeyBanner();
             }
         }
 
@@ -329,5 +338,119 @@ namespace GxPT
         }
 
         // future conversation-related helpers can go here
+
+        private void EnsureCenterHost()
+        {
+            if (_centerHost != null) return;
+
+            // Create a dedicated Fill host so we can safely insert the banner above the bottom input panel
+            _centerHost = new Panel { Dock = DockStyle.Fill };
+            try
+            {
+                this.SuspendLayout();
+                // Move chatTranscript into the center host
+                if (this.chatTranscript != null)
+                {
+                    this.Controls.Remove(this.chatTranscript);
+                    this.chatTranscript.Dock = DockStyle.Fill;
+                    _centerHost.Controls.Add(this.chatTranscript);
+                }
+                // Add host to the form; panel1 remains Dock=Bottom on the form
+                this.Controls.Add(_centerHost);
+                // Ensure panel1 remains at bottom
+                if (this.panel1 != null)
+                {
+                    this.Controls.SetChildIndex(this.panel1, 0);
+                }
+            }
+            finally
+            {
+                this.ResumeLayout(true);
+            }
+        }
+
+        private void CreateApiKeyBanner()
+        {
+            if (_apiKeyBanner != null) return;
+
+            _apiKeyBanner = new Panel
+            {
+                Height = 28,
+                BackColor = Color.Khaki,
+                Dock = DockStyle.Bottom,
+                Visible = false,
+                Padding = new Padding(6, 4, 6, 4),
+                TabStop = false
+            };
+
+            var lbl = new Label
+            {
+                AutoSize = true,
+                Text = "No API key configured.",
+                Margin = new Padding(0, 4, 8, 4)
+            };
+
+            _lnkOpenSettings = new LinkLabel
+            {
+                AutoSize = true,
+                Text = "Open Settings",
+                Margin = new Padding(0, 4, 0, 4)
+            };
+            _lnkOpenSettings.LinkClicked += (s, e) =>
+            {
+                // Open settings and refresh configuration state
+                using (var dlg = new SettingsForm())
+                {
+                    if (dlg.ShowDialog(this) == DialogResult.OK)
+                    {
+                        InitializeClient();
+                        UpdateApiKeyBanner();
+                    }
+                    else
+                    {
+                        // Still refresh in case they hit Apply
+                        InitializeClient();
+                        UpdateApiKeyBanner();
+                    }
+                }
+            };
+
+            var flow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                WrapContents = false,
+                AutoSize = false
+            };
+            flow.Controls.Add(lbl);
+            flow.Controls.Add(_lnkOpenSettings);
+            _apiKeyBanner.Controls.Add(flow);
+
+            // Ensure host exists and insert banner inside it so it's always above the bottom input panel
+            EnsureCenterHost();
+            _centerHost.Controls.Add(_apiKeyBanner); // Dock=Bottom, sits above chatTranscript (Fill) within host
+        }
+
+        private void UpdateApiKeyBanner()
+        {
+            try
+            {
+                string key = AppSettings.Get("openrouter_api_key");
+                bool hasKey = (key != null && key.Trim().Length > 0);
+                if (_apiKeyBanner != null)
+                    _apiKeyBanner.Visible = !hasKey;
+
+                // Enable/disable input controls based on configuration
+                if (this.txtMessage != null) this.txtMessage.Enabled = hasKey;
+                if (this.btnSend != null) this.btnSend.Enabled = hasKey;
+                if (this.cmbModel != null) this.cmbModel.Enabled = hasKey;
+            }
+            catch
+            {
+                if (_apiKeyBanner != null) _apiKeyBanner.Visible = true;
+                if (this.txtMessage != null) this.txtMessage.Enabled = false;
+                if (this.btnSend != null) this.btnSend.Enabled = false;
+                if (this.cmbModel != null) this.cmbModel.Enabled = false;
+            }
+        }
     }
 }
