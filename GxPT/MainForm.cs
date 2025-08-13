@@ -14,7 +14,7 @@ namespace GxPT
     {
         private readonly List<ChatMessage> _history = new List<ChatMessage>();
         private OpenRouterClient _client;
-        private string _model = "openai/gpt-4o";
+
 
         public MainForm()
         {
@@ -27,6 +27,20 @@ namespace GxPT
         {
             // Ensure send button is wired
             this.btnSend.Click += btnSend_Click;
+        }
+
+        private string GetSelectedModel()
+        {
+            try
+            {
+                string m = (cmbModel != null ? cmbModel.Text : null) ?? string.Empty;
+                m = m.Trim();
+                return string.IsNullOrEmpty(m) ? "openai/gpt-4o" : m;
+            }
+            catch
+            {
+                return "openai/gpt-4o";
+            }
         }
 
         private void InitializeClient()
@@ -184,6 +198,8 @@ namespace GxPT
                 return;
             }
 
+            var modelToUse = GetSelectedModel();
+
             _sending = true;
 
             // Kick off streaming in background
@@ -191,8 +207,10 @@ namespace GxPT
             {
                 try
                 {
+                    // Capture the model selection at send time
+                    //var modelToUse = GetSelectedModel();
                     _client.CreateCompletionStream(
-                        _model,
+                        modelToUse,
                         _history.ToArray(),
                         delegate(string d)
                         {
