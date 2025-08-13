@@ -1,6 +1,6 @@
-﻿// ChatTranscriptControl_Markdown.cs
+﻿// ChatTranscriptControl.cs
 // WinForms owner-drawn chat transcript with basic Markdown rendering
-// Target: .NET 3.5, Windows XP compatible (no external deps)
+// Target: .NET 3.5, Windows XP compatible
 
 using System;
 using System.Collections.Generic;

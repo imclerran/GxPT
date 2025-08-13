@@ -1,6 +1,6 @@
 ﻿// SyntaxHighlightingRenderer.cs
 // Syntax highlighting renderer for code blocks and inline code
-// Target: .NET 3.5, Windows XP compatible (no external deps)
+// Target: .NET 3.5, Windows XP compatible
 
 using System;
 using System.Collections.Generic;

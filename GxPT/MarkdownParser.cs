@@ -1,6 +1,6 @@
 ﻿// MarkdownParser.cs
 // Simple Markdown parser for chat transcript display
-// Target: .NET 3.5, Windows XP compatible (no external deps)
+// Target: .NET 3.5, Windows XP compatible
 
 using System;
 using System.Collections.Generic;
