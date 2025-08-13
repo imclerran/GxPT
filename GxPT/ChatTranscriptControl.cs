@@ -194,6 +194,39 @@ namespace GxPT
             Invalidate();
         }
 
+        // Replace the content of the last message if it exists
+        public void UpdateLastMessage(string markdown)
+        {
+            if (_items.Count == 0) return;
+            var it = _items[_items.Count - 1];
+            it.RawMarkdown = markdown ?? string.Empty;
+            it.Blocks = MarkdownParser.ParseMarkdown(it.RawMarkdown);
+            // reset code scrolls to match blocks
+            it.CodeScroll = new List<int>();
+            int codes = 0; foreach (var b in it.Blocks) if (b.Type == BlockType.CodeBlock) codes++;
+            for (int i = 0; i < codes; i++) it.CodeScroll.Add(0);
+            Reflow();
+            ScrollToBottom();
+            Invalidate();
+        }
+
+        // Append text to the last message (useful for streaming); will keep as a single paragraph
+        public void AppendToLastMessage(string delta)
+        {
+            if (delta == null) return;
+            if (_items.Count == 0)
+            {
+                AddMessage(MessageRole.Assistant, delta);
+                return;
+            }
+            var it = _items[_items.Count - 1];
+            it.RawMarkdown = (it.RawMarkdown ?? string.Empty) + delta;
+            it.Blocks = MarkdownParser.ParseMarkdown(it.RawMarkdown);
+            Reflow();
+            ScrollToBottom();
+            Invalidate();
+        }
+
         // ---------- Layout ----------
         private void Reflow()
         {

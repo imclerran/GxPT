@@ -12,11 +12,30 @@ namespace GxPT
 {
     public partial class Form1 : Form
     {
+        private readonly List<ChatMessage> _history = new List<ChatMessage>();
+        private OpenRouterClient _client;
+        private string _model = "openai/gpt-4o";
 
         public Form1()
         {
             InitializeComponent();
-            AddDemoMessages();
+            HookEvents();
+            InitializeClient();
+        }
+
+        private void HookEvents()
+        {
+            // Ensure send button is wired
+            this.btnSend.Click += btnSend_Click;
+        }
+
+        private void InitializeClient()
+        {
+            // Read API key from settings.yaml in %AppData%\GxPT
+            string apiKey = AppSettings.Get("openrouter_api_key");
+            // curl.exe expected next to executable (bin/Debug)
+            string curlPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "curl.exe");
+            _client = new OpenRouterClient(apiKey, curlPath);
         }
 
         private void AddDemoMessages()
@@ -131,7 +150,72 @@ namespace GxPT
             using (var dlg = new SettingsForm())
             {
                 dlg.ShowDialog(this);
+                // Re-init client in case API key changed
+                InitializeClient();
             }
+        }
+
+        private void miExit_Click(object sender, EventArgs e)
+        {
+            this.Close();
+        }
+
+        private bool _sending;
+
+        private void btnSend_Click(object sender, EventArgs e)
+        {
+            if (_sending) return;
+            string text = (txtMessage.Text ?? string.Empty).Trim();
+            if (text.Length == 0) return;
+
+            // Add to UI and history
+            chatTranscript.AddMessage(MessageRole.User, text);
+            _history.Add(new ChatMessage("user", text));
+            txtMessage.Clear();
+
+            // Add placeholder assistant message to stream into
+            chatTranscript.AddMessage(MessageRole.Assistant, "");
+            var assistantBuilder = new StringBuilder();
+
+            if (_client == null || !_client.IsConfigured)
+            {
+                string reason = _client == null ? "Client not initialized." : (!System.IO.File.Exists(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "curl.exe")) ? "curl.exe not found next to the app." : "Missing API key in settings.yaml.");
+                chatTranscript.UpdateLastMessage("Error: " + reason);
+                return;
+            }
+
+            _sending = true;
+
+            // Kick off streaming in background
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    _client.CreateCompletionStream(_model, _history.ToArray(),
+                        onDelta: delegate(string d)
+                        {
+                            assistantBuilder.Append(d);
+                            BeginInvoke((MethodInvoker)delegate { chatTranscript.UpdateLastMessage(assistantBuilder.ToString()); });
+                        },
+                        onDone: delegate
+                        {
+                            // finalize
+                            string finalText = assistantBuilder.ToString();
+                            _history.Add(new ChatMessage("assistant", finalText));
+                            BeginInvoke((MethodInvoker)delegate { _sending = false; });
+                        },
+                        onError: delegate(string err)
+                        {
+                            if (string.IsNullOrEmpty(err)) return;
+                            BeginInvoke((MethodInvoker)delegate { chatTranscript.UpdateLastMessage("Error: " + err); _sending = false; });
+                        }
+                    );
+                }
+                catch (Exception ex)
+                {
+                    BeginInvoke((MethodInvoker)delegate { chatTranscript.UpdateLastMessage("Error: " + ex.Message); _sending = false; });
+                }
+            });
         }
     }
 }

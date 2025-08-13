@@ -78,6 +78,7 @@
             this.miExit.Name = "miExit";
             this.miExit.Size = new System.Drawing.Size(152, 22);
             this.miExit.Text = "E&xit";
+            this.miExit.Click += new System.EventHandler(this.miExit_Click);
             // 
             // panel1
             // 
