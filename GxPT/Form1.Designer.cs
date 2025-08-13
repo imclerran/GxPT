@@ -28,55 +28,55 @@
         /// </summary>
         private void InitializeComponent()
         {
-            this.menuStrip1 = new System.Windows.Forms.MenuStrip();
-            this.fileToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.settingsToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.msMain = new System.Windows.Forms.MenuStrip();
+            this.miFile = new System.Windows.Forms.ToolStripMenuItem();
+            this.miSettings = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
-            this.exitToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.miExit = new System.Windows.Forms.ToolStripMenuItem();
             this.panel1 = new System.Windows.Forms.Panel();
             this.btnSend = new System.Windows.Forms.Button();
             this.txtMessage = new System.Windows.Forms.TextBox();
             this.chatTranscript = new GxPT.ChatTranscriptControl();
-            this.menuStrip1.SuspendLayout();
+            this.msMain.SuspendLayout();
             this.panel1.SuspendLayout();
             this.SuspendLayout();
             // 
-            // menuStrip1
+            // msMain
             // 
-            this.menuStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.fileToolStripMenuItem});
-            this.menuStrip1.Location = new System.Drawing.Point(0, 0);
-            this.menuStrip1.Name = "menuStrip1";
-            this.menuStrip1.Size = new System.Drawing.Size(742, 24);
-            this.menuStrip1.TabIndex = 1;
-            this.menuStrip1.Text = "menuStrip1";
+            this.msMain.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.miFile});
+            this.msMain.Location = new System.Drawing.Point(0, 0);
+            this.msMain.Name = "msMain";
+            this.msMain.Size = new System.Drawing.Size(742, 24);
+            this.msMain.TabIndex = 1;
+            this.msMain.Text = "menuStrip1";
             // 
-            // fileToolStripMenuItem
+            // miFile
             // 
-            this.fileToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.settingsToolStripMenuItem,
+            this.miFile.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.miSettings,
             this.toolStripSeparator1,
-            this.exitToolStripMenuItem});
-            this.fileToolStripMenuItem.Name = "fileToolStripMenuItem";
-            this.fileToolStripMenuItem.Size = new System.Drawing.Size(35, 20);
-            this.fileToolStripMenuItem.Text = "&File";
+            this.miExit});
+            this.miFile.Name = "miFile";
+            this.miFile.Size = new System.Drawing.Size(35, 20);
+            this.miFile.Text = "&File";
             // 
-            // settingsToolStripMenuItem
+            // miSettings
             // 
-            this.settingsToolStripMenuItem.Name = "settingsToolStripMenuItem";
-            this.settingsToolStripMenuItem.Size = new System.Drawing.Size(124, 22);
-            this.settingsToolStripMenuItem.Text = "&Settings";
+            this.miSettings.Name = "miSettings";
+            this.miSettings.Size = new System.Drawing.Size(152, 22);
+            this.miSettings.Text = "&Settings";
             // 
             // toolStripSeparator1
             // 
             this.toolStripSeparator1.Name = "toolStripSeparator1";
-            this.toolStripSeparator1.Size = new System.Drawing.Size(121, 6);
+            this.toolStripSeparator1.Size = new System.Drawing.Size(149, 6);
             // 
-            // exitToolStripMenuItem
+            // miExit
             // 
-            this.exitToolStripMenuItem.Name = "exitToolStripMenuItem";
-            this.exitToolStripMenuItem.Size = new System.Drawing.Size(124, 22);
-            this.exitToolStripMenuItem.Text = "E&xit";
+            this.miExit.Name = "miExit";
+            this.miExit.Size = new System.Drawing.Size(152, 22);
+            this.miExit.Text = "E&xit";
             // 
             // panel1
             // 
@@ -127,12 +127,12 @@
             this.ClientSize = new System.Drawing.Size(742, 866);
             this.Controls.Add(this.chatTranscript);
             this.Controls.Add(this.panel1);
-            this.Controls.Add(this.menuStrip1);
-            this.MainMenuStrip = this.menuStrip1;
+            this.Controls.Add(this.msMain);
+            this.MainMenuStrip = this.msMain;
             this.Name = "Form1";
             this.Text = "GxPT";
-            this.menuStrip1.ResumeLayout(false);
-            this.menuStrip1.PerformLayout();
+            this.msMain.ResumeLayout(false);
+            this.msMain.PerformLayout();
             this.panel1.ResumeLayout(false);
             this.panel1.PerformLayout();
             this.ResumeLayout(false);
@@ -143,11 +143,11 @@
         #endregion
 
         private ChatTranscriptControl chatTranscript;
-        private System.Windows.Forms.MenuStrip menuStrip1;
-        private System.Windows.Forms.ToolStripMenuItem fileToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem settingsToolStripMenuItem;
+        private System.Windows.Forms.MenuStrip msMain;
+        private System.Windows.Forms.ToolStripMenuItem miFile;
+        private System.Windows.Forms.ToolStripMenuItem miSettings;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator1;
-        private System.Windows.Forms.ToolStripMenuItem exitToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem miExit;
         private System.Windows.Forms.Panel panel1;
         private System.Windows.Forms.Button btnSend;
         private System.Windows.Forms.TextBox txtMessage;
