@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
 using System.Windows.Forms;
+using System.IO;
 
 namespace GxPT
 {
@@ -348,6 +349,8 @@ namespace GxPT
             public string Text;
             public Rectangle Rect;
             public bool IsInlineCode;
+            public bool IsLink;
+            public string LinkUrl;
         }
 
         private Font GetRunFont(RunStyle st, Font baseFont)
@@ -369,48 +372,56 @@ namespace GxPT
 
             using (Graphics g = CreateGraphics())
             {
-                foreach (var r in runs)
+                // Use typographic metrics to avoid GDI+ extra side bearings padding
+                using (var fmt = StringFormat.GenericTypographic)
                 {
-                    bool isCode = (r.Style & RunStyle.Code) != 0;
-                    Font f = isCode ? _monoFont : GetRunFont(r.Style, baseFont);
-                    // Split by spaces, keep separators
-                    var parts = SplitWordsPreserveSpaces(r.Text);
-                    foreach (string part in parts)
+                    fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+                    foreach (var r in runs)
                     {
-                        string text = part;
-                        if (text == "\n")
+                        bool isCode = (r.Style & RunStyle.Code) != 0;
+                        bool isLink = (r.Style & RunStyle.Link) != 0;
+                        Font f = isCode ? _monoFont : GetRunFont(r.Style, baseFont);
+                        // Split by spaces, keep separators
+                        var parts = SplitWordsPreserveSpaces(r.Text);
+                        foreach (string part in parts)
                         {
-                            // Hard line break
-                            yield return new LayoutSeg { IsNewLine = true, LineWidth = lineWidth };
-                            x = 0; lineWidth = 0; lineHeight = baseFont.Height;
-                            continue;
+                            string text = part;
+                            if (text == "\n")
+                            {
+                                // Hard line break
+                                yield return new LayoutSeg { IsNewLine = true, LineWidth = lineWidth };
+                                x = 0; lineWidth = 0; lineHeight = baseFont.Height;
+                                continue;
+                            }
+
+                            SizeF szF = g.MeasureString(text.Length == 0 ? " " : text, f, PointF.Empty, fmt);
+                            int partWidth = (int)Math.Ceiling(szF.Width);
+                            int partHeight = (int)Math.Ceiling(szF.Height);
+
+                            bool needsBreak = (x > 0 && x + partWidth > maxWidth);
+                            if (needsBreak)
+                            {
+                                // break line
+                                yield return new LayoutSeg { IsNewLine = true, LineWidth = lineWidth };
+                                x = 0; lineWidth = 0; lineHeight = baseFont.Height;
+                            }
+
+                            // emit segment
+                            yield return new LayoutSeg
+                            {
+                                IsNewLine = false,
+                                Font = f,
+                                Text = text,
+                                Rect = new Rectangle(x, 0, partWidth, partHeight),
+                                IsInlineCode = isCode,
+                                IsLink = isLink,
+                                LinkUrl = isLink ? r.LinkUrl : null
+                            };
+
+                            x += partWidth;
+                            lineWidth += partWidth;
+                            lineHeight = Math.Max(lineHeight, partHeight);
                         }
-
-                        SizeF szF = g.MeasureString(text.Length == 0 ? " " : text, f);
-                        int partWidth = (int)Math.Ceiling(szF.Width);
-                        int partHeight = (int)Math.Ceiling(szF.Height);
-
-                        bool needsBreak = (x > 0 && x + partWidth > maxWidth);
-                        if (needsBreak)
-                        {
-                            // break line
-                            yield return new LayoutSeg { IsNewLine = true, LineWidth = lineWidth };
-                            x = 0; lineWidth = 0; lineHeight = baseFont.Height;
-                        }
-
-                        // emit segment
-                        yield return new LayoutSeg
-                        {
-                            IsNewLine = false,
-                            Font = f,
-                            Text = text,
-                            Rect = new Rectangle(x, 0, partWidth, partHeight),
-                            IsInlineCode = isCode
-                        };
-
-                        x += partWidth;
-                        lineWidth += partWidth;
-                        lineHeight = Math.Max(lineHeight, partHeight);
                     }
                 }
             }
@@ -679,9 +690,35 @@ namespace GxPT
 
                 Rectangle r = new Rectangle(xCursor, yCursor, seg.Rect.Width, seg.Rect.Height);
 
-                using (var brush = new SolidBrush(ForeColor))
+                if (seg.IsLink)
                 {
-                    g.DrawString(seg.Text, seg.Font, brush, r.Location);
+                    using (var brush = new SolidBrush(Color.FromArgb(0, 102, 204))) // link blue
+                    {
+                        // Draw text
+                        using (var fmt = StringFormat.GenericTypographic)
+                        {
+                            fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+                            g.DrawString(seg.Text, seg.Font, brush, (PointF)r.Location, fmt);
+                            SizeF w = g.MeasureString(seg.Text, seg.Font, PointF.Empty, fmt);
+                            int underlineWidth = (int)Math.Ceiling(w.Width);
+                            int underlineY = r.Bottom - 2;
+                            using (var pen = new Pen(brush.Color))
+                            {
+                                g.DrawLine(pen, r.Left, underlineY, r.Left + underlineWidth, underlineY);
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    using (var brush = new SolidBrush(ForeColor))
+                    {
+                        using (var fmt = StringFormat.GenericTypographic)
+                        {
+                            fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+                            g.DrawString(seg.Text, seg.Font, brush, (PointF)r.Location, fmt);
+                        }
+                    }
                 }
                 xCursor += r.Width;
                 lineWidth += r.Width;
@@ -773,6 +810,59 @@ namespace GxPT
                 _ctxHit = HitTest(e.Location);
                 if (_ctxHit != null)
                     _ctx.Show(this, e.Location);
+                return;
+            }
+            if (e.Button == MouseButtons.Left)
+            {
+                // Link click detection
+                string link = HitTestLink(e.Location);
+                if (!string.IsNullOrEmpty(link))
+                {
+                    try
+                    {
+                        string supermiumPath = @"C:\\Program Files\\Supermium\\chrome.exe";
+                        if (IsWindowsXP() && File.Exists(supermiumPath))
+                        {
+                            // On XP (no reliable default browser override), prefer Supermium if installed
+                            System.Diagnostics.Process.Start(supermiumPath, link);
+                        }
+                        else
+                        {
+                            // On newer OS (or if Supermium absent), let shell pick the default handler
+                            System.Diagnostics.Process.Start(link);
+                        }
+                    }
+                    catch { }
+                }
+            }
+        }
+
+        private static bool IsWindowsXP()
+        {
+            try
+            {
+                OperatingSystem os = Environment.OSVersion;
+                if (os.Platform == PlatformID.Win32NT && os.Version.Major == 5)
+                {
+                    // 5.1 = XP, 5.2 = XP x64 / Server 2003
+                    return os.Version.Minor == 1 || os.Version.Minor == 2;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            string link = HitTestLink(e.Location);
+            if (!string.IsNullOrEmpty(link))
+            {
+                if (Cursor != Cursors.Hand) Cursor = Cursors.Hand;
+            }
+            else
+            {
+                if (Cursor != Cursors.Default) Cursor = Cursors.Default;
             }
         }
 
@@ -783,6 +873,122 @@ namespace GxPT
             {
                 if (_items[i].Bounds.Contains(virt))
                     return _items[i];
+            }
+            return null;
+        }
+
+        private string HitTestLink(Point clientPt)
+        {
+            // Determine which message
+            Point virt = new Point(clientPt.X, clientPt.Y + _scrollOffset);
+            foreach (var it in _items)
+            {
+                if (!it.Bounds.Contains(virt)) continue;
+                // Re-layout its blocks to locate link rectangles (simple approach; could cache)
+                int contentX = it.Bounds.X + BubblePadding;
+                int contentY = it.Bounds.Y + BubblePadding;
+                int contentW = it.Bounds.Width - 2 * BubblePadding;
+                int y = contentY;
+                foreach (var blk in it.Blocks)
+                {
+                    if (blk.Type == BlockType.Paragraph || blk.Type == BlockType.Heading)
+                    {
+                        List<InlineRun> inlines;
+                        Font baseFont;
+                        if (blk.Type == BlockType.Heading)
+                        {
+                            var h = (HeadingBlock)blk;
+                            inlines = h.Inlines;
+                            baseFont = GetHeadingFont(h.Level);
+                        }
+                        else
+                        {
+                            var p = (ParagraphBlock)blk;
+                            inlines = p.Inlines;
+                            baseFont = _baseFont;
+                        }
+                        int x0 = contentX;
+                        int lineHeight = baseFont.Height;
+                        int xCursor = x0;
+                        var wrapped = new List<LayoutSeg>();
+                        foreach (var seg in WordWrapRuns(inlines, baseFont, contentW)) wrapped.Add(seg);
+                        int yCursor = y;
+                        foreach (var seg in wrapped)
+                        {
+                            if (seg.IsNewLine)
+                            {
+                                yCursor += lineHeight + 2;
+                                xCursor = x0;
+                                lineHeight = baseFont.Height;
+                                continue;
+                            }
+                            Rectangle r = new Rectangle(xCursor, yCursor, seg.Rect.Width, seg.Rect.Height);
+                            if (seg.IsLink && r.Contains(virt)) return seg.LinkUrl;
+                            xCursor += r.Width;
+                            lineHeight = Math.Max(lineHeight, seg.Font.Height);
+                        }
+                        y = yCursor + lineHeight + 2 + 2; // account for added gaps
+                    }
+                    else if (blk.Type == BlockType.CodeBlock)
+                    {
+                        // skip; links not in code blocks
+                        // approximate vertical advance
+                        var cb = (CodeBlock)blk;
+                        // simple measure reuse
+                        var colored = SyntaxHighlightingRenderer.GetColoredSegments(cb.Text, cb.Language, _monoFont);
+                        Size measured = SyntaxHighlightingRenderer.MeasureColoredSegments(CreateGraphics(), colored, contentW - 2 * CodeBlockPadding);
+                        y += Math.Max(_monoFont.Height, measured.Height) + 2 * CodeBlockPadding + 4;
+                    }
+                    else if (blk.Type == BlockType.BulletList)
+                    {
+                        // Rough skip for bullets (no links expected yet)
+                        var list = (BulletListBlock)blk;
+                        foreach (var item in list.Items)
+                        {
+                            var wrapped = new List<LayoutSeg>();
+                            foreach (var seg in WordWrapRuns(item.Content, _baseFont, contentW - BulletIndent)) wrapped.Add(seg);
+                            int lineHeight = _baseFont.Height;
+                            int xCursor = contentX + (item.IndentLevel * BulletIndent) + BulletIndent;
+                            int yCursor = y;
+                            foreach (var seg in wrapped)
+                            {
+                                if (seg.IsNewLine)
+                                {
+                                    yCursor += lineHeight + 2; xCursor = contentX + (item.IndentLevel * BulletIndent) + BulletIndent; lineHeight = _baseFont.Height; continue;
+                                }
+                                Rectangle r2 = new Rectangle(xCursor, yCursor, seg.Rect.Width, seg.Rect.Height);
+                                if (seg.IsLink && r2.Contains(virt)) return seg.LinkUrl;
+                                xCursor += r2.Width;
+                                lineHeight = Math.Max(lineHeight, seg.Font.Height);
+                            }
+                            y = yCursor + lineHeight + 2 + 2;
+                        }
+                    }
+                    else if (blk.Type == BlockType.NumberedList)
+                    {
+                        var list = (NumberedListBlock)blk;
+                        int itemNo = 1;
+                        foreach (var item in list.Items)
+                        {
+                            var wrapped = new List<LayoutSeg>();
+                            foreach (var seg in WordWrapRuns(item.Content, _baseFont, contentW - BulletIndent)) wrapped.Add(seg);
+                            int lineHeight = _baseFont.Height;
+                            int xCursor = contentX + (item.IndentLevel * BulletIndent) + BulletIndent + 16; // approximate number width
+                            int yCursor = y;
+                            foreach (var seg in wrapped)
+                            {
+                                if (seg.IsNewLine)
+                                { yCursor += lineHeight + 2; xCursor = contentX + (item.IndentLevel * BulletIndent) + BulletIndent + 16; lineHeight = _baseFont.Height; continue; }
+                                Rectangle r2 = new Rectangle(xCursor, yCursor, seg.Rect.Width, seg.Rect.Height);
+                                if (seg.IsLink && r2.Contains(virt)) return seg.LinkUrl;
+                                xCursor += r2.Width;
+                                lineHeight = Math.Max(lineHeight, seg.Font.Height);
+                            }
+                            y = yCursor + lineHeight + 2 + 2;
+                            itemNo++;
+                        }
+                    }
+                }
             }
             return null;
         }

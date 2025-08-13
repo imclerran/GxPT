@@ -41,6 +41,7 @@ namespace GxPT
                 "- *Italic text* using *single asterisks*\n" +
                 "- `Inline code` using backticks\n" +
                 "- ***Bold and italic*** combined\n\n" +
+                "- Hyperlinks like [Visit OpenAI](https://www.openai.com/) and [GitHub](https://github.com/)\n\n" +
                 "## Lists\n" +
                 "### Bullet Lists:\n" +
                 "- First bullet item\n" +

@@ -11,7 +11,7 @@ namespace GxPT
     public enum BlockType { Paragraph, Heading, CodeBlock, BulletList, NumberedList }
 
     [Flags]
-    public enum RunStyle { Normal = 0, Bold = 1, Italic = 2, Code = 4 }
+    public enum RunStyle { Normal = 0, Bold = 1, Italic = 2, Code = 4, Link = 8 }
 
     public abstract class Block
     {
@@ -55,6 +55,7 @@ namespace GxPT
     {
         public string Text;
         public RunStyle Style;
+        public string LinkUrl; // non-null when this run is a hyperlink
     }
 
     public static class MarkdownParser
@@ -220,7 +221,7 @@ namespace GxPT
             return blocks;
         }
 
-        // Very simple inline parser: **bold**, *italic*, __bold__, _italic_, `code`
+        // Very simple inline parser: **bold**, *italic*, __bold__, _italic_, `code`, [text](url)
         // No nested emphasis beyond bold+italic combos; escapes not handled exhaustively (sufficient for chat)
         public static List<InlineRun> ParseInlines(string text)
         {
@@ -246,6 +247,30 @@ namespace GxPT
 
             while (i < text.Length)
             {
+                // hyperlink [text](url)
+                if (text[i] == '[')
+                {
+                    int linkTextStart = i + 1;
+                    int bracketEnd = text.IndexOf(']', linkTextStart);
+                    if (bracketEnd > linkTextStart && bracketEnd + 1 < text.Length && text[bracketEnd + 1] == '(')
+                    {
+                        int urlStart = bracketEnd + 2;
+                        int parenEnd = text.IndexOf(')', urlStart);
+                        if (parenEnd > urlStart)
+                        {
+                            // Flush pending normal text
+                            flush();
+                            string linkText = text.Substring(linkTextStart, bracketEnd - linkTextStart);
+                            string url = text.Substring(urlStart, parenEnd - urlStart).Trim();
+                            if (url.Length > 0)
+                            {
+                                runs.Add(new InlineRun { Text = linkText, Style = RunStyle.Link, LinkUrl = url });
+                                i = parenEnd + 1;
+                                continue;
+                            }
+                        }
+                    }
+                }
                 // inline code
                 if (text[i] == '`')
                 {
