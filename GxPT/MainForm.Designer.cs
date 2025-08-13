@@ -107,7 +107,7 @@
             // 
             // btnSend
             // 
-            this.btnSend.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.btnSend.Dock = System.Windows.Forms.DockStyle.Bottom;
             this.btnSend.Location = new System.Drawing.Point(0, 0);
             this.btnSend.Name = "btnSend";
             this.btnSend.Size = new System.Drawing.Size(138, 54);
@@ -137,11 +137,13 @@
             // txtMessage
             // 
             this.txtMessage.AcceptsReturn = true;
-            this.txtMessage.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.txtMessage.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
+                        | System.Windows.Forms.AnchorStyles.Right)));
             this.txtMessage.Location = new System.Drawing.Point(0, 0);
+            this.txtMessage.Margin = new System.Windows.Forms.Padding(0);
             this.txtMessage.Multiline = true;
             this.txtMessage.Name = "txtMessage";
-            this.txtMessage.Size = new System.Drawing.Size(604, 75);
+            this.txtMessage.Size = new System.Drawing.Size(605, 75);
             this.txtMessage.TabIndex = 1;
             this.txtMessage.KeyDown += new System.Windows.Forms.KeyEventHandler(this.txtMessage_KeyDown);
             // 
