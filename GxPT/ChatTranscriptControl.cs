@@ -28,6 +28,11 @@ namespace GxPT
         private const int CodeBlockPadding = 6;
         private const int InlineCodePaddingX = 3;
         private const int InlineCodePaddingY = 1;
+        // Code block UI
+        private const int CodeHScrollHeight = 12;      // height of horizontal scrollbar area
+        private const int CodeHScrollThumbMin = 24;    // minimum thumb width
+        private const int CodeCopyButtonHeight = 14;   // header area for copy button
+        private const int CodeCopyButtonPad = 4;       // padding around copy text
 
         // Colors (XP-friendly)
         private static readonly Color UserBack = Color.FromArgb(225, 240, 255);
@@ -58,6 +63,21 @@ namespace GxPT
 
         private readonly ContextMenu _ctx;
         private MessageItem _ctxHit;
+        // Hover/drag state for code block UI
+        private MessageItem _hoverCopyItem;
+        private int _hoverCopyCodeIndex = -1;
+        private MessageItem _copyPressedItem;
+        private int _copyPressedCodeIndex = -1;
+        private bool _draggingHScroll;
+        private MessageItem _dragScrollItem;
+        private int _dragScrollCodeIndex = -1;
+        private Rectangle _dragScrollTrackRect; // track rect at drag start (virtual coords)
+        private int _dragScrollContentWidth;    // content width at drag start
+        private int _dragScrollViewportWidth;   // viewport width at drag start
+        private int _dragStartMouseX;           // client X at drag start
+        private int _dragStartScrollX;
+        private MessageItem _hoverScrollItem;
+        private int _hoverScrollCodeIndex = -1;
 
         // ---------- Data ----------
         private sealed class MessageItem
@@ -67,6 +87,7 @@ namespace GxPT
             public Rectangle Bounds; // bubble bounds, virtual coords
             public int MeasuredHeight;
             public List<Block> Blocks; // parsed markdown
+            public List<int> CodeScroll; // per-code-block horizontal scroll offsets
         }
 
         private readonly List<MessageItem> _items = new List<MessageItem>();
@@ -151,8 +172,13 @@ namespace GxPT
             {
                 Role = role,
                 RawMarkdown = markdown,
-                Blocks = MarkdownParser.ParseMarkdown(markdown)
+                Blocks = MarkdownParser.ParseMarkdown(markdown),
+                CodeScroll = new List<int>()
             };
+            // initialize per-code-block scroll positions
+            int codeCount = 0;
+            foreach (var b in item.Blocks) if (b.Type == BlockType.CodeBlock) codeCount++;
+            for (int i = 0; i < codeCount; i++) item.CodeScroll.Add(0);
             _items.Add(item);
             Reflow();
             ScrollToBottom();
@@ -179,6 +205,11 @@ namespace GxPT
 
                 foreach (var it in _items)
                 {
+                    if (it.CodeScroll == null) it.CodeScroll = new List<int>();
+                    // ensure length matches number of code blocks
+                    int codes = 0; foreach (var b in it.Blocks) if (b.Type == BlockType.CodeBlock) codes++;
+                    while (it.CodeScroll.Count < codes) it.CodeScroll.Add(0);
+                    if (it.CodeScroll.Count > codes) it.CodeScroll.RemoveRange(codes, it.CodeScroll.Count - codes);
                     Size bubbleSize = MeasureBubble(it, usableWidth);
                     int xLeft;
                     if (it.Role == MessageRole.User)
@@ -294,17 +325,18 @@ namespace GxPT
                 case BlockType.CodeBlock:
                     {
                         var c = (CodeBlock)blk;
-                        // Use TextRenderer with WordBreak + TextBoxControl to wrap code block
-                        Size proposed = new Size(maxWidth - 2 * CodeBlockPadding, int.MaxValue);
-                        Size text = TextRenderer.MeasureText(
-                            c.Text.Length == 0 ? " " : c.Text,
-                            _monoFont,
-                            proposed,
-                            TextFormatFlags.TextBoxControl | TextFormatFlags.WordBreak);
-
-                        int width = Math.Min(maxWidth, text.Width + 2 * CodeBlockPadding);
-                        int height = Math.Max(_monoFont.Height + 2 * CodeBlockPadding, text.Height + 2 * CodeBlockPadding);
-                        return new Size(width, height);
+                        // Measure colored segments without wrapping to know full content width
+                        using (Graphics g = CreateGraphics())
+                        {
+                            var colored = SyntaxHighlightingRenderer.GetColoredSegments(c.Text, c.Language, _monoFont);
+                            Size content = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, colored);
+                            int viewportW = Math.Max(0, maxWidth - 2 * CodeBlockPadding);
+                            bool needH = content.Width > viewportW;
+                            int boxW = Math.Min(maxWidth, Math.Max(0, Math.Min(content.Width + 2 * CodeBlockPadding, maxWidth)));
+                            int textH = Math.Max(_monoFont.Height, content.Height);
+                            int boxH = textH + 2 * CodeBlockPadding + CodeCopyButtonHeight + (needH ? CodeHScrollHeight : 0);
+                            return new Size(Math.Max(24, boxW), Math.Max(CodeCopyButtonHeight + 2 * CodeBlockPadding, boxH));
+                        }
                     }
             }
             return Size.Empty;
@@ -532,14 +564,15 @@ namespace GxPT
 
             // Content area
             Rectangle content = new Rectangle(r.X + BubblePadding, r.Y + BubblePadding, r.Width - 2 * BubblePadding, r.Height - 2 * BubblePadding);
-            DrawBlocks(g, content, it.Blocks);
+            DrawBlocks(g, content, it.Blocks, it);
         }
 
-        private void DrawBlocks(Graphics g, Rectangle bounds, List<Block> blocks)
+        private void DrawBlocks(Graphics g, Rectangle bounds, List<Block> blocks, MessageItem owner)
         {
             int y = bounds.Y;
             int x0 = bounds.X;
             int maxWidth = bounds.Width;
+            int codeIndex = 0; // index of code block within this message for scroll state
 
             foreach (var blk in blocks)
             {
@@ -605,15 +638,17 @@ namespace GxPT
                 else if (blk.Type == BlockType.CodeBlock)
                 {
                     var c = (CodeBlock)blk;
-
-                    // Get colored segments for syntax highlighting
+                    // Colored segments and content size without wrapping
                     var coloredSegments = SyntaxHighlightingRenderer.GetColoredSegments(c.Text, c.Language, _monoFont);
-                    // Measure using renderer's measurement to align with drawing
-                    Size measured = SyntaxHighlightingRenderer.MeasureColoredSegments(g, coloredSegments, maxWidth - 2 * CodeBlockPadding);
-                    if (measured.Width <= 0) measured.Width = _monoFont.Height; // fallback minimal
-                    if (measured.Height <= 0) measured.Height = _monoFont.Height;
-                    Rectangle box = new Rectangle(x0, y, Math.Min(maxWidth, measured.Width + 2 * CodeBlockPadding), measured.Height + 2 * CodeBlockPadding);
+                    Size contentNoWrap = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, coloredSegments);
+                    int viewportW = Math.Max(0, maxWidth - 2 * CodeBlockPadding);
+                    bool needH = contentNoWrap.Width > viewportW;
+                    int boxW = Math.Min(maxWidth, Math.Max(0, Math.Min(contentNoWrap.Width + 2 * CodeBlockPadding, maxWidth)));
+                    int textHeight = Math.Max(_monoFont.Height, contentNoWrap.Height);
+                    int boxH = textHeight + 2 * CodeBlockPadding + CodeCopyButtonHeight + (needH ? CodeHScrollHeight : 0);
+                    Rectangle box = new Rectangle(x0, y, boxW, boxH);
 
+                    // Draw code block background and border
                     using (var sb = new SolidBrush(CodeBlockBack))
                     using (var pen = new Pen(CodeBlockBorder))
                     {
@@ -621,12 +656,91 @@ namespace GxPT
                         g.DrawRectangle(pen, box);
                     }
 
-                    Rectangle textRect = new Rectangle(box.X + CodeBlockPadding, box.Y + CodeBlockPadding, box.Width - 2 * CodeBlockPadding, box.Height - 2 * CodeBlockPadding);
+                    // Copy button
+                    string copyText = "Copy";
+                    SizeF copySizeF;
+                    using (var fmt = StringFormat.GenericTypographic)
+                    {
+                        fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+                        copySizeF = g.MeasureString(copyText, _baseFont, PointF.Empty, fmt);
+                    }
+                    int copyW = (int)Math.Ceiling(copySizeF.Width) + CodeCopyButtonPad * 2;
+                    int copyH = CodeCopyButtonHeight - 2;
+                    Rectangle copyRect = new Rectangle(box.Right - CodeCopyButtonPad - copyW, box.Top + CodeCopyButtonPad, copyW, copyH);
 
-                    // Draw syntax-highlighted text
-                    SyntaxHighlightingRenderer.DrawColoredSegments(g, coloredSegments, textRect);
+                    bool hoverCopy = (_hoverCopyItem == owner && _hoverCopyCodeIndex == codeIndex);
+                    // Draw copy background on hover or mouse down
+                    if (hoverCopy || (owner == _copyPressedItem && codeIndex == _copyPressedCodeIndex))
+                    {
+                        bool pressed = (owner == _copyPressedItem && codeIndex == _copyPressedCodeIndex);
+                        int shade = pressed ? 210 : 230;
+                        using (var sb = new SolidBrush(Color.FromArgb(shade, shade, shade)))
+                        using (var pen = new Pen(CodeBlockBorder))
+                        {
+                            g.FillRectangle(sb, copyRect);
+                            g.DrawRectangle(pen, copyRect);
+                        }
+                    }
+                    // Draw copy text
+                    using (var brush = new SolidBrush(Color.FromArgb(0, 102, 204)))
+                    using (var fmt = StringFormat.GenericTypographic)
+                    {
+                        fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+                        var textPt = new PointF(copyRect.X + CodeCopyButtonPad, copyRect.Y + (copyRect.Height - _baseFont.Height) / 2f);
+                        g.DrawString(copyText, _baseFont, brush, textPt, fmt);
+                    }
+
+                    // Header separator line
+                    using (var pen = new Pen(CodeBlockBorder))
+                    {
+                        int headerBottom = box.Top + CodeCopyButtonHeight + CodeBlockPadding;
+                        g.DrawLine(pen, box.Left + CodeBlockPadding, headerBottom, box.Right - CodeBlockPadding, headerBottom);
+                    }
+
+                    // Text viewport
+                    Rectangle textRect = new Rectangle(box.X + CodeBlockPadding, box.Y + CodeBlockPadding + CodeCopyButtonHeight, box.Width - 2 * CodeBlockPadding, textHeight);
+
+                    // Horizontal scrollbar geometry
+                    int scrollX = 0;
+                    if (owner.CodeScroll != null && codeIndex < owner.CodeScroll.Count)
+                        scrollX = owner.CodeScroll[codeIndex];
+                    int maxScroll = Math.Max(0, contentNoWrap.Width - textRect.Width);
+                    if (scrollX > maxScroll) scrollX = maxScroll;
+                    if (scrollX < 0) scrollX = 0;
+                    if (owner.CodeScroll != null && codeIndex < owner.CodeScroll.Count)
+                        owner.CodeScroll[codeIndex] = scrollX;
+
+                    // Draw text without wrapping with horizontal scroll
+                    SyntaxHighlightingRenderer.DrawColoredSegmentsNoWrap(g, coloredSegments, textRect, scrollX);
+
+                    // Draw horizontal scrollbar if needed
+                    if (needH && textRect.Width > 0)
+                    {
+                        Rectangle track = new Rectangle(textRect.X, textRect.Bottom + 2, textRect.Width, CodeHScrollHeight - 4);
+                        bool hoverScroll = (_hoverScrollItem == owner && _hoverScrollCodeIndex == codeIndex);
+                        Color trackBorder = hoverScroll ? Color.FromArgb(170, 170, 170) : CodeBlockBorder;
+                        Color thumbBorder = hoverScroll ? Color.FromArgb(120, 120, 120) : Color.FromArgb(160, 160, 160);
+                        using (var trackBrush = new SolidBrush(Color.FromArgb(235, 235, 235)))
+                        using (var trackPen = new Pen(trackBorder))
+                        {
+                            g.FillRectangle(trackBrush, track);
+                            g.DrawRectangle(trackPen, track);
+                        }
+
+                        int thumbW = Math.Max(CodeHScrollThumbMin, (int)Math.Round((double)track.Width * textRect.Width / Math.Max(1, contentNoWrap.Width)));
+                        int trackRange = Math.Max(1, track.Width - thumbW);
+                        int thumbX = track.X + (maxScroll > 0 ? (int)Math.Round((double)scrollX / maxScroll * trackRange) : 0);
+                        Rectangle thumb = new Rectangle(thumbX, track.Y, thumbW, track.Height);
+                        using (var thumbBrush = new SolidBrush(Color.FromArgb(200, 200, 200)))
+                        using (var thumbPen = new Pen(thumbBorder))
+                        {
+                            g.FillRectangle(thumbBrush, thumb);
+                            g.DrawRectangle(thumbPen, thumb);
+                        }
+                    }
 
                     y += box.Height + 4;
+                    codeIndex++;
                 }
             }
         }
@@ -730,6 +844,24 @@ namespace GxPT
             return yCursor - y;
         }
 
+        private int MeasureInlineParagraphHeight(Graphics g, int maxWidth, List<InlineRun> runs, Font baseFont)
+        {
+            int lineHeight = baseFont.Height;
+            int total = 0;
+            foreach (var seg in WordWrapRuns(runs, baseFont, maxWidth))
+            {
+                if (seg.IsNewLine)
+                {
+                    total += lineHeight + 2;
+                    lineHeight = baseFont.Height;
+                    continue;
+                }
+                lineHeight = Math.Max(lineHeight, seg.Font.Height);
+            }
+            total += lineHeight + 2;
+            return total;
+        }
+
         private void DrawInlineCodeBackgrounds(Graphics g, List<LayoutSeg> segments, int lineStart, int lineEnd, int x, int y)
         {
             int currentX = x;
@@ -805,6 +937,11 @@ namespace GxPT
         protected override void OnMouseUp(MouseEventArgs e)
         {
             base.OnMouseUp(e);
+            if (_draggingHScroll)
+            {
+                _draggingHScroll = false; _dragScrollItem = null; _dragScrollCodeIndex = -1; Capture = false; Invalidate();
+                return;
+            }
             if (e.Button == MouseButtons.Right)
             {
                 _ctxHit = HitTest(e.Location);
@@ -814,6 +951,23 @@ namespace GxPT
             }
             if (e.Button == MouseButtons.Left)
             {
+                // Copy button click
+                var ui = HitTestCodeUI(e.Location);
+                if (ui.Hit && ui.Which == CodeUiHit.CopyButton && ui.Item != null)
+                {
+                    var cb = (CodeBlock)ui.Block;
+                    // Normalize newlines to CRLF for Windows clipboard
+                    string text = cb != null ? cb.Text : string.Empty;
+                    if (text == null) text = string.Empty;
+                    string normalized = text.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
+                    SafeClipboardSetText(normalized);
+                    _copyPressedItem = null; _copyPressedCodeIndex = -1;
+                    Invalidate();
+                    return;
+                }
+                // Clear any pressed copy state on mouse up
+                if (_copyPressedItem != null)
+                { _copyPressedItem = null; _copyPressedCodeIndex = -1; Invalidate(); }
                 // Link click detection
                 string link = HitTestLink(e.Location);
                 if (!string.IsNullOrEmpty(link))
@@ -837,6 +991,51 @@ namespace GxPT
             }
         }
 
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            if (e.Button == MouseButtons.Left)
+            {
+                var ui = HitTestCodeUI(e.Location);
+                if (ui.Hit)
+                {
+                    if (ui.Which == CodeUiHit.CopyButton)
+                    {
+                        _copyPressedItem = ui.Item;
+                        _copyPressedCodeIndex = ui.CodeIndex;
+                        Invalidate();
+                        return;
+                    }
+                    if (ui.Which == CodeUiHit.ScrollThumb)
+                    {
+                        _draggingHScroll = true;
+                        _dragScrollItem = ui.Item;
+                        _dragScrollCodeIndex = ui.CodeIndex;
+                        _dragScrollTrackRect = ui.ScrollTrackRect;
+                        _dragScrollContentWidth = ui.ContentWidth;
+                        _dragScrollViewportWidth = ui.ViewportWidth;
+                        _dragStartMouseX = e.X;
+                        _dragStartScrollX = ui.Item.CodeScroll[ui.CodeIndex];
+                        Capture = true;
+                        return;
+                    }
+                    if (ui.Which == CodeUiHit.ScrollTrack)
+                    {
+                        // Jump to position where thumb center aligns with click
+                        int trackWidth = Math.Max(1, ui.ScrollTrackRect.Width);
+                        int thumbW = Math.Max(CodeHScrollThumbMin, (int)Math.Round((double)trackWidth * ui.ViewportWidth / Math.Max(1, ui.ContentWidth)));
+                        int trackRange = Math.Max(1, trackWidth - thumbW);
+                        int clickOffset = Math.Max(0, Math.Min(trackRange, e.X - ui.ScrollTrackRect.X - thumbW / 2));
+                        int maxScroll = Math.Max(0, ui.ContentWidth - ui.ViewportWidth);
+                        int newScroll = (int)Math.Round((double)clickOffset / trackRange * maxScroll);
+                        ui.Item.CodeScroll[ui.CodeIndex] = newScroll;
+                        Invalidate();
+                        return;
+                    }
+                }
+            }
+        }
+
         private static bool IsWindowsXP()
         {
             try
@@ -855,15 +1054,66 @@ namespace GxPT
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
-            string link = HitTestLink(e.Location);
-            if (!string.IsNullOrEmpty(link))
+            if (_draggingHScroll && _dragScrollItem != null && _dragScrollCodeIndex >= 0)
             {
-                if (Cursor != Cursors.Hand) Cursor = Cursors.Hand;
+                // update scroll based on mouse delta
+                int dx = e.X - _dragStartMouseX;
+                int trackWidth = Math.Max(1, _dragScrollTrackRect.Width);
+                int thumbW = Math.Max(CodeHScrollThumbMin, (int)Math.Round((double)trackWidth * _dragScrollViewportWidth / Math.Max(1, _dragScrollContentWidth)));
+                int trackRange = Math.Max(1, trackWidth - thumbW);
+                int maxScroll = Math.Max(0, _dragScrollContentWidth - _dragScrollViewportWidth);
+                int deltaScroll = (int)Math.Round((double)dx / trackRange * maxScroll);
+                int newScroll = Math.Max(0, Math.Min(maxScroll, _dragStartScrollX + deltaScroll));
+                _dragScrollItem.CodeScroll[_dragScrollCodeIndex] = newScroll;
+                Invalidate();
+                return;
+            }
+
+            // Hover check for copy button and set cursor
+            var ui = HitTestCodeUI(e.Location);
+            bool overInteractive = false;
+            if (ui.Hit && (ui.Which == CodeUiHit.CopyButton || ui.Which == CodeUiHit.ScrollThumb || ui.Which == CodeUiHit.ScrollTrack))
+            {
+                overInteractive = true;
+                if (ui.Which == CodeUiHit.CopyButton)
+                {
+                    _hoverCopyItem = ui.Item; _hoverCopyCodeIndex = ui.CodeIndex;
+                }
+                if (ui.Which == CodeUiHit.ScrollThumb || ui.Which == CodeUiHit.ScrollTrack)
+                {
+                    _hoverScrollItem = ui.Item; _hoverScrollCodeIndex = ui.CodeIndex;
+                }
             }
             else
             {
-                if (Cursor != Cursors.Default) Cursor = Cursors.Default;
+                _hoverCopyItem = null; _hoverCopyCodeIndex = -1;
+                _hoverScrollItem = null; _hoverScrollCodeIndex = -1;
             }
+
+            string link = HitTestLink(e.Location);
+            if (!string.IsNullOrEmpty(link)) { overInteractive = true; Cursor = Cursors.Hand; return; }
+
+            if (overInteractive)
+            {
+                // Use standard cursor for scroll bars; hand for copy
+                if (ui.Which == CodeUiHit.ScrollThumb || ui.Which == CodeUiHit.ScrollTrack) Cursor = Cursors.Default;
+                else if (ui.Which == CodeUiHit.CopyButton) Cursor = Cursors.Hand;
+                else Cursor = Cursors.Default;
+            }
+            else
+            {
+                Cursor = Cursors.Default;
+            }
+            Invalidate();
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            base.OnMouseLeave(e);
+            _hoverCopyItem = null; _hoverCopyCodeIndex = -1;
+            _hoverScrollItem = null; _hoverScrollCodeIndex = -1;
+            _copyPressedItem = null; _copyPressedCodeIndex = -1;
+            Invalidate();
         }
 
         private MessageItem HitTest(Point clientPt)
@@ -932,12 +1182,18 @@ namespace GxPT
                     else if (blk.Type == BlockType.CodeBlock)
                     {
                         // skip; links not in code blocks
-                        // approximate vertical advance
+                        // Advance y using the same calculation as drawing (no wrap, include copy header and optional h-scroll)
                         var cb = (CodeBlock)blk;
-                        // simple measure reuse
-                        var colored = SyntaxHighlightingRenderer.GetColoredSegments(cb.Text, cb.Language, _monoFont);
-                        Size measured = SyntaxHighlightingRenderer.MeasureColoredSegments(CreateGraphics(), colored, contentW - 2 * CodeBlockPadding);
-                        y += Math.Max(_monoFont.Height, measured.Height) + 2 * CodeBlockPadding + 4;
+                        using (Graphics g = CreateGraphics())
+                        {
+                            var colored = SyntaxHighlightingRenderer.GetColoredSegments(cb.Text, cb.Language, _monoFont);
+                            Size contentNoWrap = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, colored);
+                            int viewportW = Math.Max(0, contentW - 2 * CodeBlockPadding);
+                            bool needH = contentNoWrap.Width > viewportW;
+                            int textH = Math.Max(_monoFont.Height, contentNoWrap.Height);
+                            int boxH = textH + 2 * CodeBlockPadding + CodeCopyButtonHeight + (needH ? CodeHScrollHeight : 0);
+                            y += boxH + 4;
+                        }
                     }
                     else if (blk.Type == BlockType.BulletList)
                     {
@@ -1043,6 +1299,135 @@ namespace GxPT
         {
             try { Clipboard.SetText(s ?? ""); }
             catch { /* clipboard busy; ignore */ }
+        }
+
+        // --------- Helpers for code block UI hit testing ---------
+        private enum CodeUiHit { None, CopyButton, ScrollThumb, ScrollTrack, Text }
+        private struct CodeUiInfo
+        {
+            public bool Hit;
+            public CodeUiHit Which;
+            public MessageItem Item;
+            public Block Block;
+            public int CodeIndex;
+            public Rectangle ScrollTrackRect;
+            public int ContentWidth;
+            public int ViewportWidth;
+        }
+
+        private CodeUiInfo HitTestCodeUI(Point clientPt)
+        {
+            var info = new CodeUiInfo { Hit = false, Which = CodeUiHit.None };
+            Point virt = new Point(clientPt.X, clientPt.Y + _scrollOffset);
+
+            // Find containing message
+            foreach (var it in _items)
+            {
+                if (!it.Bounds.Contains(virt)) continue;
+                int contentX = it.Bounds.X + BubblePadding;
+                int contentY = it.Bounds.Y + BubblePadding;
+                int contentW = it.Bounds.Width - 2 * BubblePadding;
+                int y = contentY;
+                int codeIdx = 0;
+                using (Graphics g = CreateGraphics())
+                {
+                    foreach (var blk in it.Blocks)
+                    {
+                        if (blk.Type == BlockType.Heading)
+                        {
+                            var h = (HeadingBlock)blk;
+                            int used = MeasureInlineParagraphHeight(g, contentW, h.Inlines, GetHeadingFont(h.Level));
+                            // Copy button not here; just spacing like DrawBlocks
+                            y += used + 4;
+                        }
+                        else if (blk.Type == BlockType.Paragraph)
+                        {
+                            var p = (ParagraphBlock)blk;
+                            int used = MeasureInlineParagraphHeight(g, contentW, p.Inlines, _baseFont);
+                            y += used + 2;
+                        }
+                        else if (blk.Type == BlockType.BulletList)
+                        {
+                            var list = (BulletListBlock)blk;
+                            foreach (var item in list.Items)
+                            {
+                                int indentX = contentX + (item.IndentLevel * BulletIndent);
+                                int textX = indentX + BulletIndent;
+                                int used = MeasureInlineParagraphHeight(g, contentW - (textX - contentX), item.Content, _baseFont);
+                                y += Math.Max(used, _baseFont.Height) + 2;
+                            }
+                        }
+                        else if (blk.Type == BlockType.NumberedList)
+                        {
+                            var list = (NumberedListBlock)blk;
+                            foreach (var item in list.Items)
+                            {
+                                int indentX = contentX + (item.IndentLevel * BulletIndent);
+                                Size numberSize = TextRenderer.MeasureText("0.", _baseFont);
+                                int textX = indentX + numberSize.Width + 4;
+                                int used = MeasureInlineParagraphHeight(g, contentW - (textX - contentX), item.Content, _baseFont);
+                                y += Math.Max(used, _baseFont.Height) + 2;
+                            }
+                        }
+                        else if (blk.Type == BlockType.CodeBlock)
+                        {
+                            var cb = (CodeBlock)blk;
+                            var colored = SyntaxHighlightingRenderer.GetColoredSegments(cb.Text, cb.Language, _monoFont);
+                            Size content = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, colored);
+                            int viewportW = Math.Max(0, contentW - 2 * CodeBlockPadding);
+                            bool needH = content.Width > viewportW;
+                            int textH = Math.Max(_monoFont.Height, content.Height);
+                            int boxH = textH + 2 * CodeBlockPadding + CodeCopyButtonHeight + (needH ? CodeHScrollHeight : 0);
+                            Rectangle box = new Rectangle(contentX, y, Math.Min(contentW, Math.Max(0, Math.Min(content.Width + 2 * CodeBlockPadding, contentW))), boxH);
+
+                            // Copy button rect
+                            SizeF copySizeF = g.MeasureString("Copy", _baseFont, PointF.Empty, StringFormat.GenericTypographic);
+                            int copyW = (int)Math.Ceiling(copySizeF.Width) + CodeCopyButtonPad * 2;
+                            int copyH = CodeCopyButtonHeight - 2;
+                            Rectangle copyRect = new Rectangle(box.Right - CodeCopyButtonPad - copyW, box.Top + CodeCopyButtonPad, copyW, copyH);
+                            if (copyRect.Contains(virt))
+                            {
+                                info.Hit = true; info.Which = CodeUiHit.CopyButton; info.Item = it; info.Block = blk; info.CodeIndex = codeIdx; return info;
+                            }
+
+                            // Scrollbar rects
+                            Rectangle textRect = new Rectangle(box.X + CodeBlockPadding, box.Y + CodeBlockPadding + CodeCopyButtonHeight, box.Width - 2 * CodeBlockPadding, textH);
+                            if (needH)
+                            {
+                                Rectangle track = new Rectangle(textRect.X, textRect.Bottom + 2, textRect.Width, CodeHScrollHeight - 4);
+                                int maxScroll = Math.Max(0, content.Width - textRect.Width);
+                                int thumbW = Math.Max(CodeHScrollThumbMin, (int)Math.Round((double)track.Width * textRect.Width / Math.Max(1, content.Width)));
+                                int trackRange = Math.Max(1, track.Width - thumbW);
+                                int scrollX = (codeIdx < it.CodeScroll.Count) ? it.CodeScroll[codeIdx] : 0;
+                                int thumbX = track.X + (maxScroll > 0 ? (int)Math.Round((double)scrollX / maxScroll * trackRange) : 0);
+                                Rectangle thumb = new Rectangle(thumbX, track.Y, thumbW, track.Height);
+                                if (thumb.Contains(virt))
+                                {
+                                    info.Hit = true; info.Which = CodeUiHit.ScrollThumb; info.Item = it; info.Block = blk; info.CodeIndex = codeIdx; info.ScrollTrackRect = track; info.ContentWidth = content.Width; info.ViewportWidth = textRect.Width; return info;
+                                }
+                                if (track.Contains(virt))
+                                {
+                                    info.Hit = true; info.Which = CodeUiHit.ScrollTrack; info.Item = it; info.Block = blk; info.CodeIndex = codeIdx; info.ScrollTrackRect = track; info.ContentWidth = content.Width; info.ViewportWidth = textRect.Width; return info;
+                                }
+                            }
+
+                            y += box.Height + 4;
+                            codeIdx++;
+                        }
+                    }
+                }
+            }
+            return info;
+        }
+
+        private MessageItem GetCurrentMessageFromY(int contentTopY)
+        {
+            // Helper: find message item whose content starts at contentTopY (approximate by bounds Y)
+            foreach (var it in _items)
+            {
+                if (it.Bounds.Y + BubblePadding == contentTopY) return it;
+            }
+            return null;
         }
     }
 }
