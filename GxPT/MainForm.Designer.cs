@@ -50,7 +50,7 @@
             this.miFile});
             this.msMain.Location = new System.Drawing.Point(0, 0);
             this.msMain.Name = "msMain";
-            this.msMain.Size = new System.Drawing.Size(742, 24);
+            this.msMain.Size = new System.Drawing.Size(738, 24);
             this.msMain.TabIndex = 1;
             this.msMain.Text = "menuStrip1";
             // 
@@ -89,10 +89,10 @@
             this.panel1.Controls.Add(this.txtMessage);
             this.panel1.Controls.Add(this.panel2);
             this.panel1.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.panel1.Location = new System.Drawing.Point(0, 791);
+            this.panel1.Location = new System.Drawing.Point(0, 787);
             this.panel1.MinimumSize = new System.Drawing.Size(0, 75);
             this.panel1.Name = "panel1";
-            this.panel1.Size = new System.Drawing.Size(742, 75);
+            this.panel1.Size = new System.Drawing.Size(738, 75);
             this.panel1.TabIndex = 2;
             // 
             // panel2
@@ -100,7 +100,7 @@
             this.panel2.Controls.Add(this.btnSend);
             this.panel2.Controls.Add(this.cmbModel);
             this.panel2.Dock = System.Windows.Forms.DockStyle.Right;
-            this.panel2.Location = new System.Drawing.Point(604, 0);
+            this.panel2.Location = new System.Drawing.Point(600, 0);
             this.panel2.Name = "panel2";
             this.panel2.Size = new System.Drawing.Size(138, 75);
             this.panel2.TabIndex = 3;
@@ -143,7 +143,7 @@
             this.txtMessage.Margin = new System.Windows.Forms.Padding(0);
             this.txtMessage.Multiline = true;
             this.txtMessage.Name = "txtMessage";
-            this.txtMessage.Size = new System.Drawing.Size(605, 75);
+            this.txtMessage.Size = new System.Drawing.Size(601, 75);
             this.txtMessage.TabIndex = 1;
             this.txtMessage.KeyDown += new System.Windows.Forms.KeyEventHandler(this.txtMessage_KeyDown);
             // 
@@ -155,14 +155,14 @@
             this.chatTranscript.ForeColor = System.Drawing.SystemColors.WindowText;
             this.chatTranscript.Location = new System.Drawing.Point(0, 24);
             this.chatTranscript.Name = "chatTranscript";
-            this.chatTranscript.Size = new System.Drawing.Size(742, 767);
+            this.chatTranscript.Size = new System.Drawing.Size(738, 763);
             this.chatTranscript.TabIndex = 0;
             // 
             // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(742, 866);
+            this.ClientSize = new System.Drawing.Size(738, 862);
             this.Controls.Add(this.chatTranscript);
             this.Controls.Add(this.panel1);
             this.Controls.Add(this.msMain);

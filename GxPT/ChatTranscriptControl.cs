@@ -497,25 +497,26 @@ namespace GxPT
             var parts = new List<string>();
             if (string.IsNullOrEmpty(s)) { parts.Add(""); return parts; }
 
-            // Split on spaces, but attach space to the preceding word (except the last word)
-            string[] words = s.Split(new char[] { ' ' }, StringSplitOptions.None);
-            for (int i = 0; i < words.Length; i++)
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < s.Length; i++)
             {
-                if (i == words.Length - 1)
+                char c = s[i];
+                if (c == '\n')
                 {
-                    // Last word - no trailing space
-                    if (words[i].Length > 0 || i == 0) parts.Add(words[i]);
+                    if (sb.Length > 0) { parts.Add(sb.ToString()); sb.Length = 0; }
+                    parts.Add("\n");
+                }
+                else if (c == ' ')
+                {
+                    if (sb.Length > 0) { parts.Add(sb.ToString()); sb.Length = 0; }
+                    parts.Add(" ");
                 }
                 else
                 {
-                    // Add word with trailing space (handles empty strings from multiple spaces)
-                    if (words[i].Length > 0)
-                        parts.Add(words[i] + " ");
-                    else
-                        parts.Add(" "); // Handle multiple consecutive spaces
+                    sb.Append(c);
                 }
             }
-
+            if (sb.Length > 0) parts.Add(sb.ToString());
             if (parts.Count == 0) parts.Add("");
             return parts;
         }

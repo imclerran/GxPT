@@ -204,8 +204,9 @@ namespace GxPT
                 }
 
                 // otherwise paragraph text (accumulate)
-                if (paraAccum.Length > 0) paraAccum.Append(' ');
-                paraAccum.Append(line.Trim());
+                // Preserve single newlines within a paragraph as hard line breaks
+                if (paraAccum.Length > 0) paraAccum.Append('\n');
+                paraAccum.Append(line.TrimEnd());
             }
 
             // end flush
