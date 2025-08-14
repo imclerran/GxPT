@@ -49,9 +49,15 @@ namespace GxPT
     public interface ISyntaxHighlighter
     {
         /// <summary>
-        /// The language identifier (e.g., "cs", "js", "json", "python")
+        /// The primary language identifier (e.g., "cs", "js", "json", "python")
         /// </summary>
         string Language { get; }
+
+        /// <summary>
+        /// All accepted identifiers for this highlighter, including aliases (e.g., "cs", "csharp").
+        /// Should include the primary <see cref="Language"/> as well. Case-insensitive matching.
+        /// </summary>
+        string[] Aliases { get; }
 
         /// <summary>
         /// Tokenizes the given source code into highlighted tokens
@@ -91,9 +97,37 @@ namespace GxPT
         /// <param name="highlighter">The highlighter to register</param>
         public static void RegisterHighlighter(ISyntaxHighlighter highlighter)
         {
-            if (highlighter != null && !string.IsNullOrEmpty(highlighter.Language))
+            if (highlighter == null)
+                return;
+
+            // Collect unique identifiers (primary + aliases)
+            var ids = new List<string>();
+            if (!string.IsNullOrEmpty(highlighter.Language))
+                ids.Add(highlighter.Language);
+
+            if (highlighter.Aliases != null)
             {
-                _highlighters[highlighter.Language] = highlighter;
+                for (int i = 0; i < highlighter.Aliases.Length; i++)
+                {
+                    var id = highlighter.Aliases[i];
+                    if (!string.IsNullOrEmpty(id))
+                        ids.Add(id);
+                }
+            }
+
+            // Register under each identifier (dictionary is case-insensitive)
+            for (int i = 0; i < ids.Count; i++)
+            {
+                string id = ids[i];
+                if (!_highlighters.ContainsKey(id))
+                {
+                    _highlighters[id] = highlighter;
+                }
+                else
+                {
+                    // Overwrite only if mapping to the same highlighter type to avoid surprises
+                    _highlighters[id] = highlighter;
+                }
             }
         }
 

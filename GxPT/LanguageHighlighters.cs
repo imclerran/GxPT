@@ -31,6 +31,12 @@ namespace GxPT
 
         public abstract string Language { get; }
 
+        // Optional aliases; base returns empty list to keep compatibility
+        public virtual string[] Aliases
+        {
+            get { return new string[0]; }
+        }
+
         protected abstract TokenPattern[] GetPatterns();
 
         public RegexHighlighterBase()
@@ -108,6 +114,11 @@ namespace GxPT
             get { return "cs"; }
         }
 
+        public override string[] Aliases
+        {
+            get { return new string[] { "csharp", "c#", "dotnet", "c-sharp" }; }
+        }
+
         protected override TokenPattern[] GetPatterns()
         {
             return new TokenPattern[]
@@ -153,6 +164,11 @@ namespace GxPT
         public override string Language
         {
             get { return "js"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "javascript", "node", "nodejs" }; }
         }
 
         protected override TokenPattern[] GetPatterns()
@@ -202,6 +218,11 @@ namespace GxPT
             get { return "json"; }
         }
 
+        public override string[] Aliases
+        {
+            get { return new string[] { "jsonc", "json5" }; }
+        }
+
         protected override TokenPattern[] GetPatterns()
         {
             return new TokenPattern[]
@@ -229,6 +250,11 @@ namespace GxPT
         public override string Language
         {
             get { return "python"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "py", "python3", "py3" }; }
         }
 
         protected override TokenPattern[] GetPatterns()

@@ -145,7 +145,7 @@
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:GxPT"
         "ProductCode" = "8:{C3C26208-74DC-4646-80A9-FC7103BCF289}"
-        "PackageCode" = "8:{B170014E-22DC-468C-9C45-2C4989A32EFF}"
+        "PackageCode" = "8:{BAE1CA46-5BBB-49CF-9476-9226977353B3}"
         "UpgradeCode" = "8:{18C05863-8BD9-4273-B9E8-061F771066DF}"
         "RestartWWWService" = "11:FALSE"
         "RemovePreviousVersions" = "11:FALSE"
