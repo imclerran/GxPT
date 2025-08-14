@@ -209,69 +209,129 @@ namespace GxPT
 
         private void btnSend_Click(object sender, EventArgs e)
         {
-            if (_sending) return;
+            // Validate input
             string text = (txtMessage.Text ?? string.Empty).Trim();
             if (text.Length == 0) return;
+            if (_sending) return; // ensure only one in-flight request
 
-            // Add to UI and history
-            chatTranscript.AddMessage(MessageRole.User, text);
-            _conversation.AddUserMessage(text);
-            txtMessage.Clear();
-            ResetInputBoxHeight();
-
-            // If this is the first message, request a conversation name in the background
-            if (_conversation.History.Count == 1)
-            {
-                _conversation.EnsureNameGenerated(text);
-            }
-
-            // Add placeholder assistant message to stream into
-            chatTranscript.AddMessage(MessageRole.Assistant, "");
-            var assistantBuilder = new StringBuilder();
-
+            // Ensure client configured before we lock sending
             if (_client == null || !_client.IsConfigured)
             {
-                string reason = _client == null ? "Client not initialized." : (!System.IO.File.Exists(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "curl.exe")) ? "curl.exe not found next to the app." : "Missing API key in settings.yaml.");
-                chatTranscript.UpdateLastMessage("Error: " + reason);
+                string reason = _client == null
+                    ? "Client not initialized."
+                    : (!System.IO.File.Exists(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "curl.exe"))
+                        ? "curl.exe not found next to the app."
+                        : "Missing API key in settings.");
+                // Show error as assistant bubble (no placeholder first)
+                chatTranscript.AddMessage(MessageRole.Assistant, "Error: " + reason);
+                Logger.Log("Send", "Blocked: " + reason);
                 return;
             }
 
-            var modelToUse = GetSelectedModel();
-
+            // Lock sending immediately to avoid duplicate sends from rapid clicks/Enter
             _sending = true;
 
-            // Kick off streaming in background
-            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            try
             {
-                try
+                Logger.Log("Send", "Begin send. Model=" + GetSelectedModel());
+                // Add to UI and history
+                chatTranscript.AddMessage(MessageRole.User, text);
+                _conversation.AddUserMessage(text);
+                Logger.Log("Send", "User message added. HistoryCount=" + _conversation.History.Count);
+                txtMessage.Clear();
+                ResetInputBoxHeight();
+
+                // If this is the first message, request a conversation name in the background
+                if (_conversation.History.Count == 1)
                 {
-                    _client.CreateCompletionStream(
-                        modelToUse,
-                        _conversation.History.ToArray(),
-                        delegate(string d)
+                    _conversation.EnsureNameGenerated(text);
+                }
+
+                // Add placeholder assistant message to stream into and capture its index
+                int assistantIndex = chatTranscript.AddMessageGetIndex(MessageRole.Assistant, string.Empty);
+                Logger.Log("Send", "Assistant placeholder index=" + assistantIndex);
+                var assistantBuilder = new StringBuilder();
+
+                var modelToUse = GetSelectedModel();
+
+                // Kick off streaming in background
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                {
+                    try
+                    {
+                        // Snapshot the history and log it
+                        var snapshot = _conversation.History.ToArray();
+                        try
                         {
-                            assistantBuilder.Append(d);
-                            BeginInvoke((MethodInvoker)delegate { chatTranscript.UpdateLastMessage(assistantBuilder.ToString()); });
-                        },
-                        delegate
-                        {
-                            // finalize
-                            string finalText = assistantBuilder.ToString();
-                            _conversation.AddAssistantMessage(finalText);
-                            BeginInvoke((MethodInvoker)delegate { _sending = false; });
-                        },
-                        delegate(string err)
-                        {
-                            if (string.IsNullOrEmpty(err)) return;
-                            BeginInvoke((MethodInvoker)delegate { chatTranscript.UpdateLastMessage("Error: " + err); _sending = false; });
+                            var sbSnap = new StringBuilder();
+                            sbSnap.Append("Sending ").Append(snapshot.Length).Append(" messages:\n");
+                            for (int i = 0; i < snapshot.Length; i++)
+                            {
+                                var m = snapshot[i];
+                                string content = m.Content ?? string.Empty;
+                                content = content.Replace("\r", " ").Replace("\n", " ");
+                                if (content.Length > 200) content = content.Substring(0, 200) + "...";
+                                sbSnap.Append("  ").Append(i).Append(": ").Append(m.Role).Append(" | ").Append(content).Append('\n');
+                            }
+                            Logger.Log("Send", sbSnap.ToString());
                         }
-                    );
-                }
-                catch (Exception ex)
-                {
-                    BeginInvoke((MethodInvoker)delegate { chatTranscript.UpdateLastMessage("Error: " + ex.Message); _sending = false; });
-                }
-            });
+                        catch { }
+
+                        _client.CreateCompletionStream(
+                            modelToUse,
+                            snapshot,
+                            delegate(string d)
+                            {
+                                if (string.IsNullOrEmpty(d)) return;
+                                assistantBuilder.Append(d);
+                                BeginInvoke((MethodInvoker)delegate
+                                {
+                                    chatTranscript.UpdateMessageAt(assistantIndex, assistantBuilder.ToString());
+                                });
+                            },
+                            delegate
+                            {
+                                // finalize on UI thread (update history and unlock send)
+                                string finalText = assistantBuilder.ToString();
+                                BeginInvoke((MethodInvoker)delegate
+                                {
+                                    _conversation.AddAssistantMessage(finalText);
+                                    try { Logger.Log("Transcript", "Final assistant message at index=" + assistantIndex + ":\n" + (finalText ?? string.Empty)); }
+                                    catch { }
+                                    Logger.Log("Send", "Assistant finalized at index=" + assistantIndex + ", chars=" + (finalText != null ? finalText.Length : 0));
+                                    _sending = false;
+                                });
+                            },
+                            delegate(string err)
+                            {
+                                // Treat as fatal only if the process failed; UI already shows placeholder
+                                if (string.IsNullOrEmpty(err)) err = "Unknown error.";
+                                BeginInvoke((MethodInvoker)delegate
+                                {
+                                    chatTranscript.UpdateMessageAt(assistantIndex, "Error: " + err);
+                                    Logger.Log("Send", "Stream error at index=" + assistantIndex + ": " + err);
+                                    _sending = false;
+                                });
+                            }
+                        );
+                    }
+                    catch (Exception ex)
+                    {
+                        BeginInvoke((MethodInvoker)delegate
+                        {
+                            chatTranscript.UpdateMessageAt(assistantIndex, "Error: " + ex.Message);
+                            Logger.Log("Send", "Exception in streaming worker: " + ex.Message);
+                            _sending = false;
+                        });
+                    }
+                });
+            }
+            catch
+            {
+                Logger.Log("Send", "Send failed unexpectedly; unlocking.");
+                _sending = false;
+                throw;
+            }
         }
 
         private void txtMessage_KeyDown(object sender, KeyEventArgs e)

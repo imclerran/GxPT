@@ -185,6 +185,13 @@ namespace GxPT
             Invalidate();
         }
 
+        // Add and return the index of the inserted message (to support targeted updates later)
+        public int AddMessageGetIndex(MessageRole role, string markdown)
+        {
+            AddMessage(role, markdown);
+            return _items.Count - 1;
+        }
+
         public void ClearMessages()
         {
             _items.Clear();
@@ -199,6 +206,22 @@ namespace GxPT
         {
             if (_items.Count == 0) return;
             var it = _items[_items.Count - 1];
+            it.RawMarkdown = markdown ?? string.Empty;
+            it.Blocks = MarkdownParser.ParseMarkdown(it.RawMarkdown);
+            // reset code scrolls to match blocks
+            it.CodeScroll = new List<int>();
+            int codes = 0; foreach (var b in it.Blocks) if (b.Type == BlockType.CodeBlock) codes++;
+            for (int i = 0; i < codes; i++) it.CodeScroll.Add(0);
+            Reflow();
+            ScrollToBottom();
+            Invalidate();
+        }
+
+        // Replace content of a specific message by index; safe no-op if out of range
+        public void UpdateMessageAt(int index, string markdown)
+        {
+            if (index < 0 || index >= _items.Count) return;
+            var it = _items[index];
             it.RawMarkdown = markdown ?? string.Empty;
             it.Blocks = MarkdownParser.ParseMarkdown(it.RawMarkdown);
             // reset code scrolls to match blocks

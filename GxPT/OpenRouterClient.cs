@@ -42,7 +42,8 @@ namespace GxPT
         public string CreateCompletion(string model, IList<ChatMessage> messages)
         {
             string body = BuildRequestBody(model, messages, false);
-            string args = BuildCurlArgs(body);
+            string dataFile;
+            string args = BuildCurlArgs(body, out dataFile);
 
             var psi = new ProcessStartInfo
             {
@@ -58,6 +59,9 @@ namespace GxPT
                 string output = p.StandardOutput.ReadToEnd();
                 string err = p.StandardError.ReadToEnd();
                 p.WaitForExit();
+                // Clean up temp file
+                try { if (!string.IsNullOrEmpty(dataFile) && File.Exists(dataFile)) File.Delete(dataFile); }
+                catch { }
                 if (!string.IsNullOrEmpty(err) && output.Length == 0)
                     throw new Exception("curl error: " + err);
                 return output;
@@ -67,7 +71,8 @@ namespace GxPT
         public void CreateCompletionStream(string model, IList<ChatMessage> messages, Action<string> onDelta, Action onDone, Action<string> onError)
         {
             string body = BuildRequestBody(model, messages, true);
-            string args = BuildCurlArgs(body);
+            string dataFile;
+            string args = BuildCurlArgs(body, out dataFile);
 
             var psi = new ProcessStartInfo
             {
@@ -84,12 +89,15 @@ namespace GxPT
                 var proc = new Process();
                 proc.StartInfo = psi;
                 proc.EnableRaisingEvents = false;
+                Logger.Log("Stream", "Starting curl for model=" + model + ", messages=" + (messages != null ? messages.Count : 0));
                 proc.Start();
 
                 // Read lines as they arrive (SSE: lines like "data: {...}")
                 var sr = proc.StandardOutput;
+                var er = proc.StandardError;
                 string line;
                 var ser = new JavaScriptSerializer();
+                bool sawAnyDelta = false;
                 while ((line = sr.ReadLine()) != null)
                 {
                     line = line.Trim();
@@ -104,36 +112,103 @@ namespace GxPT
                             foreach (var ch in chunk.choices)
                             {
                                 string content = (ch != null && ch.delta != null) ? ch.delta.content : null;
-                                if (!string.IsNullOrEmpty(content) && onDelta != null)
-                                    onDelta(content);
+                                if (!string.IsNullOrEmpty(content))
+                                {
+                                    sawAnyDelta = true;
+                                    if (onDelta != null) onDelta(content);
+                                }
                             }
                         }
                     }
                     catch
                     {
-                        // If JSON parse fails, ignore that line
-                        if (onError != null) onError("Failed to parse stream line.");
+                        // Ignore malformed keepalive/heartbeat lines
+                        continue;
                     }
                 }
-                try { proc.WaitForExit(); } catch { }
+                try { proc.WaitForExit(); }
+                catch { }
+                // If process wrote errors and we produced no deltas, surface error
+                try
+                {
+                    string err = er.ReadToEnd();
+                    if (!string.IsNullOrEmpty(err) && !sawAnyDelta)
+                    {
+                        Logger.Log("Stream", "curl stderr (no deltas): " + err);
+                        if (onError != null) onError(err.Trim());
+                        // Clean up temp file
+                        try { if (!string.IsNullOrEmpty(dataFile) && File.Exists(dataFile)) File.Delete(dataFile); }
+                        catch { }
+                        return;
+                    }
+                }
+                catch { }
+
                 if (onDone != null) onDone();
+                // Clean up temp file
+                try { if (!string.IsNullOrEmpty(dataFile) && File.Exists(dataFile)) File.Delete(dataFile); }
+                catch { }
             }
             catch (Exception ex)
             {
+                Logger.Log("Stream", "Exception: " + ex.Message);
                 if (onError != null) onError(ex.Message);
             }
         }
 
-        private string BuildCurlArgs(string jsonBody)
+        private string BuildCurlArgs(string jsonBody, out string dataFilePath)
         {
             // Escape quotes for curl -d "..." on Windows
-            string bodyEscaped = jsonBody.Replace("\"", "\\\"");
+            try { Logger.Log("Stream", "Request JSON: " + jsonBody); }
+            catch { }
+            try { Logger.Log("Stream", "Request JSON length=" + (jsonBody != null ? jsonBody.Length : 0)); }
+            catch { }
+
+            // Write body to a temp file to avoid command-line length/quoting issues
+            string tempDir = Path.GetTempPath();
+            string fileName = "gxpt_body_" + Guid.NewGuid().ToString("N") + ".json";
+            string filePath = Path.Combine(tempDir, fileName);
+            try
+            {
+                var utf8NoBom = new UTF8Encoding(false);
+                File.WriteAllText(filePath, jsonBody ?? string.Empty, utf8NoBom);
+            }
+            catch (Exception ex)
+            {
+                // Fallback: if writing fails, we still try inline (last resort)
+                try { Logger.Log("Stream", "Temp body write failed: " + ex.Message); }
+                catch { }
+                dataFilePath = null;
+                return BuildCurlArgsInline(jsonBody);
+            }
+            dataFilePath = filePath;
+
             var sb = new StringBuilder();
             sb.Append("https://openrouter.ai/api/v1/chat/completions ");
             sb.Append("-H \"Content-Type: application/json\" ");
-            sb.Append("-H \"Authorization: Bearer ").Append(_apiKey).Append("\" ");
+            string apiKeyForCurl = _apiKey;
+            sb.Append("-H \"Authorization: Bearer ").Append(apiKeyForCurl).Append("\" ");
             sb.Append("-N "); // important for streaming to disable buffering
+            // Use @file to pass the body
+            sb.Append("-d @\"").Append(filePath).Append("\"");
+            try { Logger.Log("Stream", "curl args prepared for request."); }
+            catch { }
+            return sb.ToString();
+        }
+
+        // Last-resort inline args builder, used only if temp-file write fails
+        private string BuildCurlArgsInline(string jsonBody)
+        {
+            string bodyEscaped = (jsonBody ?? string.Empty).Replace("\"", "\\\"");
+            var sb = new StringBuilder();
+            sb.Append("https://openrouter.ai/api/v1/chat/completions ");
+            sb.Append("-H \"Content-Type: application/json\" ");
+            string apiKeyForCurl = _apiKey;
+            sb.Append("-H \"Authorization: Bearer ").Append(apiKeyForCurl).Append("\" ");
+            sb.Append("-N ");
             sb.Append("-d \"").Append(bodyEscaped).Append("\"");
+            try { Logger.Log("Stream", "curl args prepared for request (inline fallback)."); }
+            catch { }
             return sb.ToString();
         }
     }

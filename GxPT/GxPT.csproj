@@ -60,7 +60,9 @@
     <Compile Include="AppSettings.cs" />
     <Compile Include="ChatModels.cs" />
     <Compile Include="Conversation.cs" />
-    <Compile Include="OpenRouterClient.cs" />
+    <Compile Include="Logger.cs" />
+    <Compile Include="OpenRouterClient.cs">
+    </Compile>
     <Compile Include="MainForm.cs">
       <SubType>Form</SubType>
     </Compile>
