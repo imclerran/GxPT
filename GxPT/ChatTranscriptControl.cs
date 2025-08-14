@@ -1331,7 +1331,13 @@ namespace GxPT
 
         private static void SafeClipboardSetText(string s)
         {
-            try { Clipboard.SetText(s ?? ""); }
+            try
+            {
+                if (s == null) s = string.Empty;
+                // Normalize line endings to CRLF for Windows clipboard
+                string normalized = s.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
+                Clipboard.SetText(normalized);
+            }
             catch { /* clipboard busy; ignore */ }
         }
 
