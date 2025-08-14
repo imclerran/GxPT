@@ -8,7 +8,6 @@ namespace GxPT
     internal sealed class Conversation
     {
         private readonly OpenRouterClient _client;
-        private volatile bool _nameRequested; // legacy flag; kept for safety
         private volatile bool _namingInProgress;
 
         private readonly List<ChatMessage> _history = new List<ChatMessage>();

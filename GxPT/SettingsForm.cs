@@ -26,7 +26,10 @@ namespace GxPT
             // Wire events (in case not hooked up in designer)
             this.Load += SettingsForm_Load;
             this.btnSave.Click += btnSave_Click;
-            this.btnApply.Click += btnApply_Click;
+
+            // Enable Ctrl+S to save settings without closing the form
+            this.KeyPreview = true;
+            this.KeyDown += SettingsForm_KeyDown;
         }
 
         private void SettingsForm_Load(object sender, EventArgs e)
@@ -93,16 +96,21 @@ namespace GxPT
             }
         }
 
-        private void btnApply_Click(object sender, EventArgs e)
-        {
-            SaveSettingsOnly();
-        }
-
         private void btnSave_Click(object sender, EventArgs e)
         {
             SaveSettingsOnly();
             this.DialogResult = DialogResult.OK;
             this.Close();
+        }
+
+        private void SettingsForm_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Control && e.KeyCode == Keys.S)
+            {
+                e.SuppressKeyPress = true; // prevent ding
+                SaveSettingsOnly();
+                this.Close();
+            }
         }
     }
 }
