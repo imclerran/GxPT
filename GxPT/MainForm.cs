@@ -241,12 +241,6 @@ namespace GxPT
                 txtMessage.Clear();
                 ResetInputBoxHeight();
 
-                // If this is the first message, request a conversation name in the background
-                if (_conversation.History.Count == 1)
-                {
-                    _conversation.EnsureNameGenerated(text);
-                }
-
                 // Add placeholder assistant message to stream into and capture its index
                 int assistantIndex = chatTranscript.AddMessageGetIndex(MessageRole.Assistant, string.Empty);
                 Logger.Log("Send", "Assistant placeholder index=" + assistantIndex);
