@@ -30,9 +30,17 @@ namespace GxPT
             payload["model"] = string.IsNullOrEmpty(model) ? "openai/gpt-4o" : model;
             payload["stream"] = stream;
             var msgs = new List<Dictionary<string, string>>();
-            foreach (var m in messages)
+            // Prepend a system instruction to avoid emoji in all responses
+            msgs.Add(new Dictionary<string, string> {
+                { "role", "system" },
+                { "content", "Do not use emojis or emoticons in any response. Use plain text only." }
+            });
+            if (messages != null)
             {
-                msgs.Add(new Dictionary<string, string> { { "role", m.Role }, { "content", m.Content } });
+                foreach (var m in messages)
+                {
+                    msgs.Add(new Dictionary<string, string> { { "role", m.Role }, { "content", m.Content } });
+                }
             }
             payload["messages"] = msgs;
             var ser = new JavaScriptSerializer();
@@ -56,8 +64,18 @@ namespace GxPT
             };
             using (var p = Process.Start(psi))
             {
-                string output = p.StandardOutput.ReadToEnd();
-                string err = p.StandardError.ReadToEnd();
+                // Explicitly decode stdout/stderr as UTF-8 to avoid mojibake on non-UTF8 system locales
+                var utf8 = new UTF8Encoding(false, false);
+                string output;
+                string err;
+                using (var outReader = new StreamReader(p.StandardOutput.BaseStream, utf8, false))
+                {
+                    output = outReader.ReadToEnd();
+                }
+                using (var errReader = new StreamReader(p.StandardError.BaseStream, utf8, false))
+                {
+                    err = errReader.ReadToEnd();
+                }
                 p.WaitForExit();
                 // Clean up temp file
                 try { if (!string.IsNullOrEmpty(dataFile) && File.Exists(dataFile)) File.Delete(dataFile); }
@@ -92,9 +110,10 @@ namespace GxPT
                 Logger.Log("Stream", "Starting curl for model=" + model + ", messages=" + (messages != null ? messages.Count : 0));
                 proc.Start();
 
-                // Read lines as they arrive (SSE: lines like "data: {...}")
-                var sr = proc.StandardOutput;
-                var er = proc.StandardError;
+                // Read lines as they arrive (SSE: lines like "data: {...}") with explicit UTF-8 decoding
+                var utf8 = new UTF8Encoding(false, false);
+                var sr = new StreamReader(proc.StandardOutput.BaseStream, utf8, false);
+                var er = new StreamReader(proc.StandardError.BaseStream, utf8, false);
                 string line;
                 var ser = new JavaScriptSerializer();
                 bool sawAnyDelta = false;
