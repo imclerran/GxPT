@@ -40,8 +40,14 @@
             this.cmbDefaultModel = new System.Windows.Forms.ComboBox();
             this.txtModels = new System.Windows.Forms.TextBox();
             this.txtApiKey = new System.Windows.Forms.TextBox();
+            this.tabControl1 = new System.Windows.Forms.TabControl();
+            this.tabVisual = new System.Windows.Forms.TabPage();
+            this.tabJson = new System.Windows.Forms.TabPage();
             this.flowLayoutPanel1.SuspendLayout();
             this.tableLayoutPanel1.SuspendLayout();
+            this.tabControl1.SuspendLayout();
+            this.tabVisual.SuspendLayout();
+            this.tabJson.SuspendLayout();
             this.SuspendLayout();
             // 
             // flowLayoutPanel1
@@ -69,11 +75,11 @@
             // textBox1
             // 
             this.textBox1.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.textBox1.Location = new System.Drawing.Point(0, 216);
+            this.textBox1.Location = new System.Drawing.Point(3, 3);
             this.textBox1.Multiline = true;
             this.textBox1.Name = "textBox1";
             this.textBox1.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.textBox1.Size = new System.Drawing.Size(592, 127);
+            this.textBox1.Size = new System.Drawing.Size(578, 311);
             this.textBox1.TabIndex = 1;
             // 
             // tableLayoutPanel1
@@ -90,14 +96,14 @@
             this.tableLayoutPanel1.Controls.Add(this.txtModels, 1, 1);
             this.tableLayoutPanel1.Controls.Add(this.txtApiKey, 1, 0);
             this.tableLayoutPanel1.Dock = System.Windows.Forms.DockStyle.Top;
-            this.tableLayoutPanel1.Location = new System.Drawing.Point(0, 0);
+            this.tableLayoutPanel1.Location = new System.Drawing.Point(3, 3);
             this.tableLayoutPanel1.Name = "tableLayoutPanel1";
             this.tableLayoutPanel1.RowCount = 4;
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle());
-            this.tableLayoutPanel1.Size = new System.Drawing.Size(592, 216);
+            this.tableLayoutPanel1.Size = new System.Drawing.Size(578, 216);
             this.tableLayoutPanel1.TabIndex = 2;
             // 
             // lblApiKey
@@ -149,7 +155,7 @@
             this.chkEnableLogging.Location = new System.Drawing.Point(115, 199);
             this.chkEnableLogging.Margin = new System.Windows.Forms.Padding(3, 6, 3, 3);
             this.chkEnableLogging.Name = "chkEnableLogging";
-            this.chkEnableLogging.Size = new System.Drawing.Size(474, 14);
+            this.chkEnableLogging.Size = new System.Drawing.Size(460, 14);
             this.chkEnableLogging.TabIndex = 4;
             this.chkEnableLogging.UseVisualStyleBackColor = true;
             // 
@@ -170,7 +176,7 @@
             this.txtModels.Multiline = true;
             this.txtModels.Name = "txtModels";
             this.txtModels.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.txtModels.Size = new System.Drawing.Size(474, 134);
+            this.txtModels.Size = new System.Drawing.Size(460, 134);
             this.txtModels.TabIndex = 6;
             // 
             // txtApiKey
@@ -179,22 +185,58 @@
                         | System.Windows.Forms.AnchorStyles.Right)));
             this.txtApiKey.Location = new System.Drawing.Point(115, 3);
             this.txtApiKey.Name = "txtApiKey";
-            this.txtApiKey.Size = new System.Drawing.Size(474, 20);
+            this.txtApiKey.Size = new System.Drawing.Size(460, 20);
             this.txtApiKey.TabIndex = 7;
+            // 
+            // tabControl1
+            // 
+            this.tabControl1.Controls.Add(this.tabVisual);
+            this.tabControl1.Controls.Add(this.tabJson);
+            this.tabControl1.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.tabControl1.Location = new System.Drawing.Point(0, 0);
+            this.tabControl1.Name = "tabControl1";
+            this.tabControl1.SelectedIndex = 0;
+            this.tabControl1.Size = new System.Drawing.Size(592, 343);
+            this.tabControl1.TabIndex = 3;
+            // 
+            // tabVisual
+            // 
+            this.tabVisual.Controls.Add(this.tableLayoutPanel1);
+            this.tabVisual.Location = new System.Drawing.Point(4, 22);
+            this.tabVisual.Name = "tabVisual";
+            this.tabVisual.Padding = new System.Windows.Forms.Padding(3);
+            this.tabVisual.Size = new System.Drawing.Size(584, 317);
+            this.tabVisual.TabIndex = 0;
+            this.tabVisual.Text = "Visual";
+            this.tabVisual.UseVisualStyleBackColor = true;
+            // 
+            // tabJson
+            // 
+            this.tabJson.Controls.Add(this.textBox1);
+            this.tabJson.Location = new System.Drawing.Point(4, 22);
+            this.tabJson.Name = "tabJson";
+            this.tabJson.Padding = new System.Windows.Forms.Padding(3);
+            this.tabJson.Size = new System.Drawing.Size(584, 317);
+            this.tabJson.TabIndex = 1;
+            this.tabJson.Text = "JSON";
+            this.tabJson.UseVisualStyleBackColor = true;
             // 
             // SettingsForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(592, 366);
-            this.Controls.Add(this.textBox1);
-            this.Controls.Add(this.tableLayoutPanel1);
+            this.Controls.Add(this.tabControl1);
             this.Controls.Add(this.flowLayoutPanel1);
             this.Name = "SettingsForm";
             this.Text = "SettingsForm";
             this.flowLayoutPanel1.ResumeLayout(false);
             this.tableLayoutPanel1.ResumeLayout(false);
             this.tableLayoutPanel1.PerformLayout();
+            this.tabControl1.ResumeLayout(false);
+            this.tabVisual.ResumeLayout(false);
+            this.tabJson.ResumeLayout(false);
+            this.tabJson.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -214,5 +256,8 @@
         private System.Windows.Forms.ComboBox cmbDefaultModel;
         private System.Windows.Forms.TextBox txtModels;
         private System.Windows.Forms.TextBox txtApiKey;
+        private System.Windows.Forms.TabControl tabControl1;
+        private System.Windows.Forms.TabPage tabVisual;
+        private System.Windows.Forms.TabPage tabJson;
     }
 }
