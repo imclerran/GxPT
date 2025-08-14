@@ -74,7 +74,8 @@ namespace GxPT
             sb.AppendLine("    \"openai/gpt-4o\",");
             sb.AppendLine("    \"openai/gpt-5\"");
             sb.AppendLine("  ],");
-            sb.AppendLine("  \"default_model\": \"openai/gpt-4o\"");
+            sb.AppendLine("  \"default_model\": \"openai/gpt-4o\",");
+            sb.AppendLine("  \"enable_logging\": false");
             sb.AppendLine("}");
             return sb.ToString();
         }
