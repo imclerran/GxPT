@@ -12,10 +12,20 @@ namespace GxPT
 {
     public partial class MainForm : Form
     {
-        private Conversation _conversation;
         private OpenRouterClient _client;
         private const int MinInputHeightPx = 75; // initial and minimum height for input panel
         // future conversation-related helpers can go here
+
+        // Per-tab chat context so each tab has its own conversation and transcript
+        private sealed class ChatTabContext
+        {
+            public TabPage Page;
+            public ChatTranscriptControl Transcript;
+            public Conversation Conversation;
+            public bool IsSending;
+        }
+
+        private readonly Dictionary<TabPage, ChatTabContext> _tabContexts = new Dictionary<TabPage, ChatTabContext>();
 
 
         public MainForm()
@@ -23,11 +33,19 @@ namespace GxPT
             InitializeComponent();
             HookEvents();
             InitializeClient();
+            if (this.tabControl1 != null)
+                this.tabControl1.SelectedIndexChanged += (s, e) => UpdateWindowTitleFromActiveTab();
+
+            // Setup initial tab context for the designer-created tab
+            SetupInitialConversationTab();
+            // Remove any extra placeholder tab if present in designer
+            try { if (this.tabControl1 != null && this.tabPage2 != null) this.tabControl1.TabPages.Remove(this.tabPage2); }
+            catch { }
             // Wire banner link and ensure it lays out nicely
             if (this.lnkOpenSettings != null)
                 this.lnkOpenSettings.LinkClicked += lnkOpenSettings_LinkClicked;
-            if (this.apiKeyBannerPanel != null)
-                this.apiKeyBannerPanel.Resize += (s, e) => LayoutApiKeyBanner();
+            if (this.pnlApiKeyBanner != null)
+                this.pnlApiKeyBanner.Resize += (s, e) => LayoutApiKeyBanner();
             this.Load += (s, e) => UpdateApiKeyBanner();
             // Ensure baseline sizing and behavior
             if (this.txtMessage != null)
@@ -66,20 +84,123 @@ namespace GxPT
             // curl.exe expected next to executable (bin/Debug)
             string curlPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "curl.exe");
             _client = new OpenRouterClient(apiKey, curlPath);
-            _conversation = new Conversation(_client);
-            _conversation.NameGenerated += delegate(string name)
-            {
-                try
-                {
-                    // Ensure UI-thread update
-                    if (this.IsHandleCreated)
-                        this.BeginInvoke((MethodInvoker)delegate { this.Text = "GxPT - " + name; });
-                }
-                catch { }
-            };
             // Populate models from settings and reflect configuration
             PopulateModelsFromSettings();
             UpdateApiKeyBanner();
+        }
+
+        // Build a context for the existing designer tab (tabPage1 + chatTranscript)
+        private void SetupInitialConversationTab()
+        {
+            try
+            {
+                if (this.tabControl1 == null || this.tabPage1 == null || this.chatTranscript == null)
+                    return;
+
+                if (_tabContexts.ContainsKey(this.tabPage1))
+                    return;
+
+                var ctx = new ChatTabContext
+                {
+                    Page = this.tabPage1,
+                    Transcript = this.chatTranscript,
+                    Conversation = new Conversation(_client),
+                    IsSending = false
+                };
+
+                // When a name is generated, update the tab text and window title if active
+                ctx.Conversation.NameGenerated += delegate(string name)
+                {
+                    try
+                    {
+                        if (this.IsHandleCreated)
+                        {
+                            this.BeginInvoke((MethodInvoker)delegate
+                            {
+                                ctx.Page.Text = string.IsNullOrEmpty(name) ? "Conversation" : name;
+                                UpdateWindowTitleFromActiveTab();
+                            });
+                        }
+                    }
+                    catch { }
+                };
+
+                // Initial title
+                try { ctx.Page.Text = "New Conversation"; }
+                catch { }
+
+                _tabContexts[this.tabPage1] = ctx;
+            }
+            catch { }
+        }
+
+        // Create a new tab with its own transcript + conversation
+        private ChatTabContext CreateConversationTab()
+        {
+            if (this.tabControl1 == null) return null;
+
+            var page = new TabPage("New Conversation");
+            page.UseVisualStyleBackColor = true;
+
+            var transcript = new ChatTranscriptControl();
+            transcript.Dock = DockStyle.Fill;
+            page.Controls.Add(transcript);
+
+            var ctx = new ChatTabContext
+            {
+                Page = page,
+                Transcript = transcript,
+                Conversation = new Conversation(_client),
+                IsSending = false
+            };
+
+            ctx.Conversation.NameGenerated += delegate(string name)
+            {
+                try
+                {
+                    if (this.IsHandleCreated)
+                    {
+                        this.BeginInvoke((MethodInvoker)delegate
+                        {
+                            ctx.Page.Text = string.IsNullOrEmpty(name) ? "Conversation" : name;
+                            UpdateWindowTitleFromActiveTab();
+                        });
+                    }
+                }
+                catch { }
+            };
+
+            _tabContexts[page] = ctx;
+
+            this.tabControl1.TabPages.Add(page);
+            try { this.tabControl1.SelectedTab = page; }
+            catch { }
+            return ctx;
+        }
+
+        // Get the active tab's chat context
+        private ChatTabContext GetActiveContext()
+        {
+            try
+            {
+                if (this.tabControl1 == null) return null;
+                var page = this.tabControl1.SelectedTab;
+                if (page == null) return null;
+                ChatTabContext ctx;
+                return _tabContexts.TryGetValue(page, out ctx) ? ctx : null;
+            }
+            catch { return null; }
+        }
+
+        private void UpdateWindowTitleFromActiveTab()
+        {
+            try
+            {
+                var page = (this.tabControl1 != null ? this.tabControl1.SelectedTab : null);
+                string name = (page != null ? page.Text : null);
+                this.Text = string.IsNullOrEmpty(name) ? "GxPT" : ("GxPT - " + name);
+            }
+            catch { }
         }
 
         private void AddDemoMessages()
@@ -205,14 +326,14 @@ namespace GxPT
             this.Close();
         }
 
-        private bool _sending;
-
         private void btnSend_Click(object sender, EventArgs e)
         {
+            var ctx = GetActiveContext();
+            if (ctx == null) return;
             // Validate input
             string text = (txtMessage.Text ?? string.Empty).Trim();
             if (text.Length == 0) return;
-            if (_sending) return; // ensure only one in-flight request
+            if (ctx.IsSending) return; // ensure only one in-flight request per tab
 
             // Ensure client configured before we lock sending
             if (_client == null || !_client.IsConfigured)
@@ -223,26 +344,26 @@ namespace GxPT
                         ? "curl.exe not found next to the app."
                         : "Missing API key in settings.");
                 // Show error as assistant bubble (no placeholder first)
-                chatTranscript.AddMessage(MessageRole.Assistant, "Error: " + reason);
+                ctx.Transcript.AddMessage(MessageRole.Assistant, "Error: " + reason);
                 Logger.Log("Send", "Blocked: " + reason);
                 return;
             }
 
             // Lock sending immediately to avoid duplicate sends from rapid clicks/Enter
-            _sending = true;
+            ctx.IsSending = true;
 
             try
             {
                 Logger.Log("Send", "Begin send. Model=" + GetSelectedModel());
                 // Add to UI and history
-                chatTranscript.AddMessage(MessageRole.User, text);
-                _conversation.AddUserMessage(text);
-                Logger.Log("Send", "User message added. HistoryCount=" + _conversation.History.Count);
+                ctx.Transcript.AddMessage(MessageRole.User, text);
+                ctx.Conversation.AddUserMessage(text);
+                Logger.Log("Send", "User message added. HistoryCount=" + ctx.Conversation.History.Count);
                 txtMessage.Clear();
                 ResetInputBoxHeight();
 
                 // Add placeholder assistant message to stream into and capture its index
-                int assistantIndex = chatTranscript.AddMessageGetIndex(MessageRole.Assistant, string.Empty);
+                int assistantIndex = ctx.Transcript.AddMessageGetIndex(MessageRole.Assistant, string.Empty);
                 Logger.Log("Send", "Assistant placeholder index=" + assistantIndex);
                 var assistantBuilder = new StringBuilder();
 
@@ -254,7 +375,7 @@ namespace GxPT
                     try
                     {
                         // Snapshot the history and log it
-                        var snapshot = _conversation.History.ToArray();
+                        var snapshot = ctx.Conversation.History.ToArray();
                         try
                         {
                             var sbSnap = new StringBuilder();
@@ -280,7 +401,7 @@ namespace GxPT
                                 assistantBuilder.Append(d);
                                 BeginInvoke((MethodInvoker)delegate
                                 {
-                                    chatTranscript.UpdateMessageAt(assistantIndex, assistantBuilder.ToString());
+                                    ctx.Transcript.UpdateMessageAt(assistantIndex, assistantBuilder.ToString());
                                 });
                             },
                             delegate
@@ -289,11 +410,11 @@ namespace GxPT
                                 string finalText = assistantBuilder.ToString();
                                 BeginInvoke((MethodInvoker)delegate
                                 {
-                                    _conversation.AddAssistantMessage(finalText);
+                                    ctx.Conversation.AddAssistantMessage(finalText);
                                     try { Logger.Log("Transcript", "Final assistant message at index=" + assistantIndex + ":\n" + (finalText ?? string.Empty)); }
                                     catch { }
                                     Logger.Log("Send", "Assistant finalized at index=" + assistantIndex + ", chars=" + (finalText != null ? finalText.Length : 0));
-                                    _sending = false;
+                                    ctx.IsSending = false;
                                 });
                             },
                             delegate(string err)
@@ -302,9 +423,9 @@ namespace GxPT
                                 if (string.IsNullOrEmpty(err)) err = "Unknown error.";
                                 BeginInvoke((MethodInvoker)delegate
                                 {
-                                    chatTranscript.UpdateMessageAt(assistantIndex, "Error: " + err);
+                                    ctx.Transcript.UpdateMessageAt(assistantIndex, "Error: " + err);
                                     Logger.Log("Send", "Stream error at index=" + assistantIndex + ": " + err);
-                                    _sending = false;
+                                    ctx.IsSending = false;
                                 });
                             }
                         );
@@ -313,9 +434,9 @@ namespace GxPT
                     {
                         BeginInvoke((MethodInvoker)delegate
                         {
-                            chatTranscript.UpdateMessageAt(assistantIndex, "Error: " + ex.Message);
+                            ctx.Transcript.UpdateMessageAt(assistantIndex, "Error: " + ex.Message);
                             Logger.Log("Send", "Exception in streaming worker: " + ex.Message);
-                            _sending = false;
+                            ctx.IsSending = false;
                         });
                     }
                 });
@@ -323,7 +444,7 @@ namespace GxPT
             catch
             {
                 Logger.Log("Send", "Send failed unexpectedly; unlocking.");
-                _sending = false;
+                ctx.IsSending = false;
                 throw;
             }
         }
@@ -439,13 +560,19 @@ namespace GxPT
             }
         }
 
+        // File > New Conversation
+        private void miNewConversation_Click(object sender, EventArgs e)
+        {
+            CreateConversationTab();
+        }
+
         // Center the label and link vertically within the banner panel
         private void LayoutApiKeyBanner()
         {
             try
             {
-                if (this.apiKeyBannerPanel == null) return;
-                int h = this.apiKeyBannerPanel.ClientSize.Height;
+                if (this.pnlApiKeyBanner == null) return;
+                int h = this.pnlApiKeyBanner.ClientSize.Height;
                 if (this.lblNoApiKey != null)
                 {
                     int y = Math.Max(0, (h - this.lblNoApiKey.Height) / 2);
@@ -466,8 +593,8 @@ namespace GxPT
             {
                 string key = AppSettings.GetString("openrouter_api_key");
                 bool hasKey = (key != null && key.Trim().Length > 0);
-                if (this.apiKeyBannerPanel != null)
-                    this.apiKeyBannerPanel.Visible = !hasKey;
+                if (this.pnlApiKeyBanner != null)
+                    this.pnlApiKeyBanner.Visible = !hasKey;
 
                 // Enable/disable input controls based on configuration
                 if (this.txtMessage != null) this.txtMessage.Enabled = hasKey;
@@ -479,7 +606,7 @@ namespace GxPT
             }
             catch
             {
-                if (this.apiKeyBannerPanel != null) this.apiKeyBannerPanel.Visible = true;
+                if (this.pnlApiKeyBanner != null) this.pnlApiKeyBanner.Visible = true;
                 if (this.txtMessage != null) this.txtMessage.Enabled = false;
                 if (this.btnSend != null) this.btnSend.Enabled = false;
                 if (this.cmbModel != null) this.cmbModel.Enabled = false;
