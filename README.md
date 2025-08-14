@@ -1,6 +1,8 @@
 # GxPT
 A chatbot client for Windows XP.
 
-Nothing wired up yet - just chat UI demo. More to come...
+Still very much a work in progress, but basic chat functionity is working. Much more to come... 
+
+## Screenshot
 
 ![GxPT Screenshot](GxPT.png)
