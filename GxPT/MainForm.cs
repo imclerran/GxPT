@@ -34,7 +34,9 @@ namespace GxPT
         private ToolStripMenuItem _miTabClose;
         private ToolStripMenuItem _miTabCloseOthers;
         private TabPage _tabCtxTarget;
-        private Timer _focusTimer; // one-shot timer to ensure focus after tab switches
+        private ToolStripLabel _menuSpacer; // fills remaining menu width to push custom buttons right
+        private GlyphToolStripButton _btnNewTab;
+        private GlyphToolStripButton _btnCloseTab;
         private bool _syncingModelCombo; // avoid event feedback loops when syncing combo text
 
 
@@ -68,10 +70,7 @@ namespace GxPT
                 {
                     UpdateWindowTitleFromActiveTab();
                     SyncComboModelFromActiveTab();
-                    FocusInputSafely();
                 };
-                try { this.tabControl1.Selected += (s, e) => { FocusInputSafely(); }; }
-                catch { }
                 try
                 {
                     // Revert to default visuals and dynamic-width tabs
@@ -98,6 +97,43 @@ namespace GxPT
                 _miTabCloseOthers.Click += delegate { if (_tabCtxTarget != null) CloseOtherTabs(_tabCtxTarget); };
 
                 _tabCtxMenu.Items.AddRange(new ToolStripItem[] { _miTabNew, _miTabClose, _miTabCloseOthers });
+            }
+            catch { }
+
+            // Add custom + and x buttons to the right side of the MenuStrip using a spacer
+            try
+            {
+                if (this.msMain != null)
+                {
+                    // Spacer label to consume remaining width
+                    _menuSpacer = new ToolStripLabel();
+                    _menuSpacer.AutoSize = false;
+                    _menuSpacer.Margin = new Padding(0);
+                    _menuSpacer.Text = string.Empty;
+
+                    // Custom-drawn buttons
+                    _btnNewTab = new GlyphToolStripButton(GlyphToolStripButton.GlyphType.Plus);
+                    _btnNewTab.Margin = new Padding(2, 2, 2, 2);
+                    _btnNewTab.Click += delegate { miNewConversation_Click(this, EventArgs.Empty); };
+
+                    _btnCloseTab = new GlyphToolStripButton(GlyphToolStripButton.GlyphType.Close);
+                    _btnCloseTab.Margin = new Padding(2, 2, 6, 2);
+                    _btnCloseTab.Click += delegate { closeConversationToolStripMenuItem_Click(this, EventArgs.Empty); };
+
+                    // Insert spacer right after the File menu, then add our buttons so they sit at the far right
+                    int idx = this.msMain.Items.IndexOf(this.miFile);
+                    if (idx < 0) idx = this.msMain.Items.Count - 1;
+                    if (idx < 0) idx = 0;
+                    this.msMain.Items.Insert(Math.Min(idx + 1, this.msMain.Items.Count), _menuSpacer);
+                    this.msMain.Items.Add(_btnNewTab);
+                    this.msMain.Items.Add(_btnCloseTab);
+
+                    // Resize spacer whenever the menustrip size changes
+                    this.msMain.SizeChanged -= msMain_SizeChanged;
+                    this.msMain.SizeChanged += msMain_SizeChanged;
+                    // Initial layout
+                    UpdateMenuSpacerWidth();
+                }
             }
             catch { }
 
@@ -861,6 +897,77 @@ namespace GxPT
             }
         }
 
+        // Resize spacer to fill available width on the MenuStrip
+        private void msMain_SizeChanged(object sender, EventArgs e)
+        {
+            UpdateMenuSpacerWidth();
+        }
+
+        private void UpdateMenuSpacerWidth()
+        {
+            try
+            {
+                if (this.msMain == null || _menuSpacer == null) return;
+                int available = this.msMain.DisplayRectangle.Width;
+                int used = 0;
+                foreach (ToolStripItem it in this.msMain.Items)
+                {
+                    if (object.ReferenceEquals(it, _menuSpacer)) continue; // we'll set this one
+                    used += it.Width + it.Margin.Horizontal;
+                }
+                int w = Math.Max(0, available - used - 4);
+                _menuSpacer.Width = w;
+            }
+            catch { }
+        }
+
+        // Custom ToolStripButton with copy-button-like hover/press visuals and +/x glyphs
+        private sealed class GlyphToolStripButton : ToolStripButton
+        {
+            public enum GlyphType { Plus, Close }
+            private bool _hover; private bool _pressed; private readonly GlyphType _glyph;
+            public GlyphToolStripButton(GlyphType glyph)
+            {
+                _glyph = glyph;
+                DisplayStyle = ToolStripItemDisplayStyle.None;
+                AutoSize = false;
+                Size = new Size(24, 20);
+                Margin = new Padding(2);
+            }
+            protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
+            protected override void OnMouseLeave(EventArgs e) { _hover = false; _pressed = false; Invalidate(); base.OnMouseLeave(e); }
+            protected override void OnMouseDown(MouseEventArgs e) { if (e.Button == MouseButtons.Left) { _pressed = true; Invalidate(); } base.OnMouseDown(e); }
+            protected override void OnMouseUp(MouseEventArgs e) { _pressed = false; Invalidate(); base.OnMouseUp(e); }
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                var g = e.Graphics;
+                Rectangle r = new Rectangle(0, 0, (int)this.Width - 1, (int)this.Height - 1);
+                if (_hover || _pressed)
+                {
+                    int shade = _pressed ? 210 : 230;
+                    using (var sb = new SolidBrush(Color.FromArgb(shade, shade, shade))) g.FillRectangle(sb, r);
+                    using (var pen = new Pen(Color.FromArgb(210, 210, 210))) g.DrawRectangle(pen, r);
+                }
+                using (var pen = new Pen(Color.FromArgb(80, 80, 80), 2f))
+                {
+                    int cx = r.Left + r.Width / 2;
+                    int cy = r.Top + r.Height / 2;
+                    int len = Math.Min(r.Width, r.Height) / 2 - 3;
+                    g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                    if (_glyph == GlyphType.Plus)
+                    {
+                        g.DrawLine(pen, cx - len, cy, cx + len, cy);
+                        g.DrawLine(pen, cx, cy - len, cx, cy + len);
+                    }
+                    else
+                    {
+                        g.DrawLine(pen, cx - len, cy - len, cx + len, cy + len);
+                        g.DrawLine(pen, cx - len, cy + len, cx + len, cy - len);
+                    }
+                }
+            }
+        }
+
         // Return default model from settings or fallback
         private string GetConfiguredDefaultModel()
         {
@@ -876,64 +983,6 @@ namespace GxPT
         }
 
         // Sync the model combo box to the active tab's SelectedModel
-
-        // Ensure the message textbox gets focus after tab changes
-        private void FocusInputSafely()
-        {
-            try
-            {
-                if (!this.IsHandleCreated) return;
-                this.BeginInvoke((MethodInvoker)delegate
-                {
-                    try
-                    {
-                        if (this.txtMessage != null && this.txtMessage.CanFocus)
-                        {
-                            this.ActiveControl = this.txtMessage;
-                            this.txtMessage.Focus();
-                            try { this.txtMessage.Select(this.txtMessage.TextLength, 0); }
-                            catch { }
-                        }
-                        else
-                        {
-                            EnsureFocusViaTimer();
-                        }
-                    }
-                    catch { }
-                });
-            }
-            catch { }
-        }
-
-        private void EnsureFocusViaTimer()
-        {
-            try
-            {
-                if (_focusTimer == null)
-                {
-                    _focusTimer = new Timer();
-                    _focusTimer.Interval = 10; // short delay
-                    _focusTimer.Tick += delegate
-                    {
-                        try
-                        {
-                            _focusTimer.Stop();
-                            if (this.txtMessage != null && this.txtMessage.CanFocus)
-                            {
-                                this.ActiveControl = this.txtMessage;
-                                this.txtMessage.Focus();
-                                try { this.txtMessage.Select(this.txtMessage.TextLength, 0); }
-                                catch { }
-                            }
-                        }
-                        catch { }
-                    };
-                }
-                _focusTimer.Stop();
-                _focusTimer.Start();
-            }
-            catch { }
-        }
         private void SyncComboModelFromActiveTab()
         {
             try
