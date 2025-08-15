@@ -112,6 +112,18 @@ namespace GxPT
                 }
             }
             catch { }
+            // View -> Conversation History toggle wiring and initial checked state
+            try
+            {
+                if (this.miConversationHistory != null)
+                {
+                    this.miConversationHistory.CheckOnClick = false; // we'll manage Checked strictly from state
+                    this.miConversationHistory.Click -= miConversationHistory_Click;
+                    this.miConversationHistory.Click += miConversationHistory_Click;
+                    UpdateConversationHistoryCheckedState();
+                }
+            }
+            catch { }
             if (this.tabControl1 != null)
             {
                 this.tabControl1.SelectedIndexChanged += (s, e) =>
@@ -148,39 +160,25 @@ namespace GxPT
             }
             catch { }
 
-            // Add custom + and x buttons to the right side of the MenuStrip using a spacer
+            // Add custom + and x buttons to the right side of the MenuStrip without altering existing menu order
             try
             {
                 if (this.msMain != null)
                 {
-                    // Spacer label to consume remaining width
-                    _menuSpacer = new ToolStripLabel();
-                    _menuSpacer.AutoSize = false;
-                    _menuSpacer.Margin = new Padding(0);
-                    _menuSpacer.Text = string.Empty;
-
                     // Custom-drawn buttons
                     _btnNewTab = new GlyphToolStripButton(GlyphToolStripButton.GlyphType.Plus);
                     _btnNewTab.Margin = new Padding(2, 2, 2, 2);
                     _btnNewTab.Click += delegate { miNewConversation_Click(this, EventArgs.Empty); };
+                    _btnNewTab.Alignment = ToolStripItemAlignment.Right; // pin to right edge
 
                     _btnCloseTab = new GlyphToolStripButton(GlyphToolStripButton.GlyphType.Close);
                     _btnCloseTab.Margin = new Padding(2, 2, 3, 2);
                     _btnCloseTab.Click += delegate { closeConversationToolStripMenuItem_Click(this, EventArgs.Empty); };
+                    _btnCloseTab.Alignment = ToolStripItemAlignment.Right; // pin to right edge
 
-                    // Insert spacer right after the File menu, then add our buttons so they sit at the far right
-                    int idx = this.msMain.Items.IndexOf(this.miFile);
-                    if (idx < 0) idx = this.msMain.Items.Count - 1;
-                    if (idx < 0) idx = 0;
-                    this.msMain.Items.Insert(Math.Min(idx + 1, this.msMain.Items.Count), _menuSpacer);
-                    this.msMain.Items.Add(_btnNewTab);
+                    // Add right-aligned buttons; existing items (File, View) stay in designer order
                     this.msMain.Items.Add(_btnCloseTab);
-
-                    // Resize spacer whenever the menustrip size changes
-                    this.msMain.SizeChanged -= msMain_SizeChanged;
-                    this.msMain.SizeChanged += msMain_SizeChanged;
-                    // Initial layout
-                    UpdateMenuSpacerWidth();
+                    this.msMain.Items.Add(_btnNewTab);
                 }
             }
             catch { }
@@ -1111,6 +1109,8 @@ namespace GxPT
                     // Ensure the arrow repaints in its final direction and layout is correct
                     if (_sidebarArrowPanel != null) _sidebarArrowPanel.Invalidate();
                     LayoutSidebarChildren();
+                    // Keep View -> Conversation History checked state in sync
+                    UpdateConversationHistoryCheckedState();
                 }
             }
             catch
@@ -1213,6 +1213,25 @@ namespace GxPT
                 this.splitContainer1.Panel1.Controls.Add(_sidebarArrowPanel);
                 _sidebarArrowPanel.BringToFront();
                 LayoutSidebarChildren();
+            }
+            catch { }
+        }
+
+        // View -> Conversation History click: toggle sidebar expanded/collapsed
+        private void miConversationHistory_Click(object sender, EventArgs e)
+        {
+            ToggleSidebar();
+        }
+
+        // Ensure the menu checked state mirrors the actual expanded state
+        private void UpdateConversationHistoryCheckedState()
+        {
+            try
+            {
+                if (this.miConversationHistory != null)
+                {
+                    this.miConversationHistory.Checked = _sidebarExpanded;
+                }
             }
             catch { }
         }
