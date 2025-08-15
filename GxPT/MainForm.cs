@@ -117,7 +117,7 @@ namespace GxPT
                     _btnNewTab.Click += delegate { miNewConversation_Click(this, EventArgs.Empty); };
 
                     _btnCloseTab = new GlyphToolStripButton(GlyphToolStripButton.GlyphType.Close);
-                    _btnCloseTab.Margin = new Padding(2, 2, 6, 2);
+                    _btnCloseTab.Margin = new Padding(2, 2, 3, 2);
                     _btnCloseTab.Click += delegate { closeConversationToolStripMenuItem_Click(this, EventArgs.Empty); };
 
                     // Insert spacer right after the File menu, then add our buttons so they sit at the far right
@@ -937,7 +937,7 @@ namespace GxPT
                     if (object.ReferenceEquals(it, _menuSpacer)) continue; // we'll set this one
                     used += it.Width + it.Margin.Horizontal;
                 }
-                int w = Math.Max(0, available - used - 4);
+                int w = Math.Max(0, available - used - 2);
                 _menuSpacer.Width = w;
             }
             catch { }
