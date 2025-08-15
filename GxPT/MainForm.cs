@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Data;
 using System.Drawing;
 using System.Linq;
+using System.Diagnostics;
 using System.Text;
 using System.Windows.Forms;
 using GxPT;
@@ -15,6 +16,19 @@ namespace GxPT
         private OpenRouterClient _client;
         private const int MinInputHeightPx = 75; // initial and minimum height for input panel
         // future conversation-related helpers can go here
+
+        // Sidebar (Panel1) animation settings
+        private const int SidebarMinWidth = 8;
+        private const int SidebarMaxWidth = 240;
+        private const int SidebarAnimStep = 40; // legacy step (not used with easing)
+        private const int SidebarAnimIntervalMs = 10; // timer interval (smoother updates)
+        private const int SidebarAnimDurationMs = 100; // total duration for open/close
+        private bool _sidebarExpanded; // true when fully expanded
+        private bool _sidebarAnimating;
+        private int _sidebarTargetWidth; // target width for animation
+        private Timer _sidebarTimer;
+        private Stopwatch _sidebarAnimWatch = new Stopwatch();
+        private int _sidebarStartWidth;
 
         // Per-tab chat context so each tab has its own conversation and transcript
         private sealed class ChatTabContext
@@ -38,6 +52,11 @@ namespace GxPT
         private GlyphToolStripButton _btnNewTab;
         private GlyphToolStripButton _btnCloseTab;
         private bool _syncingModelCombo; // avoid event feedback loops when syncing combo text
+        private ListView _lvConversations; // sidebar list
+        private Panel _sidebarArrowPanel; // narrow right strip for the arrow
+        private readonly Dictionary<string, TabPage> _openConversationsById = new Dictionary<string, TabPage>();
+        // ImageList used to control row height (add vertical padding) for the sidebar list
+        private ImageList _lvRowHeightImages;
 
 
         public MainForm()
@@ -45,6 +64,35 @@ namespace GxPT
             InitializeComponent();
             HookEvents();
             InitializeClient();
+            // Configure split container for sidebar behavior
+            try
+            {
+                if (this.splitContainer1 != null)
+                {
+                    // Ensure left panel acts as a collapsible sidebar and can't be manually dragged
+                    this.splitContainer1.FixedPanel = FixedPanel.Panel1;
+                    this.splitContainer1.IsSplitterFixed = true;
+                    this.splitContainer1.Panel1MinSize = SidebarMinWidth;
+                    this.splitContainer1.Panel2MinSize = 0;
+                    this.splitContainer1.SplitterWidth = 1; // thin, unobtrusive divider
+                    // Start collapsed
+                    this.splitContainer1.SplitterDistance = SidebarMinWidth;
+                    _sidebarExpanded = false;
+
+                    // Add sidebar list control and arrow strip
+                    EnsureSidebarList();
+                    EnsureSidebarArrowStrip();
+                    // Keyboard toggle (Enter/Space) accessibility when Panel1 focused
+                    this.splitContainer1.Panel1.TabStop = true;
+                    this.splitContainer1.Panel1.PreviewKeyDown += Panel1_PreviewKeyDown;
+                }
+            }
+            catch { }
+
+            // Sidebar animation timer
+            _sidebarTimer = new Timer();
+            _sidebarTimer.Interval = SidebarAnimIntervalMs;
+            _sidebarTimer.Tick += SidebarTimer_Tick;
             // Wire menu items and tab events
             try
             {
@@ -159,6 +207,9 @@ namespace GxPT
             this.txtMessage.KeyDown += txtMessage_KeyDown;
             this.txtMessage.TextChanged += txtMessage_TextChanged;
             this.Resize += MainForm_Resize;
+            // Redraw arrow on resize for proper centering and keep list width clear of arrow strip
+            try { if (this.splitContainer1 != null) this.splitContainer1.Panel1.Resize += (s, e) => { if (_sidebarArrowPanel != null) _sidebarArrowPanel.Invalidate(); LayoutSidebarChildren(); }; }
+            catch { }
             try
             {
                 if (this.cmbModel != null)
@@ -218,6 +269,8 @@ namespace GxPT
                     IsSending = false,
                     SelectedModel = GetSelectedModel()
                 };
+                ctx.Conversation.SelectedModel = ctx.SelectedModel;
+                EnsureConversationId(ctx);
 
                 // When a name is generated, update the tab text and window title if active
                 ctx.Conversation.NameGenerated += delegate(string name)
@@ -241,8 +294,10 @@ namespace GxPT
                 catch { }
 
                 _tabContexts[this.tabPage1] = ctx;
+                TrackOpenConversation(ctx);
                 // Ensure combo reflects the initial tab's stored model
                 SyncComboModelFromActiveTab();
+                RefreshSidebarList();
             }
             catch { }
         }
@@ -267,6 +322,8 @@ namespace GxPT
                 IsSending = false,
                 SelectedModel = GetSelectedModel()
             };
+            ctx.Conversation.SelectedModel = ctx.SelectedModel;
+            EnsureConversationId(ctx);
 
             ctx.Conversation.NameGenerated += delegate(string name)
             {
@@ -285,12 +342,14 @@ namespace GxPT
             };
 
             _tabContexts[page] = ctx;
+            TrackOpenConversation(ctx);
 
             this.tabControl1.TabPages.Add(page);
             try { this.tabControl1.SelectedTab = page; }
             catch { }
             // After selecting, sync combo to this tab's model
             SyncComboModelFromActiveTab();
+            RefreshSidebarList();
             return ctx;
         }
 
@@ -386,6 +445,13 @@ namespace GxPT
                     catch { }
                 }
                 if (_tabContexts.ContainsKey(page)) _tabContexts.Remove(page);
+                try
+                {
+                    // Remove from open map
+                    var toRemove = _openConversationsById.Where(kv => object.ReferenceEquals(kv.Value, page)).Select(kv => kv.Key).ToList();
+                    foreach (var k in toRemove) _openConversationsById.Remove(k);
+                }
+                catch { }
                 if (this.tabControl1 != null)
                 {
                     this.tabControl1.TabPages.Remove(page);
@@ -405,6 +471,7 @@ namespace GxPT
                 try { page.Dispose(); }
                 catch { }
                 UpdateWindowTitleFromActiveTab();
+                RefreshSidebarList();
             }
             catch { }
         }
@@ -564,6 +631,8 @@ namespace GxPT
                 // Add to UI and history
                 ctx.Transcript.AddMessage(MessageRole.User, text);
                 ctx.Conversation.AddUserMessage(text);
+                ctx.Conversation.SelectedModel = ctx.SelectedModel;
+                ConversationStore.Save(ctx.Conversation); // save when a new user message starts/continues a convo
                 Logger.Log("Send", "User message added. HistoryCount=" + ctx.Conversation.History.Count);
                 txtMessage.Clear();
                 ResetInputBoxHeight();
@@ -617,10 +686,13 @@ namespace GxPT
                                 BeginInvoke((MethodInvoker)delegate
                                 {
                                     ctx.Conversation.AddAssistantMessage(finalText);
+                                    ctx.Conversation.SelectedModel = ctx.SelectedModel;
+                                    ConversationStore.Save(ctx.Conversation); // save only after streaming completes
                                     try { Logger.Log("Transcript", "Final assistant message at index=" + assistantIndex + ":\n" + (finalText ?? string.Empty)); }
                                     catch { }
                                     Logger.Log("Send", "Assistant finalized at index=" + assistantIndex + ", chars=" + (finalText != null ? finalText.Length : 0));
                                     ctx.IsSending = false;
+                                    RefreshSidebarList();
                                 });
                             },
                             delegate(string err)
@@ -632,6 +704,7 @@ namespace GxPT
                                     ctx.Transcript.UpdateMessageAt(assistantIndex, "Error: " + err);
                                     Logger.Log("Send", "Stream error at index=" + assistantIndex + ": " + err);
                                     ctx.IsSending = false;
+                                    // don't save on failure; no new assistant content
                                 });
                             }
                         );
@@ -943,6 +1016,207 @@ namespace GxPT
             catch { }
         }
 
+        // ===== Sidebar animation and visuals =====
+        private void Panel1_ClickToggle(object sender, EventArgs e)
+        {
+            try
+            {
+                // If expanded, reduce clickable area to the right half of the arrow strip
+                if (_sidebarArrowPanel != null && _sidebarExpanded)
+                {
+                    var me = e as MouseEventArgs;
+                    if (me != null)
+                    {
+                        int half = _sidebarArrowPanel.Width / 2;
+                        if (me.X < half) return; // ignore clicks on left half when expanded
+                    }
+                }
+            }
+            catch { }
+            ToggleSidebar();
+        }
+
+        private void Panel1_PreviewKeyDown(object sender, PreviewKeyDownEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter || e.KeyCode == Keys.Space)
+            {
+                ToggleSidebar();
+                e.IsInputKey = true;
+            }
+        }
+
+        private void ToggleSidebar()
+        {
+            if (this.splitContainer1 == null) return;
+            if (_sidebarAnimating) return;
+            _sidebarStartWidth = this.splitContainer1.SplitterDistance;
+            _sidebarTargetWidth = _sidebarExpanded ? SidebarMinWidth : SidebarMaxWidth;
+            _sidebarAnimating = true;
+            try { _sidebarAnimWatch.Reset(); _sidebarAnimWatch.Start(); }
+            catch { }
+            _sidebarTimer.Start();
+        }
+
+        private void SidebarTimer_Tick(object sender, EventArgs e)
+        {
+            try
+            {
+                if (this.splitContainer1 == null) { _sidebarTimer.Stop(); _sidebarAnimating = false; return; }
+                if (!_sidebarAnimWatch.IsRunning) { _sidebarAnimWatch.Start(); }
+
+                long elapsed = _sidebarAnimWatch.ElapsedMilliseconds;
+                double t = Math.Max(0.0, Math.Min(1.0, (double)elapsed / SidebarAnimDurationMs));
+                // Smooth easing to reduce jerkiness
+                double eased = EaseInOutCubic(t);
+
+                int start = _sidebarStartWidth;
+                int end = _sidebarTargetWidth;
+                int next = (int)Math.Round(start + (end - start) * eased);
+
+                int cur = this.splitContainer1.SplitterDistance;
+                if (next != cur)
+                {
+                    this.splitContainer1.SuspendLayout();
+                    try { this.splitContainer1.SplitterDistance = next; }
+                    finally { this.splitContainer1.ResumeLayout(); }
+
+                    // Invalidate arrow panel only
+                    if (_sidebarArrowPanel != null)
+                    {
+                        int h = _sidebarArrowPanel.ClientSize.Height;
+                        var rect = new Rectangle(0, Math.Max(0, h / 2 - 20), _sidebarArrowPanel.Width, 40);
+                        _sidebarArrowPanel.Invalidate(rect);
+                    }
+                    // Ensure list leaves room for the arrow strip while animating
+                    LayoutSidebarChildren();
+                }
+
+                if (t >= 1.0)
+                {
+                    // Snap to exact target to avoid off-by-one ambiguity
+                    try
+                    {
+                        this.splitContainer1.SuspendLayout();
+                        if (this.splitContainer1.SplitterDistance != _sidebarTargetWidth)
+                            this.splitContainer1.SplitterDistance = _sidebarTargetWidth;
+                    }
+                    finally { this.splitContainer1.ResumeLayout(); }
+
+                    _sidebarTimer.Stop();
+                    _sidebarAnimWatch.Stop();
+                    _sidebarAnimating = false;
+                    // Use the target to set state deterministically
+                    _sidebarExpanded = (_sidebarTargetWidth >= SidebarMaxWidth);
+
+                    // Ensure the arrow repaints in its final direction and layout is correct
+                    if (_sidebarArrowPanel != null) _sidebarArrowPanel.Invalidate();
+                    LayoutSidebarChildren();
+                }
+            }
+            catch
+            {
+                try { _sidebarTimer.Stop(); }
+                catch { }
+                try { _sidebarAnimWatch.Stop(); }
+                catch { }
+                _sidebarAnimating = false;
+            }
+        }
+
+        private static double EaseInOutCubic(double t)
+        {
+            // Cubic easing: accelerate, then decelerate
+            return t < 0.5 ? 4 * t * t * t : 1 - Math.Pow(-2 * t + 2, 3) / 2;
+        }
+
+        // Draw a very small arrow at the vertical center of the arrow panel.
+        // Points right when collapsed (invite to expand), left when expanded (invite to collapse).
+        private void Panel1_PaintArrow(object sender, PaintEventArgs e)
+        {
+            try
+            {
+                var p = _sidebarArrowPanel ?? (this.splitContainer1 != null ? this.splitContainer1.Panel1 : null);
+                if (p == null) return;
+
+                int w = p.ClientSize.Width;
+                int h = p.ClientSize.Height;
+                if (w <= 0 || h <= 0) return;
+
+                // Decide arrow direction deterministically
+                bool pointRight;
+                if (_sidebarAnimating)
+                {
+                    // While animating, point towards the target width
+                    pointRight = _sidebarTargetWidth > this.splitContainer1.SplitterDistance;
+                }
+                else
+                {
+                    // When idle, reflect the expanded/collapsed state
+                    pointRight = !_sidebarExpanded;
+                }
+
+                // Arrow size and position (keep it tiny)
+                int arrowH = Math.Max(8, Math.Min(12, h / 20));
+                int arrowW = Math.Max(5, arrowH / 2 + 2);
+                int cy = h / 2;
+                int paddingRight = 1; // keep within strip
+                int cxRight = Math.Max(arrowW + 1, Math.Min(w - paddingRight, w));
+                int cxLeft = Math.Max(arrowW + 1, Math.Min(w - paddingRight, w));
+
+                using (var sb = new SolidBrush(Color.DimGray))
+                {
+                    var oldMode = e.Graphics.SmoothingMode;
+                    e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                    Point[] tri;
+                    if (pointRight)
+                    {
+                        tri = new[]
+                        {
+                            new Point(cxRight - arrowW, cy - arrowH/2),
+                            new Point(cxRight - arrowW, cy + arrowH/2),
+                            new Point(cxRight,            cy)
+                        };
+                    }
+                    else // pointLeft
+                    {
+                        int cx = cxLeft - 1;
+                        tri = new[]
+                        {
+                            new Point(cx,            cy - arrowH/2),
+                            new Point(cx,            cy + arrowH/2),
+                            new Point(cx - arrowW,   cy)
+                        };
+                    }
+                    e.Graphics.FillPolygon(sb, tri);
+                    e.Graphics.SmoothingMode = oldMode;
+                }
+            }
+            catch { }
+        }
+
+        private void EnsureSidebarArrowStrip()
+        {
+            try
+            {
+                if (_sidebarArrowPanel != null) return;
+                _sidebarArrowPanel = new Panel();
+                _sidebarArrowPanel.Width = 14; // slim strip
+                _sidebarArrowPanel.Dock = DockStyle.Right;
+                _sidebarArrowPanel.Margin = new Padding(0);
+                _sidebarArrowPanel.Padding = new Padding(0);
+                _sidebarArrowPanel.Cursor = Cursors.Hand;
+                _sidebarArrowPanel.BackColor = this.splitContainer1.Panel1.BackColor;
+                _sidebarArrowPanel.Paint += Panel1_PaintArrow;
+                _sidebarArrowPanel.Click += Panel1_ClickToggle;
+                _sidebarArrowPanel.PreviewKeyDown += Panel1_PreviewKeyDown;
+                _sidebarArrowPanel.TabStop = true;
+                this.splitContainer1.Panel1.Controls.Add(_sidebarArrowPanel);
+                _sidebarArrowPanel.BringToFront();
+                LayoutSidebarChildren();
+            }
+            catch { }
+        }
+
         // Custom ToolStripButton with copy-button-like hover/press visuals and +/x glyphs
         private sealed class GlyphToolStripButton : ToolStripButton
         {
@@ -1032,6 +1306,16 @@ namespace GxPT
             {
                 var ctx = GetActiveContext();
                 if (ctx != null) ctx.SelectedModel = GetSelectedModel();
+                if (ctx != null && ctx.Conversation != null)
+                {
+                    ctx.Conversation.SelectedModel = ctx.SelectedModel;
+                    // Optional: persist model change only when messages exist
+                    if (ctx.Conversation.History.Count > 0)
+                    {
+                        ConversationStore.Save(ctx.Conversation);
+                        RefreshSidebarList();
+                    }
+                }
             }
             catch { }
         }
@@ -1044,6 +1328,263 @@ namespace GxPT
             {
                 var ctx = GetActiveContext();
                 if (ctx != null) ctx.SelectedModel = GetSelectedModel();
+                if (ctx != null && ctx.Conversation != null)
+                {
+                    ctx.Conversation.SelectedModel = ctx.SelectedModel;
+                    if (ctx.Conversation.History.Count > 0)
+                    {
+                        ConversationStore.Save(ctx.Conversation);
+                        RefreshSidebarList();
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // ===== Sidebar list (Panel1) =====
+        private void EnsureSidebarList()
+        {
+            try
+            {
+                if (_lvConversations != null) return;
+                _lvConversations = new ListView();
+                _lvConversations.View = View.Details;
+                _lvConversations.FullRowSelect = true;
+                _lvConversations.HideSelection = false;
+                _lvConversations.HeaderStyle = ColumnHeaderStyle.None;
+                _lvConversations.BorderStyle = BorderStyle.None;
+                _lvConversations.Dock = DockStyle.Left; // we'll size manually to avoid overlap with arrow strip
+                _lvConversations.Columns.Add("Conversation", 200, HorizontalAlignment.Left);
+                _lvConversations.MultiSelect = false;
+                // Use double-click/Enter to open
+                _lvConversations.ItemActivate += LvConversations_ItemActivate;
+                // Right-click context menu
+                var cms = new ContextMenuStrip();
+                var miOpen = new ToolStripMenuItem("Open");
+                var miDelete = new ToolStripMenuItem("Delete");
+                miOpen.Click += (s, e) => TryOpenSelectedConversation();
+                miDelete.Click += (s, e) => DeleteSelectedConversation();
+                cms.Items.Add(miOpen);
+                cms.Items.Add(miDelete);
+                _lvConversations.ContextMenuStrip = cms;
+
+                // Background matches panel for a unified look
+                _lvConversations.BackColor = this.splitContainer1.Panel1.BackColor;
+                // Use system rendering (no bold)
+                _lvConversations.OwnerDraw = false;
+
+                // Increase row height via a 1px-wide SmallImageList with a taller ImageSize
+                try
+                {
+                    if (_lvRowHeightImages == null)
+                    {
+                        _lvRowHeightImages = new ImageList();
+                        int rowHeight = Math.Max(_lvConversations.Font.Height + 8, 22); // add vertical padding
+                        _lvRowHeightImages.ImageSize = new Size(1, rowHeight);
+                    }
+                    _lvConversations.SmallImageList = _lvRowHeightImages;
+                }
+                catch { }
+
+                // Keep the single column sized correctly on resize and sidebar animation
+                _lvConversations.Resize += (s, e) => ResizeSidebarColumn();
+
+                this.splitContainer1.Panel1.Controls.Add(_lvConversations);
+                RefreshSidebarList();
+                LayoutSidebarChildren();
+            }
+            catch { }
+        }
+
+        private void RefreshSidebarList()
+        {
+            try
+            {
+                if (_lvConversations == null) return;
+                var items = ConversationStore.ListAll();
+                _lvConversations.BeginUpdate();
+                try
+                {
+                    _lvConversations.Items.Clear();
+                    foreach (var it in items)
+                    {
+                        string text = string.IsNullOrEmpty(it.Name) ? "New Conversation" : it.Name;
+                        var lvi = new ListViewItem(text);
+                        lvi.Tag = it; // store ConversationListItem
+                        _lvConversations.Items.Add(lvi);
+                    }
+                    ResizeSidebarColumn();
+                }
+                finally
+                {
+                    _lvConversations.EndUpdate();
+                }
+            }
+            catch { }
+        }
+
+        // (Owner-draw methods retained but unused when OwnerDraw = false)
+        private void LvConversations_DrawItem(object sender, DrawListViewItemEventArgs e) { }
+        private void LvConversations_DrawSubItem(object sender, DrawListViewSubItemEventArgs e) { }
+
+        // Ensure the ListView never sits under the arrow strip (prevents scrollbar overlap)
+        private void LayoutSidebarChildren()
+        {
+            try
+            {
+                if (this.splitContainer1 == null || _lvConversations == null) return;
+                int arrowW = (_sidebarArrowPanel != null ? _sidebarArrowPanel.Width : 0);
+                int panelW = this.splitContainer1.Panel1.ClientSize.Width;
+                int targetW = Math.Max(0, panelW - arrowW);
+                if (_lvConversations.Dock != DockStyle.Left) _lvConversations.Dock = DockStyle.Left;
+                if (_lvConversations.Width != targetW) _lvConversations.Width = targetW;
+            }
+            catch { }
+        }
+
+        private void LvConversations_ItemActivate(object sender, EventArgs e)
+        {
+            TryOpenSelectedConversation();
+        }
+
+        private void TryOpenSelectedConversation()
+        {
+            try
+            {
+                if (_lvConversations == null || _lvConversations.SelectedItems.Count == 0) return;
+                var lvi = _lvConversations.SelectedItems[0];
+                var info = lvi.Tag as ConversationStore.ConversationListItem;
+                if (info == null) return;
+
+                // If already open, switch to it
+                TabPage page;
+                if (!string.IsNullOrEmpty(info.Id) && _openConversationsById.TryGetValue(info.Id, out page) && this.tabControl1.TabPages.Contains(page))
+                {
+                    try { this.tabControl1.SelectedTab = page; }
+                    catch { }
+                    return;
+                }
+
+                // Otherwise, load and open a new tab
+                var convo = ConversationStore.Load(_client, info.Path);
+                if (convo == null) return;
+                // If current tab is blank, reuse it
+                var active = GetActiveContext();
+                if (active != null && active.Conversation != null && (active.Conversation.History == null || active.Conversation.History.Count == 0))
+                {
+                    OpenConversationInContext(active, convo);
+                }
+                else
+                {
+                    OpenConversationInNewTab(convo);
+                }
+            }
+            catch { }
+        }
+
+        private void DeleteSelectedConversation()
+        {
+            try
+            {
+                if (_lvConversations == null || _lvConversations.SelectedItems.Count == 0) return;
+                var lvi = _lvConversations.SelectedItems[0];
+                var info = lvi.Tag as ConversationStore.ConversationListItem;
+                if (info == null) return;
+
+                // If open, prevent deleting or prompt to close first
+                TabPage openPage;
+                if (!string.IsNullOrEmpty(info.Id) && _openConversationsById.TryGetValue(info.Id, out openPage))
+                {
+                    // Close the tab before deleting
+                    CloseConversationTab(openPage);
+                }
+
+                ConversationStore.DeletePath(info.Path);
+                RefreshSidebarList();
+            }
+            catch { }
+        }
+
+        private void ResizeSidebarColumn()
+        {
+            try
+            {
+                if (_lvConversations == null || _lvConversations.Columns.Count == 0) return;
+                // Leave space for the arrow strip if present
+                int arrowW = (_sidebarArrowPanel != null ? _sidebarArrowPanel.Width : 0);
+                int target = Math.Max(20, _lvConversations.ClientSize.Width - arrowW - 2);
+                _lvConversations.Columns[0].Width = target;
+            }
+            catch { }
+        }
+
+        private void OpenConversationInNewTab(Conversation convo)
+        {
+            if (this.tabControl1 == null || convo == null) return;
+            var ctx = CreateConversationTab();
+            if (ctx == null) return;
+            // replace the conversation and refresh transcript UI
+            OpenConversationInContext(ctx, convo);
+        }
+
+        private void OpenConversationInContext(ChatTabContext ctx, Conversation convo)
+        {
+            if (ctx == null || convo == null) return;
+            // Remove any previous mapping for this page
+            try
+            {
+                var toRemove = _openConversationsById.Where(kv => object.ReferenceEquals(kv.Value, ctx.Page)).Select(kv => kv.Key).ToList();
+                foreach (var k in toRemove) _openConversationsById.Remove(k);
+            }
+            catch { }
+
+            ctx.Conversation = convo;
+            ctx.SelectedModel = string.IsNullOrEmpty(convo.SelectedModel) ? GetSelectedModel() : convo.SelectedModel;
+            try { this.cmbModel.Text = ctx.SelectedModel; }
+            catch { }
+            EnsureConversationId(ctx);
+            TrackOpenConversation(ctx);
+
+            // Rebuild transcript UI
+            try
+            {
+                ctx.Transcript.ClearMessages();
+                foreach (var m in convo.History)
+                {
+                    if (string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+                        ctx.Transcript.AddMessage(MessageRole.Assistant, m.Content);
+                    else if (string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase))
+                        ctx.Transcript.AddMessage(MessageRole.User, m.Content);
+                    // skip system in transcript UI
+                }
+            }
+            catch { }
+
+            // Update tab title and window
+            try
+            {
+                ctx.Page.Text = string.IsNullOrEmpty(convo.Name) ? "Conversation" : convo.Name;
+                UpdateWindowTitleFromActiveTab();
+            }
+            catch { }
+        }
+
+        private void TrackOpenConversation(ChatTabContext ctx)
+        {
+            try
+            {
+                if (ctx == null || ctx.Conversation == null || string.IsNullOrEmpty(ctx.Conversation.Id)) return;
+                _openConversationsById[ctx.Conversation.Id] = ctx.Page;
+            }
+            catch { }
+        }
+
+        private void EnsureConversationId(ChatTabContext ctx)
+        {
+            try
+            {
+                if (ctx == null || ctx.Conversation == null) return;
+                ConversationStore.EnsureConversationId(ctx.Conversation);
             }
             catch { }
         }

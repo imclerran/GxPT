@@ -13,13 +13,18 @@ namespace GxPT
 
         private readonly List<ChatMessage> _history = new List<ChatMessage>();
         public List<ChatMessage> History { get { return _history; } }
-        public string Name { get; private set; }
+        public string Name { get; internal set; }
+        public string Id { get; internal set; } // UUID-like id
+        public string SelectedModel { get; set; }
+        public DateTime LastUpdated { get; set; }
         public event Action<string> NameGenerated;
 
         public Conversation(OpenRouterClient client)
         {
             _client = client;
             Name = "New Conversation"; // initialize to generic name
+            SelectedModel = null;
+            LastUpdated = DateTime.Now;
         }
 
         public void AddUserMessage(string content)
@@ -27,11 +32,13 @@ namespace GxPT
             History.Add(new ChatMessage("user", content ?? string.Empty));
             // Attempt (re)generation if still generic
             MaybeTriggerNaming();
+            LastUpdated = DateTime.Now;
         }
 
         public void AddAssistantMessage(string content)
         {
             History.Add(new ChatMessage("assistant", content ?? string.Empty));
+            LastUpdated = DateTime.Now;
         }
 
         // Generate or refine a short title using mistralai/mistral-nemo.
