@@ -48,7 +48,6 @@ namespace GxPT
         private ToolStripMenuItem _miTabClose;
         private ToolStripMenuItem _miTabCloseOthers;
         private TabPage _tabCtxTarget;
-        private ToolStripLabel _menuSpacer; // fills remaining menu width to push custom buttons right
         private GlyphToolStripButton _btnNewTab;
         private GlyphToolStripButton _btnCloseTab;
         private bool _syncingModelCombo; // avoid event feedback loops when syncing combo text
@@ -1004,29 +1003,7 @@ namespace GxPT
             }
         }
 
-        // Resize spacer to fill available width on the MenuStrip
-        private void msMain_SizeChanged(object sender, EventArgs e)
-        {
-            UpdateMenuSpacerWidth();
-        }
-
-        private void UpdateMenuSpacerWidth()
-        {
-            try
-            {
-                if (this.msMain == null || _menuSpacer == null) return;
-                int available = this.msMain.DisplayRectangle.Width;
-                int used = 0;
-                foreach (ToolStripItem it in this.msMain.Items)
-                {
-                    if (object.ReferenceEquals(it, _menuSpacer)) continue; // we'll set this one
-                    used += it.Width + it.Margin.Horizontal;
-                }
-                int w = Math.Max(0, available - used - 2);
-                _menuSpacer.Width = w;
-            }
-            catch { }
-        }
+        // (menu spacer logic removed; using right-aligned ToolStripButtons instead)
 
         // ===== Sidebar animation and visuals =====
         private void Panel1_ClickToggle(object sender, EventArgs e)
