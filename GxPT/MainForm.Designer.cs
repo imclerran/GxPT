@@ -144,6 +144,7 @@
                         | System.Windows.Forms.AnchorStyles.Right)));
             this.txtMessage.Location = new System.Drawing.Point(0, 0);
             this.txtMessage.Margin = new System.Windows.Forms.Padding(0);
+            this.txtMessage.MaxLength = 0;
             this.txtMessage.Multiline = true;
             this.txtMessage.Name = "txtMessage";
             this.txtMessage.Size = new System.Drawing.Size(748, 75);

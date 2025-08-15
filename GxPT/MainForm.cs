@@ -732,6 +732,16 @@ namespace GxPT
 
         private void txtMessage_KeyDown(object sender, KeyEventArgs e)
         {
+            // Ctrl+A selects all text in the input box
+            if (e.Control && e.KeyCode == Keys.A)
+            {
+                try { if (this.txtMessage != null) this.txtMessage.SelectAll(); }
+                catch { }
+                e.SuppressKeyPress = true;
+                e.Handled = true;
+                return;
+            }
+
             if (e.KeyCode == Keys.Enter && !e.Shift)
             {
                 // Prevent newline and trigger send
