@@ -34,6 +34,7 @@ namespace GxPT
         private ToolStripMenuItem _miTabClose;
         private ToolStripMenuItem _miTabCloseOthers;
         private TabPage _tabCtxTarget;
+        private Timer _focusTimer; // one-shot timer to ensure focus after tab switches
         private bool _syncingModelCombo; // avoid event feedback loops when syncing combo text
 
 
@@ -67,7 +68,10 @@ namespace GxPT
                 {
                     UpdateWindowTitleFromActiveTab();
                     SyncComboModelFromActiveTab();
+                    FocusInputSafely();
                 };
+                try { this.tabControl1.Selected += (s, e) => { FocusInputSafely(); }; }
+                catch { }
                 try
                 {
                     // Revert to default visuals and dynamic-width tabs
@@ -872,6 +876,64 @@ namespace GxPT
         }
 
         // Sync the model combo box to the active tab's SelectedModel
+
+        // Ensure the message textbox gets focus after tab changes
+        private void FocusInputSafely()
+        {
+            try
+            {
+                if (!this.IsHandleCreated) return;
+                this.BeginInvoke((MethodInvoker)delegate
+                {
+                    try
+                    {
+                        if (this.txtMessage != null && this.txtMessage.CanFocus)
+                        {
+                            this.ActiveControl = this.txtMessage;
+                            this.txtMessage.Focus();
+                            try { this.txtMessage.Select(this.txtMessage.TextLength, 0); }
+                            catch { }
+                        }
+                        else
+                        {
+                            EnsureFocusViaTimer();
+                        }
+                    }
+                    catch { }
+                });
+            }
+            catch { }
+        }
+
+        private void EnsureFocusViaTimer()
+        {
+            try
+            {
+                if (_focusTimer == null)
+                {
+                    _focusTimer = new Timer();
+                    _focusTimer.Interval = 10; // short delay
+                    _focusTimer.Tick += delegate
+                    {
+                        try
+                        {
+                            _focusTimer.Stop();
+                            if (this.txtMessage != null && this.txtMessage.CanFocus)
+                            {
+                                this.ActiveControl = this.txtMessage;
+                                this.txtMessage.Focus();
+                                try { this.txtMessage.Select(this.txtMessage.TextLength, 0); }
+                                catch { }
+                            }
+                        }
+                        catch { }
+                    };
+                }
+                _focusTimer.Stop();
+                _focusTimer.Start();
+            }
+            catch { }
+        }
         private void SyncComboModelFromActiveTab()
         {
             try
