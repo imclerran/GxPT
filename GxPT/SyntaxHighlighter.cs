@@ -95,6 +95,7 @@ namespace GxPT
             RegisterHighlighter(new PythonHighlighter());
             RegisterHighlighter(new RubyHighlighter());
             RegisterHighlighter(new RustHighlighter());
+            RegisterHighlighter(new TypeScriptHighlighter());
             RegisterHighlighter(new ZigHighlighter());   
         }
 
