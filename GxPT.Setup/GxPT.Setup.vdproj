@@ -15,13 +15,13 @@
     {
         "Entry"
         {
-        "MsmKey" = "8:_16CE2E2FAA4144128A03A8F162DD7527"
+        "MsmKey" = "8:_E0499EB368C445EBB017CB750C98F6FD"
         "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
         {
-        "MsmKey" = "8:_E0499EB368C445EBB017CB750C98F6FD"
+        "MsmKey" = "8:_EC11ED74D56B4424BBF1022E3CDD0A87"
         "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
         }
@@ -136,7 +136,7 @@
         }
         "File"
         {
-            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_16CE2E2FAA4144128A03A8F162DD7527"
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_EC11ED74D56B4424BBF1022E3CDD0A87"
             {
             "SourcePath" = "8:..\\GxPT\\icon.ico"
             "TargetName" = "8:icon.ico"
@@ -343,7 +343,7 @@
             "Target" = "8:_E0499EB368C445EBB017CB750C98F6FD"
             "Folder" = "8:_9F76EA3CEFD14717AA2E89C11AF3F39C"
             "WorkingFolder" = "8:_A249DCF40CCD4A129F140A8AAEBBA6B7"
-            "Icon" = "8:_16CE2E2FAA4144128A03A8F162DD7527"
+            "Icon" = "8:_EC11ED74D56B4424BBF1022E3CDD0A87"
             "Feature" = "8:"
             }
             "{970C0BB2-C7D0-45D7-ABFA-7EC378858BC0}:_7F638B572A2D42A6B2AFEDDD7BB16628"
@@ -357,7 +357,7 @@
             "Target" = "8:_E0499EB368C445EBB017CB750C98F6FD"
             "Folder" = "8:_220909C908FC48C6B29089AEEB9D4E9D"
             "WorkingFolder" = "8:_A249DCF40CCD4A129F140A8AAEBBA6B7"
-            "Icon" = "8:_16CE2E2FAA4144128A03A8F162DD7527"
+            "Icon" = "8:_EC11ED74D56B4424BBF1022E3CDD0A87"
             "Feature" = "8:"
             }
         }
