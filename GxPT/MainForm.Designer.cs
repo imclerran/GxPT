@@ -37,6 +37,8 @@
             this.closeConversationToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.miExit = new System.Windows.Forms.ToolStripMenuItem();
+            this.miView = new System.Windows.Forms.ToolStripMenuItem();
+            this.miConversationHistory = new System.Windows.Forms.ToolStripMenuItem();
             this.pnlInput = new System.Windows.Forms.Panel();
             this.txtMessage = new System.Windows.Forms.TextBox();
             this.pnlInputRight = new System.Windows.Forms.Panel();
@@ -48,10 +50,8 @@
             this.lblNoApiKey = new System.Windows.Forms.Label();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
-            this.splitContainer1 = new System.Windows.Forms.SplitContainer();
-            this.miView = new System.Windows.Forms.ToolStripMenuItem();
-            this.miConversationHistory = new System.Windows.Forms.ToolStripMenuItem();
             this.chatTranscript = new GxPT.ChatTranscriptControl();
+            this.splitContainer1 = new System.Windows.Forms.SplitContainer();
             this.msMain.SuspendLayout();
             this.pnlInput.SuspendLayout();
             this.pnlInputRight.SuspendLayout();
@@ -124,6 +124,22 @@
             this.miExit.Size = new System.Drawing.Size(212, 22);
             this.miExit.Text = "E&xit";
             this.miExit.Click += new System.EventHandler(this.miExit_Click);
+            // 
+            // miView
+            // 
+            this.miView.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.miConversationHistory});
+            this.miView.Name = "miView";
+            this.miView.Size = new System.Drawing.Size(41, 20);
+            this.miView.Text = "&View";
+            // 
+            // miConversationHistory
+            // 
+            this.miConversationHistory.Name = "miConversationHistory";
+            this.miConversationHistory.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.H)));
+            this.miConversationHistory.Size = new System.Drawing.Size(225, 22);
+            this.miConversationHistory.Text = "Conversation &History";
+            this.miConversationHistory.Click += new System.EventHandler(this.miConversationHistory_Click);
             // 
             // pnlInput
             // 
@@ -256,6 +272,18 @@
             this.tabPage1.Text = "New Conversation";
             this.tabPage1.UseVisualStyleBackColor = true;
             // 
+            // chatTranscript
+            // 
+            this.chatTranscript.AccessibleName = "Chat transcript";
+            this.chatTranscript.BackColor = System.Drawing.SystemColors.ControlLightLight;
+            this.chatTranscript.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.chatTranscript.ForeColor = System.Drawing.SystemColors.WindowText;
+            this.chatTranscript.Location = new System.Drawing.Point(0, 0);
+            this.chatTranscript.Margin = new System.Windows.Forms.Padding(0);
+            this.chatTranscript.Name = "chatTranscript";
+            this.chatTranscript.Size = new System.Drawing.Size(877, 613);
+            this.chatTranscript.TabIndex = 0;
+            // 
             // splitContainer1
             // 
             this.splitContainer1.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -274,34 +302,6 @@
             this.splitContainer1.SplitterWidth = 1;
             this.splitContainer1.TabIndex = 1;
             // 
-            // miView
-            // 
-            this.miView.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.miConversationHistory});
-            this.miView.Name = "miView";
-            this.miView.Size = new System.Drawing.Size(41, 20);
-            this.miView.Text = "&View";
-            // 
-            // miConversationHistory
-            // 
-            this.miConversationHistory.Name = "miConversationHistory";
-            this.miConversationHistory.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.H)));
-            this.miConversationHistory.Size = new System.Drawing.Size(225, 22);
-            this.miConversationHistory.Text = "Conversation &History";
-            this.miConversationHistory.Click += new System.EventHandler(this.miConversationHistory_Click);
-            // 
-            // chatTranscript
-            // 
-            this.chatTranscript.AccessibleName = "Chat transcript";
-            this.chatTranscript.BackColor = System.Drawing.SystemColors.ControlLightLight;
-            this.chatTranscript.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.chatTranscript.ForeColor = System.Drawing.SystemColors.WindowText;
-            this.chatTranscript.Location = new System.Drawing.Point(0, 0);
-            this.chatTranscript.Margin = new System.Windows.Forms.Padding(0);
-            this.chatTranscript.Name = "chatTranscript";
-            this.chatTranscript.Size = new System.Drawing.Size(877, 613);
-            this.chatTranscript.TabIndex = 0;
-            // 
             // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -312,6 +312,7 @@
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.MainMenuStrip = this.msMain;
             this.Name = "MainForm";
+            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "GxPT - New Conversation";
             this.msMain.ResumeLayout(false);
             this.msMain.PerformLayout();
