@@ -52,8 +52,6 @@
             this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.viewToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.conversationHistoryToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.showToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.hideToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.msMain.SuspendLayout();
             this.pnlInput.SuspendLayout();
             this.pnlInputRight.SuspendLayout();
@@ -297,24 +295,10 @@
             // 
             // conversationHistoryToolStripMenuItem
             // 
-            this.conversationHistoryToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.showToolStripMenuItem,
-            this.hideToolStripMenuItem});
             this.conversationHistoryToolStripMenuItem.Name = "conversationHistoryToolStripMenuItem";
-            this.conversationHistoryToolStripMenuItem.Size = new System.Drawing.Size(186, 22);
+            this.conversationHistoryToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.H)));
+            this.conversationHistoryToolStripMenuItem.Size = new System.Drawing.Size(225, 22);
             this.conversationHistoryToolStripMenuItem.Text = "Conversation &History";
-            // 
-            // showToolStripMenuItem
-            // 
-            this.showToolStripMenuItem.Name = "showToolStripMenuItem";
-            this.showToolStripMenuItem.Size = new System.Drawing.Size(152, 22);
-            this.showToolStripMenuItem.Text = "&Show";
-            // 
-            // hideToolStripMenuItem
-            // 
-            this.hideToolStripMenuItem.Name = "hideToolStripMenuItem";
-            this.hideToolStripMenuItem.Size = new System.Drawing.Size(152, 22);
-            this.hideToolStripMenuItem.Text = "&Hide";
             // 
             // MainForm
             // 
@@ -371,8 +355,6 @@
         private System.Windows.Forms.SplitContainer splitContainer1;
         private System.Windows.Forms.ToolStripMenuItem viewToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem conversationHistoryToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem showToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem hideToolStripMenuItem;
 
 
     }
