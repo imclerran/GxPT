@@ -130,6 +130,8 @@ namespace GxPT
                 {
                     UpdateWindowTitleFromActiveTab();
                     SyncComboModelFromActiveTab();
+                    // When switching to an existing tab, keep typing flow by focusing the input
+                    FocusInputSoon();
                 };
                 try
                 {
@@ -348,6 +350,8 @@ namespace GxPT
             // After selecting, sync combo to this tab's model
             SyncComboModelFromActiveTab();
             RefreshSidebarList();
+            // Ensure input is ready for typing on new tab
+            FocusInputSoon();
             return ctx;
         }
 
@@ -1544,6 +1548,8 @@ namespace GxPT
             if (ctx == null) return;
             // replace the conversation and refresh transcript UI
             OpenConversationInContext(ctx, convo);
+            // Keep focus in input when a new tab opens from history
+            FocusInputSoon();
         }
 
         private void OpenConversationInContext(ChatTabContext ctx, Conversation convo)
@@ -1586,6 +1592,9 @@ namespace GxPT
                 UpdateWindowTitleFromActiveTab();
             }
             catch { }
+
+            // If we reused a blank tab or just loaded into a newly created tab, focus input
+            FocusInputSoon();
         }
 
         private void TrackOpenConversation(ChatTabContext ctx)
@@ -1605,6 +1614,32 @@ namespace GxPT
                 if (ctx == null || ctx.Conversation == null) return;
                 ConversationStore.EnsureConversationId(ctx.Conversation);
             }
+            catch { }
+        }
+
+        // Helper: focus the message textbox now (if possible)
+        private void FocusInput()
+        {
+            try
+            {
+                if (this.txtMessage == null) return;
+                if (!this.txtMessage.CanFocus) return;
+                this.txtMessage.Focus();
+                // place caret at end
+                try
+                {
+                    this.txtMessage.SelectionStart = this.txtMessage.TextLength;
+                    this.txtMessage.SelectionLength = 0;
+                }
+                catch { }
+            }
+            catch { }
+        }
+
+        // Helper: schedule focus on UI queue to occur after layout/selection
+        private void FocusInputSoon()
+        {
+            try { this.BeginInvoke((MethodInvoker)(() => FocusInput())); }
             catch { }
         }
     }
