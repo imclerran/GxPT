@@ -27,20 +27,72 @@ namespace GxPT
 
         private readonly Dictionary<TabPage, ChatTabContext> _tabContexts = new Dictionary<TabPage, ChatTabContext>();
 
+        // Context menu for tab strip
+        private ContextMenuStrip _tabCtxMenu;
+        private ToolStripMenuItem _miTabNew;
+        private ToolStripMenuItem _miTabClose;
+        private ToolStripMenuItem _miTabCloseOthers;
+        private TabPage _tabCtxTarget;
+
 
         public MainForm()
         {
             InitializeComponent();
             HookEvents();
             InitializeClient();
+            // Wire menu items and tab events
+            try
+            {
+                if (this.miNewConversation != null)
+                {
+                    this.miNewConversation.Click -= miNewConversation_Click;
+                    this.miNewConversation.Click += miNewConversation_Click;
+                }
+            }
+            catch { }
+            try
+            {
+                if (this.closeConversationToolStripMenuItem != null)
+                {
+                    this.closeConversationToolStripMenuItem.Click -= closeConversationToolStripMenuItem_Click;
+                    this.closeConversationToolStripMenuItem.Click += closeConversationToolStripMenuItem_Click;
+                }
+            }
+            catch { }
             if (this.tabControl1 != null)
+            {
                 this.tabControl1.SelectedIndexChanged += (s, e) => UpdateWindowTitleFromActiveTab();
+                try
+                {
+                    // Revert to default visuals and dynamic-width tabs
+                    this.tabControl1.DrawMode = TabDrawMode.Normal;
+                    // No owner-draw; only support middle-click to close a tab
+                    this.tabControl1.MouseDown -= tabControl1_MouseDown;
+                    this.tabControl1.MouseDown += tabControl1_MouseDown;
+                    this.tabControl1.MouseUp -= tabControl1_MouseUp;
+                    this.tabControl1.MouseUp += tabControl1_MouseUp;
+                }
+                catch { }
+            }
+
+            // Build tab context menu
+            try
+            {
+                _tabCtxMenu = new ContextMenuStrip();
+                _miTabNew = new ToolStripMenuItem("New Tab");
+                _miTabClose = new ToolStripMenuItem("Close");
+                _miTabCloseOthers = new ToolStripMenuItem("Close Others");
+
+                _miTabNew.Click += delegate { CreateConversationTab(); };
+                _miTabClose.Click += delegate { if (_tabCtxTarget != null) CloseConversationTab(_tabCtxTarget); };
+                _miTabCloseOthers.Click += delegate { if (_tabCtxTarget != null) CloseOtherTabs(_tabCtxTarget); };
+
+                _tabCtxMenu.Items.AddRange(new ToolStripItem[] { _miTabNew, _miTabClose, _miTabCloseOthers });
+            }
+            catch { }
 
             // Setup initial tab context for the designer-created tab
             SetupInitialConversationTab();
-            // Remove any extra placeholder tab if present in designer
-            try { if (this.tabControl1 != null && this.tabPage2 != null) this.tabControl1.TabPages.Remove(this.tabPage2); }
-            catch { }
             // Wire banner link and ensure it lays out nicely
             if (this.lnkOpenSettings != null)
                 this.lnkOpenSettings.LinkClicked += lnkOpenSettings_LinkClicked;
@@ -199,6 +251,74 @@ namespace GxPT
                 var page = (this.tabControl1 != null ? this.tabControl1.SelectedTab : null);
                 string name = (page != null ? page.Text : null);
                 this.Text = string.IsNullOrEmpty(name) ? "GxPT" : ("GxPT - " + name);
+            }
+            catch { }
+        }
+
+        // Close the active conversation tab
+        private void CloseActiveConversationTab()
+        {
+            try
+            {
+                if (this.tabControl1 == null) return;
+                var page = this.tabControl1.SelectedTab;
+                if (page == null) return;
+                CloseConversationTab(page);
+            }
+            catch { }
+        }
+
+        // Close a specific conversation tab; if only one tab exists, reset it instead
+        private void CloseConversationTab(TabPage page)
+        {
+            if (page == null) return;
+
+            ChatTabContext ctx;
+            _tabContexts.TryGetValue(page, out ctx);
+
+            if (this.tabControl1 != null && this.tabControl1.TabPages.Count <= 1)
+            {
+                // Reset single remaining tab
+                try
+                {
+                    if (ctx != null)
+                    {
+                        if (ctx.Transcript != null) ctx.Transcript.ClearMessages();
+                        ctx.Conversation = new Conversation(_client);
+                        // re-hook name event
+                        ctx.Conversation.NameGenerated += delegate(string name)
+                        {
+                            try
+                            {
+                                if (this.IsHandleCreated)
+                                {
+                                    this.BeginInvoke((MethodInvoker)delegate
+                                    {
+                                        ctx.Page.Text = string.IsNullOrEmpty(name) ? "Conversation" : name;
+                                        UpdateWindowTitleFromActiveTab();
+                                    });
+                                }
+                            }
+                            catch { }
+                        };
+                        page.Text = "New Conversation";
+                        UpdateWindowTitleFromActiveTab();
+                    }
+                }
+                catch { }
+                return;
+            }
+
+            try
+            {
+                if (_tabContexts.ContainsKey(page)) _tabContexts.Remove(page);
+                if (this.tabControl1 != null)
+                {
+                    this.tabControl1.TabPages.Remove(page);
+                }
+                try { page.Dispose(); }
+                catch { }
+                UpdateWindowTitleFromActiveTab();
             }
             catch { }
         }
@@ -564,6 +684,88 @@ namespace GxPT
         private void miNewConversation_Click(object sender, EventArgs e)
         {
             CreateConversationTab();
+        }
+
+        // File > Close Conversation
+        private void closeConversationToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            CloseActiveConversationTab();
+        }
+
+        private void tabControl1_MouseDown(object sender, MouseEventArgs e)
+        {
+            try
+            {
+                if (this.tabControl1 == null) return;
+
+                // Middle-click on a tab header closes that tab
+                if (e.Button == MouseButtons.Middle)
+                {
+                    for (int i = 0; i < this.tabControl1.TabPages.Count; i++)
+                    {
+                        var page = this.tabControl1.TabPages[i];
+                        Rectangle r = this.tabControl1.GetTabRect(i);
+                        if (r.Contains(e.Location)) { CloseConversationTab(page); return; }
+                    }
+                    return;
+                }
+
+            }
+            catch { }
+        }
+
+        // Right-click on tab strip to show context menu
+        private void tabControl1_MouseUp(object sender, MouseEventArgs e)
+        {
+            try
+            {
+                if (this.tabControl1 == null || _tabCtxMenu == null) return;
+                if (e.Button != MouseButtons.Right) return;
+
+                // Determine if the click is on a tab header
+                _tabCtxTarget = null;
+                for (int i = 0; i < this.tabControl1.TabPages.Count; i++)
+                {
+                    Rectangle r = this.tabControl1.GetTabRect(i);
+                    if (r.Contains(e.Location))
+                    {
+                        _tabCtxTarget = this.tabControl1.TabPages[i];
+                        try { this.tabControl1.SelectedTab = _tabCtxTarget; }
+                        catch { }
+                        break;
+                    }
+                }
+
+                // Enable/disable items based on target
+                bool hasTarget = (_tabCtxTarget != null);
+                _miTabClose.Enabled = hasTarget;
+                _miTabCloseOthers.Enabled = hasTarget && this.tabControl1.TabPages.Count > 1;
+
+                _tabCtxMenu.Show(this.tabControl1, e.Location);
+            }
+            catch { }
+        }
+
+
+
+        // Close all tabs except the provided one; if only one tab exists, no-op
+        private void CloseOtherTabs(TabPage keep)
+        {
+            try
+            {
+                if (this.tabControl1 == null || keep == null) return;
+                // Collect to avoid modifying during enumeration
+                var toClose = new List<TabPage>();
+                foreach (TabPage p in this.tabControl1.TabPages)
+                {
+                    if (!object.ReferenceEquals(p, keep)) toClose.Add(p);
+                }
+                foreach (var p in toClose)
+                {
+                    CloseConversationTab(p);
+                }
+            }
+            catch { }
         }
 
         // Center the label and link vertically within the banner panel

@@ -31,6 +31,9 @@
             this.msMain = new System.Windows.Forms.MenuStrip();
             this.miFile = new System.Windows.Forms.ToolStripMenuItem();
             this.miSettings = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStripSeparator2 = new System.Windows.Forms.ToolStripSeparator();
+            this.miNewConversation = new System.Windows.Forms.ToolStripMenuItem();
+            this.closeConversationToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.miExit = new System.Windows.Forms.ToolStripMenuItem();
             this.pnlInput = new System.Windows.Forms.Panel();
@@ -42,10 +45,8 @@
             this.pnlApiKeyBanner = new System.Windows.Forms.Panel();
             this.lnkOpenSettings = new System.Windows.Forms.LinkLabel();
             this.lblNoApiKey = new System.Windows.Forms.Label();
-            this.miNewConversation = new System.Windows.Forms.ToolStripMenuItem();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
-            this.tabPage2 = new System.Windows.Forms.TabPage();
             this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.msMain.SuspendLayout();
             this.pnlInput.SuspendLayout();
@@ -69,8 +70,10 @@
             // miFile
             // 
             this.miFile.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.miNewConversation,
             this.miSettings,
+            this.toolStripSeparator2,
+            this.miNewConversation,
+            this.closeConversationToolStripMenuItem,
             this.toolStripSeparator1,
             this.miExit});
             this.miFile.Name = "miFile";
@@ -83,6 +86,25 @@
             this.miSettings.Size = new System.Drawing.Size(212, 22);
             this.miSettings.Text = "&Settings";
             this.miSettings.Click += new System.EventHandler(this.miSettings_Click);
+            // 
+            // toolStripSeparator2
+            // 
+            this.toolStripSeparator2.Name = "toolStripSeparator2";
+            this.toolStripSeparator2.Size = new System.Drawing.Size(209, 6);
+            // 
+            // miNewConversation
+            // 
+            this.miNewConversation.Name = "miNewConversation";
+            this.miNewConversation.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.N)));
+            this.miNewConversation.Size = new System.Drawing.Size(212, 22);
+            this.miNewConversation.Text = "&New Conversation";
+            this.miNewConversation.Click += new System.EventHandler(this.miNewConversation_Click);
+            // 
+            // closeConversationToolStripMenuItem
+            // 
+            this.closeConversationToolStripMenuItem.Name = "closeConversationToolStripMenuItem";
+            this.closeConversationToolStripMenuItem.Size = new System.Drawing.Size(212, 22);
+            this.closeConversationToolStripMenuItem.Text = "&Close Conversation";
             // 
             // toolStripSeparator1
             // 
@@ -204,18 +226,9 @@
             this.lblNoApiKey.TabIndex = 0;
             this.lblNoApiKey.Text = "No API key configured";
             // 
-            // miNewConversation
-            // 
-            this.miNewConversation.Name = "miNewConversation";
-            this.miNewConversation.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.N)));
-            this.miNewConversation.Size = new System.Drawing.Size(212, 22);
-            this.miNewConversation.Text = "&New Conversation";
-            this.miNewConversation.Click += new System.EventHandler(this.miNewConversation_Click);
-            // 
             // tabControl1
             // 
             this.tabControl1.Controls.Add(this.tabPage1);
-            this.tabControl1.Controls.Add(this.tabPage2);
             this.tabControl1.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tabControl1.Location = new System.Drawing.Point(0, 24);
             this.tabControl1.Name = "tabControl1";
@@ -232,14 +245,6 @@
             this.tabPage1.TabIndex = 0;
             this.tabPage1.Text = "New Conversation";
             this.tabPage1.UseVisualStyleBackColor = true;
-            // 
-            // tabPage2
-            // 
-            this.tabPage2.Location = new System.Drawing.Point(4, 22);
-            this.tabPage2.Name = "tabPage2";
-            this.tabPage2.Size = new System.Drawing.Size(728, 707);
-            this.tabPage2.TabIndex = 1;
-            this.tabPage2.UseVisualStyleBackColor = true;
             // 
             // chatTranscript
             // 
@@ -299,7 +304,8 @@
         private System.Windows.Forms.ToolStripMenuItem miNewConversation;
         private System.Windows.Forms.TabControl tabControl1;
         private System.Windows.Forms.TabPage tabPage1;
-        private System.Windows.Forms.TabPage tabPage2;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator2;
+        private System.Windows.Forms.ToolStripMenuItem closeConversationToolStripMenuItem;
 
 
     }
