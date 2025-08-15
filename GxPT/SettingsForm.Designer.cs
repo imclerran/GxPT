@@ -30,7 +30,7 @@
         {
             this.flowLayoutPanel1 = new System.Windows.Forms.FlowLayoutPanel();
             this.btnSave = new System.Windows.Forms.Button();
-            this.textBox1 = new System.Windows.Forms.TextBox();
+            this.rtbJson = new System.Windows.Forms.RichTextBox();
             this.tableLayoutPanel1 = new System.Windows.Forms.TableLayoutPanel();
             this.lblApiKey = new System.Windows.Forms.Label();
             this.lblModels = new System.Windows.Forms.Label();
@@ -72,15 +72,21 @@
             this.btnSave.UseVisualStyleBackColor = true;
             this.btnSave.Click += new System.EventHandler(this.btnSave_Click);
             // 
-            // textBox1
+            // rtbJson
             // 
-            this.textBox1.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.textBox1.Location = new System.Drawing.Point(3, 3);
-            this.textBox1.Multiline = true;
-            this.textBox1.Name = "textBox1";
-            this.textBox1.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.textBox1.Size = new System.Drawing.Size(578, 311);
-            this.textBox1.TabIndex = 1;
+            this.rtbJson.AcceptsTab = true;
+            this.rtbJson.BorderStyle = System.Windows.Forms.BorderStyle.None;
+            this.rtbJson.DetectUrls = false;
+            this.rtbJson.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.rtbJson.Font = new System.Drawing.Font("Consolas", 9F);
+            this.rtbJson.HideSelection = false;
+            this.rtbJson.Location = new System.Drawing.Point(3, 3);
+            this.rtbJson.Name = "rtbJson";
+            this.rtbJson.ScrollBars = System.Windows.Forms.RichTextBoxScrollBars.ForcedBoth;
+            this.rtbJson.Size = new System.Drawing.Size(578, 311);
+            this.rtbJson.TabIndex = 1;
+            this.rtbJson.Text = "";
+            this.rtbJson.WordWrap = false;
             // 
             // tableLayoutPanel1
             // 
@@ -212,7 +218,7 @@
             // 
             // tabJson
             // 
-            this.tabJson.Controls.Add(this.textBox1);
+            this.tabJson.Controls.Add(this.rtbJson);
             this.tabJson.Location = new System.Drawing.Point(4, 22);
             this.tabJson.Name = "tabJson";
             this.tabJson.Padding = new System.Windows.Forms.Padding(3);
@@ -246,7 +252,7 @@
 
         private System.Windows.Forms.FlowLayoutPanel flowLayoutPanel1;
         private System.Windows.Forms.Button btnSave;
-        private System.Windows.Forms.TextBox textBox1;
+        private System.Windows.Forms.RichTextBox rtbJson;
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanel1;
         private System.Windows.Forms.Label lblApiKey;
         private System.Windows.Forms.Label lblModels;

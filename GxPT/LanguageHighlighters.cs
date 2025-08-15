@@ -441,17 +441,21 @@ namespace GxPT
         {
             return new TokenPattern[]
             {
-                // String literals (JSON keys and values)
-                new TokenPattern(@"""(?:[^""\\]|\\.)*""", TokenType.String, 1),
+                // Property names (strings immediately followed by optional whitespace and a colon)
+                // Higher priority so keys are colored differently than string values
+                new TokenPattern(@"""(?:[^""\\]|\\.)*""(?=\s*:)", TokenType.Type, 1),
+
+                // String literals (values and non-key strings)
+                new TokenPattern(@"""(?:[^""\\]|\\.)*""", TokenType.String, 2),
                 
                 // Numbers
-                new TokenPattern(@"-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?", TokenType.Number, 2),
+                new TokenPattern(@"-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?", TokenType.Number, 3),
                 
                 // Boolean and null values
-                new TokenPattern(@"\b(?:true|false|null)\b", TokenType.Keyword, 3),
+                new TokenPattern(@"\b(?:true|false|null)\b", TokenType.Keyword, 4),
                 
                 // Punctuation
-                new TokenPattern(@"[{}()\[\]:,]", TokenType.Punctuation, 4)
+                new TokenPattern(@"[{}()\[\]:,]", TokenType.Punctuation, 5)
             };
         }
     }

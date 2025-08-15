@@ -22,6 +22,16 @@ namespace GxPT
         // Guard to prevent event loops during programmatic sync
         private bool _isSyncing = false;
 
+        // Debounce timer for JSON syntax highlighting
+        private Timer _jsonHighlightTimer;
+
+        // Prevent re-entrant highlighting and repeated scheduling during formatting
+        private bool _isHighlighting = false;
+
+        // Track pending edited region to highlight (union of ranges until debounce fires)
+        private int _pendingHighlightStart = -1;
+        private int _pendingHighlightEnd = -1;
+
         public SettingsForm()
         {
             InitializeComponent();
@@ -42,6 +52,12 @@ namespace GxPT
 
             // Keep default model list updated as models are typed
             this.txtModels.TextChanged += TxtModels_TextChanged;
+
+            // JSON editor changed -> debounce highlight
+            _jsonHighlightTimer = new Timer();
+            _jsonHighlightTimer.Interval = 200; // ms
+            _jsonHighlightTimer.Tick += JsonHighlightTimer_Tick;
+            this.rtbJson.TextChanged += RtbJson_TextChanged;
         }
 
         private void SettingsForm_Load(object sender, EventArgs e)
@@ -148,6 +164,13 @@ namespace GxPT
                 try { UpdateJsonEditorFromSettings(_working); }
                 finally { _isSyncing = false; }
 
+                // If currently on the JSON tab, re-apply highlighting once post-save
+                if (this.tabControl1.SelectedTab == this.tabJson)
+                {
+                    try { BeginInvoke(new Action(HighlightJsonNow)); }
+                    catch { /* ignore */ }
+                }
+
                 return true;
             }
             catch (Exception ex)
@@ -251,6 +274,13 @@ namespace GxPT
                 }
             }
             finally { _isSyncing = false; }
+
+            // When switching to JSON tab, run a one-time highlight
+            if (toJson)
+            {
+                try { BeginInvoke(new Action(HighlightJsonNow)); }
+                catch { /* ignore */ }
+            }
         }
 
         // --- Serialization helpers (JavaScriptSerializer for .NET 3.5) ---
@@ -279,7 +309,8 @@ namespace GxPT
         private void UpdateJsonEditorFromSettings(SettingsData settings)
         {
             var json = Serialize(settings);
-            this.textBox1.Text = PrettyPrintJson(json);
+            this.rtbJson.Text = PrettyPrintJson(json);
+            // Do not trigger highlight here; only on TextChanged
         }
 
         private bool TryParseJsonEditorToSettings(out SettingsData settings, out string error)
@@ -287,7 +318,7 @@ namespace GxPT
             try
             {
                 var ser = new JavaScriptSerializer();
-                settings = ser.Deserialize<SettingsData>(this.textBox1.Text ?? string.Empty) ?? new SettingsData();
+                settings = ser.Deserialize<SettingsData>(this.rtbJson.Text ?? string.Empty) ?? new SettingsData();
                 PostProcess(settings);
                 error = string.Empty;
                 return true;
@@ -297,6 +328,192 @@ namespace GxPT
                 settings = new SettingsData();
                 error = ex.Message;
                 return false;
+            }
+        }
+
+        // --- JSON RichTextBox syntax highlighting (debounced) ---
+        private void RtbJson_TextChanged(object sender, EventArgs e)
+        {
+            if (_isSyncing || _isHighlighting) return;
+
+            // Compute an edited range covering the current line +/- one adjacent line
+            int caret = this.rtbJson.SelectionStart;
+            int selLen = this.rtbJson.SelectionLength;
+            int totalLines = this.rtbJson.Lines != null ? this.rtbJson.Lines.Length : 0;
+
+            int startLine = this.rtbJson.GetLineFromCharIndex(Math.Max(0, caret));
+            int endLine = this.rtbJson.GetLineFromCharIndex(Math.Max(0, caret + Math.Max(0, selLen - 1)));
+            if (totalLines > 0)
+            {
+                startLine = Math.Max(0, startLine - 1);
+                endLine = Math.Min(totalLines - 1, endLine + 1);
+            }
+
+            int startPos = this.rtbJson.GetFirstCharIndexFromLine(startLine);
+            if (startPos < 0) startPos = 0;
+            int nextLinePos = (endLine + 1 < totalLines) ? this.rtbJson.GetFirstCharIndexFromLine(endLine + 1) : this.rtbJson.TextLength;
+            int endPos = Math.Max(startPos, nextLinePos);
+
+            // Merge into pending range
+            if (_pendingHighlightStart < 0)
+            {
+                _pendingHighlightStart = startPos;
+                _pendingHighlightEnd = endPos;
+            }
+            else
+            {
+                _pendingHighlightStart = Math.Min(_pendingHighlightStart, startPos);
+                _pendingHighlightEnd = Math.Max(_pendingHighlightEnd, endPos);
+            }
+
+            HighlightJsonSoon();
+        }
+
+        private void JsonHighlightTimer_Tick(object sender, EventArgs e)
+        {
+            _jsonHighlightTimer.Stop();
+            int start = _pendingHighlightStart;
+            int end = _pendingHighlightEnd;
+            _pendingHighlightStart = -1;
+            _pendingHighlightEnd = -1;
+            if (start >= 0 && end >= start)
+            {
+                HighlightJsonRange(start, end - start);
+            }
+            else
+            {
+                HighlightJsonNow();
+            }
+        }
+
+        private void HighlightJsonSoon()
+        {
+            if (_jsonHighlightTimer != null)
+            {
+                _jsonHighlightTimer.Stop();
+                _jsonHighlightTimer.Start();
+            }
+        }
+
+        private void HighlightJsonNow()
+        {
+            try
+            {
+                _isHighlighting = true;
+                var rtb = this.rtbJson;
+                if (rtb == null || rtb.IsDisposed) return;
+
+                string text = rtb.Text ?? string.Empty;
+                // Save caret
+                int savedStart = rtb.SelectionStart;
+                int savedLength = rtb.SelectionLength;
+
+                // Disable redraw
+                rtb.SuspendLayout();
+
+                // Reset to default color
+                rtb.SelectionStart = 0;
+                rtb.SelectionLength = rtb.TextLength;
+                rtb.SelectionColor = SystemColors.WindowText;
+
+                if (text.Length > 0)
+                {
+                    var tokens = SyntaxHighlighter.Highlight("json", text);
+                    int maxLen = rtb.TextLength;
+                    for (int i = 0; i < tokens.Count; i++)
+                    {
+                        var t = tokens[i];
+                        if (t.Type == TokenType.Normal || t.Length <= 0 || t.StartIndex < 0 || t.StartIndex >= maxLen) continue;
+
+                        int length = t.Length;
+                        int end = t.StartIndex + length;
+                        if (end > maxLen)
+                        {
+                            length = Math.Max(0, maxLen - t.StartIndex);
+                            if (length == 0) continue;
+                        }
+
+                        rtb.SelectionStart = t.StartIndex;
+                        rtb.SelectionLength = length;
+                        rtb.SelectionColor = SyntaxHighlighter.GetTokenColor(t.Type);
+                    }
+                }
+
+                // Restore caret
+                rtb.SelectionStart = Math.Max(0, Math.Min(savedStart, rtb.TextLength));
+                rtb.SelectionLength = Math.Max(0, Math.Min(savedLength, rtb.TextLength - rtb.SelectionStart));
+            }
+            catch
+            {
+                // ignore
+            }
+            finally
+            {
+                this.rtbJson.ResumeLayout();
+                this.rtbJson.Invalidate();
+                _isHighlighting = false;
+            }
+        }
+
+        private void HighlightJsonRange(int start, int length)
+        {
+            if (length <= 0) return;
+            try
+            {
+                _isHighlighting = true;
+                var rtb = this.rtbJson;
+                if (rtb == null || rtb.IsDisposed) return;
+
+                int maxLen = rtb.TextLength;
+                if (start >= maxLen) return;
+                if (start + length > maxLen) length = Math.Max(0, maxLen - start);
+                if (length == 0) return;
+
+                string segment = (rtb.Text ?? string.Empty).Substring(start, length);
+
+                // Save caret
+                int savedStart = rtb.SelectionStart;
+                int savedLength = rtb.SelectionLength;
+
+                rtb.SuspendLayout();
+
+                // Reset segment to default color
+                rtb.SelectionStart = start;
+                rtb.SelectionLength = length;
+                rtb.SelectionColor = SystemColors.WindowText;
+
+                var tokens = SyntaxHighlighter.Highlight("json", segment);
+                for (int i = 0; i < tokens.Count; i++)
+                {
+                    var t = tokens[i];
+                    if (t.Type == TokenType.Normal || t.Length <= 0) continue;
+                    int tStart = start + t.StartIndex;
+                    int tLen = t.Length;
+                    if (tStart < 0 || tStart >= maxLen) continue;
+                    if (tStart + tLen > maxLen)
+                    {
+                        tLen = Math.Max(0, maxLen - tStart);
+                        if (tLen == 0) continue;
+                    }
+
+                    rtb.SelectionStart = tStart;
+                    rtb.SelectionLength = tLen;
+                    rtb.SelectionColor = SyntaxHighlighter.GetTokenColor(t.Type);
+                }
+
+                // Restore caret
+                rtb.SelectionStart = Math.Max(0, Math.Min(savedStart, rtb.TextLength));
+                rtb.SelectionLength = Math.Max(0, Math.Min(savedLength, rtb.TextLength - rtb.SelectionStart));
+            }
+            catch
+            {
+                // ignore
+            }
+            finally
+            {
+                this.rtbJson.ResumeLayout();
+                this.rtbJson.Invalidate();
+                _isHighlighting = false;
             }
         }
 
