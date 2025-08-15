@@ -23,6 +23,7 @@ namespace GxPT
             public ChatTranscriptControl Transcript;
             public Conversation Conversation;
             public bool IsSending;
+            public string SelectedModel; // model selected for this tab
         }
 
         private readonly Dictionary<TabPage, ChatTabContext> _tabContexts = new Dictionary<TabPage, ChatTabContext>();
@@ -33,6 +34,7 @@ namespace GxPT
         private ToolStripMenuItem _miTabClose;
         private ToolStripMenuItem _miTabCloseOthers;
         private TabPage _tabCtxTarget;
+        private bool _syncingModelCombo; // avoid event feedback loops when syncing combo text
 
 
         public MainForm()
@@ -61,7 +63,11 @@ namespace GxPT
             catch { }
             if (this.tabControl1 != null)
             {
-                this.tabControl1.SelectedIndexChanged += (s, e) => UpdateWindowTitleFromActiveTab();
+                this.tabControl1.SelectedIndexChanged += (s, e) =>
+                {
+                    UpdateWindowTitleFromActiveTab();
+                    SyncComboModelFromActiveTab();
+                };
                 try
                 {
                     // Revert to default visuals and dynamic-width tabs
@@ -113,6 +119,18 @@ namespace GxPT
             this.txtMessage.KeyDown += txtMessage_KeyDown;
             this.txtMessage.TextChanged += txtMessage_TextChanged;
             this.Resize += MainForm_Resize;
+            try
+            {
+                if (this.cmbModel != null)
+                {
+                    this.cmbModel.SelectedIndexChanged -= cmbModel_SelectedIndexChanged;
+                    this.cmbModel.SelectedIndexChanged += cmbModel_SelectedIndexChanged;
+                    // Track typed text as well (fires for user edits, not for programmatic changes)
+                    this.cmbModel.TextUpdate -= cmbModel_TextUpdate;
+                    this.cmbModel.TextUpdate += cmbModel_TextUpdate;
+                }
+            }
+            catch { }
         }
 
         private string GetSelectedModel()
@@ -157,7 +175,8 @@ namespace GxPT
                     Page = this.tabPage1,
                     Transcript = this.chatTranscript,
                     Conversation = new Conversation(_client),
-                    IsSending = false
+                    IsSending = false,
+                    SelectedModel = GetSelectedModel()
                 };
 
                 // When a name is generated, update the tab text and window title if active
@@ -182,6 +201,8 @@ namespace GxPT
                 catch { }
 
                 _tabContexts[this.tabPage1] = ctx;
+                // Ensure combo reflects the initial tab's stored model
+                SyncComboModelFromActiveTab();
             }
             catch { }
         }
@@ -203,7 +224,8 @@ namespace GxPT
                 Page = page,
                 Transcript = transcript,
                 Conversation = new Conversation(_client),
-                IsSending = false
+                IsSending = false,
+                SelectedModel = GetSelectedModel()
             };
 
             ctx.Conversation.NameGenerated += delegate(string name)
@@ -227,6 +249,8 @@ namespace GxPT
             this.tabControl1.TabPages.Add(page);
             try { this.tabControl1.SelectedTab = page; }
             catch { }
+            // After selecting, sync combo to this tab's model
+            SyncComboModelFromActiveTab();
             return ctx;
         }
 
@@ -589,18 +613,36 @@ namespace GxPT
 
                 if (list != null && list.Count > 0 && this.cmbModel != null)
                 {
+                    // Preserve the active tab's chosen model if possible
+                    string currentTabModel = null;
+                    try
+                    {
+                        var act = GetActiveContext();
+                        if (act != null) currentTabModel = act.SelectedModel;
+                    }
+                    catch { }
+
                     this.cmbModel.BeginUpdate();
                     try
                     {
                         this.cmbModel.Items.Clear();
                         foreach (var m in list) this.cmbModel.Items.Add(m);
-                        if (!string.IsNullOrEmpty(def)) this.cmbModel.Text = def;
-                        else this.cmbModel.SelectedIndex = 0;
+
+                        string target = !string.IsNullOrEmpty(currentTabModel) ? currentTabModel : (!string.IsNullOrEmpty(def) ? def : (list.Count > 0 ? list[0] : null));
+                        if (!string.IsNullOrEmpty(target))
+                        {
+                            _syncingModelCombo = true;
+                            try { this.cmbModel.Text = target; }
+                            finally { _syncingModelCombo = false; }
+                        }
                     }
                     finally
                     {
                         this.cmbModel.EndUpdate();
                     }
+                    // Ensure the active context stores whatever is shown
+                    var ctx = GetActiveContext();
+                    if (ctx != null) ctx.SelectedModel = GetSelectedModel();
                 }
             }
             catch { }
@@ -813,6 +855,64 @@ namespace GxPT
                 if (this.btnSend != null) this.btnSend.Enabled = false;
                 if (this.cmbModel != null) this.cmbModel.Enabled = false;
             }
+        }
+
+        // Return default model from settings or fallback
+        private string GetConfiguredDefaultModel()
+        {
+            try
+            {
+                var def = AppSettings.GetString("default_model");
+                if (!string.IsNullOrEmpty(def)) return def;
+                var list = AppSettings.GetList("models");
+                if (list != null && list.Count > 0) return list[0];
+            }
+            catch { }
+            return "openai/gpt-4o";
+        }
+
+        // Sync the model combo box to the active tab's SelectedModel
+        private void SyncComboModelFromActiveTab()
+        {
+            try
+            {
+                if (this.cmbModel == null) return;
+                var ctx = GetActiveContext();
+                if (ctx == null) return;
+                var target = ctx.SelectedModel;
+                if (string.IsNullOrEmpty(target)) target = GetConfiguredDefaultModel();
+                if (!string.Equals(this.cmbModel.Text, target, StringComparison.Ordinal))
+                {
+                    _syncingModelCombo = true;
+                    try { this.cmbModel.Text = target; }
+                    finally { _syncingModelCombo = false; }
+                }
+            }
+            catch { }
+        }
+
+        // Update the active tab's SelectedModel when user changes selection in the combo
+        private void cmbModel_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (_syncingModelCombo) return;
+            try
+            {
+                var ctx = GetActiveContext();
+                if (ctx != null) ctx.SelectedModel = GetSelectedModel();
+            }
+            catch { }
+        }
+
+        // Track typed text into the combo box as model selection per tab
+        private void cmbModel_TextUpdate(object sender, EventArgs e)
+        {
+            if (_syncingModelCombo) return;
+            try
+            {
+                var ctx = GetActiveContext();
+                if (ctx != null) ctx.SelectedModel = GetSelectedModel();
+            }
+            catch { }
         }
     }
 }
