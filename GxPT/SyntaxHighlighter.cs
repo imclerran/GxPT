@@ -85,10 +85,17 @@ namespace GxPT
         /// </summary>
         private static void RegisterDefaultHighlighters()
         {
+            RegisterHighlighter(new CHighlighter());
+            RegisterHighlighter(new CppHighlighter());
             RegisterHighlighter(new CSharpHighlighter());
+            RegisterHighlighter(new GoHighlighter());
+            RegisterHighlighter(new JavaHighlighter());
             RegisterHighlighter(new JavaScriptHighlighter());
             RegisterHighlighter(new JsonHighlighter());
             RegisterHighlighter(new PythonHighlighter());
+            RegisterHighlighter(new RubyHighlighter());
+            RegisterHighlighter(new RustHighlighter());
+            RegisterHighlighter(new ZigHighlighter());   
         }
 
         /// <summary>

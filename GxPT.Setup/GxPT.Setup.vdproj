@@ -56,6 +56,19 @@
             "PrerequisitesLocation" = "2:1"
             "Url" = "8:"
             "ComponentsUrl" = "8:"
+                "Items"
+                {
+                    "{EDC2488A-8267-493A-A98E-7D9C3B36CDF3}:Microsoft.Net.Framework.3.5.SP1"
+                    {
+                    "Name" = "8:.NET Framework 3.5 SP1"
+                    "ProductCode" = "8:Microsoft.Net.Framework.3.5.SP1"
+                    }
+                    "{EDC2488A-8267-493A-A98E-7D9C3B36CDF3}:Microsoft.Windows.Installer.3.1"
+                    {
+                    "Name" = "8:Windows Installer 3.1"
+                    "ProductCode" = "8:Microsoft.Windows.Installer.3.1"
+                    }
+                }
             }
         }
         "Release"
@@ -199,14 +212,14 @@
         {
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:GxPT"
-        "ProductCode" = "8:{8AD25423-6C69-401B-A9C1-0E049378549B}"
-        "PackageCode" = "8:{96EEDBFC-D213-47A1-8333-AC8F630F7B6D}"
+        "ProductCode" = "8:{5188DCBA-F861-4883-AAC9-E32B1F691778}"
+        "PackageCode" = "8:{646C03CA-BD0A-4109-90B3-343084909208}"
         "UpgradeCode" = "8:{18C05863-8BD9-4273-B9E8-061F771066DF}"
         "RestartWWWService" = "11:FALSE"
         "RemovePreviousVersions" = "11:TRUE"
         "DetectNewerInstalledVersion" = "11:TRUE"
         "InstallAllUsers" = "11:FALSE"
-        "ProductVersion" = "8:0.1.0"
+        "ProductVersion" = "8:0.2.0"
         "Manufacturer" = "8:IFM Innovations"
         "ARPHELPTELEPHONE" = "8:"
         "ARPHELPLINK" = "8:"
