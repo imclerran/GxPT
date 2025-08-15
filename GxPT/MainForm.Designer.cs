@@ -50,8 +50,8 @@
             this.tabPage1 = new System.Windows.Forms.TabPage();
             this.splitContainer1 = new System.Windows.Forms.SplitContainer();
             this.chatTranscript = new GxPT.ChatTranscriptControl();
-            this.viewToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.conversationHistoryToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.miView = new System.Windows.Forms.ToolStripMenuItem();
+            this.miConversationHistory = new System.Windows.Forms.ToolStripMenuItem();
             this.msMain.SuspendLayout();
             this.pnlInput.SuspendLayout();
             this.pnlInputRight.SuspendLayout();
@@ -67,7 +67,7 @@
             // 
             this.msMain.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.miFile,
-            this.viewToolStripMenuItem});
+            this.miView});
             this.msMain.Location = new System.Drawing.Point(0, 0);
             this.msMain.Name = "msMain";
             this.msMain.Size = new System.Drawing.Size(736, 24);
@@ -285,20 +285,20 @@
             this.chatTranscript.Size = new System.Drawing.Size(722, 707);
             this.chatTranscript.TabIndex = 0;
             // 
-            // viewToolStripMenuItem
+            // miView
             // 
-            this.viewToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.conversationHistoryToolStripMenuItem});
-            this.viewToolStripMenuItem.Name = "viewToolStripMenuItem";
-            this.viewToolStripMenuItem.Size = new System.Drawing.Size(41, 20);
-            this.viewToolStripMenuItem.Text = "&View";
+            this.miView.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.miConversationHistory});
+            this.miView.Name = "miView";
+            this.miView.Size = new System.Drawing.Size(41, 20);
+            this.miView.Text = "&View";
             // 
-            // conversationHistoryToolStripMenuItem
+            // miConversationHistory
             // 
-            this.conversationHistoryToolStripMenuItem.Name = "conversationHistoryToolStripMenuItem";
-            this.conversationHistoryToolStripMenuItem.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.H)));
-            this.conversationHistoryToolStripMenuItem.Size = new System.Drawing.Size(225, 22);
-            this.conversationHistoryToolStripMenuItem.Text = "Conversation &History";
+            this.miConversationHistory.Name = "miConversationHistory";
+            this.miConversationHistory.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.H)));
+            this.miConversationHistory.Size = new System.Drawing.Size(225, 22);
+            this.miConversationHistory.Text = "Conversation &History";
             // 
             // MainForm
             // 
@@ -353,8 +353,8 @@
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator2;
         private System.Windows.Forms.ToolStripMenuItem closeConversationToolStripMenuItem;
         private System.Windows.Forms.SplitContainer splitContainer1;
-        private System.Windows.Forms.ToolStripMenuItem viewToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem conversationHistoryToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem miView;
+        private System.Windows.Forms.ToolStripMenuItem miConversationHistory;
 
 
     }
