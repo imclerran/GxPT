@@ -70,7 +70,7 @@
             this.miView});
             this.msMain.Location = new System.Drawing.Point(0, 0);
             this.msMain.Name = "msMain";
-            this.msMain.Size = new System.Drawing.Size(692, 24);
+            this.msMain.Size = new System.Drawing.Size(892, 24);
             this.msMain.TabIndex = 1;
             this.msMain.Text = "menuStrip1";
             // 
@@ -134,7 +134,7 @@
             this.pnlInput.Location = new System.Drawing.Point(0, 28);
             this.pnlInput.MinimumSize = new System.Drawing.Size(0, 75);
             this.pnlInput.Name = "pnlInput";
-            this.pnlInput.Size = new System.Drawing.Size(686, 75);
+            this.pnlInput.Size = new System.Drawing.Size(885, 75);
             this.pnlInput.TabIndex = 2;
             // 
             // txtMessage
@@ -146,7 +146,7 @@
             this.txtMessage.Margin = new System.Windows.Forms.Padding(0);
             this.txtMessage.Multiline = true;
             this.txtMessage.Name = "txtMessage";
-            this.txtMessage.Size = new System.Drawing.Size(549, 75);
+            this.txtMessage.Size = new System.Drawing.Size(748, 75);
             this.txtMessage.TabIndex = 1;
             this.txtMessage.KeyDown += new System.Windows.Forms.KeyEventHandler(this.txtMessage_KeyDown);
             // 
@@ -155,7 +155,7 @@
             this.pnlInputRight.Controls.Add(this.btnSend);
             this.pnlInputRight.Controls.Add(this.cmbModel);
             this.pnlInputRight.Dock = System.Windows.Forms.DockStyle.Right;
-            this.pnlInputRight.Location = new System.Drawing.Point(548, 0);
+            this.pnlInputRight.Location = new System.Drawing.Point(747, 0);
             this.pnlInputRight.Name = "pnlInputRight";
             this.pnlInputRight.Size = new System.Drawing.Size(138, 75);
             this.pnlInputRight.TabIndex = 3;
@@ -198,7 +198,7 @@
             this.pnlBottom.Location = new System.Drawing.Point(0, 639);
             this.pnlBottom.Margin = new System.Windows.Forms.Padding(0, 3, 3, 3);
             this.pnlBottom.Name = "pnlBottom";
-            this.pnlBottom.Size = new System.Drawing.Size(686, 103);
+            this.pnlBottom.Size = new System.Drawing.Size(885, 103);
             this.pnlBottom.TabIndex = 3;
             // 
             // pnlApiKeyBanner
@@ -211,7 +211,7 @@
             this.pnlApiKeyBanner.Margin = new System.Windows.Forms.Padding(0);
             this.pnlApiKeyBanner.Name = "pnlApiKeyBanner";
             this.pnlApiKeyBanner.Padding = new System.Windows.Forms.Padding(6, 4, 6, 4);
-            this.pnlApiKeyBanner.Size = new System.Drawing.Size(686, 28);
+            this.pnlApiKeyBanner.Size = new System.Drawing.Size(885, 28);
             this.pnlApiKeyBanner.TabIndex = 1;
             // 
             // lnkOpenSettings
@@ -242,7 +242,7 @@
             this.tabControl1.Location = new System.Drawing.Point(0, 0);
             this.tabControl1.Name = "tabControl1";
             this.tabControl1.SelectedIndex = 0;
-            this.tabControl1.Size = new System.Drawing.Size(686, 639);
+            this.tabControl1.Size = new System.Drawing.Size(885, 639);
             this.tabControl1.TabIndex = 4;
             // 
             // tabPage1
@@ -250,7 +250,7 @@
             this.tabPage1.Controls.Add(this.chatTranscript);
             this.tabPage1.Location = new System.Drawing.Point(4, 22);
             this.tabPage1.Name = "tabPage1";
-            this.tabPage1.Size = new System.Drawing.Size(678, 613);
+            this.tabPage1.Size = new System.Drawing.Size(877, 613);
             this.tabPage1.TabIndex = 0;
             this.tabPage1.Text = "New Conversation";
             this.tabPage1.UseVisualStyleBackColor = true;
@@ -268,8 +268,8 @@
             // 
             this.splitContainer1.Panel2.Controls.Add(this.tabControl1);
             this.splitContainer1.Panel2.Controls.Add(this.pnlBottom);
-            this.splitContainer1.Size = new System.Drawing.Size(692, 742);
-            this.splitContainer1.SplitterDistance = 5;
+            this.splitContainer1.Size = new System.Drawing.Size(892, 742);
+            this.splitContainer1.SplitterDistance = 6;
             this.splitContainer1.SplitterWidth = 1;
             this.splitContainer1.TabIndex = 1;
             // 
@@ -298,14 +298,14 @@
             this.chatTranscript.Location = new System.Drawing.Point(0, 0);
             this.chatTranscript.Margin = new System.Windows.Forms.Padding(0);
             this.chatTranscript.Name = "chatTranscript";
-            this.chatTranscript.Size = new System.Drawing.Size(678, 613);
+            this.chatTranscript.Size = new System.Drawing.Size(877, 613);
             this.chatTranscript.TabIndex = 0;
             // 
             // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(692, 766);
+            this.ClientSize = new System.Drawing.Size(892, 766);
             this.Controls.Add(this.splitContainer1);
             this.Controls.Add(this.msMain);
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));

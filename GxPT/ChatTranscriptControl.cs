@@ -28,6 +28,26 @@ namespace GxPT
         private const int CodeBlockPadding = 6;
         private const int InlineCodePaddingX = 3;
         private const int InlineCodePaddingY = 1;
+
+        // Bounded central content area width (designer-configurable)
+        private int _maxContentWidth = 1000; // default maximum central area width
+
+        [Browsable(true)]
+        [Category("Layout")]
+        [Description("Maximum width, in pixels, for the centered content area. If the control is narrower, it uses the control width.")]
+        [DefaultValue(1000)]
+        public int MaxContentWidth
+        {
+            get { return _maxContentWidth; }
+            set
+            {
+                int v = (value < 1) ? 1 : value; // guard against invalid values
+                if (v == _maxContentWidth) return;
+                _maxContentWidth = v;
+                Reflow();
+                Invalidate();
+            }
+        }
         // Code block UI
         private const int CodeHScrollHeight = 12;      // height of horizontal scrollbar area
         private const int CodeHScrollThumbMin = 24;    // minimum thumb width
@@ -257,7 +277,10 @@ namespace GxPT
             {
                 int y = MarginOuter;
                 int innerWidth = Math.Max(0, ClientSize.Width - _vbar.Width - 2 * MarginOuter);
-                int usableWidth = Math.Min(innerWidth, MaxBubbleWidth);
+                // Determine the bounded content area (centered) within which bubbles align
+                int areaWidth = Math.Min(innerWidth, _maxContentWidth);
+                int areaLeft = MarginOuter + Math.Max(0, (innerWidth - areaWidth) / 2);
+                int usableWidth = Math.Min(areaWidth, MaxBubbleWidth);
 
                 foreach (var it in _items)
                 {
@@ -273,12 +296,12 @@ namespace GxPT
                         // User messages: right-aligned, but ensure minimum width
                         int minUserWidth = Math.Min(usableWidth, Math.Max(200, usableWidth / 2));
                         bubbleSize.Width = Math.Max(bubbleSize.Width, minUserWidth);
-                        xLeft = MarginOuter + innerWidth - bubbleSize.Width;
+                        xLeft = areaLeft + areaWidth - bubbleSize.Width;
                     }
                     else
                     {
                         // Assistant/System messages: left-aligned
-                        xLeft = MarginOuter;
+                        xLeft = areaLeft;
                     }
 
                     it.MeasuredHeight = bubbleSize.Height;
