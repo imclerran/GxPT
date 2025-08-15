@@ -375,10 +375,32 @@ namespace GxPT
 
             try
             {
+                int desiredIndex = -1;
+                if (this.tabControl1 != null)
+                {
+                    try
+                    {
+                        int idx = this.tabControl1.TabPages.IndexOf(page);
+                        if (idx >= 0) desiredIndex = Math.Max(0, idx - 1);
+                    }
+                    catch { }
+                }
                 if (_tabContexts.ContainsKey(page)) _tabContexts.Remove(page);
                 if (this.tabControl1 != null)
                 {
                     this.tabControl1.TabPages.Remove(page);
+                    // After removal, select the immediate left neighbor if possible
+                    try
+                    {
+                        if (this.tabControl1.TabPages.Count > 0)
+                        {
+                            if (desiredIndex < 0) desiredIndex = 0;
+                            if (desiredIndex >= this.tabControl1.TabPages.Count)
+                                desiredIndex = this.tabControl1.TabPages.Count - 1;
+                            this.tabControl1.SelectedIndex = desiredIndex;
+                        }
+                    }
+                    catch { }
                 }
                 try { page.Dispose(); }
                 catch { }
