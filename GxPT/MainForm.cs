@@ -247,7 +247,7 @@ namespace GxPT
             // Populate models from settings and reflect configuration
             PopulateModelsFromSettings();
             UpdateApiKeyBanner();
-            ApplyFontSizeSettingToAllTranscripts();
+            ApplyFontSizeSettingToAllUi();
         }
 
         // Build a context for the existing designer tab (tabPage1 + chatTranscript)
@@ -1104,6 +1104,9 @@ namespace GxPT
                     LayoutSidebarChildren();
                     // Keep View -> Conversation History checked state in sync
                     UpdateConversationHistoryCheckedState();
+                    // Re-apply sidebar font/row height so it takes effect immediately after expand/collapse
+                    try { ApplyFontSizeSettingToSidebar(); }
+                    catch { }
                 }
             }
             catch
@@ -1402,6 +1405,9 @@ namespace GxPT
                 _lvConversations.Resize += (s, e) => ResizeSidebarColumn();
 
                 this.splitContainer1.Panel1.Controls.Add(_lvConversations);
+                // Apply current font/row height immediately (works even if collapsed)
+                try { ApplyFontSizeSettingToSidebar(); }
+                catch { }
                 RefreshSidebarList();
                 LayoutSidebarChildren();
             }
@@ -1587,6 +1593,52 @@ namespace GxPT
             FocusInputSoon();
         }
 
+        private void ApplyFontSizeSettingToAllUi()
+        {
+            try
+            {
+                double fs = AppSettings.GetDouble("font_size", 0);
+                if (fs <= 0) { ApplyFontSizeSettingToAllTranscripts(); return; }
+                float size = (float)Math.Max(6, Math.Min(48, fs));
+
+                // Core chat transcript(s)
+                ApplyFontSizeSettingToAllTranscripts();
+
+                // Input textbox
+                try { if (this.txtMessage != null) this.txtMessage.Font = new Font(this.txtMessage.Font.FontFamily, size, this.txtMessage.Font.Style); }
+                catch { }
+                // Send button
+                try { if (this.btnSend != null) this.btnSend.Font = new Font(this.btnSend.Font.FontFamily, size, this.btnSend.Font.Style); }
+                catch { }
+                // Model combo box
+                try { if (this.cmbModel != null) this.cmbModel.Font = new Font(this.cmbModel.Font.FontFamily, size, this.cmbModel.Font.Style); }
+                catch { }
+                // Sidebar list
+                try { ApplyFontSizeSettingToSidebar(); }
+                catch { }
+                // Tab headers (tab page titles)
+                try
+                {
+                    if (this.tabControl1 != null)
+                    {
+                        this.tabControl1.Font = new Font(this.tabControl1.Font.FontFamily, size, this.tabControl1.Font.Style);
+                        foreach (TabPage p in this.tabControl1.TabPages)
+                        {
+                            try { if (p != null) p.Font = new Font(p.Font.FontFamily, size, p.Font.Style); }
+                            catch { }
+                        }
+                    }
+                }
+                catch { }
+                // API key banner link/label
+                try { if (this.lnkOpenSettings != null) this.lnkOpenSettings.Font = new Font(this.lnkOpenSettings.Font.FontFamily, size, this.lnkOpenSettings.Font.Style); }
+                catch { }
+                try { if (this.lblNoApiKey != null) this.lblNoApiKey.Font = new Font(this.lblNoApiKey.Font.FontFamily, size, this.lblNoApiKey.Font.Style); }
+                catch { }
+            }
+            catch { }
+        }
+
         private void ApplyFontSizeSettingToAllTranscripts()
         {
             try
@@ -1621,6 +1673,45 @@ namespace GxPT
                 if (fs <= 0) return;
                 float size = (float)Math.Max(6, Math.Min(48, fs));
                 transcript.Font = new Font(transcript.Font.FontFamily, size, transcript.Font.Style);
+            }
+            catch { }
+        }
+
+        // Apply font size and row height to the sidebar list, even when collapsed/hidden
+        private void ApplyFontSizeSettingToSidebar()
+        {
+            try
+            {
+                if (this._lvConversations == null) return;
+                double fs = AppSettings.GetDouble("font_size", 0);
+                if (fs <= 0) return;
+                float size = (float)Math.Max(6, Math.Min(48, fs));
+
+                // Update font
+                try { this._lvConversations.Font = new Font(this._lvConversations.Font.FontFamily, size, this._lvConversations.Font.Style); }
+                catch { }
+
+                // Ensure image list exists and set row height based on font
+                if (this._lvRowHeightImages == null)
+                    this._lvRowHeightImages = new ImageList();
+
+                int rowHeight = Math.Max(this._lvConversations.Font.Height + 8, 22);
+                this._lvRowHeightImages.ImageSize = new Size(1, rowHeight);
+
+                // Force ListView to recalc item height by reassigning the image list
+                try
+                {
+                    var current = this._lvConversations.SmallImageList;
+                    this._lvConversations.SmallImageList = null;
+                    this._lvConversations.SmallImageList = this._lvRowHeightImages;
+                }
+                catch { }
+
+                // Adjust column width and refresh
+                try { ResizeSidebarColumn(); }
+                catch { }
+                try { this._lvConversations.Invalidate(); this._lvConversations.Update(); }
+                catch { }
             }
             catch { }
         }
