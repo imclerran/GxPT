@@ -50,8 +50,8 @@
             this.lblNoApiKey = new System.Windows.Forms.Label();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
-            this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.splitContainer1 = new System.Windows.Forms.SplitContainer();
+            this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.msMain.SuspendLayout();
             this.pnlInput.SuspendLayout();
             this.pnlInputRight.SuspendLayout();
@@ -156,14 +156,13 @@
             // txtMessage
             // 
             this.txtMessage.AcceptsReturn = true;
-            this.txtMessage.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
-                        | System.Windows.Forms.AnchorStyles.Right)));
+            this.txtMessage.Dock = System.Windows.Forms.DockStyle.Fill;
             this.txtMessage.Location = new System.Drawing.Point(0, 0);
             this.txtMessage.Margin = new System.Windows.Forms.Padding(0);
             this.txtMessage.MaxLength = 0;
             this.txtMessage.Multiline = true;
             this.txtMessage.Name = "txtMessage";
-            this.txtMessage.Size = new System.Drawing.Size(748, 75);
+            this.txtMessage.Size = new System.Drawing.Size(710, 75);
             this.txtMessage.TabIndex = 1;
             this.txtMessage.KeyDown += new System.Windows.Forms.KeyEventHandler(this.txtMessage_KeyDown);
             // 
@@ -172,9 +171,9 @@
             this.pnlInputRight.Controls.Add(this.btnSend);
             this.pnlInputRight.Controls.Add(this.cmbModel);
             this.pnlInputRight.Dock = System.Windows.Forms.DockStyle.Right;
-            this.pnlInputRight.Location = new System.Drawing.Point(747, 0);
+            this.pnlInputRight.Location = new System.Drawing.Point(710, 0);
             this.pnlInputRight.Name = "pnlInputRight";
-            this.pnlInputRight.Size = new System.Drawing.Size(138, 75);
+            this.pnlInputRight.Size = new System.Drawing.Size(175, 75);
             this.pnlInputRight.TabIndex = 3;
             // 
             // btnSend
@@ -182,7 +181,7 @@
             this.btnSend.Dock = System.Windows.Forms.DockStyle.Bottom;
             this.btnSend.Location = new System.Drawing.Point(0, 0);
             this.btnSend.Name = "btnSend";
-            this.btnSend.Size = new System.Drawing.Size(138, 54);
+            this.btnSend.Size = new System.Drawing.Size(175, 54);
             this.btnSend.TabIndex = 0;
             this.btnSend.Text = "Send";
             this.btnSend.UseVisualStyleBackColor = true;
@@ -191,6 +190,7 @@
             // cmbModel
             // 
             this.cmbModel.Dock = System.Windows.Forms.DockStyle.Bottom;
+            this.cmbModel.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cmbModel.FormattingEnabled = true;
             this.cmbModel.Items.AddRange(new object[] {
             "anthropic/claude-3.7-sonnet",
@@ -201,10 +201,9 @@
             "openai/gpt-5"});
             this.cmbModel.Location = new System.Drawing.Point(0, 54);
             this.cmbModel.Name = "cmbModel";
-            this.cmbModel.Size = new System.Drawing.Size(138, 21);
+            this.cmbModel.Size = new System.Drawing.Size(175, 21);
             this.cmbModel.Sorted = true;
             this.cmbModel.TabIndex = 2;
-            this.cmbModel.Text = "openai/gpt-4o";
             // 
             // pnlBottom
             // 
@@ -272,18 +271,6 @@
             this.tabPage1.Text = "New Conversation";
             this.tabPage1.UseVisualStyleBackColor = true;
             // 
-            // chatTranscript
-            // 
-            this.chatTranscript.AccessibleName = "Chat transcript";
-            this.chatTranscript.BackColor = System.Drawing.SystemColors.ControlLightLight;
-            this.chatTranscript.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.chatTranscript.ForeColor = System.Drawing.SystemColors.WindowText;
-            this.chatTranscript.Location = new System.Drawing.Point(0, 0);
-            this.chatTranscript.Margin = new System.Windows.Forms.Padding(0);
-            this.chatTranscript.Name = "chatTranscript";
-            this.chatTranscript.Size = new System.Drawing.Size(877, 613);
-            this.chatTranscript.TabIndex = 0;
-            // 
             // splitContainer1
             // 
             this.splitContainer1.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -301,6 +288,18 @@
             this.splitContainer1.SplitterDistance = 6;
             this.splitContainer1.SplitterWidth = 1;
             this.splitContainer1.TabIndex = 1;
+            // 
+            // chatTranscript
+            // 
+            this.chatTranscript.AccessibleName = "Chat transcript";
+            this.chatTranscript.BackColor = System.Drawing.SystemColors.ControlLightLight;
+            this.chatTranscript.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.chatTranscript.ForeColor = System.Drawing.SystemColors.WindowText;
+            this.chatTranscript.Location = new System.Drawing.Point(0, 0);
+            this.chatTranscript.Margin = new System.Windows.Forms.Padding(0);
+            this.chatTranscript.Name = "chatTranscript";
+            this.chatTranscript.Size = new System.Drawing.Size(877, 613);
+            this.chatTranscript.TabIndex = 0;
             // 
             // MainForm
             // 

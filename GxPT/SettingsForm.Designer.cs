@@ -37,21 +37,21 @@
             this.lblModels = new System.Windows.Forms.Label();
             this.lblDefaultModel = new System.Windows.Forms.Label();
             this.lblEnableLogging = new System.Windows.Forms.Label();
+            this.lblFontSize = new System.Windows.Forms.Label();
             this.chkEnableLogging = new System.Windows.Forms.CheckBox();
             this.cmbDefaultModel = new System.Windows.Forms.ComboBox();
             this.txtModels = new System.Windows.Forms.TextBox();
             this.txtApiKey = new System.Windows.Forms.TextBox();
+            this.nudFontSize = new System.Windows.Forms.NumericUpDown();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabVisual = new System.Windows.Forms.TabPage();
             this.tabJson = new System.Windows.Forms.TabPage();
-            this.lblFontSize = new System.Windows.Forms.Label();
-            this.nudFontSize = new System.Windows.Forms.NumericUpDown();
             this.flowLayoutPanel1.SuspendLayout();
             this.tableLayoutPanel1.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.nudFontSize)).BeginInit();
             this.tabControl1.SuspendLayout();
             this.tabVisual.SuspendLayout();
             this.tabJson.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.nudFontSize)).BeginInit();
             this.SuspendLayout();
             // 
             // flowLayoutPanel1
@@ -100,13 +100,13 @@
             this.tableLayoutPanel1.Controls.Add(this.lblApiKey, 0, 0);
             this.tableLayoutPanel1.Controls.Add(this.lblModels, 0, 1);
             this.tableLayoutPanel1.Controls.Add(this.lblDefaultModel, 0, 2);
-            this.tableLayoutPanel1.Controls.Add(this.lblEnableLogging, 0, 3);
-            this.tableLayoutPanel1.Controls.Add(this.lblFontSize, 0, 4);
-            this.tableLayoutPanel1.Controls.Add(this.chkEnableLogging, 1, 3);
+            this.tableLayoutPanel1.Controls.Add(this.lblEnableLogging, 0, 4);
+            this.tableLayoutPanel1.Controls.Add(this.lblFontSize, 0, 3);
+            this.tableLayoutPanel1.Controls.Add(this.chkEnableLogging, 1, 4);
             this.tableLayoutPanel1.Controls.Add(this.cmbDefaultModel, 1, 2);
             this.tableLayoutPanel1.Controls.Add(this.txtModels, 1, 1);
             this.tableLayoutPanel1.Controls.Add(this.txtApiKey, 1, 0);
-            this.tableLayoutPanel1.Controls.Add(this.nudFontSize, 1, 4);
+            this.tableLayoutPanel1.Controls.Add(this.nudFontSize, 1, 3);
             this.tableLayoutPanel1.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tableLayoutPanel1.Location = new System.Drawing.Point(3, 3);
             this.tableLayoutPanel1.Name = "tableLayoutPanel1";
@@ -116,6 +116,7 @@
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle());
+            this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 20F));
             this.tableLayoutPanel1.Size = new System.Drawing.Size(578, 311);
             this.tableLayoutPanel1.TabIndex = 2;
             // 
@@ -154,18 +155,29 @@
             // lblEnableLogging
             // 
             this.lblEnableLogging.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblEnableLogging.Location = new System.Drawing.Point(3, 262);
+            this.lblEnableLogging.Location = new System.Drawing.Point(3, 288);
             this.lblEnableLogging.Name = "lblEnableLogging";
             this.lblEnableLogging.Size = new System.Drawing.Size(106, 23);
             this.lblEnableLogging.TabIndex = 3;
             this.lblEnableLogging.Text = "Enable Logging";
             this.lblEnableLogging.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             // 
+            // lblFontSize
+            // 
+            this.lblFontSize.AutoSize = true;
+            this.lblFontSize.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblFontSize.Location = new System.Drawing.Point(3, 262);
+            this.lblFontSize.Name = "lblFontSize";
+            this.lblFontSize.Size = new System.Drawing.Size(106, 26);
+            this.lblFontSize.TabIndex = 8;
+            this.lblFontSize.Text = "Font Size";
+            this.lblFontSize.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            // 
             // chkEnableLogging
             // 
             this.chkEnableLogging.AutoSize = true;
             this.chkEnableLogging.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.chkEnableLogging.Location = new System.Drawing.Point(115, 268);
+            this.chkEnableLogging.Location = new System.Drawing.Point(115, 294);
             this.chkEnableLogging.Margin = new System.Windows.Forms.Padding(3, 6, 3, 3);
             this.chkEnableLogging.Name = "chkEnableLogging";
             this.chkEnableLogging.Size = new System.Drawing.Size(460, 14);
@@ -174,10 +186,12 @@
             // 
             // cmbDefaultModel
             // 
+            this.cmbDefaultModel.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.cmbDefaultModel.DropDownWidth = 175;
             this.cmbDefaultModel.FormattingEnabled = true;
             this.cmbDefaultModel.Location = new System.Drawing.Point(115, 238);
             this.cmbDefaultModel.Name = "cmbDefaultModel";
-            this.cmbDefaultModel.Size = new System.Drawing.Size(121, 21);
+            this.cmbDefaultModel.Size = new System.Drawing.Size(175, 21);
             this.cmbDefaultModel.TabIndex = 5;
             // 
             // txtModels
@@ -200,6 +214,14 @@
             this.txtApiKey.Name = "txtApiKey";
             this.txtApiKey.Size = new System.Drawing.Size(460, 20);
             this.txtApiKey.TabIndex = 7;
+            // 
+            // nudFontSize
+            // 
+            this.nudFontSize.DecimalPlaces = 2;
+            this.nudFontSize.Location = new System.Drawing.Point(115, 265);
+            this.nudFontSize.Name = "nudFontSize";
+            this.nudFontSize.Size = new System.Drawing.Size(80, 20);
+            this.nudFontSize.TabIndex = 9;
             // 
             // tabControl1
             // 
@@ -234,24 +256,6 @@
             this.tabJson.Text = "JSON";
             this.tabJson.UseVisualStyleBackColor = true;
             // 
-            // lblFontSize
-            // 
-            this.lblFontSize.AutoSize = true;
-            this.lblFontSize.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblFontSize.Location = new System.Drawing.Point(3, 285);
-            this.lblFontSize.Name = "lblFontSize";
-            this.lblFontSize.Size = new System.Drawing.Size(106, 26);
-            this.lblFontSize.TabIndex = 8;
-            this.lblFontSize.Text = "label1";
-            this.lblFontSize.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            // 
-            // nudFontSize
-            // 
-            this.nudFontSize.Location = new System.Drawing.Point(115, 288);
-            this.nudFontSize.Name = "nudFontSize";
-            this.nudFontSize.Size = new System.Drawing.Size(120, 20);
-            this.nudFontSize.TabIndex = 9;
-            // 
             // SettingsForm
             // 
             this.AcceptButton = this.btnSave;
@@ -267,10 +271,10 @@
             this.flowLayoutPanel1.ResumeLayout(false);
             this.tableLayoutPanel1.ResumeLayout(false);
             this.tableLayoutPanel1.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.nudFontSize)).EndInit();
             this.tabControl1.ResumeLayout(false);
             this.tabVisual.ResumeLayout(false);
             this.tabJson.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)(this.nudFontSize)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 

@@ -40,6 +40,20 @@ namespace GxPT
             _settingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GxPT");
             _settingsFile = Path.Combine(_settingsDir, "settings.json");
 
+            // Configure new font size controls
+            try
+            {
+                if (this.lblFontSize != null) this.lblFontSize.Text = "Chat Font Size";
+                if (this.nudFontSize != null)
+                {
+                    this.nudFontSize.DecimalPlaces = 1;
+                    this.nudFontSize.Increment = 0.5M;
+                    this.nudFontSize.Minimum = 6M;
+                    this.nudFontSize.Maximum = 48M;
+                }
+            }
+            catch { }
+
             // Wire events (in case not hooked up in designer)
             this.Load += SettingsForm_Load;
 
@@ -102,7 +116,8 @@ namespace GxPT
 
         private static string BuildDefaultJson()
         {
-            // defaults: empty key, sensible model list, and default model
+            // defaults: empty key, sensible model list, default model, and font size from chat's default
+            float defaultFontSize = GetChatDefaultFontSize();
             var sb = new StringBuilder();
             sb.AppendLine("{");
             sb.AppendLine("  \"openrouter_api_key\": \"\",");
@@ -115,9 +130,23 @@ namespace GxPT
             sb.AppendLine("    \"openai/gpt-5\"");
             sb.AppendLine("  ],");
             sb.AppendLine("  \"default_model\": \"openai/gpt-4o\",");
-            sb.AppendLine("  \"enable_logging\": false");
+            sb.AppendLine("  \"enable_logging\": false,");
+            sb.AppendLine("  \"font_size\": " + defaultFontSize.ToString(System.Globalization.CultureInfo.InvariantCulture));
             sb.AppendLine("}");
             return sb.ToString();
+        }
+
+        private static float GetChatDefaultFontSize()
+        {
+            try
+            {
+                using (var ctl = new ChatTranscriptControl())
+                {
+                    var f = ctl.Font;
+                    return (f != null ? f.Size : 9f);
+                }
+            }
+            catch { return 9f; }
         }
 
         // Strongly-typed default object (mirrors BuildDefaultJson)
@@ -136,7 +165,8 @@ namespace GxPT
                     "openai/gpt-5"
                 },
                 default_model = "openai/gpt-4o",
-                enable_logging = false
+                enable_logging = false,
+                font_size = GetChatDefaultFontSize()
             };
         }
 
@@ -608,6 +638,16 @@ namespace GxPT
             {
                 s.default_model = s.models.Count > 0 ? s.models[0] : "openai/gpt-4o";
             }
+
+            // Clamp or set default font size
+            try
+            {
+                double fs = s.font_size;
+                if (fs <= 0) fs = GetChatDefaultFontSize();
+                if (fs < 6) fs = 6; if (fs > 48) fs = 48;
+                s.font_size = fs;
+            }
+            catch { s.font_size = GetChatDefaultFontSize(); }
         }
 
         // --- Visual controls <-> working settings ---
@@ -641,6 +681,16 @@ namespace GxPT
                 this.cmbDefaultModel.SelectedItem = def;
             }
             finally { this.cmbDefaultModel.EndUpdate(); }
+
+            // Font size
+            try
+            {
+                decimal val = (decimal)(s.font_size > 0 ? s.font_size : GetChatDefaultFontSize());
+                if (val < this.nudFontSize.Minimum) val = this.nudFontSize.Minimum;
+                if (val > this.nudFontSize.Maximum) val = this.nudFontSize.Maximum;
+                this.nudFontSize.Value = val;
+            }
+            catch { }
         }
 
         private void CaptureVisualControlsToSettings(SettingsData target)
@@ -666,6 +716,10 @@ namespace GxPT
             if (string.IsNullOrEmpty(sel)) sel = this.cmbDefaultModel.Text;
             if (string.IsNullOrEmpty(sel)) sel = models.FirstOrDefault() ?? string.Empty;
             target.default_model = sel ?? string.Empty;
+
+            // Font size
+            try { target.font_size = (double)this.nudFontSize.Value; }
+            catch { target.font_size = GetChatDefaultFontSize(); }
         }
 
         // When the models textbox changes, add any new non-empty lines to the default model combo box
@@ -831,6 +885,7 @@ namespace GxPT
             public List<string> models { get; set; }
             public string default_model { get; set; }
             public bool enable_logging { get; set; }
+            public double font_size { get; set; }
         }
     }
 }

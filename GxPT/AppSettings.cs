@@ -83,5 +83,34 @@ namespace GxPT
             }
             return result;
         }
+
+        public static double GetDouble(string key, double defaultValue)
+        {
+            var all = LoadJson();
+            object val;
+            if (!all.TryGetValue(key, out val) || val == null) return defaultValue;
+            try
+            {
+                if (val is double) return (double)val;
+                if (val is float) return (double)(float)val;
+                if (val is decimal) return (double)(decimal)val;
+                if (val is int) return (int)val;
+                if (val is long) return (long)val;
+                string s = Convert.ToString(val);
+                if (string.IsNullOrEmpty(s)) return defaultValue;
+                double d;
+                if (double.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out d))
+                    return d;
+                if (double.TryParse(s, out d)) return d;
+            }
+            catch { }
+            return defaultValue;
+        }
+
+        // Overload without explicit default for C# 3.0 compatibility
+        public static double GetDouble(string key)
+        {
+            return GetDouble(key, 0);
+        }
     }
 }

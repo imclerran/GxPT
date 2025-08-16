@@ -247,6 +247,7 @@ namespace GxPT
             // Populate models from settings and reflect configuration
             PopulateModelsFromSettings();
             UpdateApiKeyBanner();
+            ApplyFontSizeSettingToAllTranscripts();
         }
 
         // Build a context for the existing designer tab (tabPage1 + chatTranscript)
@@ -311,6 +312,7 @@ namespace GxPT
 
             var transcript = new ChatTranscriptControl();
             transcript.Dock = DockStyle.Fill;
+            ApplyFontSizeSetting(transcript);
             page.Controls.Add(transcript);
 
             var ctx = new ChatTabContext
@@ -1561,6 +1563,7 @@ namespace GxPT
             try
             {
                 ctx.Transcript.ClearMessages();
+                ApplyFontSizeSetting(ctx.Transcript);
                 foreach (var m in convo.History)
                 {
                     if (string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase))
@@ -1582,6 +1585,44 @@ namespace GxPT
 
             // If we reused a blank tab or just loaded into a newly created tab, focus input
             FocusInputSoon();
+        }
+
+        private void ApplyFontSizeSettingToAllTranscripts()
+        {
+            try
+            {
+                double fs = AppSettings.GetDouble("font_size", 0);
+                if (fs <= 0) return;
+                float size = (float)Math.Max(6, Math.Min(48, fs));
+                // Designer-created transcript
+                try { if (this.chatTranscript != null) this.chatTranscript.Font = new Font(this.chatTranscript.Font.FontFamily, size, this.chatTranscript.Font.Style); }
+                catch { }
+
+                // Any transcripts in open tabs
+                foreach (var kv in _tabContexts)
+                {
+                    try
+                    {
+                        var t = kv.Value.Transcript;
+                        if (t != null) t.Font = new Font(t.Font.FontFamily, size, t.Font.Style);
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+
+        private void ApplyFontSizeSetting(ChatTranscriptControl transcript)
+        {
+            if (transcript == null) return;
+            try
+            {
+                double fs = AppSettings.GetDouble("font_size", 0);
+                if (fs <= 0) return;
+                float size = (float)Math.Max(6, Math.Min(48, fs));
+                transcript.Font = new Font(transcript.Font.FontFamily, size, transcript.Font.Style);
+            }
+            catch { }
         }
 
         private void TrackOpenConversation(ChatTabContext ctx)
