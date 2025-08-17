@@ -80,6 +80,8 @@ namespace GxPT
         private readonly VScrollBar _vbar;
         private int _contentHeight;
         private int _scrollOffset;
+        // Queue a deferred reflow to run after current layout (avoids stale viewport sizes)
+        private bool _reflowQueued;
 
         private readonly ContextMenu _ctx;
         private MessageItem _ctxHit;
@@ -212,6 +214,8 @@ namespace GxPT
             Reflow();
             ScrollToBottom();
             Invalidate();
+            // Also schedule a second-pass reflow once layout stabilizes
+            ReflowSoon();
         }
 
         // Add and return the index of the inserted message (to support targeted updates later)
@@ -248,6 +252,7 @@ namespace GxPT
             Reflow();
             ScrollToBottom();
             Invalidate();
+            ReflowSoon();
         }
 
         // Replace content of a specific message by index; safe no-op if out of range
@@ -268,6 +273,7 @@ namespace GxPT
             Reflow();
             ScrollToBottom();
             Invalidate();
+            ReflowSoon();
         }
 
         // Append text to the last message (useful for streaming); will keep as a single paragraph
@@ -285,6 +291,7 @@ namespace GxPT
             Reflow();
             ScrollToBottom();
             Invalidate();
+            ReflowSoon();
         }
 
         // ---------- Layout ----------
@@ -654,6 +661,8 @@ namespace GxPT
             base.OnResize(e);
             Reflow();
             Invalidate();
+            // Ensure a second pass after parent has finished resizing
+            ReflowSoon();
         }
 
         protected override void SetBoundsCore(int x, int y, int width, int height, BoundsSpecified specified)
@@ -670,7 +679,7 @@ namespace GxPT
         {
             base.OnHandleCreated(e);
             // Ensure scrollbar is properly initialized when handle is created
-            UpdateScrollbar();
+            ReflowSoon();
         }
 
         protected override void OnVisibleChanged(EventArgs e)
@@ -680,6 +689,7 @@ namespace GxPT
             {
                 // Ensure scrollbar is updated when control becomes visible
                 Reflow();
+                ReflowSoon();
             }
         }
 
@@ -1616,32 +1626,57 @@ namespace GxPT
             int max = Math.Max(0, _contentHeight - view);
             _scrollOffset = max;
             if (_vbar.Enabled)
-                _vbar.Value = Math.Max(_vbar.Minimum, Math.Min(_vbar.Maximum - _vbar.LargeChange + 1, max));
+            {
+                int allowedMax = Math.Max(0, _vbar.Maximum - _vbar.LargeChange + 1);
+                _vbar.Value = Math.Max(_vbar.Minimum, Math.Min(allowedMax, max));
+            }
         }
 
         private void UpdateScrollbar()
         {
             int view = Math.Max(0, ClientSize.Height);
-            int max = Math.Max(0, _contentHeight - view);
+            int maxScrollOffset = Math.Max(0, _contentHeight - view);
 
             // If view is 0 (control not properly sized yet), disable scrollbar
-            if (view <= 0 || max <= 0)
+            if (view <= 0)
             {
                 _vbar.Enabled = false;
                 _vbar.Minimum = 0;
                 _vbar.Maximum = 0;
                 _vbar.Value = 0;
                 _scrollOffset = 0;
+                return;
             }
-            else
+
+            _vbar.Minimum = 0;
+            _vbar.LargeChange = Math.Max(1, view);
+            _vbar.SmallChange = ScrollStep;
+            // For WinForms ScrollBar, Maximum should be totalContent-1; allowed Value max is Maximum-LargeChange+1
+            _vbar.Maximum = Math.Max(0, _contentHeight - 1);
+            int allowedMaxValue = Math.Max(0, _vbar.Maximum - _vbar.LargeChange + 1);
+
+            _vbar.Enabled = maxScrollOffset > 0;
+            // Clamp our logical scroll offset to what the scrollbar will accept
+            _scrollOffset = Math.Max(0, Math.Min(allowedMaxValue, _scrollOffset));
+            _vbar.Value = _scrollOffset;
+        }
+
+        // Post a deferred reflow/scrollbar refresh so measurements use the final viewport size
+        private void ReflowSoon()
+        {
+            if (!IsHandleCreated) return;
+            if (_reflowQueued) return;
+            _reflowQueued = true;
+            try
             {
-                _vbar.Enabled = true;
-                _vbar.Minimum = 0;
-                _vbar.LargeChange = Math.Max(1, view);
-                _vbar.SmallChange = ScrollStep;
-                _vbar.Maximum = max + _vbar.LargeChange - 1;
-                _vbar.Value = Math.Max(0, Math.Min(max, _scrollOffset));
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    _reflowQueued = false;
+                    Reflow();
+                    Invalidate();
+                });
             }
+            catch { _reflowQueued = false; }
         }
 
         private static System.Drawing.Drawing2D.GraphicsPath RoundedRect(Rectangle r, int radius)
