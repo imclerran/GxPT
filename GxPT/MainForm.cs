@@ -1761,5 +1761,10 @@ namespace GxPT
             try { this.BeginInvoke((MethodInvoker)(() => FocusInput())); }
             catch { }
         }
+
+        private void aPIKeysToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+
+        }
     }
 }

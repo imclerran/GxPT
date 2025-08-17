@@ -52,6 +52,8 @@
             this.tabPage1 = new System.Windows.Forms.TabPage();
             this.splitContainer1 = new System.Windows.Forms.SplitContainer();
             this.chatTranscript = new GxPT.ChatTranscriptControl();
+            this.miHelp = new System.Windows.Forms.ToolStripMenuItem();
+            this.miApiKeysHelp = new System.Windows.Forms.ToolStripMenuItem();
             this.msMain.SuspendLayout();
             this.pnlInput.SuspendLayout();
             this.pnlInputRight.SuspendLayout();
@@ -67,7 +69,8 @@
             // 
             this.msMain.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.miFile,
-            this.miView});
+            this.miView,
+            this.miHelp});
             this.msMain.Location = new System.Drawing.Point(0, 0);
             this.msMain.Name = "msMain";
             this.msMain.Size = new System.Drawing.Size(892, 24);
@@ -301,6 +304,21 @@
             this.chatTranscript.Size = new System.Drawing.Size(877, 613);
             this.chatTranscript.TabIndex = 0;
             // 
+            // miHelp
+            // 
+            this.miHelp.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.miApiKeysHelp});
+            this.miHelp.Name = "miHelp";
+            this.miHelp.Size = new System.Drawing.Size(40, 20);
+            this.miHelp.Text = "Help";
+            // 
+            // miApiKeysHelp
+            // 
+            this.miApiKeysHelp.Name = "miApiKeysHelp";
+            this.miApiKeysHelp.Size = new System.Drawing.Size(152, 22);
+            this.miApiKeysHelp.Text = "API Keys";
+            this.miApiKeysHelp.Click += new System.EventHandler(this.aPIKeysToolStripMenuItem_Click);
+            // 
             // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -357,6 +375,8 @@
         private System.Windows.Forms.SplitContainer splitContainer1;
         private System.Windows.Forms.ToolStripMenuItem miView;
         private System.Windows.Forms.ToolStripMenuItem miConversationHistory;
+        private System.Windows.Forms.ToolStripMenuItem miHelp;
+        private System.Windows.Forms.ToolStripMenuItem miApiKeysHelp;
 
 
     }
