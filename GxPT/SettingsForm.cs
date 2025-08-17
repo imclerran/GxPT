@@ -57,6 +57,20 @@ namespace GxPT
             // Wire events (in case not hooked up in designer)
             this.Load += SettingsForm_Load;
 
+            // Configure theme controls (created in Designer)
+            try
+            {
+                if (this.lblTheme != null) this.lblTheme.Text = "Theme";
+                if (this.cmbTheme != null)
+                {
+                    this.cmbTheme.DropDownStyle = ComboBoxStyle.DropDownList;
+                    this.cmbTheme.Items.Clear();
+                    this.cmbTheme.Items.Add("light");
+                    this.cmbTheme.Items.Add("dark");
+                }
+            }
+            catch { }
+
             // Enable Ctrl+S to save settings without closing the form
             this.KeyPreview = true;
             this.KeyDown += SettingsForm_KeyDown;
@@ -131,7 +145,8 @@ namespace GxPT
             sb.AppendLine("  ],");
             sb.AppendLine("  \"default_model\": \"openai/gpt-4o\",");
             sb.AppendLine("  \"enable_logging\": false,");
-            sb.AppendLine("  \"font_size\": " + defaultFontSize.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            sb.AppendLine("  \"font_size\": " + defaultFontSize.ToString(System.Globalization.CultureInfo.InvariantCulture) + ",");
+            sb.AppendLine("  \"theme\": \"light\"");
             sb.AppendLine("}");
             return sb.ToString();
         }
@@ -166,7 +181,8 @@ namespace GxPT
                 },
                 default_model = "openai/gpt-4o",
                 enable_logging = false,
-                font_size = GetChatDefaultFontSize()
+                font_size = GetChatDefaultFontSize(),
+                theme = "light"
             };
         }
 
@@ -648,6 +664,16 @@ namespace GxPT
                 s.font_size = fs;
             }
             catch { s.font_size = GetChatDefaultFontSize(); }
+
+            // Theme normalization
+            try
+            {
+                string t = s.theme ?? "";
+                t = t.Trim().ToLowerInvariant();
+                if (t != "dark" && t != "light") t = "light";
+                s.theme = t;
+            }
+            catch { s.theme = "light"; }
         }
 
         // --- Visual controls <-> working settings ---
@@ -691,6 +717,24 @@ namespace GxPT
                 this.nudFontSize.Value = val;
             }
             catch { }
+
+            // Theme
+            try
+            {
+                string t = s.theme ?? "light";
+                if (this.cmbTheme != null)
+                {
+                    if (!this.cmbTheme.Items.Contains(t))
+                    {
+                        // ensure items present
+                        this.cmbTheme.Items.Clear();
+                        this.cmbTheme.Items.Add("light");
+                        this.cmbTheme.Items.Add("dark");
+                    }
+                    this.cmbTheme.SelectedItem = t;
+                }
+            }
+            catch { }
         }
 
         private void CaptureVisualControlsToSettings(SettingsData target)
@@ -720,6 +764,16 @@ namespace GxPT
             // Font size
             try { target.font_size = (double)this.nudFontSize.Value; }
             catch { target.font_size = GetChatDefaultFontSize(); }
+
+            // Theme
+            try
+            {
+                var themeSel = this.cmbTheme != null ? (this.cmbTheme.SelectedItem as string) : null;
+                if (string.IsNullOrEmpty(themeSel) && this.cmbTheme != null) themeSel = this.cmbTheme.Text;
+                if (string.IsNullOrEmpty(themeSel)) themeSel = "light";
+                target.theme = (themeSel ?? "light").Trim().ToLowerInvariant();
+            }
+            catch { target.theme = "light"; }
         }
 
         // When the models textbox changes, add any new non-empty lines to the default model combo box
@@ -886,6 +940,7 @@ namespace GxPT
             public string default_model { get; set; }
             public bool enable_logging { get; set; }
             public double font_size { get; set; }
+            public string theme { get; set; }
         }
     }
 }

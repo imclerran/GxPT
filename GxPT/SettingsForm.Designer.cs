@@ -43,6 +43,8 @@
             this.txtModels = new System.Windows.Forms.TextBox();
             this.txtApiKey = new System.Windows.Forms.TextBox();
             this.nudFontSize = new System.Windows.Forms.NumericUpDown();
+            this.lblTheme = new System.Windows.Forms.Label();
+            this.cmbTheme = new System.Windows.Forms.ComboBox();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabVisual = new System.Windows.Forms.TabPage();
             this.tabJson = new System.Windows.Forms.TabPage();
@@ -100,19 +102,22 @@
             this.tableLayoutPanel1.Controls.Add(this.lblApiKey, 0, 0);
             this.tableLayoutPanel1.Controls.Add(this.lblModels, 0, 1);
             this.tableLayoutPanel1.Controls.Add(this.lblDefaultModel, 0, 2);
-            this.tableLayoutPanel1.Controls.Add(this.lblEnableLogging, 0, 4);
             this.tableLayoutPanel1.Controls.Add(this.lblFontSize, 0, 3);
-            this.tableLayoutPanel1.Controls.Add(this.chkEnableLogging, 1, 4);
-            this.tableLayoutPanel1.Controls.Add(this.cmbDefaultModel, 1, 2);
-            this.tableLayoutPanel1.Controls.Add(this.txtModels, 1, 1);
+            this.tableLayoutPanel1.Controls.Add(this.lblTheme, 0, 4);
+            this.tableLayoutPanel1.Controls.Add(this.lblEnableLogging, 0, 5);
             this.tableLayoutPanel1.Controls.Add(this.txtApiKey, 1, 0);
+            this.tableLayoutPanel1.Controls.Add(this.txtModels, 1, 1);
+            this.tableLayoutPanel1.Controls.Add(this.cmbDefaultModel, 1, 2);
             this.tableLayoutPanel1.Controls.Add(this.nudFontSize, 1, 3);
+            this.tableLayoutPanel1.Controls.Add(this.cmbTheme, 1, 4);
+            this.tableLayoutPanel1.Controls.Add(this.chkEnableLogging, 1, 5);
             this.tableLayoutPanel1.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tableLayoutPanel1.Location = new System.Drawing.Point(3, 3);
             this.tableLayoutPanel1.Name = "tableLayoutPanel1";
-            this.tableLayoutPanel1.RowCount = 5;
+            this.tableLayoutPanel1.RowCount = 6;
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle());
@@ -145,7 +150,7 @@
             // lblDefaultModel
             // 
             this.lblDefaultModel.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblDefaultModel.Location = new System.Drawing.Point(3, 235);
+            this.lblDefaultModel.Location = new System.Drawing.Point(3, 208);
             this.lblDefaultModel.Name = "lblDefaultModel";
             this.lblDefaultModel.Size = new System.Drawing.Size(106, 27);
             this.lblDefaultModel.TabIndex = 2;
@@ -166,7 +171,7 @@
             // 
             this.lblFontSize.AutoSize = true;
             this.lblFontSize.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblFontSize.Location = new System.Drawing.Point(3, 262);
+            this.lblFontSize.Location = new System.Drawing.Point(3, 235);
             this.lblFontSize.Name = "lblFontSize";
             this.lblFontSize.Size = new System.Drawing.Size(106, 26);
             this.lblFontSize.TabIndex = 8;
@@ -189,7 +194,7 @@
             this.cmbDefaultModel.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cmbDefaultModel.DropDownWidth = 175;
             this.cmbDefaultModel.FormattingEnabled = true;
-            this.cmbDefaultModel.Location = new System.Drawing.Point(115, 238);
+            this.cmbDefaultModel.Location = new System.Drawing.Point(115, 211);
             this.cmbDefaultModel.Name = "cmbDefaultModel";
             this.cmbDefaultModel.Size = new System.Drawing.Size(175, 21);
             this.cmbDefaultModel.TabIndex = 5;
@@ -203,7 +208,7 @@
             this.txtModels.Multiline = true;
             this.txtModels.Name = "txtModels";
             this.txtModels.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.txtModels.Size = new System.Drawing.Size(460, 203);
+            this.txtModels.Size = new System.Drawing.Size(460, 176);
             this.txtModels.TabIndex = 6;
             // 
             // txtApiKey
@@ -218,10 +223,30 @@
             // nudFontSize
             // 
             this.nudFontSize.DecimalPlaces = 2;
-            this.nudFontSize.Location = new System.Drawing.Point(115, 265);
+            this.nudFontSize.Location = new System.Drawing.Point(115, 238);
             this.nudFontSize.Name = "nudFontSize";
             this.nudFontSize.Size = new System.Drawing.Size(80, 20);
             this.nudFontSize.TabIndex = 9;
+            // 
+            // lblTheme
+            // 
+            this.lblTheme.AutoSize = true;
+            this.lblTheme.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblTheme.Location = new System.Drawing.Point(3, 261);
+            this.lblTheme.Name = "lblTheme";
+            this.lblTheme.Size = new System.Drawing.Size(106, 27);
+            this.lblTheme.TabIndex = 10;
+            this.lblTheme.Text = "Theme";
+            this.lblTheme.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            // 
+            // cmbTheme
+            // 
+            this.cmbTheme.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.cmbTheme.FormattingEnabled = true;
+            this.cmbTheme.Location = new System.Drawing.Point(115, 264);
+            this.cmbTheme.Name = "cmbTheme";
+            this.cmbTheme.Size = new System.Drawing.Size(120, 21);
+            this.cmbTheme.TabIndex = 11;
             // 
             // tabControl1
             // 
@@ -299,5 +324,7 @@
         private System.Windows.Forms.TabPage tabJson;
         private System.Windows.Forms.Label lblFontSize;
         private System.Windows.Forms.NumericUpDown nudFontSize;
+        private System.Windows.Forms.Label lblTheme;
+        private System.Windows.Forms.ComboBox cmbTheme;
     }
 }
