@@ -1787,11 +1787,11 @@ namespace GxPT
                 }
 
                 // Pre-populate messages
-                string userMsg = "How do I get an API key?";
-                ctx.Transcript.AddMessage(MessageRole.User, userMsg);
-                ctx.Conversation.AddUserMessage(userMsg);
+                string userMsg1 = "How do I get an API key?";
+                ctx.Transcript.AddMessage(MessageRole.User, userMsg1);
+                ctx.Conversation.AddUserMessage(userMsg1);
 
-                string assistantMsg =
+                string assistantMsg1 =
                     "# How to Get an OpenRouter.ai API Key\n\n" +
                     "1. **Create an account at [openrouter.ai](https://openrouter.ai).**\n" +
                     "   - Visit the site and sign up or sign in to access your dashboard.\n" +
@@ -1809,9 +1809,24 @@ namespace GxPT
                     //"| 2    | Optionally, add credits                                                                        |\n" +
                     //"| 3    | Visit the **API Keys** section                                                                 |\n" +
                     //"| 4    | Click **Create Key**, name it, optionally set a credit limit, and **copy the key immediately** |";
+                ctx.Transcript.AddMessage(MessageRole.Assistant, assistantMsg1);
+                ctx.Conversation.AddAssistantMessage(assistantMsg1);
 
-                ctx.Transcript.AddMessage(MessageRole.Assistant, assistantMsg);
-                ctx.Conversation.AddAssistantMessage(assistantMsg);
+                string userMsg2 = "How do I set my API key in GxPT?";
+                ctx.Transcript.AddMessage(MessageRole.User, userMsg2);
+                ctx.Conversation.AddUserMessage(userMsg2);
+
+                string assistantMsg2 =
+                    "# How to Set the API key in GxPT\n\n" +
+                    "1. **Open settings in GxPT**\n" +
+                    "   - Click `File` -> `Settings`\n" +
+                    "2. **Paste in your API key from OpenRouter.ai**\n" +
+                    "   - Paste the key you generated on OpenRouter into the `OpenRouter API Key` field\n" +
+                    "3. **Save your settings**\n" +
+                    "   - Click the `Save` button in the bottom right corner of the settings window.\n" +
+                    "4. **Happy chatting!**";
+                ctx.Transcript.AddMessage(MessageRole.Assistant, assistantMsg2);
+                ctx.Conversation.AddAssistantMessage(assistantMsg2);
 
                 UpdateWindowTitleFromActiveTab();
                 FocusInputSoon();
