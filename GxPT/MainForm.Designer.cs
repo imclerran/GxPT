@@ -52,8 +52,9 @@
             this.lblNoApiKey = new System.Windows.Forms.Label();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
-            this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.splitContainer1 = new System.Windows.Forms.SplitContainer();
+            this.flowLayoutPanel1 = new System.Windows.Forms.FlowLayoutPanel();
+            this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.msMain.SuspendLayout();
             this.pnlInput.SuspendLayout();
             this.pnlInputRight.SuspendLayout();
@@ -63,6 +64,7 @@
             this.tabPage1.SuspendLayout();
             this.splitContainer1.Panel2.SuspendLayout();
             this.splitContainer1.SuspendLayout();
+            this.flowLayoutPanel1.SuspendLayout();
             this.SuspendLayout();
             // 
             // msMain
@@ -155,7 +157,7 @@
             // miApiKeysHelp
             // 
             this.miApiKeysHelp.Name = "miApiKeysHelp";
-            this.miApiKeysHelp.Size = new System.Drawing.Size(152, 22);
+            this.miApiKeysHelp.Size = new System.Drawing.Size(128, 22);
             this.miApiKeysHelp.Text = "API Keys";
             this.miApiKeysHelp.Click += new System.EventHandler(this.miApiKeysHelp_Click);
             // 
@@ -165,7 +167,7 @@
             this.pnlInput.Controls.Add(this.txtMessage);
             this.pnlInput.Controls.Add(this.pnlInputRight);
             this.pnlInput.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.pnlInput.Location = new System.Drawing.Point(0, 28);
+            this.pnlInput.Location = new System.Drawing.Point(0, 21);
             this.pnlInput.MinimumSize = new System.Drawing.Size(0, 75);
             this.pnlInput.Name = "pnlInput";
             this.pnlInput.Size = new System.Drawing.Size(885, 75);
@@ -229,29 +231,29 @@
             this.pnlBottom.Controls.Add(this.pnlApiKeyBanner);
             this.pnlBottom.Controls.Add(this.pnlInput);
             this.pnlBottom.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.pnlBottom.Location = new System.Drawing.Point(0, 639);
+            this.pnlBottom.Location = new System.Drawing.Point(0, 646);
             this.pnlBottom.Margin = new System.Windows.Forms.Padding(0, 3, 3, 3);
             this.pnlBottom.Name = "pnlBottom";
-            this.pnlBottom.Size = new System.Drawing.Size(885, 103);
+            this.pnlBottom.Size = new System.Drawing.Size(885, 96);
             this.pnlBottom.TabIndex = 3;
             // 
             // pnlApiKeyBanner
             // 
+            this.pnlApiKeyBanner.AutoSize = true;
             this.pnlApiKeyBanner.BackColor = System.Drawing.Color.Gold;
-            this.pnlApiKeyBanner.Controls.Add(this.lnkOpenSettings);
-            this.pnlApiKeyBanner.Controls.Add(this.lblNoApiKey);
+            this.pnlApiKeyBanner.Controls.Add(this.flowLayoutPanel1);
             this.pnlApiKeyBanner.Dock = System.Windows.Forms.DockStyle.Bottom;
             this.pnlApiKeyBanner.Location = new System.Drawing.Point(0, 0);
             this.pnlApiKeyBanner.Margin = new System.Windows.Forms.Padding(0);
             this.pnlApiKeyBanner.Name = "pnlApiKeyBanner";
             this.pnlApiKeyBanner.Padding = new System.Windows.Forms.Padding(6, 4, 6, 4);
-            this.pnlApiKeyBanner.Size = new System.Drawing.Size(885, 28);
+            this.pnlApiKeyBanner.Size = new System.Drawing.Size(885, 21);
             this.pnlApiKeyBanner.TabIndex = 1;
             // 
             // lnkOpenSettings
             // 
             this.lnkOpenSettings.AutoSize = true;
-            this.lnkOpenSettings.Location = new System.Drawing.Point(132, 8);
+            this.lnkOpenSettings.Location = new System.Drawing.Point(123, 0);
             this.lnkOpenSettings.Name = "lnkOpenSettings";
             this.lnkOpenSettings.Size = new System.Drawing.Size(74, 13);
             this.lnkOpenSettings.TabIndex = 1;
@@ -260,14 +262,13 @@
             // 
             // lblNoApiKey
             // 
-            this.lblNoApiKey.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
-                        | System.Windows.Forms.AnchorStyles.Left)));
             this.lblNoApiKey.AutoSize = true;
-            this.lblNoApiKey.Location = new System.Drawing.Point(12, 8);
+            this.lblNoApiKey.Location = new System.Drawing.Point(3, 0);
             this.lblNoApiKey.Name = "lblNoApiKey";
             this.lblNoApiKey.Size = new System.Drawing.Size(114, 13);
             this.lblNoApiKey.TabIndex = 0;
             this.lblNoApiKey.Text = "No API key configured";
+            this.lblNoApiKey.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // tabControl1
             // 
@@ -276,7 +277,7 @@
             this.tabControl1.Location = new System.Drawing.Point(0, 0);
             this.tabControl1.Name = "tabControl1";
             this.tabControl1.SelectedIndex = 0;
-            this.tabControl1.Size = new System.Drawing.Size(885, 639);
+            this.tabControl1.Size = new System.Drawing.Size(885, 646);
             this.tabControl1.TabIndex = 4;
             // 
             // tabPage1
@@ -284,22 +285,10 @@
             this.tabPage1.Controls.Add(this.chatTranscript);
             this.tabPage1.Location = new System.Drawing.Point(4, 22);
             this.tabPage1.Name = "tabPage1";
-            this.tabPage1.Size = new System.Drawing.Size(877, 613);
+            this.tabPage1.Size = new System.Drawing.Size(877, 620);
             this.tabPage1.TabIndex = 0;
             this.tabPage1.Text = "New Conversation";
             this.tabPage1.UseVisualStyleBackColor = true;
-            // 
-            // chatTranscript
-            // 
-            this.chatTranscript.AccessibleName = "Chat transcript";
-            this.chatTranscript.BackColor = System.Drawing.SystemColors.ControlLightLight;
-            this.chatTranscript.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.chatTranscript.ForeColor = System.Drawing.SystemColors.WindowText;
-            this.chatTranscript.Location = new System.Drawing.Point(0, 0);
-            this.chatTranscript.Margin = new System.Windows.Forms.Padding(0);
-            this.chatTranscript.Name = "chatTranscript";
-            this.chatTranscript.Size = new System.Drawing.Size(877, 613);
-            this.chatTranscript.TabIndex = 0;
             // 
             // splitContainer1
             // 
@@ -318,6 +307,30 @@
             this.splitContainer1.SplitterDistance = 6;
             this.splitContainer1.SplitterWidth = 1;
             this.splitContainer1.TabIndex = 1;
+            // 
+            // flowLayoutPanel1
+            // 
+            this.flowLayoutPanel1.AutoSize = true;
+            this.flowLayoutPanel1.Controls.Add(this.lblNoApiKey);
+            this.flowLayoutPanel1.Controls.Add(this.lnkOpenSettings);
+            this.flowLayoutPanel1.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.flowLayoutPanel1.Location = new System.Drawing.Point(6, 4);
+            this.flowLayoutPanel1.Margin = new System.Windows.Forms.Padding(0);
+            this.flowLayoutPanel1.Name = "flowLayoutPanel1";
+            this.flowLayoutPanel1.Size = new System.Drawing.Size(873, 13);
+            this.flowLayoutPanel1.TabIndex = 2;
+            // 
+            // chatTranscript
+            // 
+            this.chatTranscript.AccessibleName = "Chat transcript";
+            this.chatTranscript.BackColor = System.Drawing.SystemColors.ControlLightLight;
+            this.chatTranscript.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.chatTranscript.ForeColor = System.Drawing.SystemColors.WindowText;
+            this.chatTranscript.Location = new System.Drawing.Point(0, 0);
+            this.chatTranscript.Margin = new System.Windows.Forms.Padding(0);
+            this.chatTranscript.Name = "chatTranscript";
+            this.chatTranscript.Size = new System.Drawing.Size(877, 620);
+            this.chatTranscript.TabIndex = 0;
             // 
             // MainForm
             // 
@@ -345,6 +358,8 @@
             this.splitContainer1.Panel2.ResumeLayout(false);
             this.splitContainer1.Panel2.PerformLayout();
             this.splitContainer1.ResumeLayout(false);
+            this.flowLayoutPanel1.ResumeLayout(false);
+            this.flowLayoutPanel1.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -377,6 +392,7 @@
         private System.Windows.Forms.ToolStripMenuItem miConversationHistory;
         private System.Windows.Forms.ToolStripMenuItem miHelp;
         private System.Windows.Forms.ToolStripMenuItem miApiKeysHelp;
+        private System.Windows.Forms.FlowLayoutPanel flowLayoutPanel1;
 
 
     }
