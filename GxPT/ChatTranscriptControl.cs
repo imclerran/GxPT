@@ -323,10 +323,17 @@ namespace GxPT
             int h = BubblePadding; // top padding
             int wUsed = 0;
 
+            // Maintain numbering counters across blocks so ordered lists continue through sublists
+            var numberedCounters = new Dictionary<int, int>(); // key: indent level, value: last number emitted
+
             for (int i = 0; i < it.Blocks.Count; i++)
             {
                 var blk = it.Blocks[i];
-                Size sz = MeasureBlock(blk, textMax);
+                // Reset numbering when leaving list context (paragraphs, headings, code)
+                if (blk.Type != BlockType.NumberedList && blk.Type != BlockType.BulletList)
+                    numberedCounters.Clear();
+
+                Size sz = MeasureBlock(blk, textMax, numberedCounters);
                 h += sz.Height;
 
                 // Add spacing that matches the drawing code
@@ -350,7 +357,7 @@ namespace GxPT
             return new Size(bubbleW, Math.Max(24, h));
         }
 
-        private Size MeasureBlock(Block blk, int maxWidth)
+        private Size MeasureBlock(Block blk, int maxWidth, Dictionary<int, int> numberedCounters)
         {
             switch (blk.Type)
             {
@@ -386,9 +393,22 @@ namespace GxPT
                         var list = (NumberedListBlock)blk;
                         int y = 0;
                         int w = 0;
-                        int itemNumber = 1;
                         foreach (var item in list.Items)
                         {
+                            // Determine current number for this indent level (continue across blocks)
+                            int indent = item.IndentLevel;
+                            // Remove deeper indent counters when indent decreases
+                            if (numberedCounters != null && numberedCounters.Count > 0)
+                            {
+                                var toRemove = new List<int>();
+                                foreach (var k in numberedCounters.Keys)
+                                    if (k > indent) toRemove.Add(k);
+                                for (int r = 0; r < toRemove.Count; r++) numberedCounters.Remove(toRemove[r]);
+                            }
+                            int current;
+                            if (numberedCounters == null || !numberedCounters.TryGetValue(indent, out current)) current = 0;
+                            int itemNumber = current + 1;
+                            if (numberedCounters != null) numberedCounters[indent] = itemNumber;
                             // measure number + indented paragraph
                             string numberText = itemNumber.ToString() + ".";
                             Size numberSize = TextRenderer.MeasureText(numberText, _baseFont);
@@ -397,7 +417,6 @@ namespace GxPT
                             y += Math.Max(sz.Height, _baseFont.Height);
                             y += 2;
                             w = Math.Max(w, numberWidth + sz.Width);
-                            itemNumber++;
                         }
                         return new Size(Math.Min(maxWidth, w), y);
                     }
@@ -653,6 +672,8 @@ namespace GxPT
             int x0 = bounds.X;
             int maxWidth = bounds.Width;
             int codeIndex = 0; // index of code block within this message for scroll state
+            // Maintain numbering counters across blocks so ordered lists continue through sublists
+            var numberedCounters = new Dictionary<int, int>(); // key: indent level, value: last number emitted
 
             foreach (var blk in blocks)
             {
@@ -662,12 +683,16 @@ namespace GxPT
                     Font f = GetHeadingFont(h.Level);
                     y += DrawInlineParagraph(g, x0, y, maxWidth, h.Inlines, f);
                     y += 4;
+                    // Reset numbering when leaving list context
+                    numberedCounters.Clear();
                 }
                 else if (blk.Type == BlockType.Paragraph)
                 {
                     var p = (ParagraphBlock)blk;
                     y += DrawInlineParagraph(g, x0, y, maxWidth, p.Inlines, _baseFont);
                     y += 2;
+                    // Reset numbering when leaving list context
+                    numberedCounters.Clear();
                 }
                 else if (blk.Type == BlockType.BulletList)
                 {
@@ -697,9 +722,21 @@ namespace GxPT
                 else if (blk.Type == BlockType.NumberedList)
                 {
                     var list = (NumberedListBlock)blk;
-                    int itemNumber = 1;
                     foreach (var item in list.Items)
                     {
+                        // determine sequential number based on indent level, continuing across blocks
+                        int indent = item.IndentLevel;
+                        // drop deeper levels if indent decreased
+                        if (numberedCounters.Count > 0)
+                        {
+                            var toRemove = new List<int>();
+                            foreach (var k in numberedCounters.Keys) if (k > indent) toRemove.Add(k);
+                            for (int r = 0; r < toRemove.Count; r++) numberedCounters.Remove(toRemove[r]);
+                        }
+                        int prev;
+                        if (!numberedCounters.TryGetValue(indent, out prev)) prev = 0;
+                        int itemNumber = prev + 1;
+                        numberedCounters[indent] = itemNumber;
                         int indentX = x0 + (item.IndentLevel * BulletIndent);
                         // number
                         string numberText = itemNumber.ToString() + ".";
@@ -712,7 +749,6 @@ namespace GxPT
                         int textX = indentX + numberSize.Width + 4; // 4px gap after number
                         int used = DrawInlineParagraph(g, textX, y, maxWidth - (textX - x0), item.Content, _baseFont);
                         y += Math.Max(used, _baseFont.Height) + 2;
-                        itemNumber++;
                     }
                 }
                 else if (blk.Type == BlockType.CodeBlock)
@@ -821,6 +857,8 @@ namespace GxPT
 
                     y += box.Height + 4;
                     codeIndex++;
+                    // Reset numbering when leaving list context
+                    numberedCounters.Clear();
                 }
             }
         }
@@ -1446,10 +1484,21 @@ namespace GxPT
                         else if (blk.Type == BlockType.NumberedList)
                         {
                             var list = (NumberedListBlock)blk;
+                            // Maintain numbering counters for accurate width when numbers exceed one digit or continue across lists
+                            var counters = new Dictionary<int, int>();
                             foreach (var item in list.Items)
                             {
+                                int indent = item.IndentLevel;
+                                if (counters.Count > 0)
+                                {
+                                    var toRemove = new List<int>();
+                                    foreach (var k in counters.Keys) if (k > indent) toRemove.Add(k);
+                                    for (int r = 0; r < toRemove.Count; r++) counters.Remove(toRemove[r]);
+                                }
+                                int prev; if (!counters.TryGetValue(indent, out prev)) prev = 0; int itemNumber = prev + 1; counters[indent] = itemNumber;
+                                string numberText = itemNumber.ToString() + ".";
                                 int indentX = contentX + (item.IndentLevel * BulletIndent);
-                                Size numberSize = TextRenderer.MeasureText("0.", _baseFont);
+                                Size numberSize = TextRenderer.MeasureText(numberText, _baseFont);
                                 int textX = indentX + numberSize.Width + 4;
                                 int used = MeasureInlineParagraphHeight(g, contentW - (textX - contentX), item.Content, _baseFont);
                                 y += Math.Max(used, _baseFont.Height) + 2;
