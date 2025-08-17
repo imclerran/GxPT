@@ -1828,8 +1828,39 @@ namespace GxPT
                 ctx.Transcript.AddMessage(MessageRole.Assistant, assistantMsg2);
                 ctx.Conversation.AddAssistantMessage(assistantMsg2);
 
+                // Ensure the help tab starts scrolled to the top
+                TryScrollTranscriptToTop(ctx.Transcript);
+                try { this.BeginInvoke((MethodInvoker)(() => TryScrollTranscriptToTop(ctx.Transcript))); }
+                catch { }
+
                 UpdateWindowTitleFromActiveTab();
                 FocusInputSoon();
+            }
+            catch { }
+        }
+
+        // Best-effort: scroll a transcript to the top using public API if present, otherwise fallback to private VScrollBar via reflection
+        private static void TryScrollTranscriptToTop(ChatTranscriptControl t)
+        {
+            if (t == null) return;
+            try
+            {
+                var mi = t.GetType().GetMethod("ScrollToTop", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                if (mi != null)
+                {
+                    mi.Invoke(t, null);
+                    return;
+                }
+                var fld = t.GetType().GetField("_vbar", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (fld != null)
+                {
+                    var vbar = fld.GetValue(t) as VScrollBar;
+                    if (vbar != null)
+                    {
+                        if (vbar.Enabled) vbar.Value = 0;
+                    }
+                }
+                t.Invalidate();
             }
             catch { }
         }
