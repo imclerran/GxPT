@@ -22,7 +22,7 @@ namespace GxPT
         private const int BubblePadding = 8;
         private const int BubbleRadius = 8;
         private const int ScrollStep = 40;
-        private const int MaxBubbleWidth = 560; // cap to keep lines readable
+        private const int MaxBubbleWidth = 700; // midpoint between original 560 and 1000
         private const int BulletIndent = 18;
         private const int BulletGap = 8;
         private const int CodeBlockPadding = 6;
@@ -98,6 +98,9 @@ namespace GxPT
         private int _dragStartScrollX;
         private MessageItem _hoverScrollItem;
         private int _hoverScrollCodeIndex = -1;
+        private int _hoverScrollTableIndex = -1;
+        private bool _dragScrollIsTable;        // dragging a table scrollbar vs code
+        private bool _hoverScrollIsTable;       // hovering a table scrollbar vs code
 
         // ---------- Data ----------
         private sealed class MessageItem
@@ -108,6 +111,7 @@ namespace GxPT
             public int MeasuredHeight;
             public List<Block> Blocks; // parsed markdown
             public List<int> CodeScroll; // per-code-block horizontal scroll offsets
+            public List<int> TableScroll; // per-table horizontal scroll offsets
         }
 
         private readonly List<MessageItem> _items = new List<MessageItem>();
@@ -193,12 +197,17 @@ namespace GxPT
                 Role = role,
                 RawMarkdown = markdown,
                 Blocks = MarkdownParser.ParseMarkdown(markdown),
-                CodeScroll = new List<int>()
+                CodeScroll = new List<int>(),
+                TableScroll = new List<int>()
             };
             // initialize per-code-block scroll positions
             int codeCount = 0;
             foreach (var b in item.Blocks) if (b.Type == BlockType.CodeBlock) codeCount++;
             for (int i = 0; i < codeCount; i++) item.CodeScroll.Add(0);
+            // initialize per-table scroll positions
+            int tableCount = 0;
+            foreach (var b in item.Blocks) if (b.Type == BlockType.Table) tableCount++;
+            for (int i = 0; i < tableCount; i++) item.TableScroll.Add(0);
             _items.Add(item);
             Reflow();
             ScrollToBottom();
@@ -232,6 +241,10 @@ namespace GxPT
             it.CodeScroll = new List<int>();
             int codes = 0; foreach (var b in it.Blocks) if (b.Type == BlockType.CodeBlock) codes++;
             for (int i = 0; i < codes; i++) it.CodeScroll.Add(0);
+            // reset table scrolls to match blocks
+            it.TableScroll = new List<int>();
+            int tables = 0; foreach (var b in it.Blocks) if (b.Type == BlockType.Table) tables++;
+            for (int i = 0; i < tables; i++) it.TableScroll.Add(0);
             Reflow();
             ScrollToBottom();
             Invalidate();
@@ -248,6 +261,10 @@ namespace GxPT
             it.CodeScroll = new List<int>();
             int codes = 0; foreach (var b in it.Blocks) if (b.Type == BlockType.CodeBlock) codes++;
             for (int i = 0; i < codes; i++) it.CodeScroll.Add(0);
+            // reset table scrolls to match blocks
+            it.TableScroll = new List<int>();
+            int tables = 0; foreach (var b in it.Blocks) if (b.Type == BlockType.Table) tables++;
+            for (int i = 0; i < tables; i++) it.TableScroll.Add(0);
             Reflow();
             ScrollToBottom();
             Invalidate();
@@ -285,10 +302,15 @@ namespace GxPT
                 foreach (var it in _items)
                 {
                     if (it.CodeScroll == null) it.CodeScroll = new List<int>();
+                    if (it.TableScroll == null) it.TableScroll = new List<int>();
                     // ensure length matches number of code blocks
                     int codes = 0; foreach (var b in it.Blocks) if (b.Type == BlockType.CodeBlock) codes++;
                     while (it.CodeScroll.Count < codes) it.CodeScroll.Add(0);
                     if (it.CodeScroll.Count > codes) it.CodeScroll.RemoveRange(codes, it.CodeScroll.Count - codes);
+                    // ensure length matches number of table blocks
+                    int tables = 0; foreach (var b in it.Blocks) if (b.Type == BlockType.Table) tables++;
+                    while (it.TableScroll.Count < tables) it.TableScroll.Add(0);
+                    if (it.TableScroll.Count > tables) it.TableScroll.RemoveRange(tables, it.TableScroll.Count - tables);
                     Size bubbleSize = MeasureBubble(it, usableWidth);
                     int xLeft;
                     if (it.Role == MessageRole.User)
@@ -435,6 +457,46 @@ namespace GxPT
                             int boxH = textH + 2 * CodeBlockPadding + CodeCopyButtonHeight + (needH ? CodeHScrollHeight : 0);
                             return new Size(Math.Max(24, boxW), Math.Max(CodeCopyButtonHeight + 2 * CodeBlockPadding, boxH));
                         }
+                    }
+                case BlockType.Table:
+                    {
+                        var t = (TableBlock)blk;
+                        // Measure each cell as inline paragraphs to compute column widths and total height
+                        int cols = Math.Max(0, t.Alignments != null ? t.Alignments.Count : 0);
+                        if (cols == 0) return new Size(0, 0);
+                        int cellPad = 6;
+                        int border = 1;
+                        int[] colWidths = new int[cols];
+                        int rowHeightHeader = 0;
+                        int contentWidth = border; // total intrinsic content width of the table
+                        // Header
+                        for (int c = 0; c < cols; c++)
+                        {
+                            var inl = (c < t.Header.Count) ? t.Header[c] : new List<InlineRun>();
+                            Size sz = MeasureInlineParagraph(inl, _baseFont, int.MaxValue / 4, false);
+                            colWidths[c] = Math.Max(colWidths[c], sz.Width);
+                            rowHeightHeader = Math.Max(rowHeightHeader, sz.Height);
+                        }
+                        // Rows
+                        int[] rowHeights = new int[Math.Max(0, t.Rows.Count)];
+                        for (int r = 0; r < t.Rows.Count; r++)
+                        {
+                            int rowH = 0;
+                            var row = t.Rows[r];
+                            for (int c = 0; c < cols; c++)
+                            {
+                                var inl = (c < row.Count) ? row[c] : new List<InlineRun>();
+                                Size sz = MeasureInlineParagraph(inl, _baseFont, int.MaxValue / 4, false);
+                                colWidths[c] = Math.Max(colWidths[c], sz.Width);
+                                rowH = Math.Max(rowH, sz.Height);
+                            }
+                            rowHeights[r] = rowH;
+                        }
+                        int totalW = border; for (int c = 0; c < cols; c++) totalW += colWidths[c] + cellPad * 2 + border; contentWidth = totalW;
+                        int totalH = border + rowHeightHeader + cellPad * 2 + border; for (int r = 0; r < rowHeights.Length; r++) totalH += rowHeights[r] + cellPad * 2 + border;
+                        bool needH = totalW > maxWidth;
+                        // Clamp returned width to available max; add h-scroll height when needed
+                        return new Size(Math.Min(maxWidth, totalW), totalH + (needH ? CodeHScrollHeight : 0));
                     }
             }
             return Size.Empty;
@@ -860,6 +922,137 @@ namespace GxPT
                     // Reset numbering when leaving list context
                     numberedCounters.Clear();
                 }
+                else if (blk.Type == BlockType.Table)
+                {
+                    var t = (TableBlock)blk;
+                    int cols = Math.Max(0, t.Alignments != null ? t.Alignments.Count : 0);
+                    if (cols > 0)
+                    {
+                        int cellPad = 6;
+                        int border = 1;
+                        // compute column widths by measuring unbounded to get intrinsic content width
+                        int[] colWidths = new int[cols];
+                        int headerH = 0;
+                        for (int c = 0; c < cols; c++)
+                        {
+                            var inl = (c < t.Header.Count) ? t.Header[c] : new List<InlineRun>();
+                            Size sz = MeasureInlineParagraph(inl, _baseFont, int.MaxValue / 4, false);
+                            colWidths[c] = Math.Max(colWidths[c], sz.Width);
+                            headerH = Math.Max(headerH, sz.Height);
+                        }
+                        int[] rowHeights = new int[t.Rows.Count];
+                        for (int r = 0; r < t.Rows.Count; r++)
+                        {
+                            int rowH = 0;
+                            for (int c = 0; c < cols; c++)
+                            {
+                                var inl = (c < t.Rows[r].Count) ? t.Rows[r][c] : new List<InlineRun>();
+                                Size sz = MeasureInlineParagraph(inl, _baseFont, int.MaxValue / 4, false);
+                                colWidths[c] = Math.Max(colWidths[c], sz.Width);
+                                rowH = Math.Max(rowH, sz.Height);
+                            }
+                            rowHeights[r] = rowH;
+                        }
+
+                        int intrinsicW = border; for (int c = 0; c < cols; c++) intrinsicW += colWidths[c] + cellPad * 2 + border;
+                        int viewportW = Math.Max(0, maxWidth);
+                        bool needH = intrinsicW > viewportW;
+                        int viewW = Math.Min(viewportW, intrinsicW);
+
+                        // Horizontal scroll state (per table)
+                        if (owner.TableScroll == null) owner.TableScroll = new List<int>();
+                        int tableIndex = 0; // compute table index within this message
+                        for (int bi = 0; bi < blocks.Count && !object.ReferenceEquals(blocks[bi], blk); bi++)
+                            if (blocks[bi].Type == BlockType.Table) tableIndex++;
+                        while (owner.TableScroll.Count <= tableIndex) owner.TableScroll.Add(0);
+                        int scrollX = owner.TableScroll[tableIndex];
+                        int maxScroll = Math.Max(0, intrinsicW - viewW);
+                        if (scrollX < 0) scrollX = 0; if (scrollX > maxScroll) scrollX = maxScroll;
+                        owner.TableScroll[tableIndex] = scrollX;
+
+                        // Draw table within a clipped viewport with horizontal offset
+                        Rectangle tableViewport = new Rectangle(x0, y, viewW, headerH + cellPad * 2 + 1); // header first; body will extend
+                        // compute full table height
+                        int tableH = 1 + headerH + cellPad * 2 + 1; for (int r = 0; r < rowHeights.Length; r++) tableH += rowHeights[r] + cellPad * 2 + 1;
+                        tableViewport.Height = tableH;
+
+                        Region prevClip = g.Clip;
+                        g.SetClip(tableViewport);
+
+                        using (var pen = new Pen(CodeBlockBorder))
+                        using (var headerBrush = new SolidBrush(Color.FromArgb(245, 245, 245)))
+                        using (var cellBrush = new SolidBrush(BackColor))
+                        {
+                            int drawX = x0 - scrollX;
+
+                            // Header row background across viewport
+                            int headerY = y;
+                            int headerHeight = headerH + cellPad * 2;
+                            g.FillRectangle(headerBrush, new Rectangle(x0, headerY, viewW, headerHeight + 1));
+
+                            // Draw header cells
+                            int x = drawX + 1; // start after left border
+                            for (int c = 0; c < cols; c++)
+                            {
+                                Rectangle cellRect = new Rectangle(x, headerY + 1, colWidths[c] + cellPad * 2, headerHeight);
+                                int textX = cellRect.X + cellPad;
+                                int avail = colWidths[c];
+                                var inl = (c < t.Header.Count) ? t.Header[c] : new List<InlineRun>();
+                                DrawInlineParagraph(g, textX, cellRect.Y + (cellRect.Height - _baseFont.Height) / 2, avail, inl, _baseFont);
+                                g.DrawRectangle(pen, new Rectangle(cellRect.X - 1, cellRect.Y - 1, cellRect.Width + 1, cellRect.Height + 1));
+                                x += cellRect.Width + 1;
+                            }
+                            int yBody = headerY + headerHeight + 1;
+                            // Body rows
+                            for (int r = 0; r < t.Rows.Count; r++)
+                            {
+                                int rowH = rowHeights[r];
+                                x = drawX + 1;
+                                for (int c = 0; c < cols; c++)
+                                {
+                                    Rectangle cellRect = new Rectangle(x, yBody, colWidths[c] + cellPad * 2, rowH + cellPad * 2);
+                                    g.FillRectangle(cellBrush, cellRect);
+                                    int textX = cellRect.X + cellPad;
+                                    int avail = colWidths[c];
+                                    var inl = (c < t.Rows[r].Count) ? t.Rows[r][c] : new List<InlineRun>();
+                                    DrawInlineParagraph(g, textX, cellRect.Y + cellPad, avail, inl, _baseFont);
+                                    g.DrawRectangle(pen, new Rectangle(cellRect.X - 1, cellRect.Y - 1, cellRect.Width + 1, cellRect.Height + 1));
+                                    x += cellRect.Width + 1;
+                                }
+                                yBody += rowH + cellPad * 2 + 1;
+                            }
+                        }
+
+                        g.Clip = prevClip;
+
+                        // Draw horizontal scrollbar if needed
+                        if (needH && viewW > 0)
+                        {
+                            Rectangle track = new Rectangle(x0, y + tableH + 2, viewW, CodeHScrollHeight - 4);
+                            bool hoverScroll = (_hoverScrollItem == owner && _hoverScrollIsTable && _hoverScrollTableIndex == tableIndex);
+                            Color trackBorder = hoverScroll ? Color.FromArgb(170, 170, 170) : CodeBlockBorder;
+                            Color thumbBorder = hoverScroll ? Color.FromArgb(120, 120, 120) : Color.FromArgb(160, 160, 160);
+                            using (var trackBrush = new SolidBrush(Color.FromArgb(235, 235, 235)))
+                            using (var trackPen = new Pen(trackBorder))
+                            {
+                                g.FillRectangle(trackBrush, track);
+                                g.DrawRectangle(trackPen, track);
+                            }
+                            int thumbW = Math.Max(CodeHScrollThumbMin, (int)Math.Round((double)track.Width * viewW / Math.Max(1, intrinsicW)));
+                            int trackRange = Math.Max(1, track.Width - thumbW);
+                            int thumbX = track.X + (maxScroll > 0 ? (int)Math.Round((double)scrollX / maxScroll * trackRange) : 0);
+                            Rectangle thumb = new Rectangle(thumbX, track.Y, thumbW, track.Height);
+                            using (var thumbBrush = new SolidBrush(Color.FromArgb(200, 200, 200)))
+                            using (var thumbPen = new Pen(thumbBorder))
+                            {
+                                g.FillRectangle(thumbBrush, thumb);
+                                g.DrawRectangle(thumbPen, thumb);
+                            }
+                        }
+                        y += tableH + (needH ? CodeHScrollHeight : 0);
+                    }
+                    y += 2; // small gap after table
+                }
             }
         }
 
@@ -1057,7 +1250,7 @@ namespace GxPT
             base.OnMouseUp(e);
             if (_draggingHScroll)
             {
-                _draggingHScroll = false; _dragScrollItem = null; _dragScrollCodeIndex = -1; Capture = false; Invalidate();
+                _draggingHScroll = false; _dragScrollItem = null; _dragScrollCodeIndex = -1; _dragScrollIsTable = false; Capture = false; Invalidate();
                 return;
             }
             if (e.Button == MouseButtons.Right)
@@ -1128,12 +1321,13 @@ namespace GxPT
                     {
                         _draggingHScroll = true;
                         _dragScrollItem = ui.Item;
-                        _dragScrollCodeIndex = ui.CodeIndex;
+                        _dragScrollCodeIndex = ui.IsTable ? -1 : ui.CodeIndex;
+                        _dragScrollIsTable = ui.IsTable;
                         _dragScrollTrackRect = ui.ScrollTrackRect;
                         _dragScrollContentWidth = ui.ContentWidth;
                         _dragScrollViewportWidth = ui.ViewportWidth;
                         _dragStartMouseX = e.X;
-                        _dragStartScrollX = ui.Item.CodeScroll[ui.CodeIndex];
+                        _dragStartScrollX = ui.IsTable ? ui.Item.TableScroll[ui.TableIndex] : ui.Item.CodeScroll[ui.CodeIndex];
                         Capture = true;
                         return;
                     }
@@ -1146,7 +1340,7 @@ namespace GxPT
                         int clickOffset = Math.Max(0, Math.Min(trackRange, e.X - ui.ScrollTrackRect.X - thumbW / 2));
                         int maxScroll = Math.Max(0, ui.ContentWidth - ui.ViewportWidth);
                         int newScroll = (int)Math.Round((double)clickOffset / trackRange * maxScroll);
-                        ui.Item.CodeScroll[ui.CodeIndex] = newScroll;
+                        if (ui.IsTable) ui.Item.TableScroll[ui.TableIndex] = newScroll; else ui.Item.CodeScroll[ui.CodeIndex] = newScroll;
                         Invalidate();
                         return;
                     }
@@ -1172,7 +1366,7 @@ namespace GxPT
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
-            if (_draggingHScroll && _dragScrollItem != null && _dragScrollCodeIndex >= 0)
+            if (_draggingHScroll && _dragScrollItem != null)
             {
                 // update scroll based on mouse delta
                 int dx = e.X - _dragStartMouseX;
@@ -1182,7 +1376,21 @@ namespace GxPT
                 int maxScroll = Math.Max(0, _dragScrollContentWidth - _dragScrollViewportWidth);
                 int deltaScroll = (int)Math.Round((double)dx / trackRange * maxScroll);
                 int newScroll = Math.Max(0, Math.Min(maxScroll, _dragStartScrollX + deltaScroll));
-                _dragScrollItem.CodeScroll[_dragScrollCodeIndex] = newScroll;
+                if (_dragScrollIsTable)
+                {
+                    // Find current table index via hit test again or approximate: compute by geometry would be heavy; reuse start scroll index mapping
+                    // We'll adjust both code path: On mouse down stored _dragScrollTrackRect and widths; here only need to update the same target list.
+                    // Use the closest matching thumb width mapping: we piggybacked _dragStartScrollX from the appropriate list earlier.
+                    // For table, we must identify index; we can recompute using HitTestCodeUI at the current mouse to find which table scrollbar is under drag.
+                    var tableUi = HitTestCodeUI(new Point(e.X, e.Y));
+                    if (tableUi.Hit && tableUi.IsTable) { _dragScrollItem.TableScroll[tableUi.TableIndex] = newScroll; }
+                    else { if (_dragScrollItem.TableScroll != null && _dragScrollItem.TableScroll.Count > 0) _dragScrollItem.TableScroll[0] = newScroll; }
+                }
+                else
+                {
+                    if (_dragScrollCodeIndex >= 0 && _dragScrollCodeIndex < _dragScrollItem.CodeScroll.Count)
+                        _dragScrollItem.CodeScroll[_dragScrollCodeIndex] = newScroll;
+                }
                 Invalidate();
                 return;
             }
@@ -1199,13 +1407,13 @@ namespace GxPT
                 }
                 if (ui.Which == CodeUiHit.ScrollThumb || ui.Which == CodeUiHit.ScrollTrack)
                 {
-                    _hoverScrollItem = ui.Item; _hoverScrollCodeIndex = ui.CodeIndex;
+                    _hoverScrollItem = ui.Item; _hoverScrollCodeIndex = ui.CodeIndex; _hoverScrollIsTable = ui.IsTable; _hoverScrollTableIndex = ui.TableIndex;
                 }
             }
             else
             {
                 _hoverCopyItem = null; _hoverCopyCodeIndex = -1;
-                _hoverScrollItem = null; _hoverScrollCodeIndex = -1;
+                _hoverScrollItem = null; _hoverScrollCodeIndex = -1; _hoverScrollIsTable = false; _hoverScrollTableIndex = -1;
             }
 
             string link = HitTestLink(e.Location);
@@ -1362,6 +1570,41 @@ namespace GxPT
                             itemNo++;
                         }
                     }
+                    else if (blk.Type == BlockType.Table)
+                    {
+                        // Advance y past table area (without link detection within table for now)
+                        var t = (TableBlock)blk;
+                        int cols = Math.Max(0, t.Alignments != null ? t.Alignments.Count : 0);
+                        if (cols > 0)
+                        {
+                            int cellPad = 6; int border = 1;
+                            int[] colWidths = new int[cols]; int headerH = 0;
+                            for (int c = 0; c < cols; c++)
+                            {
+                                var inl = (c < t.Header.Count) ? t.Header[c] : new List<InlineRun>();
+                                Size sz = MeasureInlineParagraph(inl, _baseFont, int.MaxValue / 4, false);
+                                colWidths[c] = Math.Max(colWidths[c], sz.Width);
+                                headerH = Math.Max(headerH, sz.Height);
+                            }
+                            int[] rowHeights = new int[t.Rows.Count];
+                            for (int r = 0; r < t.Rows.Count; r++)
+                            {
+                                int rowH = 0;
+                                for (int c = 0; c < cols; c++)
+                                {
+                                    var inl = (c < t.Rows[r].Count) ? t.Rows[r][c] : new List<InlineRun>();
+                                    Size sz = MeasureInlineParagraph(inl, _baseFont, int.MaxValue / 4, false);
+                                    colWidths[c] = Math.Max(colWidths[c], sz.Width);
+                                    rowH = Math.Max(rowH, sz.Height);
+                                }
+                                rowHeights[r] = rowH;
+                            }
+                            int intrinsicW = border; for (int c = 0; c < cols; c++) intrinsicW += colWidths[c] + cellPad * 2 + border;
+                            int tableH = 1 + headerH + cellPad * 2 + 1; for (int r = 0; r < rowHeights.Length; r++) tableH += rowHeights[r] + cellPad * 2 + 1;
+                            bool needH = intrinsicW > contentW;
+                            y += tableH + (needH ? CodeHScrollHeight : 0) + 2;
+                        }
+                    }
                 }
             }
             return null;
@@ -1437,6 +1680,8 @@ namespace GxPT
             public Rectangle ScrollTrackRect;
             public int ContentWidth;
             public int ViewportWidth;
+            public bool IsTable; // true when referring to a table scrollbar
+            public int TableIndex; // when IsTable
         }
 
         private CodeUiInfo HitTestCodeUI(Point clientPt)
@@ -1548,6 +1793,61 @@ namespace GxPT
 
                             y += box.Height + 4;
                             codeIdx++;
+                        }
+                        else if (blk.Type == BlockType.Table)
+                        {
+                            var t = (TableBlock)blk;
+                            int cols = Math.Max(0, t.Alignments != null ? t.Alignments.Count : 0);
+                            if (cols > 0)
+                            {
+                                int cellPad = 6; int border = 1;
+                                // measure intrinsic widths
+                                int[] colWidths = new int[cols];
+                                int headerH = 0;
+                                for (int c = 0; c < cols; c++)
+                                {
+                                    var inl = (c < t.Header.Count) ? t.Header[c] : new List<InlineRun>();
+                                    Size sz = MeasureInlineParagraph(inl, _baseFont, int.MaxValue / 4, false);
+                                    colWidths[c] = Math.Max(colWidths[c], sz.Width);
+                                    headerH = Math.Max(headerH, sz.Height);
+                                }
+                                int[] rowHeights = new int[t.Rows.Count];
+                                for (int r = 0; r < t.Rows.Count; r++)
+                                {
+                                    int rowH = 0;
+                                    for (int c = 0; c < cols; c++)
+                                    {
+                                        var inl = (c < t.Rows[r].Count) ? t.Rows[r][c] : new List<InlineRun>();
+                                        Size sz = MeasureInlineParagraph(inl, _baseFont, int.MaxValue / 4, false);
+                                        colWidths[c] = Math.Max(colWidths[c], sz.Width);
+                                        rowH = Math.Max(rowH, sz.Height);
+                                    }
+                                    rowHeights[r] = rowH;
+                                }
+                                int intrinsicW = border; for (int c = 0; c < cols; c++) intrinsicW += colWidths[c] + cellPad * 2 + border;
+                                int viewportW = Math.Max(0, contentW);
+                                int tableH = 1 + headerH + cellPad * 2 + 1; for (int r = 0; r < rowHeights.Length; r++) tableH += rowHeights[r] + cellPad * 2 + 1;
+                                bool needH = intrinsicW > viewportW;
+                                if (needH)
+                                {
+                                    Rectangle track = new Rectangle(contentX, y + tableH + 2, Math.Min(contentW, intrinsicW), CodeHScrollHeight - 4);
+                                    int tableIndex = 0; for (int bi = 0; bi < it.Blocks.Count && !object.ReferenceEquals(it.Blocks[bi], blk); bi++) if (it.Blocks[bi].Type == BlockType.Table) tableIndex++;
+                                    if (it.TableScroll == null) it.TableScroll = new List<int>();
+                                    while (it.TableScroll.Count <= tableIndex) it.TableScroll.Add(0);
+                                    int scrollX = it.TableScroll[tableIndex];
+                                    int maxScroll = Math.Max(0, intrinsicW - track.Width);
+                                    int thumbW = Math.Max(CodeHScrollThumbMin, (int)Math.Round((double)track.Width * track.Width / Math.Max(1, intrinsicW)));
+                                    int trackRange = Math.Max(1, track.Width - thumbW);
+                                    int thumbX = track.X + (maxScroll > 0 ? (int)Math.Round((double)scrollX / maxScroll * trackRange) : 0);
+                                    Rectangle thumb = new Rectangle(thumbX, track.Y, thumbW, track.Height);
+                                    if (thumb.Contains(virt))
+                                    { info.Hit = true; info.Which = CodeUiHit.ScrollThumb; info.Item = it; info.Block = blk; info.CodeIndex = -1; info.TableIndex = tableIndex; info.ScrollTrackRect = track; info.ContentWidth = intrinsicW; info.ViewportWidth = track.Width; info.IsTable = true; return info; }
+                                    if (track.Contains(virt))
+                                    { info.Hit = true; info.Which = CodeUiHit.ScrollTrack; info.Item = it; info.Block = blk; info.CodeIndex = -1; info.TableIndex = tableIndex; info.ScrollTrackRect = track; info.ContentWidth = intrinsicW; info.ViewportWidth = track.Width; info.IsTable = true; return info; }
+                                }
+
+                                y += tableH + (needH ? CodeHScrollHeight : 0) + 2;
+                            }
                         }
                     }
                 }

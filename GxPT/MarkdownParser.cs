@@ -8,7 +8,7 @@ using System.Collections.Generic;
 namespace GxPT
 {
     // ---------- Markdown model ----------
-    public enum BlockType { Paragraph, Heading, CodeBlock, BulletList, NumberedList }
+    public enum BlockType { Paragraph, Heading, CodeBlock, BulletList, NumberedList, Table }
 
     [Flags]
     public enum RunStyle { Normal = 0, Bold = 1, Italic = 2, Code = 4, Link = 8 }
@@ -43,6 +43,15 @@ namespace GxPT
     public sealed class NumberedListBlock : Block
     {
         public List<ListItem> Items = new List<ListItem>();
+    }
+
+    public enum TableAlign { Left, Center, Right }
+
+    public sealed class TableBlock : Block
+    {
+        public List<List<InlineRun>> Header = new List<List<InlineRun>>();
+        public List<TableAlign> Alignments = new List<TableAlign>();
+        public List<List<List<InlineRun>>> Rows = new List<List<List<InlineRun>>>();
     }
 
     public sealed class ListItem
@@ -122,9 +131,9 @@ namespace GxPT
                 }
             };
 
-            foreach (string raw in lines)
+            for (int li = 0; li < lines.Length; li++)
             {
-                string line = raw;
+                string line = lines[li];
                 if (line.StartsWith("```"))
                 {
                     if (!inCode)
@@ -177,6 +186,22 @@ namespace GxPT
                     string content = line.Substring(h + 1).TrimEnd();
                     blocks.Add(new HeadingBlock { Type = BlockType.Heading, Level = h, Inlines = ParseInlines(content) });
                     continue;
+                }
+
+                // table? Expect header row with pipes followed by a separator row of dashes/colons
+                if (LooksLikeTableHeader(line) && (li + 1) < lines.Length && LooksLikeTableSeparator(lines[li + 1]))
+                {
+                    flushParagraph();
+                    flushBullets();
+                    flushNumbered();
+                    int consumed;
+                    var table = ParseTable(lines, li, out consumed);
+                    if (table != null)
+                    {
+                        blocks.Add(table);
+                        li += consumed - 1; // consumed includes header+separator+rows; -1 for loop increment
+                        continue;
+                    }
                 }
 
                 // bullet?
@@ -376,6 +401,111 @@ namespace GxPT
             while (i < line.Length && i < 6 && line[i] == '#') i++;
             if (i > 0 && i < line.Length && line[i] == ' ') return i;
             return 0;
+        }
+
+        // ---------- Table parsing (GitHub-style pipe tables) ----------
+        private static bool LooksLikeTableHeader(string line)
+        {
+            if (string.IsNullOrEmpty(line)) return false;
+            // must contain at least one pipe and non-pipe text
+            if (line.IndexOf('|') < 0) return false;
+            // avoid treating code fences or headings as tables
+            if (line.StartsWith("|") || char.IsLetterOrDigit(line.TrimStart()[0]))
+                return true;
+            return false;
+        }
+
+        private static bool LooksLikeTableSeparator(string line)
+        {
+            if (string.IsNullOrEmpty(line)) return false;
+            // a separator looks like: | --- | :---: | ---: |
+            string s = line.Trim();
+            if (!s.Contains("-")) return false;
+            // Check segments between pipes contain only '-', ':' and optional spaces
+            var parts = SplitTableRow(line);
+            if (parts == null || parts.Count == 0) return false;
+            foreach (string p in parts)
+            {
+                string t = p.Trim();
+                if (t.Length == 0) return false;
+                foreach (char c in t) if (c != '-' && c != ':') return false;
+                if (t.IndexOf('-') < 0) return false; // must have at least one dash
+            }
+            return true;
+        }
+
+        private static List<string> SplitTableRow(string line)
+        {
+            // Split by pipes, but allow leading/trailing pipes; no escaping support (simple)
+            string s = line;
+            if (s.StartsWith("|")) s = s.Substring(1);
+            if (s.EndsWith("|")) s = s.Substring(0, s.Length - 1);
+            var cells = new List<string>(s.Split('|'));
+            // Trim one space around cells
+            for (int i = 0; i < cells.Count; i++) cells[i] = cells[i].Trim();
+            return cells;
+        }
+
+        private static TableBlock ParseTable(string[] lines, int startIndex, out int consumed)
+        {
+            consumed = 0;
+            int i = startIndex;
+            if (i + 1 >= lines.Length) return null;
+
+            var headerCells = SplitTableRow(lines[i]);
+            var sepCells = SplitTableRow(lines[i + 1]);
+            if (headerCells == null || sepCells == null) return null;
+            // Alignments derive from separator cells
+            var aligns = new List<TableAlign>();
+            foreach (var cell in sepCells)
+            {
+                string t = cell.Trim();
+                bool left = t.StartsWith(":");
+                bool right = t.EndsWith(":");
+                if (left && right) aligns.Add(TableAlign.Center);
+                else if (right) aligns.Add(TableAlign.Right);
+                else aligns.Add(TableAlign.Left);
+            }
+
+            // Normalize number of columns to separator length
+            int cols = aligns.Count;
+            if (cols == 0) return null;
+
+            var tbl = new TableBlock { Type = BlockType.Table };
+            for (int c = 0; c < cols; c++)
+            {
+                string cell = (c < headerCells.Count) ? headerCells[c] : string.Empty;
+                tbl.Header.Add(ParseInlines(cell));
+                tbl.Alignments.Add(aligns[c]);
+            }
+
+            // Read body rows until a blank line or non-table line
+            i += 2; // skip header and separator
+            while (i < lines.Length)
+            {
+                string l = lines[i];
+                if (l == null || l.Trim().Length == 0) break;
+                // stop on lines that look like other blocks (simple heuristic): heading, bullet, numbered, code fence
+                string tmpBulletText; int tmpBulletIndent;
+                string tmpNumText; int tmpNumIndent;
+                bool isBullet = IsBullet(l, out tmpBulletText, out tmpBulletIndent);
+                bool isNumbered = IsNumberedItem(l, out tmpNumText, out tmpNumIndent);
+                if (HeadingLevel(l) > 0 || isBullet || isNumbered || l.StartsWith("```")) break;
+                if (l.IndexOf('|') < 0) break;
+
+                var rowCells = SplitTableRow(l);
+                var row = new List<List<InlineRun>>();
+                for (int c = 0; c < cols; c++)
+                {
+                    string cell = (c < rowCells.Count) ? rowCells[c] : string.Empty;
+                    row.Add(ParseInlines(cell));
+                }
+                tbl.Rows.Add(row);
+                i++;
+            }
+
+            consumed = Math.Max(2, i - startIndex);
+            return tbl;
         }
     }
 }
