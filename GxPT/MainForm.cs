@@ -1800,15 +1800,15 @@ namespace GxPT
                     "3. **Go to the API Keys section.**\n" +
                     "   - Once logged in, locate the section labeled **API Keys** or **Keys** to manage your keys.\n" +
                     "4. **Create a new key and name it.**\n" +
-                    "   - Click **Create Key**, enter a descriptive name, and optionally set a credit limit. Save the key immediately—**it won’t be visible again** after navigating away.\n";
-                    //"---\n\n"
-                    //"## Summary\n\n" +
-                    //"| Step | Action                                                                                         |\n" +
-                    //"| ---- | ---------------------------------------------------------------------------------------------- |\n" +
-                    //"| 1    | Create an account at [openrouter.ai](https://openrouter.ai)                                    |\n" +
-                    //"| 2    | Optionally, add credits                                                                        |\n" +
-                    //"| 3    | Visit the **API Keys** section                                                                 |\n" +
-                    //"| 4    | Click **Create Key**, name it, optionally set a credit limit, and **copy the key immediately** |";
+                    "   - Click **Create Key**, enter a descriptive name, and optionally set a credit limit. Save the key immediately—**it won’t be visible again** after navigating away.\n" +
+                    "---\n\n" +
+                    "## Summary\n\n" +
+                    "| Step | Action                                                                                         |\n" +
+                    "| ---- | ---------------------------------------------------------------------------------------------- |\n" +
+                    "| 1    | Create an account at [openrouter.ai](https://openrouter.ai)                                    |\n" +
+                    "| 2    | Optionally, add credits                                                                        |\n" +
+                    "| 3    | Visit the **API Keys** section                                                                 |\n" +
+                    "| 4    | Click **Create Key**, name it, optionally set a credit limit, and **copy the key immediately** |";
                 ctx.Transcript.AddMessage(MessageRole.Assistant, assistantMsg1);
                 ctx.Conversation.AddAssistantMessage(assistantMsg1);
 
