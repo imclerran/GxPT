@@ -38,6 +38,8 @@ namespace GxPT
             public Conversation Conversation;
             public bool IsSending;
             public string SelectedModel; // model selected for this tab
+            // If true, do not persist this tab's conversation until the user sends a new message
+            public bool NoSaveUntilUserSend;
         }
 
         private readonly Dictionary<TabPage, ChatTabContext> _tabContexts = new Dictionary<TabPage, ChatTabContext>();
@@ -635,6 +637,8 @@ namespace GxPT
                 ctx.Transcript.AddMessage(MessageRole.User, text);
                 ctx.Conversation.AddUserMessage(text);
                 ctx.Conversation.SelectedModel = ctx.SelectedModel;
+                // If this tab was marked as no-save (e.g., help), flip it now and save
+                if (ctx.NoSaveUntilUserSend) ctx.NoSaveUntilUserSend = false;
                 ConversationStore.Save(ctx.Conversation); // save when a new user message starts/continues a convo
                 Logger.Log("Send", "User message added. HistoryCount=" + ctx.Conversation.History.Count);
                 txtMessage.Clear();
@@ -690,7 +694,9 @@ namespace GxPT
                                 {
                                     ctx.Conversation.AddAssistantMessage(finalText);
                                     ctx.Conversation.SelectedModel = ctx.SelectedModel;
-                                    ConversationStore.Save(ctx.Conversation); // save only after streaming completes
+                                    // Save assistant completion if allowed
+                                    if (!ctx.NoSaveUntilUserSend)
+                                        ConversationStore.Save(ctx.Conversation); // save only after streaming completes
                                     try { Logger.Log("Transcript", "Final assistant message at index=" + assistantIndex + ":\n" + (finalText ?? string.Empty)); }
                                     catch { }
                                     Logger.Log("Send", "Assistant finalized at index=" + assistantIndex + ", chars=" + (finalText != null ? finalText.Length : 0));
@@ -1324,8 +1330,8 @@ namespace GxPT
                 if (ctx != null && ctx.Conversation != null)
                 {
                     ctx.Conversation.SelectedModel = ctx.SelectedModel;
-                    // Optional: persist model change only when messages exist
-                    if (ctx.Conversation.History.Count > 0)
+                    // Optional: persist model change only when messages exist and saving is allowed
+                    if (ctx.Conversation.History.Count > 0 && !ctx.NoSaveUntilUserSend)
                     {
                         ConversationStore.Save(ctx.Conversation);
                         RefreshSidebarList();
@@ -1346,7 +1352,7 @@ namespace GxPT
                 if (ctx != null && ctx.Conversation != null)
                 {
                     ctx.Conversation.SelectedModel = ctx.SelectedModel;
-                    if (ctx.Conversation.History.Count > 0)
+                    if (ctx.Conversation.History.Count > 0 && !ctx.NoSaveUntilUserSend)
                     {
                         ConversationStore.Save(ctx.Conversation);
                         RefreshSidebarList();
@@ -1762,9 +1768,55 @@ namespace GxPT
             catch { }
         }
 
-        private void aPIKeysToolStripMenuItem_Click(object sender, EventArgs e)
+        private void miApiKeysHelp_Click(object sender, EventArgs e)
         {
+            // Open a new tab pre-populated with an unsaved help conversation
+            var ctx = CreateConversationTab();
+            if (ctx == null) return;
 
+            try
+            {
+                // Mark this tab as unsaved until the user sends another message
+                ctx.NoSaveUntilUserSend = true;
+
+                // Give the tab a descriptive title and name to bypass auto-naming
+                ctx.Page.Text = "API Keys Help";
+                if (ctx.Conversation != null)
+                {
+                    ctx.Conversation.Name = "API Keys Help";
+                }
+
+                // Pre-populate messages
+                string userMsg = "How do I get an API key?";
+                ctx.Transcript.AddMessage(MessageRole.User, userMsg);
+                ctx.Conversation.AddUserMessage(userMsg);
+
+                string assistantMsg =
+                    "# How to Get an OpenRouter.ai API Key\n\n" +
+                    "1. **Create an account at [openrouter.ai](https://openrouter.ai).**\n" +
+                    "   - Visit the site and sign up or sign in to access your dashboard.\n" +
+                    "2. **(Optional) Add credits.**\n" +
+                    "   - If needed, go to your account page and purchase credits to enable model usage.\n" +
+                    "3. **Go to the API Keys section.**\n" +
+                    "   - Once logged in, locate the section labeled **API Keys** or **Keys** to manage your keys.\n" +
+                    "4. **Create a new key and name it.**\n" +
+                    "   - Click **Create Key**, enter a descriptive name, and optionally set a credit limit. Save the key immediately—**it won’t be visible again** after navigating away.\n";
+                    //"---\n\n"
+                    //"## Summary\n\n" +
+                    //"| Step | Action                                                                                         |\n" +
+                    //"| ---- | ---------------------------------------------------------------------------------------------- |\n" +
+                    //"| 1    | Create an account at [openrouter.ai](https://openrouter.ai)                                    |\n" +
+                    //"| 2    | Optionally, add credits                                                                        |\n" +
+                    //"| 3    | Visit the **API Keys** section                                                                 |\n" +
+                    //"| 4    | Click **Create Key**, name it, optionally set a credit limit, and **copy the key immediately** |";
+
+                ctx.Transcript.AddMessage(MessageRole.Assistant, assistantMsg);
+                ctx.Conversation.AddAssistantMessage(assistantMsg);
+
+                UpdateWindowTitleFromActiveTab();
+                FocusInputSoon();
+            }
+            catch { }
         }
     }
 }

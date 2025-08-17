@@ -39,6 +39,8 @@
             this.miExit = new System.Windows.Forms.ToolStripMenuItem();
             this.miView = new System.Windows.Forms.ToolStripMenuItem();
             this.miConversationHistory = new System.Windows.Forms.ToolStripMenuItem();
+            this.miHelp = new System.Windows.Forms.ToolStripMenuItem();
+            this.miApiKeysHelp = new System.Windows.Forms.ToolStripMenuItem();
             this.pnlInput = new System.Windows.Forms.Panel();
             this.txtMessage = new System.Windows.Forms.TextBox();
             this.pnlInputRight = new System.Windows.Forms.Panel();
@@ -50,10 +52,8 @@
             this.lblNoApiKey = new System.Windows.Forms.Label();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
-            this.splitContainer1 = new System.Windows.Forms.SplitContainer();
             this.chatTranscript = new GxPT.ChatTranscriptControl();
-            this.miHelp = new System.Windows.Forms.ToolStripMenuItem();
-            this.miApiKeysHelp = new System.Windows.Forms.ToolStripMenuItem();
+            this.splitContainer1 = new System.Windows.Forms.SplitContainer();
             this.msMain.SuspendLayout();
             this.pnlInput.SuspendLayout();
             this.pnlInputRight.SuspendLayout();
@@ -143,6 +143,21 @@
             this.miConversationHistory.Size = new System.Drawing.Size(225, 22);
             this.miConversationHistory.Text = "Conversation &History";
             this.miConversationHistory.Click += new System.EventHandler(this.miConversationHistory_Click);
+            // 
+            // miHelp
+            // 
+            this.miHelp.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.miApiKeysHelp});
+            this.miHelp.Name = "miHelp";
+            this.miHelp.Size = new System.Drawing.Size(40, 20);
+            this.miHelp.Text = "Help";
+            // 
+            // miApiKeysHelp
+            // 
+            this.miApiKeysHelp.Name = "miApiKeysHelp";
+            this.miApiKeysHelp.Size = new System.Drawing.Size(152, 22);
+            this.miApiKeysHelp.Text = "API Keys";
+            this.miApiKeysHelp.Click += new System.EventHandler(this.miApiKeysHelp_Click);
             // 
             // pnlInput
             // 
@@ -274,6 +289,18 @@
             this.tabPage1.Text = "New Conversation";
             this.tabPage1.UseVisualStyleBackColor = true;
             // 
+            // chatTranscript
+            // 
+            this.chatTranscript.AccessibleName = "Chat transcript";
+            this.chatTranscript.BackColor = System.Drawing.SystemColors.ControlLightLight;
+            this.chatTranscript.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.chatTranscript.ForeColor = System.Drawing.SystemColors.WindowText;
+            this.chatTranscript.Location = new System.Drawing.Point(0, 0);
+            this.chatTranscript.Margin = new System.Windows.Forms.Padding(0);
+            this.chatTranscript.Name = "chatTranscript";
+            this.chatTranscript.Size = new System.Drawing.Size(877, 613);
+            this.chatTranscript.TabIndex = 0;
+            // 
             // splitContainer1
             // 
             this.splitContainer1.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -291,33 +318,6 @@
             this.splitContainer1.SplitterDistance = 6;
             this.splitContainer1.SplitterWidth = 1;
             this.splitContainer1.TabIndex = 1;
-            // 
-            // chatTranscript
-            // 
-            this.chatTranscript.AccessibleName = "Chat transcript";
-            this.chatTranscript.BackColor = System.Drawing.SystemColors.ControlLightLight;
-            this.chatTranscript.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.chatTranscript.ForeColor = System.Drawing.SystemColors.WindowText;
-            this.chatTranscript.Location = new System.Drawing.Point(0, 0);
-            this.chatTranscript.Margin = new System.Windows.Forms.Padding(0);
-            this.chatTranscript.Name = "chatTranscript";
-            this.chatTranscript.Size = new System.Drawing.Size(877, 613);
-            this.chatTranscript.TabIndex = 0;
-            // 
-            // miHelp
-            // 
-            this.miHelp.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.miApiKeysHelp});
-            this.miHelp.Name = "miHelp";
-            this.miHelp.Size = new System.Drawing.Size(40, 20);
-            this.miHelp.Text = "Help";
-            // 
-            // miApiKeysHelp
-            // 
-            this.miApiKeysHelp.Name = "miApiKeysHelp";
-            this.miApiKeysHelp.Size = new System.Drawing.Size(152, 22);
-            this.miApiKeysHelp.Text = "API Keys";
-            this.miApiKeysHelp.Click += new System.EventHandler(this.aPIKeysToolStripMenuItem_Click);
             // 
             // MainForm
             // 
