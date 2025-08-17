@@ -106,10 +106,10 @@ namespace GxPT
             catch { }
             try
             {
-                if (this.closeConversationToolStripMenuItem != null)
+                if (this.miCloseConversation != null)
                 {
-                    this.closeConversationToolStripMenuItem.Click -= closeConversationToolStripMenuItem_Click;
-                    this.closeConversationToolStripMenuItem.Click += closeConversationToolStripMenuItem_Click;
+                    this.miCloseConversation.Click -= closeConversationToolStripMenuItem_Click;
+                    this.miCloseConversation.Click += closeConversationToolStripMenuItem_Click;
                 }
             }
             catch { }

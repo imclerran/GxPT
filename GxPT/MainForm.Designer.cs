@@ -34,7 +34,7 @@
             this.miSettings = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripSeparator2 = new System.Windows.Forms.ToolStripSeparator();
             this.miNewConversation = new System.Windows.Forms.ToolStripMenuItem();
-            this.closeConversationToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.miCloseConversation = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.miExit = new System.Windows.Forms.ToolStripMenuItem();
             this.miView = new System.Windows.Forms.ToolStripMenuItem();
@@ -48,23 +48,23 @@
             this.cmbModel = new System.Windows.Forms.ComboBox();
             this.pnlBottom = new System.Windows.Forms.Panel();
             this.pnlApiKeyBanner = new System.Windows.Forms.Panel();
-            this.lnkOpenSettings = new System.Windows.Forms.LinkLabel();
+            this.flowLayoutPanel1 = new System.Windows.Forms.FlowLayoutPanel();
             this.lblNoApiKey = new System.Windows.Forms.Label();
+            this.lnkOpenSettings = new System.Windows.Forms.LinkLabel();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
             this.splitContainer1 = new System.Windows.Forms.SplitContainer();
-            this.flowLayoutPanel1 = new System.Windows.Forms.FlowLayoutPanel();
             this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.msMain.SuspendLayout();
             this.pnlInput.SuspendLayout();
             this.pnlInputRight.SuspendLayout();
             this.pnlBottom.SuspendLayout();
             this.pnlApiKeyBanner.SuspendLayout();
+            this.flowLayoutPanel1.SuspendLayout();
             this.tabControl1.SuspendLayout();
             this.tabPage1.SuspendLayout();
             this.splitContainer1.Panel2.SuspendLayout();
             this.splitContainer1.SuspendLayout();
-            this.flowLayoutPanel1.SuspendLayout();
             this.SuspendLayout();
             // 
             // msMain
@@ -85,7 +85,7 @@
             this.miSettings,
             this.toolStripSeparator2,
             this.miNewConversation,
-            this.closeConversationToolStripMenuItem,
+            this.miCloseConversation,
             this.toolStripSeparator1,
             this.miExit});
             this.miFile.Name = "miFile";
@@ -95,38 +95,41 @@
             // miSettings
             // 
             this.miSettings.Name = "miSettings";
-            this.miSettings.Size = new System.Drawing.Size(212, 22);
+            this.miSettings.ShortcutKeyDisplayString = "Ctrl+,";
+            this.miSettings.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.Oemcomma)));
+            this.miSettings.Size = new System.Drawing.Size(220, 22);
             this.miSettings.Text = "&Settings";
             this.miSettings.Click += new System.EventHandler(this.miSettings_Click);
             // 
             // toolStripSeparator2
             // 
             this.toolStripSeparator2.Name = "toolStripSeparator2";
-            this.toolStripSeparator2.Size = new System.Drawing.Size(209, 6);
+            this.toolStripSeparator2.Size = new System.Drawing.Size(217, 6);
             // 
             // miNewConversation
             // 
             this.miNewConversation.Name = "miNewConversation";
             this.miNewConversation.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.N)));
-            this.miNewConversation.Size = new System.Drawing.Size(212, 22);
+            this.miNewConversation.Size = new System.Drawing.Size(220, 22);
             this.miNewConversation.Text = "&New Conversation";
             this.miNewConversation.Click += new System.EventHandler(this.miNewConversation_Click);
             // 
-            // closeConversationToolStripMenuItem
+            // miCloseConversation
             // 
-            this.closeConversationToolStripMenuItem.Name = "closeConversationToolStripMenuItem";
-            this.closeConversationToolStripMenuItem.Size = new System.Drawing.Size(212, 22);
-            this.closeConversationToolStripMenuItem.Text = "&Close Conversation";
+            this.miCloseConversation.Name = "miCloseConversation";
+            this.miCloseConversation.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.W)));
+            this.miCloseConversation.Size = new System.Drawing.Size(220, 22);
+            this.miCloseConversation.Text = "&Close Conversation";
             // 
             // toolStripSeparator1
             // 
             this.toolStripSeparator1.Name = "toolStripSeparator1";
-            this.toolStripSeparator1.Size = new System.Drawing.Size(209, 6);
+            this.toolStripSeparator1.Size = new System.Drawing.Size(217, 6);
             // 
             // miExit
             // 
             this.miExit.Name = "miExit";
-            this.miExit.Size = new System.Drawing.Size(212, 22);
+            this.miExit.Size = new System.Drawing.Size(220, 22);
             this.miExit.Text = "E&xit";
             this.miExit.Click += new System.EventHandler(this.miExit_Click);
             // 
@@ -157,7 +160,8 @@
             // miApiKeysHelp
             // 
             this.miApiKeysHelp.Name = "miApiKeysHelp";
-            this.miApiKeysHelp.Size = new System.Drawing.Size(128, 22);
+            this.miApiKeysHelp.ShortcutKeys = System.Windows.Forms.Keys.F1;
+            this.miApiKeysHelp.Size = new System.Drawing.Size(147, 22);
             this.miApiKeysHelp.Text = "API Keys";
             this.miApiKeysHelp.Click += new System.EventHandler(this.miApiKeysHelp_Click);
             // 
@@ -250,15 +254,17 @@
             this.pnlApiKeyBanner.Size = new System.Drawing.Size(885, 21);
             this.pnlApiKeyBanner.TabIndex = 1;
             // 
-            // lnkOpenSettings
+            // flowLayoutPanel1
             // 
-            this.lnkOpenSettings.AutoSize = true;
-            this.lnkOpenSettings.Location = new System.Drawing.Point(123, 0);
-            this.lnkOpenSettings.Name = "lnkOpenSettings";
-            this.lnkOpenSettings.Size = new System.Drawing.Size(74, 13);
-            this.lnkOpenSettings.TabIndex = 1;
-            this.lnkOpenSettings.TabStop = true;
-            this.lnkOpenSettings.Text = "Open Settings";
+            this.flowLayoutPanel1.AutoSize = true;
+            this.flowLayoutPanel1.Controls.Add(this.lblNoApiKey);
+            this.flowLayoutPanel1.Controls.Add(this.lnkOpenSettings);
+            this.flowLayoutPanel1.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.flowLayoutPanel1.Location = new System.Drawing.Point(6, 4);
+            this.flowLayoutPanel1.Margin = new System.Windows.Forms.Padding(0);
+            this.flowLayoutPanel1.Name = "flowLayoutPanel1";
+            this.flowLayoutPanel1.Size = new System.Drawing.Size(873, 13);
+            this.flowLayoutPanel1.TabIndex = 2;
             // 
             // lblNoApiKey
             // 
@@ -269,6 +275,16 @@
             this.lblNoApiKey.TabIndex = 0;
             this.lblNoApiKey.Text = "No API key configured";
             this.lblNoApiKey.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
+            // lnkOpenSettings
+            // 
+            this.lnkOpenSettings.AutoSize = true;
+            this.lnkOpenSettings.Location = new System.Drawing.Point(123, 0);
+            this.lnkOpenSettings.Name = "lnkOpenSettings";
+            this.lnkOpenSettings.Size = new System.Drawing.Size(74, 13);
+            this.lnkOpenSettings.TabIndex = 1;
+            this.lnkOpenSettings.TabStop = true;
+            this.lnkOpenSettings.Text = "Open Settings";
             // 
             // tabControl1
             // 
@@ -308,18 +324,6 @@
             this.splitContainer1.SplitterWidth = 1;
             this.splitContainer1.TabIndex = 1;
             // 
-            // flowLayoutPanel1
-            // 
-            this.flowLayoutPanel1.AutoSize = true;
-            this.flowLayoutPanel1.Controls.Add(this.lblNoApiKey);
-            this.flowLayoutPanel1.Controls.Add(this.lnkOpenSettings);
-            this.flowLayoutPanel1.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.flowLayoutPanel1.Location = new System.Drawing.Point(6, 4);
-            this.flowLayoutPanel1.Margin = new System.Windows.Forms.Padding(0);
-            this.flowLayoutPanel1.Name = "flowLayoutPanel1";
-            this.flowLayoutPanel1.Size = new System.Drawing.Size(873, 13);
-            this.flowLayoutPanel1.TabIndex = 2;
-            // 
             // chatTranscript
             // 
             this.chatTranscript.AccessibleName = "Chat transcript";
@@ -353,13 +357,13 @@
             this.pnlBottom.PerformLayout();
             this.pnlApiKeyBanner.ResumeLayout(false);
             this.pnlApiKeyBanner.PerformLayout();
+            this.flowLayoutPanel1.ResumeLayout(false);
+            this.flowLayoutPanel1.PerformLayout();
             this.tabControl1.ResumeLayout(false);
             this.tabPage1.ResumeLayout(false);
             this.splitContainer1.Panel2.ResumeLayout(false);
             this.splitContainer1.Panel2.PerformLayout();
             this.splitContainer1.ResumeLayout(false);
-            this.flowLayoutPanel1.ResumeLayout(false);
-            this.flowLayoutPanel1.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -386,7 +390,7 @@
         private System.Windows.Forms.TabControl tabControl1;
         private System.Windows.Forms.TabPage tabPage1;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator2;
-        private System.Windows.Forms.ToolStripMenuItem closeConversationToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem miCloseConversation;
         private System.Windows.Forms.SplitContainer splitContainer1;
         private System.Windows.Forms.ToolStripMenuItem miView;
         private System.Windows.Forms.ToolStripMenuItem miConversationHistory;
