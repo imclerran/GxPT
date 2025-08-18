@@ -1984,5 +1984,15 @@ namespace GxPT
                 dlg.ShowDialog(this);
             }
         }
+
+        private void miImport_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void miExport_Click(object sender, EventArgs e)
+        {
+
+        }
     }
 }

@@ -41,6 +41,8 @@
             this.miConversationHistory = new System.Windows.Forms.ToolStripMenuItem();
             this.miHelp = new System.Windows.Forms.ToolStripMenuItem();
             this.miApiKeysHelp = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStripSeparator3 = new System.Windows.Forms.ToolStripSeparator();
+            this.miAbout = new System.Windows.Forms.ToolStripMenuItem();
             this.pnlInput = new System.Windows.Forms.Panel();
             this.txtMessage = new System.Windows.Forms.TextBox();
             this.pnlInputRight = new System.Windows.Forms.Panel();
@@ -53,10 +55,11 @@
             this.lnkOpenSettings = new System.Windows.Forms.LinkLabel();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
-            this.splitContainer1 = new System.Windows.Forms.SplitContainer();
-            this.toolStripSeparator3 = new System.Windows.Forms.ToolStripSeparator();
-            this.miAbout = new System.Windows.Forms.ToolStripMenuItem();
             this.chatTranscript = new GxPT.ChatTranscriptControl();
+            this.splitContainer1 = new System.Windows.Forms.SplitContainer();
+            this.toolStripSeparator4 = new System.Windows.Forms.ToolStripSeparator();
+            this.miImport = new System.Windows.Forms.ToolStripMenuItem();
+            this.miExport = new System.Windows.Forms.ToolStripMenuItem();
             this.msMain.SuspendLayout();
             this.pnlInput.SuspendLayout();
             this.pnlInputRight.SuspendLayout();
@@ -88,6 +91,9 @@
             this.toolStripSeparator2,
             this.miNewConversation,
             this.miCloseConversation,
+            this.toolStripSeparator4,
+            this.miImport,
+            this.miExport,
             this.toolStripSeparator1,
             this.miExit});
             this.miFile.Name = "miFile";
@@ -165,9 +171,21 @@
             // 
             this.miApiKeysHelp.Name = "miApiKeysHelp";
             this.miApiKeysHelp.ShortcutKeys = System.Windows.Forms.Keys.F1;
-            this.miApiKeysHelp.Size = new System.Drawing.Size(152, 22);
+            this.miApiKeysHelp.Size = new System.Drawing.Size(147, 22);
             this.miApiKeysHelp.Text = "API &Keys";
             this.miApiKeysHelp.Click += new System.EventHandler(this.miApiKeysHelp_Click);
+            // 
+            // toolStripSeparator3
+            // 
+            this.toolStripSeparator3.Name = "toolStripSeparator3";
+            this.toolStripSeparator3.Size = new System.Drawing.Size(144, 6);
+            // 
+            // miAbout
+            // 
+            this.miAbout.Name = "miAbout";
+            this.miAbout.Size = new System.Drawing.Size(147, 22);
+            this.miAbout.Text = "&About";
+            this.miAbout.Click += new System.EventHandler(this.miAbout_Click);
             // 
             // pnlInput
             // 
@@ -310,6 +328,18 @@
             this.tabPage1.Text = "New Conversation";
             this.tabPage1.UseVisualStyleBackColor = true;
             // 
+            // chatTranscript
+            // 
+            this.chatTranscript.AccessibleName = "Chat transcript";
+            this.chatTranscript.BackColor = System.Drawing.SystemColors.ControlLightLight;
+            this.chatTranscript.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.chatTranscript.ForeColor = System.Drawing.SystemColors.WindowText;
+            this.chatTranscript.Location = new System.Drawing.Point(0, 0);
+            this.chatTranscript.Margin = new System.Windows.Forms.Padding(0);
+            this.chatTranscript.Name = "chatTranscript";
+            this.chatTranscript.Size = new System.Drawing.Size(877, 620);
+            this.chatTranscript.TabIndex = 0;
+            // 
             // splitContainer1
             // 
             this.splitContainer1.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -328,29 +358,24 @@
             this.splitContainer1.SplitterWidth = 1;
             this.splitContainer1.TabIndex = 1;
             // 
-            // toolStripSeparator3
+            // toolStripSeparator4
             // 
-            this.toolStripSeparator3.Name = "toolStripSeparator3";
-            this.toolStripSeparator3.Size = new System.Drawing.Size(149, 6);
+            this.toolStripSeparator4.Name = "toolStripSeparator4";
+            this.toolStripSeparator4.Size = new System.Drawing.Size(217, 6);
             // 
-            // miAbout
+            // miImport
             // 
-            this.miAbout.Name = "miAbout";
-            this.miAbout.Size = new System.Drawing.Size(152, 22);
-            this.miAbout.Text = "&About";
-            this.miAbout.Click += new System.EventHandler(this.miAbout_Click);
+            this.miImport.Name = "miImport";
+            this.miImport.Size = new System.Drawing.Size(220, 22);
+            this.miImport.Text = "&Import";
+            this.miImport.Click += new System.EventHandler(this.miImport_Click);
             // 
-            // chatTranscript
+            // miExport
             // 
-            this.chatTranscript.AccessibleName = "Chat transcript";
-            this.chatTranscript.BackColor = System.Drawing.SystemColors.ControlLightLight;
-            this.chatTranscript.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.chatTranscript.ForeColor = System.Drawing.SystemColors.WindowText;
-            this.chatTranscript.Location = new System.Drawing.Point(0, 0);
-            this.chatTranscript.Margin = new System.Windows.Forms.Padding(0);
-            this.chatTranscript.Name = "chatTranscript";
-            this.chatTranscript.Size = new System.Drawing.Size(877, 620);
-            this.chatTranscript.TabIndex = 0;
+            this.miExport.Name = "miExport";
+            this.miExport.Size = new System.Drawing.Size(220, 22);
+            this.miExport.Text = "&Export";
+            this.miExport.Click += new System.EventHandler(this.miExport_Click);
             // 
             // MainForm
             // 
@@ -415,6 +440,9 @@
         private System.Windows.Forms.FlowLayoutPanel flowLayoutPanel1;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator3;
         private System.Windows.Forms.ToolStripMenuItem miAbout;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator4;
+        private System.Windows.Forms.ToolStripMenuItem miImport;
+        private System.Windows.Forms.ToolStripMenuItem miExport;
 
 
     }
