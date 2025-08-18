@@ -1629,6 +1629,30 @@ namespace GxPT
                 }
             }
             catch { }
+
+            // Also apply matching background/foreground to the input textbox
+            try
+            {
+                string theme = null;
+                try { theme = AppSettings.GetString("theme"); }
+                catch { theme = null; }
+                bool dark = !string.IsNullOrEmpty(theme) && theme.Trim().Equals("dark", StringComparison.OrdinalIgnoreCase);
+                if (this.txtMessage != null)
+                {
+                    if (dark)
+                    {
+                        // Match ChatTranscriptControl dark app background and bubble text color
+                        this.txtMessage.BackColor = Color.FromArgb(0x24, 0x27, 0x3A); // Macchiato Base
+                        this.txtMessage.ForeColor = Color.FromArgb(230, 230, 230);   // light text like bubbles
+                    }
+                    else
+                    {
+                        this.txtMessage.BackColor = SystemColors.Window;
+                        this.txtMessage.ForeColor = SystemColors.WindowText;
+                    }
+                }
+            }
+            catch { }
         }
 
         private void ApplyFontSizeSettingToAllUi()
