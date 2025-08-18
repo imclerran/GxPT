@@ -96,7 +96,7 @@ namespace GxPT
             RegisterHighlighter(new RubyHighlighter());
             RegisterHighlighter(new RustHighlighter());
             RegisterHighlighter(new TypeScriptHighlighter());
-            RegisterHighlighter(new ZigHighlighter());   
+            RegisterHighlighter(new ZigHighlighter());
         }
 
         /// <summary>
@@ -204,7 +204,18 @@ namespace GxPT
                     return Color.FromArgb(0x1E, 0x66, 0xF5); // blue (functions)
                 case TokenType.Normal:
                 default:
-                    return SystemColors.WindowText; // Align with renderer default
+                    // Theme-aware default text color
+                    try
+                    {
+                        string theme = AppSettings.GetString("theme");
+                        if (!string.IsNullOrEmpty(theme) && theme.Trim().Equals("dark", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Light text for dark backgrounds
+                            return Color.FromArgb(230, 230, 230);
+                        }
+                    }
+                    catch { }
+                    return SystemColors.WindowText; // light theme default
             }
         }
 

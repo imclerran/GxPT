@@ -42,7 +42,7 @@ namespace GxPT
             var tokens = SyntaxHighlighter.Highlight(language, code);
             if (tokens == null || tokens.Count == 0)
             {
-                segments.Add(new ColoredSegment(code, SystemColors.WindowText, monoFont, 0));
+                segments.Add(new ColoredSegment(code, SyntaxHighlighter.GetTokenColor(TokenType.Normal), monoFont, 0));
                 return segments;
             }
 
@@ -56,7 +56,7 @@ namespace GxPT
                 if (token.StartIndex > lastEnd)
                 {
                     string gapText = code.Substring(lastEnd, token.StartIndex - lastEnd);
-                    allSegments.Add(new ColoredSegment(gapText, SystemColors.WindowText, monoFont, lastEnd));
+                    allSegments.Add(new ColoredSegment(gapText, SyntaxHighlighter.GetTokenColor(TokenType.Normal), monoFont, lastEnd));
                 }
 
                 // Add the colored token
@@ -70,7 +70,7 @@ namespace GxPT
             if (lastEnd < code.Length)
             {
                 string remainingText = code.Substring(lastEnd);
-                allSegments.Add(new ColoredSegment(remainingText, SystemColors.WindowText, monoFont, lastEnd));
+                allSegments.Add(new ColoredSegment(remainingText, SyntaxHighlighter.GetTokenColor(TokenType.Normal), monoFont, lastEnd));
             }
 
             return allSegments;

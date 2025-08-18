@@ -54,20 +54,30 @@ namespace GxPT
         private const int CodeCopyButtonHeight = 14;   // header area for copy button
         private const int CodeCopyButtonPad = 4;       // padding around copy text
 
-        // Colors (XP-friendly)
-        private static readonly Color UserBack = Color.FromArgb(225, 240, 255);
-        private static readonly Color UserBorder = Color.FromArgb(160, 190, 220);
+        // Colors (theme-aware); default to light
+        private Color _clrAppBack = SystemColors.Window;
+        private Color _clrAppText = SystemColors.WindowText;
 
-        private static readonly Color AsstBack = Color.FromArgb(235, 235, 235);
-        private static readonly Color AsstBorder = Color.FromArgb(200, 200, 200);
+        private Color _clrUserBack = Color.FromArgb(225, 240, 255);
+        private Color _clrUserBorder = Color.FromArgb(160, 190, 220);
 
-        private static readonly Color SysBack = Color.FromArgb(255, 250, 220);
-        private static readonly Color SysBorder = Color.FromArgb(210, 200, 150);
+        private Color _clrAsstBack = Color.FromArgb(235, 235, 235);
+        private Color _clrAsstBorder = Color.FromArgb(200, 200, 200);
 
-        private static readonly Color CodeBlockBack = Color.FromArgb(245, 245, 245);
-        private static readonly Color CodeBlockBorder = Color.FromArgb(210, 210, 210);
-        private static readonly Color InlineCodeBack = Color.FromArgb(240, 240, 240);
-        private static readonly Color InlineCodeBorder = Color.FromArgb(200, 200, 200);
+        private Color _clrSysBack = Color.FromArgb(255, 250, 220);
+        private Color _clrSysBorder = Color.FromArgb(210, 200, 150);
+
+        private Color _clrCodeBack = Color.FromArgb(245, 245, 245);
+        private Color _clrCodeBorder = Color.FromArgb(210, 210, 210);
+        private Color _clrInlineCodeBack = Color.FromArgb(240, 240, 240);
+        private Color _clrInlineCodeBorder = Color.FromArgb(200, 200, 200);
+        private Color _clrLink = Color.FromArgb(0, 102, 204);
+        private Color _clrCopyHover = Color.FromArgb(230, 230, 230);
+        private Color _clrCopyPressed = Color.FromArgb(210, 210, 210);
+        private Color _clrScrollTrack = Color.FromArgb(235, 235, 235);
+        private Color _clrScrollThumb = Color.FromArgb(200, 200, 200);
+        private Color _clrScrollTrackBorder = Color.FromArgb(210, 210, 210);
+        private Color _clrScrollThumbBorder = Color.FromArgb(160, 160, 160);
 
         // ---------- Fonts ----------
         private Font _baseFont;         // default UI font
@@ -126,8 +136,7 @@ namespace GxPT
                      ControlStyles.ResizeRedraw |
                      ControlStyles.UserPaint, true);
 
-            BackColor = SystemColors.Window;
-            ForeColor = SystemColors.WindowText;
+            ApplyThemeFromSettings();
 
             _vbar = new VScrollBar();
             _vbar.Dock = DockStyle.Right;
@@ -145,6 +154,74 @@ namespace GxPT
 
             this.AccessibleName = "Chat transcript";
             this.TabStop = true;
+        }
+
+        public void RefreshTheme()
+        {
+            ApplyThemeFromSettings();
+            Reflow();
+            Invalidate();
+        }
+
+        private void ApplyThemeFromSettings()
+        {
+            // Read theme from AppSettings; fallback to light
+            string theme = null;
+            try { theme = AppSettings.GetString("theme"); }
+            catch { theme = null; }
+            bool dark = !string.IsNullOrEmpty(theme) && theme.Trim().Equals("dark", StringComparison.OrdinalIgnoreCase);
+
+            if (dark)
+            {
+                // App background and text
+                _clrAppBack = Color.FromArgb(32, 33, 36); // dark grey
+                _clrAppText = Color.FromArgb(230, 230, 230); // light text
+                // Bubbles
+                _clrUserBack = Color.FromArgb(148, 60, 12); // reddish orange
+                _clrUserBorder = Color.FromArgb(116, 46, 10);
+                _clrAsstBack = Color.FromArgb(48, 49, 52);   // darker grey
+                _clrAsstBorder = Color.FromArgb(70, 72, 75);
+                _clrSysBack = Color.FromArgb(64, 60, 40);    // muted warm
+                _clrSysBorder = Color.FromArgb(90, 85, 60);
+                // Code blocks
+                _clrCodeBack = Color.FromArgb(28, 29, 31);
+                _clrCodeBorder = Color.FromArgb(70, 72, 75);
+                _clrInlineCodeBack = Color.FromArgb(45, 46, 49);
+                _clrInlineCodeBorder = Color.FromArgb(70, 72, 75);
+                _clrLink = Color.FromArgb(120, 170, 255);
+                _clrCopyHover = Color.FromArgb(60, 62, 66);
+                _clrCopyPressed = Color.FromArgb(52, 54, 58);
+                _clrScrollTrack = Color.FromArgb(45, 46, 49);
+                _clrScrollThumb = Color.FromArgb(90, 92, 96);
+                _clrScrollTrackBorder = Color.FromArgb(70, 72, 75);
+                _clrScrollThumbBorder = Color.FromArgb(110, 112, 116);
+            }
+            else
+            {
+                _clrAppBack = SystemColors.Window;
+                _clrAppText = SystemColors.WindowText;
+                _clrUserBack = Color.FromArgb(225, 240, 255);
+                _clrUserBorder = Color.FromArgb(160, 190, 220);
+                _clrAsstBack = Color.FromArgb(235, 235, 235);
+                _clrAsstBorder = Color.FromArgb(200, 200, 200);
+                _clrSysBack = Color.FromArgb(255, 250, 220);
+                _clrSysBorder = Color.FromArgb(210, 200, 150);
+                _clrCodeBack = Color.FromArgb(245, 245, 245);
+                _clrCodeBorder = Color.FromArgb(210, 210, 210);
+                _clrInlineCodeBack = Color.FromArgb(240, 240, 240);
+                _clrInlineCodeBorder = Color.FromArgb(200, 200, 200);
+                _clrLink = Color.FromArgb(0, 102, 204);
+                _clrCopyHover = Color.FromArgb(230, 230, 230);
+                _clrCopyPressed = Color.FromArgb(210, 210, 210);
+                _clrScrollTrack = Color.FromArgb(235, 235, 235);
+                _clrScrollThumb = Color.FromArgb(200, 200, 200);
+                _clrScrollTrackBorder = Color.FromArgb(210, 210, 210);
+                _clrScrollThumbBorder = Color.FromArgb(160, 160, 160);
+            }
+
+            BackColor = _clrAppBack;
+            ForeColor = _clrAppText;
+            Invalidate();
         }
 
         private void BuildFonts()
@@ -721,9 +798,9 @@ namespace GxPT
             Rectangle r = it.Bounds;
 
             Color back, border;
-            if (it.Role == MessageRole.User) { back = UserBack; border = UserBorder; }
-            else if (it.Role == MessageRole.Assistant) { back = AsstBack; border = AsstBorder; }
-            else { back = SysBack; border = SysBorder; }
+            if (it.Role == MessageRole.User) { back = _clrUserBack; border = _clrUserBorder; }
+            else if (it.Role == MessageRole.Assistant) { back = _clrAsstBack; border = _clrAsstBorder; }
+            else { back = _clrSysBack; border = _clrSysBorder; }
 
             using (var path = RoundedRect(r, BubbleRadius))
             using (var b = new SolidBrush(back))
@@ -837,8 +914,8 @@ namespace GxPT
                     Rectangle box = new Rectangle(x0, y, boxW, boxH);
 
                     // Draw code block background and border
-                    using (var sb = new SolidBrush(CodeBlockBack))
-                    using (var pen = new Pen(CodeBlockBorder))
+                    using (var sb = new SolidBrush(_clrCodeBack))
+                    using (var pen = new Pen(_clrCodeBorder))
                     {
                         g.FillRectangle(sb, box);
                         g.DrawRectangle(pen, box);
@@ -861,16 +938,15 @@ namespace GxPT
                     if (hoverCopy || (owner == _copyPressedItem && codeIndex == _copyPressedCodeIndex))
                     {
                         bool pressed = (owner == _copyPressedItem && codeIndex == _copyPressedCodeIndex);
-                        int shade = pressed ? 210 : 230;
-                        using (var sb = new SolidBrush(Color.FromArgb(shade, shade, shade)))
-                        using (var pen = new Pen(CodeBlockBorder))
+                        using (var sb = new SolidBrush(pressed ? _clrCopyPressed : _clrCopyHover))
+                        using (var pen = new Pen(_clrCodeBorder))
                         {
                             g.FillRectangle(sb, copyRect);
                             g.DrawRectangle(pen, copyRect);
                         }
                     }
                     // Draw copy text
-                    using (var brush = new SolidBrush(Color.FromArgb(0, 102, 204)))
+                    using (var brush = new SolidBrush(_clrLink))
                     using (var fmt = StringFormat.GenericTypographic)
                     {
                         fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
@@ -879,7 +955,7 @@ namespace GxPT
                     }
 
                     // Header separator line
-                    using (var pen = new Pen(CodeBlockBorder))
+                    using (var pen = new Pen(_clrCodeBorder))
                     {
                         int headerBottom = box.Top + CodeCopyButtonHeight + CodeBlockPadding;
                         g.DrawLine(pen, box.Left + CodeBlockPadding, headerBottom, box.Right - CodeBlockPadding, headerBottom);
@@ -906,9 +982,9 @@ namespace GxPT
                     {
                         Rectangle track = new Rectangle(textRect.X, textRect.Bottom + 2, textRect.Width, CodeHScrollHeight - 4);
                         bool hoverScroll = (_hoverScrollItem == owner && _hoverScrollCodeIndex == codeIndex);
-                        Color trackBorder = hoverScroll ? Color.FromArgb(170, 170, 170) : CodeBlockBorder;
-                        Color thumbBorder = hoverScroll ? Color.FromArgb(120, 120, 120) : Color.FromArgb(160, 160, 160);
-                        using (var trackBrush = new SolidBrush(Color.FromArgb(235, 235, 235)))
+                        Color trackBorder = hoverScroll ? _clrScrollThumbBorder : _clrScrollTrackBorder;
+                        Color thumbBorder = hoverScroll ? _clrScrollThumbBorder : _clrScrollThumbBorder;
+                        using (var trackBrush = new SolidBrush(_clrScrollTrack))
                         using (var trackPen = new Pen(trackBorder))
                         {
                             g.FillRectangle(trackBrush, track);
@@ -919,7 +995,7 @@ namespace GxPT
                         int trackRange = Math.Max(1, track.Width - thumbW);
                         int thumbX = track.X + (maxScroll > 0 ? (int)Math.Round((double)scrollX / maxScroll * trackRange) : 0);
                         Rectangle thumb = new Rectangle(thumbX, track.Y, thumbW, track.Height);
-                        using (var thumbBrush = new SolidBrush(Color.FromArgb(200, 200, 200)))
+                        using (var thumbBrush = new SolidBrush(_clrScrollThumb))
                         using (var thumbPen = new Pen(thumbBorder))
                         {
                             g.FillRectangle(thumbBrush, thumb);
@@ -989,8 +1065,8 @@ namespace GxPT
                         Region prevClip = g.Clip;
                         g.SetClip(tableViewport);
 
-                        using (var pen = new Pen(CodeBlockBorder))
-                        using (var headerBrush = new SolidBrush(Color.FromArgb(245, 245, 245)))
+                        using (var pen = new Pen(_clrCodeBorder))
+                        using (var headerBrush = new SolidBrush(_clrCodeBack))
                         using (var cellBrush = new SolidBrush(BackColor))
                         {
                             int drawX = x0 - scrollX;
@@ -1040,9 +1116,9 @@ namespace GxPT
                         {
                             Rectangle track = new Rectangle(x0, y + tableH + 2, viewW, CodeHScrollHeight - 4);
                             bool hoverScroll = (_hoverScrollItem == owner && _hoverScrollIsTable && _hoverScrollTableIndex == tableIndex);
-                            Color trackBorder = hoverScroll ? Color.FromArgb(170, 170, 170) : CodeBlockBorder;
-                            Color thumbBorder = hoverScroll ? Color.FromArgb(120, 120, 120) : Color.FromArgb(160, 160, 160);
-                            using (var trackBrush = new SolidBrush(Color.FromArgb(235, 235, 235)))
+                            Color trackBorder = hoverScroll ? _clrScrollThumbBorder : _clrScrollTrackBorder;
+                            Color thumbBorder = hoverScroll ? _clrScrollThumbBorder : _clrScrollThumbBorder;
+                            using (var trackBrush = new SolidBrush(_clrScrollTrack))
                             using (var trackPen = new Pen(trackBorder))
                             {
                                 g.FillRectangle(trackBrush, track);
@@ -1052,7 +1128,7 @@ namespace GxPT
                             int trackRange = Math.Max(1, track.Width - thumbW);
                             int thumbX = track.X + (maxScroll > 0 ? (int)Math.Round((double)scrollX / maxScroll * trackRange) : 0);
                             Rectangle thumb = new Rectangle(thumbX, track.Y, thumbW, track.Height);
-                            using (var thumbBrush = new SolidBrush(Color.FromArgb(200, 200, 200)))
+                            using (var thumbBrush = new SolidBrush(_clrScrollThumb))
                             using (var thumbPen = new Pen(thumbBorder))
                             {
                                 g.FillRectangle(thumbBrush, thumb);
@@ -1127,7 +1203,7 @@ namespace GxPT
 
                 if (seg.IsLink)
                 {
-                    using (var brush = new SolidBrush(Color.FromArgb(0, 102, 204))) // link blue
+                    using (var brush = new SolidBrush(_clrLink)) // link color per theme
                     {
                         // Draw text
                         using (var fmt = StringFormat.GenericTypographic)
@@ -1212,8 +1288,8 @@ namespace GxPT
                         endX - startX + 2 * InlineCodePaddingX,
                         seg.Font.Height + 2 * InlineCodePaddingY);
 
-                    using (var sb = new SolidBrush(InlineCodeBack))
-                    using (var pen = new Pen(InlineCodeBorder))
+                    using (var sb = new SolidBrush(_clrInlineCodeBack))
+                    using (var pen = new Pen(_clrInlineCodeBorder))
                     {
                         g.FillRectangle(sb, bg);
                         g.DrawRectangle(pen, bg);

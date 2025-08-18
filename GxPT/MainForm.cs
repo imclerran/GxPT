@@ -250,6 +250,9 @@ namespace GxPT
             PopulateModelsFromSettings();
             UpdateApiKeyBanner();
             ApplyFontSizeSettingToAllUi();
+            // Apply theme across existing transcripts and primary UI
+            try { ApplyThemeToAllTranscripts(); }
+            catch { }
         }
 
         // Build a context for the existing designer tab (tabPage1 + chatTranscript)
@@ -300,6 +303,9 @@ namespace GxPT
                 // Ensure combo reflects the initial tab's stored model
                 SyncComboModelFromActiveTab();
                 RefreshSidebarList();
+                // Ensure initial transcript theme is applied on launch
+                try { if (ctx.Transcript != null) ctx.Transcript.RefreshTheme(); }
+                catch { }
             }
             catch { }
         }
@@ -596,6 +602,9 @@ namespace GxPT
                 // Re-init client in case API key changed
                 InitializeClient();
                 UpdateApiKeyBanner();
+                // Theme may have changed; re-apply to all open transcripts
+                try { ApplyThemeToAllTranscripts(); }
+                catch { }
             }
         }
 
@@ -873,6 +882,8 @@ namespace GxPT
                     InitializeClient();
                 }
                 UpdateApiKeyBanner();
+                try { ApplyThemeToAllTranscripts(); }
+                catch { }
             }
         }
 
@@ -1576,6 +1587,8 @@ namespace GxPT
             {
                 ctx.Transcript.ClearMessages();
                 ApplyFontSizeSetting(ctx.Transcript);
+                try { ctx.Transcript.RefreshTheme(); }
+                catch { }
                 foreach (var m in convo.History)
                 {
                     if (string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase))
@@ -1597,6 +1610,25 @@ namespace GxPT
 
             // If we reused a blank tab or just loaded into a newly created tab, focus input
             FocusInputSoon();
+        }
+
+        // Apply theme to all open transcripts, including the designer-created one
+        private void ApplyThemeToAllTranscripts()
+        {
+            try
+            {
+                if (this.chatTranscript != null) this.chatTranscript.RefreshTheme();
+            }
+            catch { }
+            try
+            {
+                foreach (var kv in _tabContexts)
+                {
+                    try { if (kv.Value.Transcript != null) kv.Value.Transcript.RefreshTheme(); }
+                    catch { }
+                }
+            }
+            catch { }
         }
 
         private void ApplyFontSizeSettingToAllUi()
