@@ -176,46 +176,72 @@ namespace GxPT
         }
 
         /// <summary>
-        /// Gets the color for a specific token type
+        /// Gets the color for a specific token type using the default (light) palette.
+        /// This is used by non-chat contexts like the Settings JSON editor.
         /// </summary>
-        /// <param name="tokenType">The type of token</param>
-        /// <returns>The color to use for rendering this token type</returns>
         public static Color GetTokenColor(TokenType tokenType)
         {
-            switch (tokenType)
+            return GetTokenColorForTheme(tokenType, false);
+        }
+
+        /// <summary>
+        /// Gets the color for a specific token type for a chosen theme.
+        /// When dark=true, uses Catppuccin Macchiato; otherwise Catppuccin Latte.
+        /// </summary>
+        public static Color GetTokenColorForTheme(TokenType tokenType, bool dark)
+        {
+            if (dark)
             {
-                // Catppuccin Latte palette mapping
-                // Reference: https://github.com/catppuccin/catppuccin (Latte)
-                case TokenType.Keyword:
-                    return Color.FromArgb(0x88, 0x39, 0xEF); // mauve
-                case TokenType.String:
-                    return Color.FromArgb(0x40, 0xA0, 0x2B); // green
-                case TokenType.Comment:
-                    return Color.FromArgb(0x8C, 0x8F, 0xA1); // overlay1 (subtle)
-                case TokenType.Number:
-                    return Color.FromArgb(0xFE, 0x64, 0x0B); // peach
-                case TokenType.Operator:
-                    return Color.FromArgb(0xEa, 0x76, 0xCB); // pink
-                case TokenType.Punctuation:
-                    return Color.FromArgb(0x7C, 0x7F, 0x93); // overlay2
-                case TokenType.Type:
-                    return Color.FromArgb(0x20, 0x9F, 0xB5); // sapphire
-                case TokenType.Method:
-                    return Color.FromArgb(0x1E, 0x66, 0xF5); // blue (functions)
-                case TokenType.Normal:
-                default:
-                    // Theme-aware default text color
-                    try
-                    {
-                        string theme = AppSettings.GetString("theme");
-                        if (!string.IsNullOrEmpty(theme) && theme.Trim().Equals("dark", StringComparison.OrdinalIgnoreCase))
-                        {
-                            // Light text for dark backgrounds
-                            return Color.FromArgb(230, 230, 230);
-                        }
-                    }
-                    catch { }
-                    return SystemColors.WindowText; // light theme default
+                // Catppuccin Mocha palette mapping
+                // https://github.com/catppuccin/catppuccin
+                switch (tokenType)
+                {
+                    case TokenType.Keyword:
+                        return ColorTranslator.FromHtml("#cba6f7"); // Mauve
+                    case TokenType.String:
+                        return ColorTranslator.FromHtml("#a6e3a1"); // Green
+                    case TokenType.Comment:
+                        return ColorTranslator.FromHtml("#7f849c"); // Overlay 1
+                    case TokenType.Number:
+                        return ColorTranslator.FromHtml("#fab387"); // Peach
+                    case TokenType.Operator:
+                        return ColorTranslator.FromHtml("#f5c2e7"); // Pink
+                    case TokenType.Punctuation:
+                        return ColorTranslator.FromHtml("#9399b2"); // Overlay 2
+                    case TokenType.Type:
+                        return ColorTranslator.FromHtml("#74c7ec"); // Sapphire
+                    case TokenType.Method:
+                        return ColorTranslator.FromHtml("#89b4fa"); // Blue
+                    case TokenType.Normal:
+                    default:
+                        return ColorTranslator.FromHtml("#cdd6f4"); // Text
+                }
+            }
+            else
+            {
+                // Catppuccin Latte palette mapping (light)
+                switch (tokenType)
+                {
+                    case TokenType.Keyword:
+                        return Color.FromArgb(0x88, 0x39, 0xEF); // mauve
+                    case TokenType.String:
+                        return Color.FromArgb(0x40, 0xA0, 0x2B); // green
+                    case TokenType.Comment:
+                        return Color.FromArgb(0x8C, 0x8F, 0xA1); // overlay1 (subtle)
+                    case TokenType.Number:
+                        return Color.FromArgb(0xFE, 0x64, 0x0B); // peach
+                    case TokenType.Operator:
+                        return Color.FromArgb(0xEa, 0x76, 0xCB); // pink
+                    case TokenType.Punctuation:
+                        return Color.FromArgb(0x7C, 0x7F, 0x93); // overlay2
+                    case TokenType.Type:
+                        return Color.FromArgb(0x20, 0x9F, 0xB5); // sapphire
+                    case TokenType.Method:
+                        return Color.FromArgb(0x1E, 0x66, 0xF5); // blue (functions)
+                    case TokenType.Normal:
+                    default:
+                        return SystemColors.WindowText; // Align with renderer/default
+                }
             }
         }
 

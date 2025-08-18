@@ -34,6 +34,11 @@ namespace GxPT
         // ---------- Segment generation ----------
         public static List<ColoredSegment> GetColoredSegments(string code, string language, Font monoFont)
         {
+            return GetColoredSegments(code, language, monoFont, false);
+        }
+
+        public static List<ColoredSegment> GetColoredSegments(string code, string language, Font monoFont, bool dark)
+        {
             var segments = new List<ColoredSegment>();
 
             if (string.IsNullOrEmpty(code))
@@ -42,7 +47,7 @@ namespace GxPT
             var tokens = SyntaxHighlighter.Highlight(language, code);
             if (tokens == null || tokens.Count == 0)
             {
-                segments.Add(new ColoredSegment(code, SyntaxHighlighter.GetTokenColor(TokenType.Normal), monoFont, 0));
+                segments.Add(new ColoredSegment(code, SyntaxHighlighter.GetTokenColorForTheme(TokenType.Normal, dark), monoFont, 0));
                 return segments;
             }
 
@@ -56,11 +61,11 @@ namespace GxPT
                 if (token.StartIndex > lastEnd)
                 {
                     string gapText = code.Substring(lastEnd, token.StartIndex - lastEnd);
-                    allSegments.Add(new ColoredSegment(gapText, SyntaxHighlighter.GetTokenColor(TokenType.Normal), monoFont, lastEnd));
+                    allSegments.Add(new ColoredSegment(gapText, SyntaxHighlighter.GetTokenColorForTheme(TokenType.Normal, dark), monoFont, lastEnd));
                 }
 
                 // Add the colored token
-                Color tokenColor = SyntaxHighlighter.GetTokenColor(token.Type);
+                Color tokenColor = SyntaxHighlighter.GetTokenColorForTheme(token.Type, dark);
                 allSegments.Add(new ColoredSegment(token.Text, tokenColor, monoFont, token.StartIndex));
 
                 lastEnd = token.StartIndex + token.Length;
@@ -70,7 +75,7 @@ namespace GxPT
             if (lastEnd < code.Length)
             {
                 string remainingText = code.Substring(lastEnd);
-                allSegments.Add(new ColoredSegment(remainingText, SyntaxHighlighter.GetTokenColor(TokenType.Normal), monoFont, lastEnd));
+                allSegments.Add(new ColoredSegment(remainingText, SyntaxHighlighter.GetTokenColorForTheme(TokenType.Normal, dark), monoFont, lastEnd));
             }
 
             return allSegments;

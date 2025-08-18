@@ -78,6 +78,7 @@ namespace GxPT
         private Color _clrScrollThumb = Color.FromArgb(200, 200, 200);
         private Color _clrScrollTrackBorder = Color.FromArgb(210, 210, 210);
         private Color _clrScrollThumbBorder = Color.FromArgb(160, 160, 160);
+        private bool _isDarkTheme;
 
         // ---------- Fonts ----------
         private Font _baseFont;         // default UI font
@@ -170,11 +171,12 @@ namespace GxPT
             try { theme = AppSettings.GetString("theme"); }
             catch { theme = null; }
             bool dark = !string.IsNullOrEmpty(theme) && theme.Trim().Equals("dark", StringComparison.OrdinalIgnoreCase);
+            _isDarkTheme = dark;
 
             if (dark)
             {
                 // App background and text
-                _clrAppBack = Color.FromArgb(32, 33, 36); // dark grey
+                _clrAppBack = Color.FromArgb(0x24, 0x27, 0x3A); // Macchiato Base
                 _clrAppText = Color.FromArgb(230, 230, 230); // light text
                 // Bubbles
                 _clrUserBack = Color.FromArgb(148, 60, 12); // reddish orange
@@ -532,7 +534,7 @@ namespace GxPT
                         // Measure colored segments without wrapping to know full content width
                         using (Graphics g = CreateGraphics())
                         {
-                            var colored = SyntaxHighlightingRenderer.GetColoredSegments(c.Text, c.Language, _monoFont);
+                            var colored = SyntaxHighlightingRenderer.GetColoredSegments(c.Text, c.Language, _monoFont, _isDarkTheme);
                             Size content = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, colored);
                             int viewportW = Math.Max(0, maxWidth - 2 * CodeBlockPadding);
                             bool needH = content.Width > viewportW;
@@ -904,7 +906,7 @@ namespace GxPT
                 {
                     var c = (CodeBlock)blk;
                     // Colored segments and content size without wrapping
-                    var coloredSegments = SyntaxHighlightingRenderer.GetColoredSegments(c.Text, c.Language, _monoFont);
+                    var coloredSegments = SyntaxHighlightingRenderer.GetColoredSegments(c.Text, c.Language, _monoFont, _isDarkTheme);
                     Size contentNoWrap = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, coloredSegments);
                     int viewportW = Math.Max(0, maxWidth - 2 * CodeBlockPadding);
                     bool needH = contentNoWrap.Width > viewportW;
@@ -1598,7 +1600,7 @@ namespace GxPT
                         var cb = (CodeBlock)blk;
                         using (Graphics g = CreateGraphics())
                         {
-                            var colored = SyntaxHighlightingRenderer.GetColoredSegments(cb.Text, cb.Language, _monoFont);
+                            var colored = SyntaxHighlightingRenderer.GetColoredSegments(cb.Text, cb.Language, _monoFont, _isDarkTheme);
                             Size contentNoWrap = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, colored);
                             int viewportW = Math.Max(0, contentW - 2 * CodeBlockPadding);
                             bool needH = contentNoWrap.Width > viewportW;
@@ -1863,7 +1865,7 @@ namespace GxPT
                         else if (blk.Type == BlockType.CodeBlock)
                         {
                             var cb = (CodeBlock)blk;
-                            var colored = SyntaxHighlightingRenderer.GetColoredSegments(cb.Text, cb.Language, _monoFont);
+                            var colored = SyntaxHighlightingRenderer.GetColoredSegments(cb.Text, cb.Language, _monoFont, _isDarkTheme);
                             Size content = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, colored);
                             int viewportW = Math.Max(0, contentW - 2 * CodeBlockPadding);
                             bool needH = content.Width > viewportW;
