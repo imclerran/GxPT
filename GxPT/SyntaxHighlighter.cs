@@ -223,21 +223,21 @@ namespace GxPT
                 switch (tokenType)
                 {
                     case TokenType.Keyword:
-                        return Color.FromArgb(0x88, 0x39, 0xEF); // mauve
+                        return ColorTranslator.FromHtml("#8839ef"); // mauve
                     case TokenType.String:
-                        return Color.FromArgb(0x40, 0xA0, 0x2B); // green
+                        return ColorTranslator.FromHtml("#40a02b"); // green
                     case TokenType.Comment:
-                        return Color.FromArgb(0x8C, 0x8F, 0xA1); // overlay1 (subtle)
+                        return ColorTranslator.FromHtml("#8c8fa1"); // overlay 1
                     case TokenType.Number:
-                        return Color.FromArgb(0xFE, 0x64, 0x0B); // peach
+                        return ColorTranslator.FromHtml("#fe640b");  // peach
                     case TokenType.Operator:
-                        return Color.FromArgb(0xEa, 0x76, 0xCB); // pink
+                        return ColorTranslator.FromHtml("#ea76cb"); // pink
                     case TokenType.Punctuation:
-                        return Color.FromArgb(0x7C, 0x7F, 0x93); // overlay2
+                        return ColorTranslator.FromHtml("#7c7f93"); // overlay 2
                     case TokenType.Type:
-                        return Color.FromArgb(0x20, 0x9F, 0xB5); // sapphire
+                        return ColorTranslator.FromHtml("#209fb5"); // sapphire
                     case TokenType.Method:
-                        return Color.FromArgb(0x1E, 0x66, 0xF5); // blue (functions)
+                        return ColorTranslator.FromHtml("#1e66f5"); // blue
                     case TokenType.Normal:
                     default:
                         return SystemColors.WindowText; // Align with renderer/default
