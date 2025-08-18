@@ -54,6 +54,8 @@
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
             this.splitContainer1 = new System.Windows.Forms.SplitContainer();
+            this.toolStripSeparator3 = new System.Windows.Forms.ToolStripSeparator();
+            this.miAbout = new System.Windows.Forms.ToolStripMenuItem();
             this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.msMain.SuspendLayout();
             this.pnlInput.SuspendLayout();
@@ -152,7 +154,9 @@
             // miHelp
             // 
             this.miHelp.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.miApiKeysHelp});
+            this.miApiKeysHelp,
+            this.toolStripSeparator3,
+            this.miAbout});
             this.miHelp.Name = "miHelp";
             this.miHelp.Size = new System.Drawing.Size(40, 20);
             this.miHelp.Text = "Help";
@@ -161,8 +165,8 @@
             // 
             this.miApiKeysHelp.Name = "miApiKeysHelp";
             this.miApiKeysHelp.ShortcutKeys = System.Windows.Forms.Keys.F1;
-            this.miApiKeysHelp.Size = new System.Drawing.Size(147, 22);
-            this.miApiKeysHelp.Text = "API Keys";
+            this.miApiKeysHelp.Size = new System.Drawing.Size(152, 22);
+            this.miApiKeysHelp.Text = "API &Keys";
             this.miApiKeysHelp.Click += new System.EventHandler(this.miApiKeysHelp_Click);
             // 
             // pnlInput
@@ -324,6 +328,18 @@
             this.splitContainer1.SplitterWidth = 1;
             this.splitContainer1.TabIndex = 1;
             // 
+            // toolStripSeparator3
+            // 
+            this.toolStripSeparator3.Name = "toolStripSeparator3";
+            this.toolStripSeparator3.Size = new System.Drawing.Size(149, 6);
+            // 
+            // miAbout
+            // 
+            this.miAbout.Name = "miAbout";
+            this.miAbout.Size = new System.Drawing.Size(152, 22);
+            this.miAbout.Text = "&About";
+            this.miAbout.Click += new System.EventHandler(this.miAbout_Click);
+            // 
             // chatTranscript
             // 
             this.chatTranscript.AccessibleName = "Chat transcript";
@@ -397,6 +413,8 @@
         private System.Windows.Forms.ToolStripMenuItem miHelp;
         private System.Windows.Forms.ToolStripMenuItem miApiKeysHelp;
         private System.Windows.Forms.FlowLayoutPanel flowLayoutPanel1;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator3;
+        private System.Windows.Forms.ToolStripMenuItem miAbout;
 
 
     }

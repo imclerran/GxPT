@@ -1920,5 +1920,14 @@ namespace GxPT
             }
             catch { }
         }
+
+        private void miAbout_Click(object sender, EventArgs e)
+        {
+            using (var dlg = new AboutForm())
+            {
+                dlg.StartPosition = FormStartPosition.CenterParent;
+                dlg.ShowDialog(this);
+            }
+        }
     }
 }
