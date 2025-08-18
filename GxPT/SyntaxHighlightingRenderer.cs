@@ -30,6 +30,40 @@ namespace GxPT
 
     public static class SyntaxHighlightingRenderer
     {
+        // Treat tabs as aligned to fixed stops (columns) when drawing/measuring.
+        // We expand tabs into spaces because GenericTypographic ignores tab stops.
+        private const int TabSize = 4; // columns
+
+        private static string ExpandTabs(string text, int startColumn)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+
+            // Build a new string expanding each '\t' to the number of spaces
+            // needed to reach the next tab stop based on the current column.
+            System.Text.StringBuilder sb = new System.Text.StringBuilder(text.Length);
+            int col = startColumn;
+            for (int i = 0; i < text.Length; i++)
+            {
+                char ch = text[i];
+                if (ch == '\t')
+                {
+                    int spaces = TabSize - (col % TabSize);
+                    if (spaces == 0) spaces = TabSize;
+                    sb.Append(' ', spaces);
+                    col += spaces;
+                }
+                else
+                {
+                    sb.Append(ch);
+                    // Newlines are not expected here (callers split on '\n'), but be safe.
+                    if (ch == '\n' || ch == '\r')
+                        col = 0;
+                    else
+                        col++;
+                }
+            }
+            return sb.ToString();
+        }
 
         // ---------- Segment generation ----------
         public static List<ColoredSegment> GetColoredSegments(string code, string language, Font monoFont)
@@ -123,21 +157,29 @@ namespace GxPT
 
                         if (!string.IsNullOrEmpty(line))
                         {
+                            // Expand tabs to spaces based on current column (monospace assumption)
+                            // Determine current column from pixel x using space width.
+                            SizeF spaceSize = g.MeasureString(" ", segment.Font, PointF.Empty, stringFormat);
+                            int startColumn = (int)Math.Floor((x - bounds.X) / Math.Max(1f, spaceSize.Width));
+                            string expanded = ExpandTabs(line, Math.Max(0, startColumn));
+
                             // Measure and draw the text using Graphics.DrawString with GenericTypographic
                             using (var brush = new SolidBrush(segment.Color))
                             {
                                 // Check if text fits on current line
-                                SizeF textSize = g.MeasureString(line, segment.Font, PointF.Empty, stringFormat);
+                                SizeF textSize = g.MeasureString(expanded, segment.Font, PointF.Empty, stringFormat);
 
                                 if (x + textSize.Width > bounds.Right && x > bounds.X)
                                 {
                                     // Word wrap - move to next line
                                     y += lineHeight;
                                     x = bounds.X;
+                                    // Recompute startColumn after wrap
+                                    startColumn = 0;
                                 }
 
                                 // Draw the text
-                                g.DrawString(line, segment.Font, brush, new PointF(x, y), stringFormat);
+                                g.DrawString(expanded, segment.Font, brush, new PointF(x, y), stringFormat);
                                 x += textSize.Width;
                             }
                         }
@@ -185,8 +227,13 @@ namespace GxPT
                         if (line.Length == 0)
                             continue;
 
+                        // Expand tabs to spaces based on current column and measure
+                        SizeF spaceSize = g.MeasureString(" ", font, PointF.Empty, stringFormat);
+                        int startColumn = (int)Math.Floor(x / Math.Max(1f, spaceSize.Width));
+                        string expanded = ExpandTabs(line, Math.Max(0, startColumn));
+
                         // basic wrap (same as draw path)
-                        SizeF textSize = g.MeasureString(line, font, PointF.Empty, stringFormat);
+                        SizeF textSize = g.MeasureString(expanded, font, PointF.Empty, stringFormat);
                         if (x + textSize.Width > maxWidth && x > 0f)
                         {
                             // wrap
@@ -241,7 +288,12 @@ namespace GxPT
                         if (line.Length == 0)
                             continue;
 
-                        SizeF size = g.MeasureString(line, font, PointF.Empty, stringFormat);
+                        // Expand tabs to spaces based on current column and measure
+                        SizeF spaceSize = g.MeasureString(" ", font, PointF.Empty, stringFormat);
+                        int startColumn = (int)Math.Floor(currentLineWidth / Math.Max(1f, spaceSize.Width));
+                        string expanded = ExpandTabs(line, Math.Max(0, startColumn));
+
+                        SizeF size = g.MeasureString(expanded, font, PointF.Empty, stringFormat);
                         currentLineWidth += size.Width;
                     }
                 }
@@ -296,8 +348,13 @@ namespace GxPT
 
                             using (var brush = new SolidBrush(segment.Color))
                             {
-                                g.DrawString(line, font, brush, new PointF(x, y), stringFormat);
-                                SizeF size = g.MeasureString(line, font, PointF.Empty, stringFormat);
+                                // Expand tabs to spaces based on current column and draw
+                                SizeF spaceSize = g.MeasureString(" ", font, PointF.Empty, stringFormat);
+                                int startColumn = (int)Math.Floor((x - (viewport.X - scrollX)) / Math.Max(1f, spaceSize.Width));
+                                string expanded = ExpandTabs(line, Math.Max(0, startColumn));
+
+                                g.DrawString(expanded, font, brush, new PointF(x, y), stringFormat);
+                                SizeF size = g.MeasureString(expanded, font, PointF.Empty, stringFormat);
                                 x += size.Width;
                             }
                         }
