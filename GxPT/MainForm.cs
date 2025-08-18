@@ -199,8 +199,18 @@ namespace GxPT
             {
                 this.txtMessage.Multiline = true;
                 this.txtMessage.AcceptsReturn = true;
+                this.txtMessage.WordWrap = true;
                 this.txtMessage.ScrollBars = ScrollBars.None;
+                // Recalculate when the textbox width changes due to layout
+                try { this.txtMessage.Resize += (s, e) => AdjustInputBoxHeight(); }
+                catch { }
             }
+            // Let code control the input panel height (Dock:Bottom); AutoSize with DockFill child prevents growth
+            try { if (this.pnlInput != null) this.pnlInput.AutoSize = false; }
+            catch { }
+            // Initial layout pass
+            try { AdjustInputBoxHeight(); }
+            catch { }
         }
 
         private void HookEvents()
@@ -222,6 +232,15 @@ namespace GxPT
                     this.cmbModel.TextUpdate += cmbModel_TextUpdate;
                 }
             }
+            catch { }
+
+            // Recalculate input height when the chat container (Panel2) or tabs resize
+            try { if (this.splitContainer1 != null) this.splitContainer1.Panel2.Resize += (s, e) => AdjustInputBoxHeight(); }
+            catch { }
+            try { if (this.tabControl1 != null) this.tabControl1.Resize += (s, e) => AdjustInputBoxHeight(); }
+            catch { }
+            // And when the API key banner changes visibility/size
+            try { if (this.pnlApiKeyBanner != null) { this.pnlApiKeyBanner.VisibleChanged += (s, e) => AdjustInputBoxHeight(); this.pnlApiKeyBanner.Resize += (s, e) => AdjustInputBoxHeight(); } }
             catch { }
         }
 
@@ -823,21 +842,46 @@ namespace GxPT
 
         private void ResetInputBoxHeight()
         {
-            if (txtMessage == null) return;
-            txtMessage.Height = MinInputHeightPx;
-            txtMessage.ScrollBars = ScrollBars.None;
+            if (this.pnlInput != null)
+            {
+                try { this.pnlInput.Height = MinInputHeightPx; }
+                catch { }
+            }
+            if (txtMessage != null)
+            {
+                txtMessage.ScrollBars = ScrollBars.None;
+            }
+        }
+
+        // Determine the vertical space shared by the transcript and input within the main chat container.
+        private int GetAvailableChatAreaHeight()
+        {
+            try
+            {
+                Control container = (this.splitContainer1 != null) ? (Control)this.splitContainer1.Panel2 : (Control)this;
+                int h = container.ClientSize.Height;
+
+                // Subtract the API key banner height when visible (banner is hosted in pnlBottom)
+                if (this.pnlApiKeyBanner != null && this.pnlApiKeyBanner.Visible)
+                    h = Math.Max(0, h - this.pnlApiKeyBanner.Height);
+                return Math.Max(0, h);
+            }
+            catch
+            {
+                int menuH = (msMain != null ? msMain.Height : 0);
+                return Math.Max(0, this.ClientSize.Height - menuH);
+            }
         }
 
         private void AdjustInputBoxHeight()
         {
-            if (txtMessage == null) return;
+            if (txtMessage == null || this.pnlInput == null) return;
 
-            // Available area: client area minus menu strip height (chatTranscript + input panel share this)
-            int menuH = (msMain != null ? msMain.Height : 0);
-            int available = Math.Max(0, this.ClientSize.Height - menuH);
+            // Available area: the right panel that hosts the transcript + input, minus any banner
+            int available = GetAvailableChatAreaHeight();
             int maxHeight = Math.Max(MinInputHeightPx, (int)Math.Floor(available * 0.5));
 
-            // Measure required height for current text within the textbox width
+            // Measure required height for current text within the textbox width (wrap-aware)
             int width = Math.Max(10, txtMessage.ClientSize.Width);
             var proposed = new Size(width, int.MaxValue);
             var flags = TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl | TextFormatFlags.NoPadding;
@@ -851,9 +895,9 @@ namespace GxPT
             // Clamp to [MinInputHeightPx, maxHeight]
             int newHeight = Math.Max(MinInputHeightPx, Math.Min(desired, maxHeight));
 
-            // Apply height to the textbox; panel will auto-size accordingly
-            if (txtMessage.Height != newHeight)
-                txtMessage.Height = newHeight;
+            // Apply height to the container panel (textbox is Dock:Fill)
+            if (this.pnlInput.Height != newHeight)
+                this.pnlInput.Height = newHeight;
 
             // Manage scrollbars: only show when content exceeds cap
             bool exceedsCap = desired > maxHeight;
@@ -1012,6 +1056,9 @@ namespace GxPT
 
                 // Keep banner layout tidy when toggled
                 if (!hasKey) LayoutApiKeyBanner();
+
+                // Recompute input height because available space changes when the banner toggles
+                AdjustInputBoxHeight();
             }
             catch
             {
@@ -1019,6 +1066,10 @@ namespace GxPT
                 if (this.txtMessage != null) this.txtMessage.Enabled = false;
                 if (this.btnSend != null) this.btnSend.Enabled = false;
                 if (this.cmbModel != null) this.cmbModel.Enabled = false;
+
+                // Still try to recalc layout
+                try { AdjustInputBoxHeight(); }
+                catch { }
             }
         }
 
@@ -1696,6 +1747,10 @@ namespace GxPT
                 try { if (this.lnkOpenSettings != null) this.lnkOpenSettings.Font = new Font(this.lnkOpenSettings.Font.FontFamily, size, this.lnkOpenSettings.Font.Style); }
                 catch { }
                 try { if (this.lblNoApiKey != null) this.lblNoApiKey.Font = new Font(this.lblNoApiKey.Font.FontFamily, size, this.lblNoApiKey.Font.Style); }
+                catch { }
+
+                // Recalculate input height because font changes alter measured height
+                try { AdjustInputBoxHeight(); }
                 catch { }
             }
             catch { }
