@@ -18,87 +18,62 @@ namespace GxPT
     public partial class MainForm : Form
     {
         private OpenRouterClient _client;
-        private const int MinInputHeightPx = 75; // initial and minimum height for input panel
-        // future conversation-related helpers can go here
 
-        // Sidebar (Panel1) animation settings
-        private const int SidebarMinWidth = 8;
-        private const int SidebarMaxWidth = 240;
-        private const int SidebarAnimStep = 40; // legacy step (not used with easing)
-        private const int SidebarAnimIntervalMs = 10; // timer interval (smoother updates)
-        private const int SidebarAnimDurationMs = 100; // total duration for open/close
-        private bool _sidebarExpanded; // true when fully expanded
-        private bool _sidebarAnimating;
-        private int _sidebarTargetWidth; // target width for animation
-        private Timer _sidebarTimer;
-        private Stopwatch _sidebarAnimWatch = new Stopwatch();
-        private int _sidebarStartWidth;
+        // Manager classes for UI concerns
+        private SidebarManager _sidebarManager;
+        private TabManager _tabManager;
+        private ThemeManager _themeManager;
+        private InputManager _inputManager;
 
-        // Per-tab chat context so each tab has its own conversation and transcript
-        private sealed class ChatTabContext
-        {
-            public TabPage Page;
-            public ChatTranscriptControl Transcript;
-            public Conversation Conversation;
-            public bool IsSending;
-            public string SelectedModel; // model selected for this tab
-            // If true, do not persist this tab's conversation until the user sends a new message
-            public bool NoSaveUntilUserSend;
-        }
-
-        private readonly Dictionary<TabPage, ChatTabContext> _tabContexts = new Dictionary<TabPage, ChatTabContext>();
-
-        // Context menu for tab strip
-        private ContextMenuStrip _tabCtxMenu;
-        private ToolStripMenuItem _miTabNew;
-        private ToolStripMenuItem _miTabClose;
-        private ToolStripMenuItem _miTabCloseOthers;
-        private TabPage _tabCtxTarget;
-        private GlyphToolStripButton _btnNewTab;
-        private GlyphToolStripButton _btnCloseTab;
         private bool _syncingModelCombo; // avoid event feedback loops when syncing combo text
-        private ListView _lvConversations; // sidebar list
-        private Panel _sidebarArrowPanel; // narrow right strip for the arrow
-        private readonly Dictionary<string, TabPage> _openConversationsById = new Dictionary<string, TabPage>();
-        // ImageList used to control row height (add vertical padding) for the sidebar list
-        private ImageList _lvRowHeightImages;
-
 
         public MainForm()
         {
             InitializeComponent();
+            InitializeManagers();
             HookEvents();
             InitializeClient();
-            // Configure split container for sidebar behavior
-            try
+
+            // Setup initial tab context for the designer-created tab
+            SetupInitialConversationTab();
+            _inputManager.SetHintText("Ask anything...");
+
+            // Wire banner link and ensure it lays out nicely
+            if (this.lnkOpenSettings != null)
+                this.lnkOpenSettings.LinkClicked += lnkOpenSettings_LinkClicked;
+            if (this.pnlApiKeyBanner != null)
+                this.pnlApiKeyBanner.Resize += (s, e) => LayoutApiKeyBanner();
+            this.Load += (s, e) => UpdateApiKeyBanner();
+        }
+
+        private void InitializeManagers()
+        {
+            // Initialize managers for UI concerns
+            _sidebarManager = new SidebarManager(this, this.splitContainer1, this.miConversationHistory);
+            _tabManager = new TabManager(this, this.tabControl1, this.msMain);
+            _themeManager = new ThemeManager(this, this.chatTranscript, this.txtMessage,
+                this.btnSend, this.cmbModel, this.lnkOpenSettings, this.lblNoApiKey);
+            _inputManager = new InputManager(this, this.txtMessage, this.pnlInput,
+                this.btnSend, this.cmbModel, this.splitContainer1, this.pnlApiKeyBanner);
+
+            // Wire manager events
+            if (_tabManager != null)
             {
-                if (this.splitContainer1 != null)
-                {
-                    // Ensure left panel acts as a collapsible sidebar and can't be manually dragged
-                    this.splitContainer1.FixedPanel = FixedPanel.Panel1;
-                    this.splitContainer1.IsSplitterFixed = true;
-                    this.splitContainer1.Panel1MinSize = SidebarMinWidth;
-                    this.splitContainer1.Panel2MinSize = 0;
-                    this.splitContainer1.SplitterWidth = 1; // thin, unobtrusive divider
-                    // Start collapsed
-                    this.splitContainer1.SplitterDistance = SidebarMinWidth;
-                    _sidebarExpanded = false;
-
-                    // Add sidebar list control and arrow strip
-                    EnsureSidebarList();
-                    EnsureSidebarArrowStrip();
-                    // Keyboard toggle (Enter/Space) accessibility when Panel1 focused
-                    this.splitContainer1.Panel1.TabStop = true;
-                    this.splitContainer1.Panel1.PreviewKeyDown += Panel1_PreviewKeyDown;
-                }
+                _tabManager.TabSelected += OnTabSelected;
+                _tabManager.TabsChanged += OnTabsChanged;
             }
-            catch { }
 
-            // Sidebar animation timer
-            _sidebarTimer = new Timer();
-            _sidebarTimer.Interval = SidebarAnimIntervalMs;
-            _sidebarTimer.Tick += SidebarTimer_Tick;
-            // Wire menu items and tab events
+            if (_sidebarManager != null)
+            {
+                _sidebarManager.SidebarToggled += OnSidebarToggled;
+            }
+        }
+
+        private void HookEvents()
+        {
+            this.Resize += MainForm_Resize;
+
+            // Wire menu items
             try
             {
                 if (this.miNewConversation != null)
@@ -117,138 +92,114 @@ namespace GxPT
                 }
             }
             catch { }
-            // View -> Conversation History toggle wiring and initial checked state
-            try
-            {
-                if (this.miConversationHistory != null)
-                {
-                    this.miConversationHistory.CheckOnClick = false; // we'll manage Checked strictly from state
-                    this.miConversationHistory.Click -= miConversationHistory_Click;
-                    this.miConversationHistory.Click += miConversationHistory_Click;
-                    UpdateConversationHistoryCheckedState();
-                }
-            }
-            catch { }
-            if (this.tabControl1 != null)
-            {
-                this.tabControl1.SelectedIndexChanged += (s, e) =>
-                {
-                    UpdateWindowTitleFromActiveTab();
-                    SyncComboModelFromActiveTab();
-                    // When switching to an existing tab, keep typing flow by focusing the input
-                    FocusInputSoon();
-                };
-                try
-                {
-                    // Revert to default visuals and dynamic-width tabs
-                    this.tabControl1.DrawMode = TabDrawMode.Normal;
-                    // No owner-draw; only support middle-click to close a tab
-                    this.tabControl1.MouseDown -= tabControl1_MouseDown;
-                    this.tabControl1.MouseDown += tabControl1_MouseDown;
-                    this.tabControl1.MouseUp -= tabControl1_MouseUp;
-                    this.tabControl1.MouseUp += tabControl1_MouseUp;
-                }
-                catch { }
-            }
 
-            // Build tab context menu
-            try
-            {
-                _tabCtxMenu = new ContextMenuStrip();
-                _miTabNew = new ToolStripMenuItem("New Tab");
-                _miTabClose = new ToolStripMenuItem("Close");
-                _miTabCloseOthers = new ToolStripMenuItem("Close Others");
-
-                _miTabNew.Click += delegate { CreateConversationTab(); };
-                _miTabClose.Click += delegate { if (_tabCtxTarget != null) CloseConversationTab(_tabCtxTarget); };
-                _miTabCloseOthers.Click += delegate { if (_tabCtxTarget != null) CloseOtherTabs(_tabCtxTarget); };
-
-                _tabCtxMenu.Items.AddRange(new ToolStripItem[] { _miTabNew, _miTabClose, _miTabCloseOthers });
-            }
-            catch { }
-
-            // Add custom + and x buttons to the right side of the MenuStrip without altering existing menu order
-            try
-            {
-                if (this.msMain != null)
-                {
-                    // Custom-drawn buttons
-                    _btnNewTab = new GlyphToolStripButton(GlyphToolStripButton.GlyphType.Plus);
-                    _btnNewTab.Margin = new Padding(2, 2, 2, 2);
-                    _btnNewTab.Click += delegate { miNewConversation_Click(this, EventArgs.Empty); };
-                    _btnNewTab.Alignment = ToolStripItemAlignment.Right; // pin to right edge
-
-                    _btnCloseTab = new GlyphToolStripButton(GlyphToolStripButton.GlyphType.Close);
-                    _btnCloseTab.Margin = new Padding(2, 2, 3, 2);
-                    _btnCloseTab.Click += delegate { closeConversationToolStripMenuItem_Click(this, EventArgs.Empty); };
-                    _btnCloseTab.Alignment = ToolStripItemAlignment.Right; // pin to right edge
-
-                    // Add right-aligned buttons; existing items (File, View) stay in designer order
-                    this.msMain.Items.Add(_btnCloseTab);
-                    this.msMain.Items.Add(_btnNewTab);
-                }
-            }
-            catch { }
-
-            // Setup initial tab context for the designer-created tab
-            SetupInitialConversationTab();
-            // Wire banner link and ensure it lays out nicely
-            if (this.lnkOpenSettings != null)
-                this.lnkOpenSettings.LinkClicked += lnkOpenSettings_LinkClicked;
-            if (this.pnlApiKeyBanner != null)
-                this.pnlApiKeyBanner.Resize += (s, e) => LayoutApiKeyBanner();
-            this.Load += (s, e) => UpdateApiKeyBanner();
-            // Ensure baseline sizing and behavior
-            if (this.txtMessage != null)
-            {
-                this.txtMessage.Multiline = true;
-                this.txtMessage.AcceptsReturn = true;
-                this.txtMessage.WordWrap = true;
-                this.txtMessage.ScrollBars = ScrollBars.None;
-                // Recalculate when the textbox width changes due to layout
-                try { this.txtMessage.Resize += (s, e) => AdjustInputBoxHeight(); }
-                catch { }
-            }
-            // Let code control the input panel height (Dock:Bottom); AutoSize with DockFill child prevents growth
-            try { if (this.pnlInput != null) this.pnlInput.AutoSize = false; }
-            catch { }
-            // Initial layout pass
-            try { AdjustInputBoxHeight(); }
-            catch { }
-        }
-
-        private void HookEvents()
-        {
-            this.txtMessage.KeyDown += txtMessage_KeyDown;
-            this.txtMessage.TextChanged += txtMessage_TextChanged;
-            this.Resize += MainForm_Resize;
-            // Redraw arrow on resize for proper centering and keep list width clear of arrow strip
-            try { if (this.splitContainer1 != null) this.splitContainer1.Panel1.Resize += (s, e) => { if (_sidebarArrowPanel != null) _sidebarArrowPanel.Invalidate(); LayoutSidebarChildren(); }; }
-            catch { }
             try
             {
                 if (this.cmbModel != null)
                 {
                     this.cmbModel.SelectedIndexChanged -= cmbModel_SelectedIndexChanged;
                     this.cmbModel.SelectedIndexChanged += cmbModel_SelectedIndexChanged;
-                    // Track typed text as well (fires for user edits, not for programmatic changes)
                     this.cmbModel.TextUpdate -= cmbModel_TextUpdate;
                     this.cmbModel.TextUpdate += cmbModel_TextUpdate;
                 }
             }
             catch { }
-
-            // Recalculate input height when the chat container (Panel2) or tabs resize
-            try { if (this.splitContainer1 != null) this.splitContainer1.Panel2.Resize += (s, e) => AdjustInputBoxHeight(); }
-            catch { }
-            try { if (this.tabControl1 != null) this.tabControl1.Resize += (s, e) => AdjustInputBoxHeight(); }
-            catch { }
-            // And when the API key banner changes visibility/size
-            try { if (this.pnlApiKeyBanner != null) { this.pnlApiKeyBanner.VisibleChanged += (s, e) => AdjustInputBoxHeight(); this.pnlApiKeyBanner.Resize += (s, e) => AdjustInputBoxHeight(); } }
-            catch { }
         }
 
-        private string GetSelectedModel()
+        // Event handlers for manager events
+        private void OnTabSelected(TabPage selectedTab)
+        {
+            UpdateWindowTitleFromActiveTab();
+            SyncComboModelFromActiveTab();
+            if (_inputManager != null) _inputManager.FocusInputSoon();
+        }
+
+        private void OnTabsChanged()
+        {
+            if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
+        }
+
+        private void OnSidebarToggled()
+        {
+            if (_themeManager != null) _themeManager.ApplyFontSizeSettingToAllUi();
+        }
+
+        // Public methods for managers to call back
+        internal OpenRouterClient GetClient()
+        {
+            return _client;
+        }
+
+        internal MenuStrip GetMenuStrip()
+        {
+            return this.msMain;
+        }
+
+        internal SidebarManager GetSidebarManager()
+        {
+            return _sidebarManager;
+        }
+
+        internal TabManager GetTabManager()
+        {
+            return _tabManager;
+        }
+
+        internal ThemeManager GetThemeManager()
+        {
+            return _themeManager;
+        }
+
+        internal InputManager GetInputManager()
+        {
+            return _inputManager;
+        }
+
+        internal void SelectTab(TabPage page)
+        {
+            if (_tabManager != null) _tabManager.SelectTab(page);
+        }
+
+        internal void CloseTab(TabPage page)
+        {
+            if (_tabManager != null) _tabManager.CloseConversationTab(page);
+        }
+
+        internal void UntrackOpenConversation(TabPage page)
+        {
+            if (_sidebarManager != null) _sidebarManager.UntrackOpenConversation(page);
+        }
+
+        internal void UpdateWindowTitle()
+        {
+            UpdateWindowTitleFromActiveTab();
+        }
+
+        internal void ApplyFontSetting(ChatTranscriptControl transcript)
+        {
+            if (_themeManager != null) _themeManager.ApplyFontSetting(transcript);
+        }
+
+        internal void EnsureConversationId(Conversation conversation)
+        {
+            ConversationStore.EnsureConversationId(conversation);
+        }
+
+        internal void OpenConversation(Conversation convo)
+        {
+            var active = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            if (active != null && active.Conversation != null &&
+                (active.Conversation.History == null || active.Conversation.History.Count == 0))
+            {
+                OpenConversationInNewTab(convo);
+            }
+            else
+            {
+                OpenConversationInNewTab(convo);
+            }
+        }
+
+        public string GetSelectedModel()
         {
             try
             {
@@ -272,9 +223,9 @@ namespace GxPT
             // Populate models from settings and reflect configuration
             PopulateModelsFromSettings();
             UpdateApiKeyBanner();
-            ApplyFontSizeSettingToAllUi();
+            if (_themeManager != null) _themeManager.ApplyFontSizeSettingToAllUi();
             // Apply theme across existing transcripts and primary UI
-            try { ApplyThemeToAllTranscripts(); }
+            try { if (_themeManager != null) _themeManager.ApplyThemeToAllTranscripts(); }
             catch { }
         }
 
@@ -286,119 +237,20 @@ namespace GxPT
                 if (this.tabControl1 == null || this.tabPage1 == null || this.chatTranscript == null)
                     return;
 
-                if (_tabContexts.ContainsKey(this.tabPage1))
-                    return;
-
-                var ctx = new ChatTabContext
+                var ctx = _tabManager != null ? _tabManager.SetupInitialConversationTab(this.tabPage1, this.chatTranscript) : null;
+                if (ctx != null)
                 {
-                    Page = this.tabPage1,
-                    Transcript = this.chatTranscript,
-                    Conversation = new Conversation(_client),
-                    IsSending = false,
-                    SelectedModel = GetSelectedModel()
-                };
-                ctx.Conversation.SelectedModel = ctx.SelectedModel;
-                EnsureConversationId(ctx);
+                    if (_sidebarManager != null && ctx.Conversation != null)
+                        _sidebarManager.TrackOpenConversation(ctx.Conversation.Id, ctx.Page);
+                    SyncComboModelFromActiveTab();
+                    if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
 
-                // When a name is generated, update the tab text and window title if active
-                ctx.Conversation.NameGenerated += delegate(string name)
-                {
-                    try
-                    {
-                        if (this.IsHandleCreated)
-                        {
-                            this.BeginInvoke((MethodInvoker)delegate
-                            {
-                                ctx.Page.Text = string.IsNullOrEmpty(name) ? "Conversation" : name;
-                                UpdateWindowTitleFromActiveTab();
-                            });
-                        }
-                    }
+                    // Ensure initial transcript theme is applied on launch
+                    try { if (ctx.Transcript != null) ctx.Transcript.RefreshTheme(); }
                     catch { }
-                };
-
-                // Initial title
-                try { ctx.Page.Text = "New Conversation"; }
-                catch { }
-
-                _tabContexts[this.tabPage1] = ctx;
-                TrackOpenConversation(ctx);
-                // Ensure combo reflects the initial tab's stored model
-                SyncComboModelFromActiveTab();
-                RefreshSidebarList();
-                // Ensure initial transcript theme is applied on launch
-                try { if (ctx.Transcript != null) ctx.Transcript.RefreshTheme(); }
-                catch { }
-            }
-            catch { }
-        }
-
-        // Create a new tab with its own transcript + conversation
-        private ChatTabContext CreateConversationTab()
-        {
-            if (this.tabControl1 == null) return null;
-
-            var page = new TabPage("New Conversation");
-            page.UseVisualStyleBackColor = true;
-
-            var transcript = new ChatTranscriptControl();
-            transcript.Dock = DockStyle.Fill;
-            ApplyFontSizeSetting(transcript);
-            page.Controls.Add(transcript);
-
-            var ctx = new ChatTabContext
-            {
-                Page = page,
-                Transcript = transcript,
-                Conversation = new Conversation(_client),
-                IsSending = false,
-                SelectedModel = GetSelectedModel()
-            };
-            ctx.Conversation.SelectedModel = ctx.SelectedModel;
-            EnsureConversationId(ctx);
-
-            ctx.Conversation.NameGenerated += delegate(string name)
-            {
-                try
-                {
-                    if (this.IsHandleCreated)
-                    {
-                        this.BeginInvoke((MethodInvoker)delegate
-                        {
-                            ctx.Page.Text = string.IsNullOrEmpty(name) ? "Conversation" : name;
-                            UpdateWindowTitleFromActiveTab();
-                        });
-                    }
                 }
-                catch { }
-            };
-
-            _tabContexts[page] = ctx;
-            TrackOpenConversation(ctx);
-
-            this.tabControl1.TabPages.Add(page);
-            try { this.tabControl1.SelectedTab = page; }
-            catch { }
-            // After selecting, sync combo to this tab's model
-            SyncComboModelFromActiveTab();
-            RefreshSidebarList();
-            // Ensure input is ready for typing on new tab
-            FocusInputSoon();
-            return ctx;
-        }
-
-        // Get the active tab's chat context
-        private ChatTabContext GetActiveContext()
-        {
-            try
-            {
-                if (this.tabControl1 == null) return null;
-                var page = this.tabControl1.SelectedTab;
-                if (page == null) return null;
-                ChatTabContext ctx;
-                return _tabContexts.TryGetValue(page, out ctx) ? ctx : null;
             }
-            catch { return null; }
+            catch { }
         }
 
         private void UpdateWindowTitleFromActiveTab()
@@ -412,211 +264,6 @@ namespace GxPT
             catch { }
         }
 
-        // Close the active conversation tab
-        private void CloseActiveConversationTab()
-        {
-            try
-            {
-                if (this.tabControl1 == null) return;
-                var page = this.tabControl1.SelectedTab;
-                if (page == null) return;
-                CloseConversationTab(page);
-            }
-            catch { }
-        }
-
-        // Close a specific conversation tab; if only one tab exists, reset it instead
-        private void CloseConversationTab(TabPage page)
-        {
-            if (page == null) return;
-
-            ChatTabContext ctx;
-            _tabContexts.TryGetValue(page, out ctx);
-
-            if (this.tabControl1 != null && this.tabControl1.TabPages.Count <= 1)
-            {
-                // Reset single remaining tab
-                try
-                {
-                    if (ctx != null)
-                    {
-                        if (ctx.Transcript != null) ctx.Transcript.ClearMessages();
-                        ctx.Conversation = new Conversation(_client);
-                        // re-hook name event
-                        ctx.Conversation.NameGenerated += delegate(string name)
-                        {
-                            try
-                            {
-                                if (this.IsHandleCreated)
-                                {
-                                    this.BeginInvoke((MethodInvoker)delegate
-                                    {
-                                        ctx.Page.Text = string.IsNullOrEmpty(name) ? "Conversation" : name;
-                                        UpdateWindowTitleFromActiveTab();
-                                    });
-                                }
-                            }
-                            catch { }
-                        };
-                        page.Text = "New Conversation";
-                        UpdateWindowTitleFromActiveTab();
-                    }
-                }
-                catch { }
-                return;
-            }
-
-            try
-            {
-                int desiredIndex = -1;
-                if (this.tabControl1 != null)
-                {
-                    try
-                    {
-                        int idx = this.tabControl1.TabPages.IndexOf(page);
-                        if (idx >= 0) desiredIndex = Math.Max(0, idx - 1);
-                    }
-                    catch { }
-                }
-                if (_tabContexts.ContainsKey(page)) _tabContexts.Remove(page);
-                try
-                {
-                    // Remove from open map
-                    var toRemove = _openConversationsById.Where(kv => object.ReferenceEquals(kv.Value, page)).Select(kv => kv.Key).ToList();
-                    foreach (var k in toRemove) _openConversationsById.Remove(k);
-                }
-                catch { }
-                if (this.tabControl1 != null)
-                {
-                    this.tabControl1.TabPages.Remove(page);
-                    // After removal, select the immediate left neighbor if possible
-                    try
-                    {
-                        if (this.tabControl1.TabPages.Count > 0)
-                        {
-                            if (desiredIndex < 0) desiredIndex = 0;
-                            if (desiredIndex >= this.tabControl1.TabPages.Count)
-                                desiredIndex = this.tabControl1.TabPages.Count - 1;
-                            this.tabControl1.SelectedIndex = desiredIndex;
-                        }
-                    }
-                    catch { }
-                }
-                try { page.Dispose(); }
-                catch { }
-                UpdateWindowTitleFromActiveTab();
-                RefreshSidebarList();
-            }
-            catch { }
-        }
-
-        private void AddDemoMessages()
-        {
-            // Add a user message
-            chatTranscript.AddMessage(MessageRole.User, "Hello! Can you show me what markdown features you support, including syntax highlighting?");
-
-            // Add an assistant message demonstrating various markdown features
-            string assistantMessage = "# Markdown Demo with Syntax Highlighting\n\n" +
-                "Hello! I support various **markdown features** including syntax highlighting:\n\n" +
-                "## Text Formatting\n" +
-                "- **Bold text** using **double asterisks**\n" +
-                "- *Italic text* using *single asterisks*\n" +
-                "- `Inline code` using backticks\n" +
-                "- ***Bold and italic*** combined\n\n" +
-                "- Hyperlinks like [Visit OpenAI](https://www.openai.com/) and [GitHub](https://github.com/)\n\n" +
-                "## Lists\n" +
-                "### Bullet Lists:\n" +
-                "- First bullet item\n" +
-                "  - Nested bullet (hollow circle)\n" +
-                "    - Deeply nested (square)\n" +
-                "- Second bullet item\n" +
-                "- Third bullet item\n\n" +
-                "### Numbered Lists:\n" +
-                "1. First numbered item\n" +
-                "2. Second numbered item\n" +
-                "  1. Nested numbered item\n" +
-                "  2. Another nested number\n" +
-                "3. Third numbered item\n\n" +
-                "## Code Blocks with Syntax Highlighting\n\n" +
-                "### C# Example:\n" +
-                "```cs\n" +
-                "using System;\n\n" +
-                "public class HelloWorld\n" +
-                "{\n" +
-                "    public static void Main(string[] args)\n" +
-                "    {\n" +
-                "        Console.WriteLine(\"Hello, World!\");\n" +
-                "        int number = 42;\n" +
-                "        bool isTrue = true;\n" +
-                "        // This is a comment\n" +
-                "        if (isTrue)\n" +
-                "        {\n" +
-                "            Console.WriteLine($\"The number is {number}\");\n" +
-                "        }\n" +
-                "    }\n" +
-                "}\n" +
-                "```\n\n" +
-                "### JavaScript Example:\n" +
-                "```js\n" +
-                "// JavaScript with syntax highlighting\n" +
-                "function greetUser(name) {\n" +
-                "    const message = `Hello, ${name}!`;\n" +
-                "    console.log(message);\n" +
-                "    \n" +
-                "    let numbers = [1, 2, 3, 4, 5];\n" +
-                "    return numbers.map(n => n * 2);\n" +
-                "}\n\n" +
-                "const result = greetUser(\"World\");\n" +
-                "```\n\n" +
-                "### JSON Example:\n" +
-                "```json\n" +
-                "{\n" +
-                "    \"name\": \"John Doe\",\n" +
-                "    \"age\": 30,\n" +
-                "    \"isActive\": true,\n" +
-                "    \"hobbies\": [\"reading\", \"coding\", \"gaming\"]\n" +
-                "}\n" +
-                "```\n\n" +
-                "### Python Example:\n" +
-                "```python\n" +
-                "# Python code with syntax highlighting\n" +
-                "def fibonacci(n):\n" +
-                "    if n <= 0:\n" +
-                "        return []\n" +
-                "    elif n == 1:\n" +
-                "        return [0]\n" +
-                "    \n" +
-                "    sequence = [0, 1]\n" +
-                "    while len(sequence) < n:\n" +
-                "        next_val = sequence[-1] + sequence[-2]\n" +
-                "        sequence.append(next_val)\n" +
-                "    \n" +
-                "    return sequence\n\n" +
-                "result = fibonacci(10)\n" +
-                "print('First 10 fibonacci numbers:', result)\n" +
-                "```\n\n" +
-                "That covers the main features including **syntax highlighting** for C#, JavaScript, JSON, and Python!";
-
-            chatTranscript.AddMessage(MessageRole.Assistant, assistantMessage);
-
-            // Add another message showing unsupported language (should fallback to normal text)
-            chatTranscript.AddMessage(MessageRole.User, "What about other languages?");
-
-            string fallbackMessage = "For unsupported languages, the code is displayed as plain text:\n\n" +
-                "```rust\n" +
-                "// Rust code (not highlighted - shows as plain text)\n" +
-                "fn main() {\n" +
-                "    println!(\"Hello, world!\");\n" +
-                "    let x = 5;\n" +
-                "    let y = 10;\n" +
-                "    println!(\"x + y = {}\", x + y);\n" +
-                "}\n" +
-                "```\n\n" +
-                "But the core languages (C#, JavaScript, JSON, Python) get full syntax highlighting!";
-
-            chatTranscript.AddMessage(MessageRole.Assistant, fallbackMessage);
-        }
-
         private void miSettings_Click(object sender, EventArgs e)
         {
             using (var dlg = new SettingsForm())
@@ -626,7 +273,7 @@ namespace GxPT
                 InitializeClient();
                 UpdateApiKeyBanner();
                 // Theme may have changed; re-apply to all open transcripts
-                try { ApplyThemeToAllTranscripts(); }
+                try { if (_themeManager != null) _themeManager.ApplyThemeToAllTranscripts(); }
                 catch { }
             }
         }
@@ -738,7 +385,7 @@ namespace GxPT
                         }
                     }
 
-                    RefreshSidebarList();
+                    if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
                     MessageBox.Show(this, "Import completed.", "Import Conversations", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 catch (Exception ex)
@@ -755,10 +402,11 @@ namespace GxPT
 
         private void btnSend_Click(object sender, EventArgs e)
         {
-            var ctx = GetActiveContext();
+            var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
             if (ctx == null) return;
+
             // Validate input
-            string text = (txtMessage.Text ?? string.Empty).Trim();
+            string text = _inputManager != null ? (_inputManager.GetInputText() ?? string.Empty) : string.Empty;
             if (text.Length == 0) return;
             if (ctx.IsSending) return; // ensure only one in-flight request per tab
 
@@ -790,8 +438,7 @@ namespace GxPT
                 if (ctx.NoSaveUntilUserSend) ctx.NoSaveUntilUserSend = false;
                 ConversationStore.Save(ctx.Conversation); // save when a new user message starts/continues a convo
                 Logger.Log("Send", "User message added. HistoryCount=" + ctx.Conversation.History.Count);
-                txtMessage.Clear();
-                ResetInputBoxHeight();
+                if (_inputManager != null) _inputManager.ClearInput();
 
                 // Add placeholder assistant message to stream into and capture its index
                 int assistantIndex = ctx.Transcript.AddMessageGetIndex(MessageRole.Assistant, string.Empty);
@@ -815,7 +462,6 @@ namespace GxPT
                             {
                                 var m = snapshot[i];
                                 string content = m.Content ?? string.Empty;
-                                // (duplicate export/import handlers removed; see earlier miExport_Click/miImport_Click)
                                 content = content.Replace("\r", " ").Replace("\n", " ");
                                 if (content.Length > 200) content = content.Substring(0, 200) + "...";
                                 sbSnap.Append("  ").Append(i).Append(": ").Append(m.Role).Append(" | ").Append(content).Append('\n');
@@ -851,7 +497,7 @@ namespace GxPT
                                     catch { }
                                     Logger.Log("Send", "Assistant finalized at index=" + assistantIndex + ", chars=" + (finalText != null ? finalText.Length : 0));
                                     ctx.IsSending = false;
-                                    RefreshSidebarList();
+                                    if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
                                 });
                             },
                             delegate(string err)
@@ -887,27 +533,6 @@ namespace GxPT
             }
         }
 
-        private void txtMessage_KeyDown(object sender, KeyEventArgs e)
-        {
-            // Ctrl+A selects all text in the input box
-            if (e.Control && e.KeyCode == Keys.A)
-            {
-                try { if (this.txtMessage != null) this.txtMessage.SelectAll(); }
-                catch { }
-                e.SuppressKeyPress = true;
-                e.Handled = true;
-                return;
-            }
-
-            if (e.KeyCode == Keys.Enter && !e.Shift)
-            {
-                // Prevent newline and trigger send
-                e.SuppressKeyPress = true;
-                e.Handled = true;
-                btnSend.PerformClick();
-            }
-        }
-
         private void PopulateModelsFromSettings()
         {
             try
@@ -921,7 +546,7 @@ namespace GxPT
                     string currentTabModel = null;
                     try
                     {
-                        var act = GetActiveContext();
+                        var act = _tabManager != null ? _tabManager.GetActiveContext() : null;
                         if (act != null) currentTabModel = act.SelectedModel;
                     }
                     catch { }
@@ -945,212 +570,28 @@ namespace GxPT
                         this.cmbModel.EndUpdate();
                     }
                     // Ensure the active context stores whatever is shown
-                    var ctx = GetActiveContext();
+                    var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
                     if (ctx != null) ctx.SelectedModel = GetSelectedModel();
                 }
             }
             catch { }
         }
 
-        private void txtMessage_TextChanged(object sender, EventArgs e)
-        {
-            AdjustInputBoxHeight();
-        }
-
         private void MainForm_Resize(object sender, EventArgs e)
         {
-            AdjustInputBoxHeight();
-        }
-
-        private void ResetInputBoxHeight()
-        {
-            if (this.pnlInput != null)
-            {
-                try { this.pnlInput.Height = MinInputHeightPx; }
-                catch { }
-            }
-            if (txtMessage != null)
-            {
-                txtMessage.ScrollBars = ScrollBars.None;
-            }
-        }
-
-        // Determine the vertical space shared by the transcript and input within the main chat container.
-        private int GetAvailableChatAreaHeight()
-        {
-            try
-            {
-                Control container = (this.splitContainer1 != null) ? (Control)this.splitContainer1.Panel2 : (Control)this;
-                int h = container.ClientSize.Height;
-
-                // Subtract the API key banner height when visible (banner is hosted in pnlBottom)
-                if (this.pnlApiKeyBanner != null && this.pnlApiKeyBanner.Visible)
-                    h = Math.Max(0, h - this.pnlApiKeyBanner.Height);
-                return Math.Max(0, h);
-            }
-            catch
-            {
-                int menuH = (msMain != null ? msMain.Height : 0);
-                return Math.Max(0, this.ClientSize.Height - menuH);
-            }
-        }
-
-        private void AdjustInputBoxHeight()
-        {
-            if (txtMessage == null || this.pnlInput == null) return;
-
-            // Available area: the right panel that hosts the transcript + input, minus any banner
-            int available = GetAvailableChatAreaHeight();
-            int maxHeight = Math.Max(MinInputHeightPx, (int)Math.Floor(available * 0.5));
-
-            // Measure required height for current text within the textbox width (wrap-aware)
-            int width = Math.Max(10, txtMessage.ClientSize.Width);
-            var proposed = new Size(width, int.MaxValue);
-            var flags = TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl | TextFormatFlags.NoPadding;
-            string text = txtMessage.Text;
-            if (string.IsNullOrEmpty(text)) text = " ";
-            Size measured = TextRenderer.MeasureText(text, txtMessage.Font, proposed, flags);
-
-            // Add a small padding to avoid clipping last line
-            int desired = measured.Height + 8;
-
-            // Ensure the input panel is never shorter than the right column (btnSend + cmbModel)
-            // Use PreferredSize to respect runtime font/DPI scaling and current theme.
-            int rightMin = 0;
-            try
-            {
-                if (this.btnSend != null && this.btnSend.Visible)
-                    rightMin += this.btnSend.PreferredSize.Height;
-            }
-            catch { }
-            try
-            {
-                if (this.cmbModel != null && this.cmbModel.Visible)
-                    rightMin += this.cmbModel.PreferredSize.Height;
-            }
-            catch { }
-
-            int minHeight = Math.Max(MinInputHeightPx, rightMin);
-
-            // Clamp to [minHeight, maxHeight]
-            int newHeight = Math.Max(minHeight, Math.Min(desired, maxHeight));
-
-            // Apply height to the container panel (textbox is Dock:Fill)
-            if (this.pnlInput.Height != newHeight)
-                this.pnlInput.Height = newHeight;
-
-            // Manage scrollbars: only show when content exceeds cap
-            bool exceedsCap = desired > maxHeight;
-            var newScroll = exceedsCap ? ScrollBars.Vertical : ScrollBars.None;
-            if (txtMessage.ScrollBars != newScroll)
-                txtMessage.ScrollBars = newScroll;
-        }
-
-        private void lnkOpenSettings_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
-        {
-            using (var dlg = new SettingsForm())
-            {
-                if (dlg.ShowDialog(this) == DialogResult.OK)
-                {
-                    InitializeClient();
-                }
-                else
-                {
-                    // They might have clicked Apply
-                    InitializeClient();
-                }
-                UpdateApiKeyBanner();
-                try { ApplyThemeToAllTranscripts(); }
-                catch { }
-            }
+            if (_inputManager != null) _inputManager.AdjustInputBoxHeight();
         }
 
         // File > New Conversation
         private void miNewConversation_Click(object sender, EventArgs e)
         {
-            CreateConversationTab();
+            if (_tabManager != null) _tabManager.CreateConversationTab();
         }
 
         // File > Close Conversation
         private void closeConversationToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            CloseActiveConversationTab();
-        }
-
-        private void tabControl1_MouseDown(object sender, MouseEventArgs e)
-        {
-            try
-            {
-                if (this.tabControl1 == null) return;
-
-                // Middle-click on a tab header closes that tab
-                if (e.Button == MouseButtons.Middle)
-                {
-                    for (int i = 0; i < this.tabControl1.TabPages.Count; i++)
-                    {
-                        var page = this.tabControl1.TabPages[i];
-                        Rectangle r = this.tabControl1.GetTabRect(i);
-                        if (r.Contains(e.Location)) { CloseConversationTab(page); return; }
-                    }
-                    return;
-                }
-
-            }
-            catch { }
-        }
-
-        // Right-click on tab strip to show context menu
-        private void tabControl1_MouseUp(object sender, MouseEventArgs e)
-        {
-            try
-            {
-                if (this.tabControl1 == null || _tabCtxMenu == null) return;
-                if (e.Button != MouseButtons.Right) return;
-
-                // Determine if the click is on a tab header
-                _tabCtxTarget = null;
-                for (int i = 0; i < this.tabControl1.TabPages.Count; i++)
-                {
-                    Rectangle r = this.tabControl1.GetTabRect(i);
-                    if (r.Contains(e.Location))
-                    {
-                        _tabCtxTarget = this.tabControl1.TabPages[i];
-                        try { this.tabControl1.SelectedTab = _tabCtxTarget; }
-                        catch { }
-                        break;
-                    }
-                }
-
-                // Enable/disable items based on target
-                bool hasTarget = (_tabCtxTarget != null);
-                _miTabClose.Enabled = hasTarget;
-                _miTabCloseOthers.Enabled = hasTarget && this.tabControl1.TabPages.Count > 1;
-
-                _tabCtxMenu.Show(this.tabControl1, e.Location);
-            }
-            catch { }
-        }
-
-
-
-        // Close all tabs except the provided one; if only one tab exists, no-op
-        private void CloseOtherTabs(TabPage keep)
-        {
-            try
-            {
-                if (this.tabControl1 == null || keep == null) return;
-                // Collect to avoid modifying during enumeration
-                var toClose = new List<TabPage>();
-                foreach (TabPage p in this.tabControl1.TabPages)
-                {
-                    if (!object.ReferenceEquals(p, keep)) toClose.Add(p);
-                }
-                foreach (var p in toClose)
-                {
-                    CloseConversationTab(p);
-                }
-            }
-            catch { }
+            if (_tabManager != null) _tabManager.CloseActiveConversationTab();
         }
 
         // Center the label and link vertically within the banner panel
@@ -1192,7 +633,7 @@ namespace GxPT
                 if (!hasKey) LayoutApiKeyBanner();
 
                 // Recompute input height because available space changes when the banner toggles
-                AdjustInputBoxHeight();
+                if (_inputManager != null) _inputManager.AdjustInputBoxHeight();
             }
             catch
             {
@@ -1202,282 +643,27 @@ namespace GxPT
                 if (this.cmbModel != null) this.cmbModel.Enabled = false;
 
                 // Still try to recalc layout
-                try { AdjustInputBoxHeight(); }
+                try { if (_inputManager != null) _inputManager.AdjustInputBoxHeight(); }
                 catch { }
             }
         }
 
-        // (menu spacer logic removed; using right-aligned ToolStripButtons instead)
-
-        // ===== Sidebar animation and visuals =====
-        private void Panel1_ClickToggle(object sender, EventArgs e)
+        private void lnkOpenSettings_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
         {
-            try
+            using (var dlg = new SettingsForm())
             {
-                // If expanded, reduce clickable area to the right half of the arrow strip
-                if (_sidebarArrowPanel != null && _sidebarExpanded)
+                if (dlg.ShowDialog(this) == DialogResult.OK)
                 {
-                    var me = e as MouseEventArgs;
-                    if (me != null)
-                    {
-                        int half = _sidebarArrowPanel.Width / 2;
-                        if (me.X < half) return; // ignore clicks on left half when expanded
-                    }
-                }
-            }
-            catch { }
-            ToggleSidebar();
-        }
-
-        private void Panel1_PreviewKeyDown(object sender, PreviewKeyDownEventArgs e)
-        {
-            if (e.KeyCode == Keys.Enter || e.KeyCode == Keys.Space)
-            {
-                ToggleSidebar();
-                e.IsInputKey = true;
-            }
-        }
-
-        private void ToggleSidebar()
-        {
-            if (this.splitContainer1 == null) return;
-            if (_sidebarAnimating) return;
-            _sidebarStartWidth = this.splitContainer1.SplitterDistance;
-            _sidebarTargetWidth = _sidebarExpanded ? SidebarMinWidth : SidebarMaxWidth;
-            _sidebarAnimating = true;
-            try { _sidebarAnimWatch.Reset(); _sidebarAnimWatch.Start(); }
-            catch { }
-            _sidebarTimer.Start();
-        }
-
-        private void SidebarTimer_Tick(object sender, EventArgs e)
-        {
-            try
-            {
-                if (this.splitContainer1 == null) { _sidebarTimer.Stop(); _sidebarAnimating = false; return; }
-                if (!_sidebarAnimWatch.IsRunning) { _sidebarAnimWatch.Start(); }
-
-                long elapsed = _sidebarAnimWatch.ElapsedMilliseconds;
-                double t = Math.Max(0.0, Math.Min(1.0, (double)elapsed / SidebarAnimDurationMs));
-                // Smooth easing to reduce jerkiness
-                double eased = EaseInOutCubic(t);
-
-                int start = _sidebarStartWidth;
-                int end = _sidebarTargetWidth;
-                int next = (int)Math.Round(start + (end - start) * eased);
-
-                int cur = this.splitContainer1.SplitterDistance;
-                if (next != cur)
-                {
-                    this.splitContainer1.SuspendLayout();
-                    try { this.splitContainer1.SplitterDistance = next; }
-                    finally { this.splitContainer1.ResumeLayout(); }
-
-                    // Invalidate arrow panel only
-                    if (_sidebarArrowPanel != null)
-                    {
-                        int h = _sidebarArrowPanel.ClientSize.Height;
-                        var rect = new Rectangle(0, Math.Max(0, h / 2 - 20), _sidebarArrowPanel.Width, 40);
-                        _sidebarArrowPanel.Invalidate(rect);
-                    }
-                    // Ensure list leaves room for the arrow strip while animating
-                    LayoutSidebarChildren();
-                }
-
-                if (t >= 1.0)
-                {
-                    // Snap to exact target to avoid off-by-one ambiguity
-                    try
-                    {
-                        this.splitContainer1.SuspendLayout();
-                        if (this.splitContainer1.SplitterDistance != _sidebarTargetWidth)
-                            this.splitContainer1.SplitterDistance = _sidebarTargetWidth;
-                    }
-                    finally { this.splitContainer1.ResumeLayout(); }
-
-                    _sidebarTimer.Stop();
-                    _sidebarAnimWatch.Stop();
-                    _sidebarAnimating = false;
-                    // Use the target to set state deterministically
-                    _sidebarExpanded = (_sidebarTargetWidth >= SidebarMaxWidth);
-
-                    // Ensure the arrow repaints in its final direction and layout is correct
-                    if (_sidebarArrowPanel != null) _sidebarArrowPanel.Invalidate();
-                    LayoutSidebarChildren();
-                    // Keep View -> Conversation History checked state in sync
-                    UpdateConversationHistoryCheckedState();
-                    // Re-apply sidebar font/row height so it takes effect immediately after expand/collapse
-                    try { ApplyFontSizeSettingToSidebar(); }
-                    catch { }
-                }
-            }
-            catch
-            {
-                try { _sidebarTimer.Stop(); }
-                catch { }
-                try { _sidebarAnimWatch.Stop(); }
-                catch { }
-                _sidebarAnimating = false;
-            }
-        }
-
-        private static double EaseInOutCubic(double t)
-        {
-            // Cubic easing: accelerate, then decelerate
-            return t < 0.5 ? 4 * t * t * t : 1 - Math.Pow(-2 * t + 2, 3) / 2;
-        }
-
-        // Draw a very small arrow at the vertical center of the arrow panel.
-        // Points right when collapsed (invite to expand), left when expanded (invite to collapse).
-        private void Panel1_PaintArrow(object sender, PaintEventArgs e)
-        {
-            try
-            {
-                var p = _sidebarArrowPanel ?? (this.splitContainer1 != null ? this.splitContainer1.Panel1 : null);
-                if (p == null) return;
-
-                int w = p.ClientSize.Width;
-                int h = p.ClientSize.Height;
-                if (w <= 0 || h <= 0) return;
-
-                // Decide arrow direction deterministically
-                bool pointRight;
-                if (_sidebarAnimating)
-                {
-                    // While animating, point towards the target width
-                    pointRight = _sidebarTargetWidth > this.splitContainer1.SplitterDistance;
+                    InitializeClient();
                 }
                 else
                 {
-                    // When idle, reflect the expanded/collapsed state
-                    pointRight = !_sidebarExpanded;
+                    // They might have clicked Apply
+                    InitializeClient();
                 }
-
-                // Arrow size and position (keep it tiny)
-                int arrowH = Math.Max(8, Math.Min(12, h / 20));
-                int arrowW = Math.Max(5, arrowH / 2 + 2);
-                int cy = h / 2;
-                int paddingRight = 1; // keep within strip
-                int cxRight = Math.Max(arrowW + 1, Math.Min(w - paddingRight, w));
-                int cxLeft = Math.Max(arrowW + 1, Math.Min(w - paddingRight, w));
-
-                using (var sb = new SolidBrush(Color.DimGray))
-                {
-                    var oldMode = e.Graphics.SmoothingMode;
-                    e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                    Point[] tri;
-                    if (pointRight)
-                    {
-                        tri = new[]
-                        {
-                            new Point(cxRight - arrowW, cy - arrowH/2),
-                            new Point(cxRight - arrowW, cy + arrowH/2),
-                            new Point(cxRight,            cy)
-                        };
-                    }
-                    else // pointLeft
-                    {
-                        int cx = cxLeft - 1;
-                        tri = new[]
-                        {
-                            new Point(cx,            cy - arrowH/2),
-                            new Point(cx,            cy + arrowH/2),
-                            new Point(cx - arrowW,   cy)
-                        };
-                    }
-                    e.Graphics.FillPolygon(sb, tri);
-                    e.Graphics.SmoothingMode = oldMode;
-                }
-            }
-            catch { }
-        }
-
-        private void EnsureSidebarArrowStrip()
-        {
-            try
-            {
-                if (_sidebarArrowPanel != null) return;
-                _sidebarArrowPanel = new Panel();
-                _sidebarArrowPanel.Width = 14; // slim strip
-                _sidebarArrowPanel.Dock = DockStyle.Right;
-                _sidebarArrowPanel.Margin = new Padding(0);
-                _sidebarArrowPanel.Padding = new Padding(0);
-                _sidebarArrowPanel.Cursor = Cursors.Hand;
-                _sidebarArrowPanel.BackColor = this.splitContainer1.Panel1.BackColor;
-                _sidebarArrowPanel.Paint += Panel1_PaintArrow;
-                _sidebarArrowPanel.Click += Panel1_ClickToggle;
-                _sidebarArrowPanel.PreviewKeyDown += Panel1_PreviewKeyDown;
-                _sidebarArrowPanel.TabStop = true;
-                this.splitContainer1.Panel1.Controls.Add(_sidebarArrowPanel);
-                _sidebarArrowPanel.BringToFront();
-                LayoutSidebarChildren();
-            }
-            catch { }
-        }
-
-        // View -> Conversation History click: toggle sidebar expanded/collapsed
-        private void miConversationHistory_Click(object sender, EventArgs e)
-        {
-            ToggleSidebar();
-        }
-
-        // Ensure the menu checked state mirrors the actual expanded state
-        private void UpdateConversationHistoryCheckedState()
-        {
-            try
-            {
-                if (this.miConversationHistory != null)
-                {
-                    this.miConversationHistory.Checked = _sidebarExpanded;
-                }
-            }
-            catch { }
-        }
-
-        // Custom ToolStripButton with copy-button-like hover/press visuals and +/x glyphs
-        private sealed class GlyphToolStripButton : ToolStripButton
-        {
-            public enum GlyphType { Plus, Close }
-            private bool _hover; private bool _pressed; private readonly GlyphType _glyph;
-            public GlyphToolStripButton(GlyphType glyph)
-            {
-                _glyph = glyph;
-                DisplayStyle = ToolStripItemDisplayStyle.None;
-                AutoSize = false;
-                Size = new Size(24, 20);
-                Margin = new Padding(2);
-            }
-            protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
-            protected override void OnMouseLeave(EventArgs e) { _hover = false; _pressed = false; Invalidate(); base.OnMouseLeave(e); }
-            protected override void OnMouseDown(MouseEventArgs e) { if (e.Button == MouseButtons.Left) { _pressed = true; Invalidate(); } base.OnMouseDown(e); }
-            protected override void OnMouseUp(MouseEventArgs e) { _pressed = false; Invalidate(); base.OnMouseUp(e); }
-            protected override void OnPaint(PaintEventArgs e)
-            {
-                var g = e.Graphics;
-                Rectangle r = new Rectangle(0, 0, (int)this.Width - 1, (int)this.Height - 1);
-                if (_hover || _pressed)
-                {
-                    int shade = _pressed ? 210 : 230;
-                    using (var sb = new SolidBrush(Color.FromArgb(shade, shade, shade))) g.FillRectangle(sb, r);
-                    using (var pen = new Pen(Color.FromArgb(210, 210, 210))) g.DrawRectangle(pen, r);
-                }
-                using (var pen = new Pen(Color.FromArgb(80, 80, 80), 2f))
-                {
-                    int cx = r.Left + r.Width / 2;
-                    int cy = r.Top + r.Height / 2;
-                    int len = Math.Min(r.Width, r.Height) / 2 - 3;
-                    g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                    if (_glyph == GlyphType.Plus)
-                    {
-                        g.DrawLine(pen, cx - len, cy, cx + len, cy);
-                        g.DrawLine(pen, cx, cy - len, cx, cy + len);
-                    }
-                    else
-                    {
-                        g.DrawLine(pen, cx - len, cy - len, cx + len, cy + len);
-                        g.DrawLine(pen, cx - len, cy + len, cx + len, cy - len);
-                    }
-                }
+                UpdateApiKeyBanner();
+                try { if (_themeManager != null) _themeManager.ApplyThemeToAllTranscripts(); }
+                catch { }
             }
         }
 
@@ -1501,7 +687,7 @@ namespace GxPT
             try
             {
                 if (this.cmbModel == null) return;
-                var ctx = GetActiveContext();
+                var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
                 if (ctx == null) return;
                 var target = ctx.SelectedModel;
                 if (string.IsNullOrEmpty(target)) target = GetConfiguredDefaultModel();
@@ -1521,7 +707,7 @@ namespace GxPT
             if (_syncingModelCombo) return;
             try
             {
-                var ctx = GetActiveContext();
+                var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
                 if (ctx != null) ctx.SelectedModel = GetSelectedModel();
                 if (ctx != null && ctx.Conversation != null)
                 {
@@ -1530,7 +716,7 @@ namespace GxPT
                     if (ctx.Conversation.History.Count > 0 && !ctx.NoSaveUntilUserSend)
                     {
                         ConversationStore.Save(ctx.Conversation);
-                        RefreshSidebarList();
+                        if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
                     }
                 }
             }
@@ -1543,7 +729,7 @@ namespace GxPT
             if (_syncingModelCombo) return;
             try
             {
-                var ctx = GetActiveContext();
+                var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
                 if (ctx != null) ctx.SelectedModel = GetSelectedModel();
                 if (ctx != null && ctx.Conversation != null)
                 {
@@ -1551,191 +737,9 @@ namespace GxPT
                     if (ctx.Conversation.History.Count > 0 && !ctx.NoSaveUntilUserSend)
                     {
                         ConversationStore.Save(ctx.Conversation);
-                        RefreshSidebarList();
+                        if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
                     }
                 }
-            }
-            catch { }
-        }
-
-        // ===== Sidebar list (Panel1) =====
-        private void EnsureSidebarList()
-        {
-            try
-            {
-                if (_lvConversations != null) return;
-                _lvConversations = new ListView();
-                _lvConversations.View = View.Details;
-                _lvConversations.FullRowSelect = true;
-                _lvConversations.HideSelection = false;
-                _lvConversations.HeaderStyle = ColumnHeaderStyle.None;
-                _lvConversations.BorderStyle = BorderStyle.None;
-                _lvConversations.Dock = DockStyle.Left; // we'll size manually to avoid overlap with arrow strip
-                _lvConversations.Columns.Add("Conversation", 200, HorizontalAlignment.Left);
-                _lvConversations.MultiSelect = false;
-                // Use double-click/Enter to open
-                _lvConversations.ItemActivate += LvConversations_ItemActivate;
-                // Right-click context menu
-                var cms = new ContextMenuStrip();
-                var miOpen = new ToolStripMenuItem("Open");
-                var miDelete = new ToolStripMenuItem("Delete");
-                var deleteImage = ResourceHelper.GetAssemblyImage("ExplorerDelete.png");
-                miOpen.Click += (s, e) => TryOpenSelectedConversation();
-                miDelete.Click += (s, e) => DeleteSelectedConversation();
-                miDelete.Image = deleteImage;
-                cms.Items.Add(miOpen);
-                cms.Items.Add(miDelete);
-                _lvConversations.ContextMenuStrip = cms;
-
-                // Background matches panel for a unified look
-                _lvConversations.BackColor = this.splitContainer1.Panel1.BackColor;
-                // Use system rendering (no bold)
-                _lvConversations.OwnerDraw = false;
-
-                // Increase row height via a 1px-wide SmallImageList with a taller ImageSize
-                try
-                {
-                    if (_lvRowHeightImages == null)
-                    {
-                        _lvRowHeightImages = new ImageList();
-                        int rowHeight = Math.Max(_lvConversations.Font.Height + 8, 22); // add vertical padding
-                        _lvRowHeightImages.ImageSize = new Size(1, rowHeight);
-                    }
-                    _lvConversations.SmallImageList = _lvRowHeightImages;
-                }
-                catch { }
-
-                // Keep the single column sized correctly on resize and sidebar animation
-                _lvConversations.Resize += (s, e) => ResizeSidebarColumn();
-
-                this.splitContainer1.Panel1.Controls.Add(_lvConversations);
-                // Apply current font/row height immediately (works even if collapsed)
-                try { ApplyFontSizeSettingToSidebar(); }
-                catch { }
-                RefreshSidebarList();
-                LayoutSidebarChildren();
-            }
-            catch { }
-        }
-
-        private void RefreshSidebarList()
-        {
-            try
-            {
-                if (_lvConversations == null) return;
-                var items = ConversationStore.ListAll();
-                _lvConversations.BeginUpdate();
-                try
-                {
-                    _lvConversations.Items.Clear();
-                    foreach (var it in items)
-                    {
-                        string text = string.IsNullOrEmpty(it.Name) ? "New Conversation" : it.Name;
-                        var lvi = new ListViewItem(text);
-                        lvi.Tag = it; // store ConversationListItem
-                        _lvConversations.Items.Add(lvi);
-                    }
-                    ResizeSidebarColumn();
-                }
-                finally
-                {
-                    _lvConversations.EndUpdate();
-                }
-            }
-            catch { }
-        }
-
-        // (Owner-draw methods retained but unused when OwnerDraw = false)
-        private void LvConversations_DrawItem(object sender, DrawListViewItemEventArgs e) { }
-        private void LvConversations_DrawSubItem(object sender, DrawListViewSubItemEventArgs e) { }
-
-        // Ensure the ListView never sits under the arrow strip (prevents scrollbar overlap)
-        private void LayoutSidebarChildren()
-        {
-            try
-            {
-                if (this.splitContainer1 == null || _lvConversations == null) return;
-                int arrowW = (_sidebarArrowPanel != null ? _sidebarArrowPanel.Width : 0);
-                int panelW = this.splitContainer1.Panel1.ClientSize.Width;
-                int targetW = Math.Max(0, panelW - arrowW);
-                if (_lvConversations.Dock != DockStyle.Left) _lvConversations.Dock = DockStyle.Left;
-                if (_lvConversations.Width != targetW) _lvConversations.Width = targetW;
-            }
-            catch { }
-        }
-
-        private void LvConversations_ItemActivate(object sender, EventArgs e)
-        {
-            TryOpenSelectedConversation();
-        }
-
-        private void TryOpenSelectedConversation()
-        {
-            try
-            {
-                if (_lvConversations == null || _lvConversations.SelectedItems.Count == 0) return;
-                var lvi = _lvConversations.SelectedItems[0];
-                var info = lvi.Tag as ConversationStore.ConversationListItem;
-                if (info == null) return;
-
-                // If already open, switch to it
-                TabPage page;
-                if (!string.IsNullOrEmpty(info.Id) && _openConversationsById.TryGetValue(info.Id, out page) && this.tabControl1.TabPages.Contains(page))
-                {
-                    try { this.tabControl1.SelectedTab = page; }
-                    catch { }
-                    return;
-                }
-
-                // Otherwise, load and open a new tab
-                var convo = ConversationStore.Load(_client, info.Path);
-                if (convo == null) return;
-                // If current tab is blank, reuse it
-                var active = GetActiveContext();
-                if (active != null && active.Conversation != null && (active.Conversation.History == null || active.Conversation.History.Count == 0))
-                {
-                    OpenConversationInContext(active, convo);
-                }
-                else
-                {
-                    OpenConversationInNewTab(convo);
-                }
-            }
-            catch { }
-        }
-
-        private void DeleteSelectedConversation()
-        {
-            try
-            {
-                if (_lvConversations == null || _lvConversations.SelectedItems.Count == 0) return;
-                var lvi = _lvConversations.SelectedItems[0];
-                var info = lvi.Tag as ConversationStore.ConversationListItem;
-                if (info == null) return;
-
-                // If open, prevent deleting or prompt to close first
-                TabPage openPage;
-                if (!string.IsNullOrEmpty(info.Id) && _openConversationsById.TryGetValue(info.Id, out openPage))
-                {
-                    // Close the tab before deleting
-                    CloseConversationTab(openPage);
-                }
-
-                ConversationStore.DeletePath(info.Path);
-                RefreshSidebarList();
-            }
-            catch { }
-        }
-
-        private void ResizeSidebarColumn()
-        {
-            try
-            {
-                if (_lvConversations == null || _lvConversations.Columns.Count == 0) return;
-                // Leave space for the arrow strip if present
-                int arrowW = (_sidebarArrowPanel != null ? _sidebarArrowPanel.Width : 0);
-                int target = Math.Max(20, _lvConversations.ClientSize.Width - arrowW - 2);
-                _lvConversations.Columns[0].Width = target;
             }
             catch { }
         }
@@ -1743,37 +747,23 @@ namespace GxPT
         private void OpenConversationInNewTab(Conversation convo)
         {
             if (this.tabControl1 == null || convo == null) return;
-            var ctx = CreateConversationTab();
+            var ctx = _tabManager != null ? _tabManager.CreateConversationTab() : null;
             if (ctx == null) return;
-            // replace the conversation and refresh transcript UI
-            OpenConversationInContext(ctx, convo);
-            // Keep focus in input when a new tab opens from history
-            FocusInputSoon();
-        }
 
-        private void OpenConversationInContext(ChatTabContext ctx, Conversation convo)
-        {
-            if (ctx == null || convo == null) return;
-            // Remove any previous mapping for this page
-            try
-            {
-                var toRemove = _openConversationsById.Where(kv => object.ReferenceEquals(kv.Value, ctx.Page)).Select(kv => kv.Key).ToList();
-                foreach (var k in toRemove) _openConversationsById.Remove(k);
-            }
-            catch { }
-
+            // Replace the conversation and refresh transcript UI
             ctx.Conversation = convo;
             ctx.SelectedModel = string.IsNullOrEmpty(convo.SelectedModel) ? GetSelectedModel() : convo.SelectedModel;
             try { this.cmbModel.Text = ctx.SelectedModel; }
             catch { }
-            EnsureConversationId(ctx);
-            TrackOpenConversation(ctx);
+            ConversationStore.EnsureConversationId(ctx.Conversation);
+            if (_sidebarManager != null && ctx.Conversation != null)
+                _sidebarManager.TrackOpenConversation(ctx.Conversation.Id, ctx.Page);
 
             // Rebuild transcript UI
             try
             {
                 ctx.Transcript.ClearMessages();
-                ApplyFontSizeSetting(ctx.Transcript);
+                if (_themeManager != null) _themeManager.ApplyFontSetting(ctx.Transcript);
                 try { ctx.Transcript.RefreshTheme(); }
                 catch { }
                 foreach (var m in convo.History)
@@ -1795,230 +785,14 @@ namespace GxPT
             }
             catch { }
 
-            // If we reused a blank tab or just loaded into a newly created tab, focus input
-            FocusInputSoon();
-        }
-
-        // Apply theme to all open transcripts, including the designer-created one
-        private void ApplyThemeToAllTranscripts()
-        {
-            try
-            {
-                if (this.chatTranscript != null) this.chatTranscript.RefreshTheme();
-            }
-            catch { }
-            try
-            {
-                foreach (var kv in _tabContexts)
-                {
-                    try { if (kv.Value.Transcript != null) kv.Value.Transcript.RefreshTheme(); }
-                    catch { }
-                }
-            }
-            catch { }
-
-            // Also apply matching background/foreground to the input textbox
-            try
-            {
-                string theme = null;
-                try { theme = AppSettings.GetString("theme"); }
-                catch { theme = null; }
-                bool dark = !string.IsNullOrEmpty(theme) && theme.Trim().Equals("dark", StringComparison.OrdinalIgnoreCase);
-                if (this.txtMessage != null)
-                {
-                    if (dark)
-                    {
-                        // Match ChatTranscriptControl dark app background and bubble text color
-                        this.txtMessage.BackColor = Color.FromArgb(0x24, 0x27, 0x3A); // Macchiato Base
-                        this.txtMessage.ForeColor = Color.FromArgb(230, 230, 230);   // light text like bubbles
-                    }
-                    else
-                    {
-                        this.txtMessage.BackColor = SystemColors.Window;
-                        this.txtMessage.ForeColor = SystemColors.WindowText;
-                    }
-                }
-            }
-            catch { }
-        }
-
-        private void ApplyFontSizeSettingToAllUi()
-        {
-            try
-            {
-                double fs = AppSettings.GetDouble("font_size", 0);
-                if (fs <= 0) { ApplyFontSizeSettingToAllTranscripts(); return; }
-                float size = (float)Math.Max(6, Math.Min(48, fs));
-
-                // Core chat transcript(s)
-                ApplyFontSizeSettingToAllTranscripts();
-
-                // Input textbox
-                try { if (this.txtMessage != null) this.txtMessage.Font = new Font(this.txtMessage.Font.FontFamily, size, this.txtMessage.Font.Style); }
-                catch { }
-                // Send button
-                try { if (this.btnSend != null) this.btnSend.Font = new Font(this.btnSend.Font.FontFamily, size, this.btnSend.Font.Style); }
-                catch { }
-                // Model combo box
-                try { if (this.cmbModel != null) this.cmbModel.Font = new Font(this.cmbModel.Font.FontFamily, size, this.cmbModel.Font.Style); }
-                catch { }
-                // Sidebar list
-                try { ApplyFontSizeSettingToSidebar(); }
-                catch { }
-                // Tab headers (tab page titles)
-                try
-                {
-                    if (this.tabControl1 != null)
-                    {
-                        this.tabControl1.Font = new Font(this.tabControl1.Font.FontFamily, size, this.tabControl1.Font.Style);
-                        foreach (TabPage p in this.tabControl1.TabPages)
-                        {
-                            try { if (p != null) p.Font = new Font(p.Font.FontFamily, size, p.Font.Style); }
-                            catch { }
-                        }
-                    }
-                }
-                catch { }
-                // API key banner link/label
-                try { if (this.lnkOpenSettings != null) this.lnkOpenSettings.Font = new Font(this.lnkOpenSettings.Font.FontFamily, size, this.lnkOpenSettings.Font.Style); }
-                catch { }
-                try { if (this.lblNoApiKey != null) this.lblNoApiKey.Font = new Font(this.lblNoApiKey.Font.FontFamily, size, this.lblNoApiKey.Font.Style); }
-                catch { }
-
-                // Recalculate input height because font changes alter measured height
-                try { AdjustInputBoxHeight(); }
-                catch { }
-            }
-            catch { }
-        }
-
-        private void ApplyFontSizeSettingToAllTranscripts()
-        {
-            try
-            {
-                double fs = AppSettings.GetDouble("font_size", 0);
-                if (fs <= 0) return;
-                float size = (float)Math.Max(6, Math.Min(48, fs));
-                // Designer-created transcript
-                try { if (this.chatTranscript != null) this.chatTranscript.Font = new Font(this.chatTranscript.Font.FontFamily, size, this.chatTranscript.Font.Style); }
-                catch { }
-
-                // Any transcripts in open tabs
-                foreach (var kv in _tabContexts)
-                {
-                    try
-                    {
-                        var t = kv.Value.Transcript;
-                        if (t != null) t.Font = new Font(t.Font.FontFamily, size, t.Font.Style);
-                    }
-                    catch { }
-                }
-            }
-            catch { }
-        }
-
-        private void ApplyFontSizeSetting(ChatTranscriptControl transcript)
-        {
-            if (transcript == null) return;
-            try
-            {
-                double fs = AppSettings.GetDouble("font_size", 0);
-                if (fs <= 0) return;
-                float size = (float)Math.Max(6, Math.Min(48, fs));
-                transcript.Font = new Font(transcript.Font.FontFamily, size, transcript.Font.Style);
-            }
-            catch { }
-        }
-
-        // Apply font size and row height to the sidebar list, even when collapsed/hidden
-        private void ApplyFontSizeSettingToSidebar()
-        {
-            try
-            {
-                if (this._lvConversations == null) return;
-                double fs = AppSettings.GetDouble("font_size", 0);
-                if (fs <= 0) return;
-                float size = (float)Math.Max(6, Math.Min(48, fs));
-
-                // Update font
-                try { this._lvConversations.Font = new Font(this._lvConversations.Font.FontFamily, size, this._lvConversations.Font.Style); }
-                catch { }
-
-                // Ensure image list exists and set row height based on font
-                if (this._lvRowHeightImages == null)
-                    this._lvRowHeightImages = new ImageList();
-
-                int rowHeight = Math.Max(this._lvConversations.Font.Height + 8, 22);
-                this._lvRowHeightImages.ImageSize = new Size(1, rowHeight);
-
-                // Force ListView to recalc item height by reassigning the image list
-                try
-                {
-                    var current = this._lvConversations.SmallImageList;
-                    this._lvConversations.SmallImageList = null;
-                    this._lvConversations.SmallImageList = this._lvRowHeightImages;
-                }
-                catch { }
-
-                // Adjust column width and refresh
-                try { ResizeSidebarColumn(); }
-                catch { }
-                try { this._lvConversations.Invalidate(); this._lvConversations.Update(); }
-                catch { }
-            }
-            catch { }
-        }
-
-        private void TrackOpenConversation(ChatTabContext ctx)
-        {
-            try
-            {
-                if (ctx == null || ctx.Conversation == null || string.IsNullOrEmpty(ctx.Conversation.Id)) return;
-                _openConversationsById[ctx.Conversation.Id] = ctx.Page;
-            }
-            catch { }
-        }
-
-        private void EnsureConversationId(ChatTabContext ctx)
-        {
-            try
-            {
-                if (ctx == null || ctx.Conversation == null) return;
-                ConversationStore.EnsureConversationId(ctx.Conversation);
-            }
-            catch { }
-        }
-
-        // Helper: focus the message textbox now (if possible)
-        private void FocusInput()
-        {
-            try
-            {
-                if (this.txtMessage == null) return;
-                if (!this.txtMessage.CanFocus) return;
-                this.txtMessage.Focus();
-                // place caret at end
-                try
-                {
-                    this.txtMessage.SelectionStart = this.txtMessage.TextLength;
-                    this.txtMessage.SelectionLength = 0;
-                }
-                catch { }
-            }
-            catch { }
-        }
-
-        // Helper: schedule focus on UI queue to occur after layout/selection
-        private void FocusInputSoon()
-        {
-            try { this.BeginInvoke((MethodInvoker)(() => FocusInput())); }
-            catch { }
+            // Focus input when a new tab opens from history
+            if (_inputManager != null) _inputManager.FocusInputSoon();
         }
 
         private void miApiKeysHelp_Click(object sender, EventArgs e)
         {
             // Open a new tab pre-populated with an unsaved help conversation
-            var ctx = CreateConversationTab();
+            var ctx = _tabManager != null ? _tabManager.CreateConversationTab() : null;
             if (ctx == null) return;
 
             try
@@ -2047,7 +821,7 @@ namespace GxPT
                     "3. **Go to the API Keys section.**\n" +
                     "   - Once logged in, locate the section labeled **API Keys** or **Keys** to manage your keys.\n" +
                     "4. **Create a new key and name it.**\n" +
-                    "   - Click **Create Key**, enter a descriptive name, and optionally set a credit limit. Save the key immediately—**it won’t be visible again** after navigating away.\n" +
+                    "   - Click **Create Key**, enter a descriptive name, and optionally set a credit limit. Save the key immediately—**it won't be visible again** after navigating away.\n" +
                     "---\n\n" +
                     "## Summary\n\n" +
                     "| Step | Action                                                                                         |\n" +
@@ -2075,39 +849,8 @@ namespace GxPT
                 ctx.Transcript.AddMessage(MessageRole.Assistant, assistantMsg2);
                 ctx.Conversation.AddAssistantMessage(assistantMsg2);
 
-                // Ensure the help tab starts scrolled to the top
-                TryScrollTranscriptToTop(ctx.Transcript);
-                try { this.BeginInvoke((MethodInvoker)(() => TryScrollTranscriptToTop(ctx.Transcript))); }
-                catch { }
-
                 UpdateWindowTitleFromActiveTab();
-                FocusInputSoon();
-            }
-            catch { }
-        }
-
-        // Best-effort: scroll a transcript to the top using public API if present, otherwise fallback to private VScrollBar via reflection
-        private static void TryScrollTranscriptToTop(ChatTranscriptControl t)
-        {
-            if (t == null) return;
-            try
-            {
-                var mi = t.GetType().GetMethod("ScrollToTop", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-                if (mi != null)
-                {
-                    mi.Invoke(t, null);
-                    return;
-                }
-                var fld = t.GetType().GetField("_vbar", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                if (fld != null)
-                {
-                    var vbar = fld.GetValue(t) as VScrollBar;
-                    if (vbar != null)
-                    {
-                        if (vbar.Enabled) vbar.Value = 0;
-                    }
-                }
-                t.Invalidate();
+                if (_inputManager != null) _inputManager.FocusInputSoon();
             }
             catch { }
         }
@@ -2119,6 +862,28 @@ namespace GxPT
                 dlg.StartPosition = FormStartPosition.CenterParent;
                 dlg.ShowDialog(this);
             }
+        }
+
+        // Missing event handlers expected by designer
+        private void miConversationHistory_Click(object sender, EventArgs e)
+        {
+            if (_sidebarManager != null) _sidebarManager.ToggleSidebar();
+        }
+
+        private void txtMessage_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (_inputManager != null) _inputManager.HandleKeyDown(e);
+        }
+
+        private void txtMessage_Enter(object sender, EventArgs e)
+        {
+            _inputManager.RemoveHintText("Ask anything...");
+            _themeManager.ApplyThemeToTextBox();
+        }
+
+        private void txtMessage_Leave(object sender, EventArgs e)
+        {
+            _inputManager.SetHintText("Ask anything...");
         }
     }
 }

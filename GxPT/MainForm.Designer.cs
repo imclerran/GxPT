@@ -230,6 +230,8 @@
             this.txtMessage.Size = new System.Drawing.Size(710, 75);
             this.txtMessage.TabIndex = 1;
             this.txtMessage.KeyDown += new System.Windows.Forms.KeyEventHandler(this.txtMessage_KeyDown);
+            this.txtMessage.Leave += new System.EventHandler(this.txtMessage_Leave);
+            this.txtMessage.Enter += new System.EventHandler(this.txtMessage_Enter);
             // 
             // pnlInputRight
             // 

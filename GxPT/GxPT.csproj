@@ -86,6 +86,7 @@
     <Compile Include="ChatModels.cs" />
     <Compile Include="Conversation.cs" />
     <Compile Include="ConversationStore.cs" />
+    <Compile Include="InputManager.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="OpenRouterClient.cs">
     </Compile>
@@ -137,9 +138,12 @@
     <Compile Include="SettingsForm.Designer.cs">
       <DependentUpon>SettingsForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="SidebarManager.cs" />
     <Compile Include="SyntaxHighlighter.cs">
     </Compile>
     <Compile Include="SyntaxHighlightingRenderer.cs" />
+    <Compile Include="TabManager.cs" />
+    <Compile Include="ThemeManager.cs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="curl.exe">
