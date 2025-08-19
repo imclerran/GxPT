@@ -320,7 +320,9 @@ namespace GxPT
                 _lvConversations.Columns.Add("Conversation", 200, HorizontalAlignment.Left);
                 _lvConversations.MultiSelect = false;
                 _lvConversations.ItemActivate += LvConversations_ItemActivate;
+                _lvConversations.MouseUp += LvConversations_MouseUp;
 
+                // Create context menu but don't assign it directly
                 var cms = new ContextMenuStrip();
                 var miOpen = new ToolStripMenuItem("Open");
                 var miDelete = new ToolStripMenuItem("Delete");
@@ -330,7 +332,9 @@ namespace GxPT
                 miDelete.Image = deleteImage;
                 cms.Items.Add(miOpen);
                 cms.Items.Add(miDelete);
-                _lvConversations.ContextMenuStrip = cms;
+
+                // Store the context menu for manual display
+                _lvConversations.Tag = cms;
 
                 _lvConversations.BackColor = _splitContainer.Panel1.BackColor;
                 _lvConversations.OwnerDraw = false;
@@ -400,6 +404,31 @@ namespace GxPT
         private void LvConversations_ItemActivate(object sender, EventArgs e)
         {
             TryOpenSelectedConversation();
+        }
+
+        private void LvConversations_MouseUp(object sender, MouseEventArgs e)
+        {
+            // Only show context menu for right-clicks that hit an actual item
+            if (e.Button == MouseButtons.Right)
+            {
+                try
+                {
+                    var hitTest = _lvConversations.HitTest(e.Location);
+                    if (hitTest.Item != null)
+                    {
+                        // Select the item that was right-clicked
+                        hitTest.Item.Selected = true;
+
+                        // Show the context menu
+                        var cms = _lvConversations.Tag as ContextMenuStrip;
+                        if (cms != null)
+                        {
+                            cms.Show(_lvConversations, e.Location);
+                        }
+                    }
+                }
+                catch { }
+            }
         }
 
         private void TryOpenSelectedConversation()
