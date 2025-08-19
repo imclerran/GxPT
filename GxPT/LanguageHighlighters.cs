@@ -725,4 +725,104 @@ namespace GxPT
             };
         }
     }
+
+    /// <summary>
+    /// Bash/Shell syntax highlighter
+    /// </summary>
+    public class BashHighlighter : RegexHighlighterBase
+    {
+        public override string Language
+        {
+            get { return "bash"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "sh", "shell", "zsh", "ksh" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Comments
+                new TokenPattern(@"#.*$", TokenType.Comment, 1),
+
+                // Here-Documents (simple heuristic)
+                    new TokenPattern(@"<<-?['""]?(\w+)['""]?[\s\S]+?\n\1\b", TokenType.String, 2),
+
+                    new TokenPattern(@"\$?""(?:[^""\\]|\\.)*""|\$?'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`", TokenType.String, 3),
+                new TokenPattern(@"\$?""(?:[^""\\]|\\.)*""|\$?'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`", TokenType.String, 3),
+
+                // Variables ($VAR, ${VAR}, $1, $@, $#, $$, etc.)
+                new TokenPattern(@"\$\{[^}]+\}|\$[a-zA-Z_][a-zA-Z0-9_]*|\$[0-9]|\$[@#?$!*_-]", TokenType.Type, 4),
+
+                // Numbers
+                new TokenPattern(@"\b\d+(?:\.\d+)?\b", TokenType.Number, 5),
+
+                // Keywords (reserved words)
+                new TokenPattern(@"\b(?:if|then|else|elif|fi|for|in|do|done|case|esac|while|until|select|function|time|coproc|return|break|continue|shift|getopts|exit|trap|local|readonly|declare|typeset|export|unset|alias|unalias|source)\b", TokenType.Keyword, 6),
+
+                // Common built-in commands (treated as types for color variety)
+                new TokenPattern(@"\b(?:echo|printf|read|cd|pwd|test|true|false|type|hash|help|umask|ulimit|jobs|fg|bg|kill|wait)\b", TokenType.Type, 7),
+
+                // Function names: highlight 'function name' and 'name() {' forms
+                new TokenPattern(@"\bfunction\s+[a-zA-Z_][a-zA-Z0-9_-]*", TokenType.Method, 8),
+                new TokenPattern(@"\b[a-zA-Z_][a-zA-Z0-9_-]*(?=\s*\(\s*\)\s*\{)", TokenType.Method, 9),
+
+                // Operators (pipes, redirects, boolean, test ops)
+                new TokenPattern(@"\|\||&&|\|&|\|>|\||>>|>|<|<<|<<<|=|==|=~|!|\+|-|\*|/|%|\^|~", TokenType.Operator, 10),
+
+                // Punctuation
+                new TokenPattern(@"[{}()\[\];,:]", TokenType.Punctuation, 11)
+            };
+        }
+    }
+
+    /// <summary>
+    /// Windows Batch (CMD) syntax highlighter
+    /// </summary>
+    public class BatchHighlighter : RegexHighlighterBase
+    {
+        public override string Language
+        {
+            get { return "batch"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "bat", "cmd", "dos", "batchfile" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Comments: REM ... or lines starting with ::
+                new TokenPattern(@"^\s*(?:REM|rem)\b.*$", TokenType.Comment, 1),
+                new TokenPattern(@"^\s*::.*$", TokenType.Comment, 2),
+
+                // Strings (double quotes)
+                new TokenPattern("\"(?:[^\\\"]|\\.)*\"", TokenType.String, 3),
+
+                // Variables: %VAR%, !VAR!, %1, %~dp0, etc.
+                new TokenPattern(@"%~?[0-9A-Za-z][^%\s]*%|![^!\s]+!", TokenType.Type, 4),
+
+                // Labels: :label at line start
+                new TokenPattern(@"^\s*:[A-Za-z_][A-Za-z0-9_\-.]*", TokenType.Type, 5),
+
+                // Numbers
+                new TokenPattern(@"\b\d+\b", TokenType.Number, 6),
+
+                // Keywords and common commands
+                new TokenPattern(@"\b(?:if|else|not|exist|defined|errorlevel|equ|neq|lss|leq|gtr|geq|for|in|do|call|goto|shift|set|setlocal|endlocal|echo|type|copy|move|ren|del|erase|mkdir|rmdir|rd|dir|pause|choice|start|exit|color|title|cls|pushd|popd|path|prompt|assoc|ftype)\b", TokenType.Keyword, 7),
+
+                // Operators and redirection
+                new TokenPattern(@"==|\|\||&&|\||>>|>|<|2>&1", TokenType.Operator, 8),
+
+                // Punctuation
+                new TokenPattern(@"[()\[\]{};,]", TokenType.Punctuation, 9)
+            };
+        }
+    }
 }

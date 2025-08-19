@@ -85,6 +85,8 @@ namespace GxPT
         /// </summary>
         private static void RegisterDefaultHighlighters()
         {
+            RegisterHighlighter(new BashHighlighter());
+            RegisterHighlighter(new BatchHighlighter());
             RegisterHighlighter(new CHighlighter());
             RegisterHighlighter(new CppHighlighter());
             RegisterHighlighter(new CSharpHighlighter());
