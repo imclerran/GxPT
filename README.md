@@ -24,7 +24,7 @@ A native chatbot client for Windows XP, written in C# and .NET 3.5. GxPT aims to
    - Windows XP or later (XP optimized)
    - .NET Framework 3.5
 
-2. **Building**
+2. **Building & Running**
    - Open the solution in Visual Studio 2008 or later.
    - Build the solution; required libraries are included.
    - Build the setup project
@@ -32,4 +32,4 @@ A native chatbot client for Windows XP, written in C# and .NET 3.5. GxPT aims to
 
 3. **Configuration**
    - Launch the app and open the settings window to configure your API key and preferences.
-   - For OpenRouter.ai, see the in-app help page for instructions on obtaining and entering an API key.
+   - See the in-app help page for instructions on obtaining and entering an OpenRouter API key.
