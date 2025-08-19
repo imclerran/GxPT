@@ -1014,8 +1014,26 @@ namespace GxPT
             // Add a small padding to avoid clipping last line
             int desired = measured.Height + 8;
 
-            // Clamp to [MinInputHeightPx, maxHeight]
-            int newHeight = Math.Max(MinInputHeightPx, Math.Min(desired, maxHeight));
+            // Ensure the input panel is never shorter than the right column (btnSend + cmbModel)
+            // Use PreferredSize to respect runtime font/DPI scaling and current theme.
+            int rightMin = 0;
+            try
+            {
+                if (this.btnSend != null && this.btnSend.Visible)
+                    rightMin += this.btnSend.PreferredSize.Height;
+            }
+            catch { }
+            try
+            {
+                if (this.cmbModel != null && this.cmbModel.Visible)
+                    rightMin += this.cmbModel.PreferredSize.Height;
+            }
+            catch { }
+
+            int minHeight = Math.Max(MinInputHeightPx, rightMin);
+
+            // Clamp to [minHeight, maxHeight]
+            int newHeight = Math.Max(minHeight, Math.Min(desired, maxHeight));
 
             // Apply height to the container panel (textbox is Dock:Fill)
             if (this.pnlInput.Height != newHeight)
@@ -1027,12 +1045,6 @@ namespace GxPT
             if (txtMessage.ScrollBars != newScroll)
                 txtMessage.ScrollBars = newScroll;
         }
-
-        // future conversation-related helpers can go here
-
-        // (designer-managed layout)
-
-        // (designer-managed banner)
 
         private void lnkOpenSettings_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
         {
