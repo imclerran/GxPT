@@ -153,21 +153,21 @@ namespace GxPT
                     rightMin += _cmbModel.PreferredSize.Height;
             }
             catch { }
-            // Small padding between stacked controls to avoid visual crowding
-            rightMin += 4;
 
             // Allow exceeding the original maxHeight when the right column needs more space
-            int heightCap = Math.Max(maxHeight, rightMin);
+            //int heightCap = Math.Max(maxHeight, rightMin);
+
+            int minHeight = Math.Max(MinInputHeightPx, rightMin);
 
             // Clamp to [MinInputHeightPx, maxHeight]
-            int newHeight = Math.Max(MinInputHeightPx, Math.Min(desired, heightCap));
+            int newHeight = Math.Max(minHeight, Math.Min(desired, maxHeight));
 
             // Apply height to the container panel (textbox is Dock:Fill)
             if (_pnlInput.Height != newHeight)
                 _pnlInput.Height = newHeight;
 
             // Manage scrollbars: only show when content exceeds cap
-            bool exceedsCap = desired > heightCap;
+            bool exceedsCap = desired > maxHeight;
             var newScroll = exceedsCap ? ScrollBars.Vertical : ScrollBars.None;
             if (_txtMessage.ScrollBars != newScroll)
                 _txtMessage.ScrollBars = newScroll;
