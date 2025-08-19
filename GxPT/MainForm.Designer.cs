@@ -35,6 +35,9 @@
             this.toolStripSeparator2 = new System.Windows.Forms.ToolStripSeparator();
             this.miNewConversation = new System.Windows.Forms.ToolStripMenuItem();
             this.miCloseConversation = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStripSeparator4 = new System.Windows.Forms.ToolStripSeparator();
+            this.miImport = new System.Windows.Forms.ToolStripMenuItem();
+            this.miExport = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.miExit = new System.Windows.Forms.ToolStripMenuItem();
             this.miView = new System.Windows.Forms.ToolStripMenuItem();
@@ -57,9 +60,6 @@
             this.tabPage1 = new System.Windows.Forms.TabPage();
             this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.splitContainer1 = new System.Windows.Forms.SplitContainer();
-            this.toolStripSeparator4 = new System.Windows.Forms.ToolStripSeparator();
-            this.miImport = new System.Windows.Forms.ToolStripMenuItem();
-            this.miExport = new System.Windows.Forms.ToolStripMenuItem();
             this.msMain.SuspendLayout();
             this.pnlInput.SuspendLayout();
             this.pnlInputRight.SuspendLayout();
@@ -128,6 +128,25 @@
             this.miCloseConversation.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.W)));
             this.miCloseConversation.Size = new System.Drawing.Size(220, 22);
             this.miCloseConversation.Text = "&Close Conversation";
+            // 
+            // toolStripSeparator4
+            // 
+            this.toolStripSeparator4.Name = "toolStripSeparator4";
+            this.toolStripSeparator4.Size = new System.Drawing.Size(217, 6);
+            // 
+            // miImport
+            // 
+            this.miImport.Name = "miImport";
+            this.miImport.Size = new System.Drawing.Size(220, 22);
+            this.miImport.Text = "&Import";
+            this.miImport.Click += new System.EventHandler(this.miImport_Click);
+            // 
+            // miExport
+            // 
+            this.miExport.Name = "miExport";
+            this.miExport.Size = new System.Drawing.Size(220, 22);
+            this.miExport.Text = "&Export";
+            this.miExport.Click += new System.EventHandler(this.miExport_Click);
             // 
             // toolStripSeparator1
             // 
@@ -357,25 +376,6 @@
             this.splitContainer1.SplitterDistance = 6;
             this.splitContainer1.SplitterWidth = 1;
             this.splitContainer1.TabIndex = 1;
-            // 
-            // toolStripSeparator4
-            // 
-            this.toolStripSeparator4.Name = "toolStripSeparator4";
-            this.toolStripSeparator4.Size = new System.Drawing.Size(217, 6);
-            // 
-            // miImport
-            // 
-            this.miImport.Name = "miImport";
-            this.miImport.Size = new System.Drawing.Size(220, 22);
-            this.miImport.Text = "&Import";
-            this.miImport.Click += new System.EventHandler(this.miImport_Click);
-            // 
-            // miExport
-            // 
-            this.miExport.Name = "miExport";
-            this.miExport.Size = new System.Drawing.Size(220, 22);
-            this.miExport.Text = "&Export";
-            this.miExport.Click += new System.EventHandler(this.miExport_Click);
             // 
             // MainForm
             // 

@@ -11,6 +11,7 @@ using GxPT;
 using System.IO;
 // DotNetZip (Ionic.Zip) v1.12.0.0 for .NET 3.5
 using Ionic.Zip;
+using System.Reflection;
 
 namespace GxPT
 {
@@ -1566,8 +1567,10 @@ namespace GxPT
                 var cms = new ContextMenuStrip();
                 var miOpen = new ToolStripMenuItem("Open");
                 var miDelete = new ToolStripMenuItem("Delete");
+                var deleteImage = ResourceHelper.GetAssemblyImage("ExplorerDelete.png");
                 miOpen.Click += (s, e) => TryOpenSelectedConversation();
                 miDelete.Click += (s, e) => DeleteSelectedConversation();
+                miDelete.Image = deleteImage;
                 cms.Items.Add(miOpen);
                 cms.Items.Add(miDelete);
                 _lvConversations.ContextMenuStrip = cms;
