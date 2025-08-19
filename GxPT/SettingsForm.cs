@@ -141,12 +141,12 @@ namespace GxPT
             sb.AppendLine("    \"google/gemini-2.5-flash\",");
             sb.AppendLine("    \"google/gemini-2.5-pro\",");
             sb.AppendLine("    \"openai/gpt-4o\",");
-            sb.AppendLine("    \"openai/gpt-5\"");
+            sb.AppendLine("    \"openai/gpt-5-chat\"");
             sb.AppendLine("  ],");
             sb.AppendLine("  \"default_model\": \"openai/gpt-4o\",");
-            sb.AppendLine("  \"enable_logging\": false,");
+            sb.AppendLine("  \"theme\": \"light\",");
             sb.AppendLine("  \"font_size\": " + defaultFontSize.ToString(System.Globalization.CultureInfo.InvariantCulture) + ",");
-            sb.AppendLine("  \"theme\": \"light\"");
+            sb.AppendLine("  \"enable_logging\": false");
             sb.AppendLine("}");
             return sb.ToString();
         }

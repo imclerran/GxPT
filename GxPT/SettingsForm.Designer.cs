@@ -36,15 +36,15 @@
             this.lblApiKey = new System.Windows.Forms.Label();
             this.lblModels = new System.Windows.Forms.Label();
             this.lblDefaultModel = new System.Windows.Forms.Label();
-            this.lblEnableLogging = new System.Windows.Forms.Label();
             this.lblFontSize = new System.Windows.Forms.Label();
-            this.chkEnableLogging = new System.Windows.Forms.CheckBox();
-            this.cmbDefaultModel = new System.Windows.Forms.ComboBox();
-            this.txtModels = new System.Windows.Forms.TextBox();
-            this.txtApiKey = new System.Windows.Forms.TextBox();
-            this.nudFontSize = new System.Windows.Forms.NumericUpDown();
             this.lblTheme = new System.Windows.Forms.Label();
+            this.lblEnableLogging = new System.Windows.Forms.Label();
+            this.txtApiKey = new System.Windows.Forms.TextBox();
+            this.txtModels = new System.Windows.Forms.TextBox();
+            this.cmbDefaultModel = new System.Windows.Forms.ComboBox();
+            this.nudFontSize = new System.Windows.Forms.NumericUpDown();
             this.cmbTheme = new System.Windows.Forms.ComboBox();
+            this.chkEnableLogging = new System.Windows.Forms.CheckBox();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabVisual = new System.Windows.Forms.TabPage();
             this.tabJson = new System.Windows.Forms.TabPage();
@@ -102,14 +102,14 @@
             this.tableLayoutPanel1.Controls.Add(this.lblApiKey, 0, 0);
             this.tableLayoutPanel1.Controls.Add(this.lblModels, 0, 1);
             this.tableLayoutPanel1.Controls.Add(this.lblDefaultModel, 0, 2);
-            this.tableLayoutPanel1.Controls.Add(this.lblFontSize, 0, 3);
-            this.tableLayoutPanel1.Controls.Add(this.lblTheme, 0, 4);
+            this.tableLayoutPanel1.Controls.Add(this.lblFontSize, 0, 4);
+            this.tableLayoutPanel1.Controls.Add(this.lblTheme, 0, 3);
             this.tableLayoutPanel1.Controls.Add(this.lblEnableLogging, 0, 5);
             this.tableLayoutPanel1.Controls.Add(this.txtApiKey, 1, 0);
             this.tableLayoutPanel1.Controls.Add(this.txtModels, 1, 1);
             this.tableLayoutPanel1.Controls.Add(this.cmbDefaultModel, 1, 2);
-            this.tableLayoutPanel1.Controls.Add(this.nudFontSize, 1, 3);
-            this.tableLayoutPanel1.Controls.Add(this.cmbTheme, 1, 4);
+            this.tableLayoutPanel1.Controls.Add(this.nudFontSize, 1, 4);
+            this.tableLayoutPanel1.Controls.Add(this.cmbTheme, 1, 3);
             this.tableLayoutPanel1.Controls.Add(this.chkEnableLogging, 1, 5);
             this.tableLayoutPanel1.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tableLayoutPanel1.Location = new System.Drawing.Point(3, 3);
@@ -157,6 +157,28 @@
             this.lblDefaultModel.Text = "Default Model";
             this.lblDefaultModel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             // 
+            // lblFontSize
+            // 
+            this.lblFontSize.AutoSize = true;
+            this.lblFontSize.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblFontSize.Location = new System.Drawing.Point(3, 262);
+            this.lblFontSize.Name = "lblFontSize";
+            this.lblFontSize.Size = new System.Drawing.Size(106, 26);
+            this.lblFontSize.TabIndex = 8;
+            this.lblFontSize.Text = "Font Size";
+            this.lblFontSize.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            // 
+            // lblTheme
+            // 
+            this.lblTheme.AutoSize = true;
+            this.lblTheme.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblTheme.Location = new System.Drawing.Point(3, 235);
+            this.lblTheme.Name = "lblTheme";
+            this.lblTheme.Size = new System.Drawing.Size(106, 27);
+            this.lblTheme.TabIndex = 10;
+            this.lblTheme.Text = "Theme";
+            this.lblTheme.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            // 
             // lblEnableLogging
             // 
             this.lblEnableLogging.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -167,37 +189,14 @@
             this.lblEnableLogging.Text = "Enable Logging";
             this.lblEnableLogging.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             // 
-            // lblFontSize
+            // txtApiKey
             // 
-            this.lblFontSize.AutoSize = true;
-            this.lblFontSize.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblFontSize.Location = new System.Drawing.Point(3, 235);
-            this.lblFontSize.Name = "lblFontSize";
-            this.lblFontSize.Size = new System.Drawing.Size(106, 26);
-            this.lblFontSize.TabIndex = 8;
-            this.lblFontSize.Text = "Font Size";
-            this.lblFontSize.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            // 
-            // chkEnableLogging
-            // 
-            this.chkEnableLogging.AutoSize = true;
-            this.chkEnableLogging.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.chkEnableLogging.Location = new System.Drawing.Point(115, 294);
-            this.chkEnableLogging.Margin = new System.Windows.Forms.Padding(3, 6, 3, 3);
-            this.chkEnableLogging.Name = "chkEnableLogging";
-            this.chkEnableLogging.Size = new System.Drawing.Size(460, 14);
-            this.chkEnableLogging.TabIndex = 4;
-            this.chkEnableLogging.UseVisualStyleBackColor = true;
-            // 
-            // cmbDefaultModel
-            // 
-            this.cmbDefaultModel.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cmbDefaultModel.DropDownWidth = 175;
-            this.cmbDefaultModel.FormattingEnabled = true;
-            this.cmbDefaultModel.Location = new System.Drawing.Point(115, 211);
-            this.cmbDefaultModel.Name = "cmbDefaultModel";
-            this.cmbDefaultModel.Size = new System.Drawing.Size(175, 21);
-            this.cmbDefaultModel.TabIndex = 5;
+            this.txtApiKey.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
+                        | System.Windows.Forms.AnchorStyles.Right)));
+            this.txtApiKey.Location = new System.Drawing.Point(115, 3);
+            this.txtApiKey.Name = "txtApiKey";
+            this.txtApiKey.Size = new System.Drawing.Size(460, 20);
+            this.txtApiKey.TabIndex = 7;
             // 
             // txtModels
             // 
@@ -211,42 +210,42 @@
             this.txtModels.Size = new System.Drawing.Size(460, 176);
             this.txtModels.TabIndex = 6;
             // 
-            // txtApiKey
+            // cmbDefaultModel
             // 
-            this.txtApiKey.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
-                        | System.Windows.Forms.AnchorStyles.Right)));
-            this.txtApiKey.Location = new System.Drawing.Point(115, 3);
-            this.txtApiKey.Name = "txtApiKey";
-            this.txtApiKey.Size = new System.Drawing.Size(460, 20);
-            this.txtApiKey.TabIndex = 7;
+            this.cmbDefaultModel.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.cmbDefaultModel.DropDownWidth = 175;
+            this.cmbDefaultModel.FormattingEnabled = true;
+            this.cmbDefaultModel.Location = new System.Drawing.Point(115, 211);
+            this.cmbDefaultModel.Name = "cmbDefaultModel";
+            this.cmbDefaultModel.Size = new System.Drawing.Size(175, 21);
+            this.cmbDefaultModel.TabIndex = 5;
             // 
             // nudFontSize
             // 
             this.nudFontSize.DecimalPlaces = 2;
-            this.nudFontSize.Location = new System.Drawing.Point(115, 238);
+            this.nudFontSize.Location = new System.Drawing.Point(115, 265);
             this.nudFontSize.Name = "nudFontSize";
             this.nudFontSize.Size = new System.Drawing.Size(80, 20);
             this.nudFontSize.TabIndex = 9;
             // 
-            // lblTheme
-            // 
-            this.lblTheme.AutoSize = true;
-            this.lblTheme.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblTheme.Location = new System.Drawing.Point(3, 261);
-            this.lblTheme.Name = "lblTheme";
-            this.lblTheme.Size = new System.Drawing.Size(106, 27);
-            this.lblTheme.TabIndex = 10;
-            this.lblTheme.Text = "Theme";
-            this.lblTheme.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            // 
             // cmbTheme
             // 
             this.cmbTheme.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cmbTheme.FormattingEnabled = true;
-            this.cmbTheme.Location = new System.Drawing.Point(115, 264);
+            this.cmbTheme.Location = new System.Drawing.Point(115, 238);
             this.cmbTheme.Name = "cmbTheme";
             this.cmbTheme.Size = new System.Drawing.Size(120, 21);
             this.cmbTheme.TabIndex = 11;
+            // 
+            // chkEnableLogging
+            // 
+            this.chkEnableLogging.AutoSize = true;
+            this.chkEnableLogging.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.chkEnableLogging.Location = new System.Drawing.Point(115, 294);
+            this.chkEnableLogging.Margin = new System.Windows.Forms.Padding(3, 6, 3, 3);
+            this.chkEnableLogging.Name = "chkEnableLogging";
+            this.chkEnableLogging.Size = new System.Drawing.Size(460, 14);
+            this.chkEnableLogging.TabIndex = 4;
+            this.chkEnableLogging.UseVisualStyleBackColor = true;
             // 
             // tabControl1
             // 
