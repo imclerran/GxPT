@@ -249,6 +249,9 @@ namespace GxPT
                 {
                     if (ctx != null)
                     {
+                        // Ensure the sidebar no longer thinks the previous conversation is still open on this page
+                        try { _mainForm.UntrackOpenConversation(page); }
+                        catch { }
                         if (ctx.Transcript != null) ctx.Transcript.ClearMessages();
                         ctx.Conversation = new Conversation(_mainForm.GetClient());
                         // re-hook name event

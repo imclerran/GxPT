@@ -187,11 +187,11 @@ namespace GxPT
 
         internal void OpenConversation(Conversation convo)
         {
-            var active = _tabManager != null ? _tabManager.GetActiveContext() : null;
-            if (active != null && active.Conversation != null &&
-                (active.Conversation.History == null || active.Conversation.History.Count == 0))
+            // Prefer reusing a blank tab (no messages). If none, open a new tab.
+            var blank = FindBlankTabPreferActive();
+            if (blank != null)
             {
-                OpenConversationInNewTab(convo);
+                OpenConversationInTab(blank, convo);
             }
             else
             {
@@ -789,11 +789,124 @@ namespace GxPT
             if (_inputManager != null) _inputManager.FocusInputSoon();
         }
 
+        // Load a conversation into a specific tab context (typically blank) and select it
+        private void OpenConversationInTab(TabManager.ChatTabContext ctx, Conversation convo)
+        {
+            if (this.tabControl1 == null || convo == null || ctx == null) return;
+
+            try
+            {
+                // Update model selection for this tab
+                ctx.Conversation = convo;
+                ctx.SelectedModel = string.IsNullOrEmpty(convo.SelectedModel) ? GetSelectedModel() : convo.SelectedModel;
+                try { this.cmbModel.Text = ctx.SelectedModel; }
+                catch { }
+
+                // Update sidebar tracking to point this page at the loaded conversation id
+                try
+                {
+                    // Remove any prior mapping for this page, then track the new id
+                    UntrackOpenConversation(ctx.Page);
+                }
+                catch { }
+                ConversationStore.EnsureConversationId(ctx.Conversation);
+                if (_sidebarManager != null && ctx.Conversation != null)
+                    _sidebarManager.TrackOpenConversation(ctx.Conversation.Id, ctx.Page);
+
+                // Rebuild transcript UI
+                try
+                {
+                    ctx.Transcript.ClearMessages();
+                    if (_themeManager != null) _themeManager.ApplyFontSetting(ctx.Transcript);
+                    try { ctx.Transcript.RefreshTheme(); }
+                    catch { }
+                    foreach (var m in convo.History)
+                    {
+                        if (string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+                            ctx.Transcript.AddMessage(MessageRole.Assistant, m.Content);
+                        else if (string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase))
+                            ctx.Transcript.AddMessage(MessageRole.User, m.Content);
+                        // skip system in transcript UI
+                    }
+                }
+                catch { }
+
+                // Hook name updates for this conversation
+                try
+                {
+                    ctx.Conversation.NameGenerated += delegate(string name)
+                    {
+                        try
+                        {
+                            if (IsHandleCreated)
+                            {
+                                BeginInvoke((MethodInvoker)delegate
+                                {
+                                    ctx.Page.Text = string.IsNullOrEmpty(name) ? "Conversation" : name;
+                                    UpdateWindowTitleFromActiveTab();
+                                });
+                            }
+                        }
+                        catch { }
+                    };
+                }
+                catch { }
+
+                // Update tab title and window
+                try
+                {
+                    ctx.Page.Text = string.IsNullOrEmpty(convo.Name) ? "Conversation" : convo.Name;
+                    // Select this tab and update window title
+                    SelectTab(ctx.Page);
+                    UpdateWindowTitleFromActiveTab();
+                }
+                catch { }
+
+                if (_inputManager != null) _inputManager.FocusInputSoon();
+                if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
+            }
+            catch { }
+        }
+
+        // Find a blank tab (no messages). Prefer the active one, else any.
+        private TabManager.ChatTabContext FindBlankTabPreferActive()
+        {
+            try
+            {
+                if (_tabManager == null) return null;
+                var active = _tabManager.GetActiveContext();
+                if (IsBlank(active)) return active;
+                foreach (var kv in _tabManager.TabContexts)
+                {
+                    var ctx = kv.Value;
+                    if (IsBlank(ctx)) return ctx;
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private static bool IsBlank(TabManager.ChatTabContext ctx)
+        {
+            try
+            {
+                return ctx != null && ctx.Conversation != null &&
+                       (ctx.Conversation.History == null || ctx.Conversation.History.Count == 0);
+            }
+            catch { return false; }
+        }
+
         private void miApiKeysHelp_Click(object sender, EventArgs e)
         {
-            // Open a new tab pre-populated with an unsaved help conversation
-            var ctx = _tabManager != null ? _tabManager.CreateConversationTab() : null;
+            // Reuse any blank tab if available (prefer active); otherwise create a new one
+            TabManager.ChatTabContext ctx = FindBlankTabPreferActive();
+            if (ctx == null)
+            {
+                ctx = _tabManager != null ? _tabManager.CreateConversationTab() : null;
+            }
             if (ctx == null) return;
+            try { SelectTab(ctx.Page); }
+            catch { }
 
             try
             {
