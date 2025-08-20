@@ -17,13 +17,14 @@ namespace GxPT
         private readonly ComboBox _cmbModel;
         private readonly SplitContainer _splitContainer;
         private readonly Panel _pnlApiKeyBanner;
+        private readonly Panel _pnlAttachmentsBanner;
 
         // Automatic property with both getter and setter
         public bool TextIsHint { get; private set; }
 
         public InputManager(MainForm mainForm, TextBox txtMessage, Panel pnlInput,
             Button btnSend, ComboBox cmbModel, SplitContainer splitContainer,
-            Panel pnlApiKeyBanner)
+            Panel pnlApiKeyBanner, Panel pnlAttachmentsBanner)
         {
             _mainForm = mainForm;
             _txtMessage = txtMessage;
@@ -32,6 +33,7 @@ namespace GxPT
             _cmbModel = cmbModel;
             _splitContainer = splitContainer;
             _pnlApiKeyBanner = pnlApiKeyBanner;
+            _pnlAttachmentsBanner = pnlAttachmentsBanner;
 
             InitializeInput();
             WireEvents();
@@ -84,6 +86,17 @@ namespace GxPT
                 {
                     _pnlApiKeyBanner.VisibleChanged += (s, e) => AdjustInputBoxHeight();
                     _pnlApiKeyBanner.Resize += (s, e) => AdjustInputBoxHeight();
+                }
+            }
+            catch { }
+
+            // When attachments banner size/visibility changes
+            try
+            {
+                if (_pnlAttachmentsBanner != null)
+                {
+                    _pnlAttachmentsBanner.VisibleChanged += (s, e) => AdjustInputBoxHeight();
+                    _pnlAttachmentsBanner.Resize += (s, e) => AdjustInputBoxHeight();
                 }
             }
             catch { }
@@ -189,6 +202,9 @@ namespace GxPT
                 // Subtract the API key banner height when visible (banner is hosted in pnlBottom)
                 if (_pnlApiKeyBanner != null && _pnlApiKeyBanner.Visible)
                     h = Math.Max(0, h - _pnlApiKeyBanner.Height);
+                // Subtract attachments banner if present
+                if (_pnlAttachmentsBanner != null && _pnlAttachmentsBanner.Visible)
+                    h = Math.Max(0, h - _pnlAttachmentsBanner.Height);
                 return Math.Max(0, h);
             }
             catch
@@ -272,8 +288,9 @@ namespace GxPT
             }
         }
 
-        public void SetHintText() {
-            if(string.IsNullOrEmpty(_txtMessage.Text))
+        public void SetHintText()
+        {
+            if (string.IsNullOrEmpty(_txtMessage.Text))
             {
                 _txtMessage.Text = InputHintText;
                 _txtMessage.ForeColor = InputHintColor;

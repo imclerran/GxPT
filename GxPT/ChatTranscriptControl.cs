@@ -128,9 +128,13 @@ namespace GxPT
             public List<Block> Blocks; // parsed markdown
             public List<int> CodeScroll; // per-code-block horizontal scroll offsets
             public List<int> TableScroll; // per-table horizontal scroll offsets
+            public List<AttachedFile> Attachments; // optional attachments to show as pills
+            public List<Rectangle> AttachmentPillRects; // computed per-draw for hit testing
         }
 
         private readonly List<MessageItem> _items = new List<MessageItem>();
+        private MessageItem _hoverAttachItem; private int _hoverAttachIndex = -1;
+        private MessageItem _pressAttachItem; private int _pressAttachIndex = -1;
 
         // ---------- ctor ----------
         public ChatTranscriptControl()
@@ -282,7 +286,9 @@ namespace GxPT
                 RawMarkdown = markdown,
                 Blocks = MarkdownParser.ParseMarkdown(markdown),
                 CodeScroll = new List<int>(),
-                TableScroll = new List<int>()
+                TableScroll = new List<int>(),
+                Attachments = null,
+                AttachmentPillRects = null
             };
             // initialize per-code-block scroll positions
             int codeCount = 0;
@@ -298,6 +304,18 @@ namespace GxPT
             Invalidate();
             // Also schedule a second-pass reflow once layout stabilizes
             ReflowSoon();
+        }
+
+        public void AddMessage(MessageRole role, string markdown, List<AttachedFile> attachments)
+        {
+            AddMessage(role, markdown);
+            if (attachments != null && attachments.Count > 0)
+            {
+                var it = _items[_items.Count - 1];
+                it.Attachments = new List<AttachedFile>(attachments);
+                Reflow();
+                Invalidate();
+            }
         }
 
         // Add and return the index of the inserted message (to support targeted updates later)
@@ -458,11 +476,41 @@ namespace GxPT
 
             h += BubblePadding; // bottom padding
 
+            // Space for attachments pills (below content, within bubble padding)
+            int attachH = MeasureAttachmentsHeight(it, textMax);
+            if (attachH > 0)
+            {
+                h += attachH + 4; // small gap above pills
+            }
+
             // Ensure minimum width and don't exceed maximum
             wUsed = Math.Max(wUsed, 100); // minimum content width
             int bubbleW = Math.Min(maxBubbleWidth, wUsed + 2 * BubblePadding);
 
             return new Size(bubbleW, Math.Max(24, h));
+        }
+
+        private int MeasureAttachmentsHeight(MessageItem it, int contentWidth)
+        {
+            if (it.Attachments == null || it.Attachments.Count == 0) return 0;
+            int x = 0;
+            int y = 0;
+            int lineH = Math.Max(_baseFont.Height + 6, 18);
+            for (int i = 0; i < it.Attachments.Count; i++)
+            {
+                string name = it.Attachments[i] != null ? (it.Attachments[i].FileName ?? "(file)") : "(file)";
+                Size sz = TextRenderer.MeasureText(name, _baseFont, new Size(int.MaxValue / 4, int.MaxValue / 4), TextFormatFlags.NoPadding);
+                int pillW = Math.Min(contentWidth, sz.Width + 16);
+                int pillH = lineH;
+                if (x > 0 && x + pillW > contentWidth)
+                {
+                    y += pillH + 4;
+                    x = 0;
+                }
+                x += pillW + 6;
+            }
+            y += lineH;
+            return y;
         }
 
         private Size MeasureBlock(Block blk, int maxWidth, Dictionary<int, int> numberedCounters)
@@ -815,6 +863,57 @@ namespace GxPT
             // Content area
             Rectangle content = new Rectangle(r.X + BubblePadding, r.Y + BubblePadding, r.Width - 2 * BubblePadding, r.Height - 2 * BubblePadding);
             DrawBlocks(g, content, it.Blocks, it);
+
+            // Draw attachment pills at the bottom of content area
+            if (it.Attachments != null && it.Attachments.Count > 0)
+            {
+                DrawAttachmentPills(g, new Rectangle(content.X, r.Bottom - BubblePadding - MeasureAttachmentsHeight(it, content.Width), content.Width, MeasureAttachmentsHeight(it, content.Width)), it);
+            }
+        }
+
+        private void DrawAttachmentPills(Graphics g, Rectangle bounds, MessageItem it)
+        {
+            if (it.Attachments == null || it.Attachments.Count == 0) return;
+            if (it.AttachmentPillRects == null) it.AttachmentPillRects = new List<Rectangle>(); else it.AttachmentPillRects.Clear();
+            int x = bounds.X;
+            int y = bounds.Y;
+            int maxW = bounds.Width;
+            for (int i = 0; i < it.Attachments.Count; i++)
+            {
+                var af = it.Attachments[i];
+                string name = af != null ? (af.FileName ?? "(file)") : "(file)";
+                Size sz = TextRenderer.MeasureText(name, _baseFont, new Size(int.MaxValue / 4, int.MaxValue / 4), TextFormatFlags.NoPadding);
+                int pillW = Math.Min(maxW, sz.Width + 16);
+                int pillH = Math.Max(_baseFont.Height + 6, 18);
+                if (x > bounds.X && x + pillW > bounds.Right)
+                {
+                    x = bounds.X; y += pillH + 4;
+                }
+                Rectangle pill = new Rectangle(x, y, pillW, pillH);
+
+                bool hover = (_hoverAttachItem == it && _hoverAttachIndex == i);
+                bool pressed = (_pressAttachItem == it && _pressAttachIndex == i);
+
+                Color baseBack = _isDarkTheme ? Color.FromArgb(60, 62, 66) : Color.FromArgb(240, 240, 240);
+                if (pressed) baseBack = _clrCopyPressed; else if (hover) baseBack = _clrCopyHover;
+                using (var sb = new SolidBrush(baseBack))
+                using (var pen = new Pen(_isDarkTheme ? _clrScrollThumbBorder : _clrCodeBorder))
+                using (var path = RoundedRect(pill, 9))
+                {
+                    g.FillPath(sb, path); g.DrawPath(pen, path);
+                }
+                Rectangle textRect = new Rectangle(pill.X + 8, pill.Y + (pill.Height - _baseFont.Height) / 2, Math.Max(0, pill.Width - 10), _baseFont.Height);
+                using (var brush = new SolidBrush(ForeColor))
+                {
+                    using (var fmt = StringFormat.GenericTypographic)
+                    {
+                        fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+                        g.DrawString(name, _baseFont, brush, (PointF)textRect.Location, fmt);
+                    }
+                }
+                it.AttachmentPillRects.Add(pill);
+                x += pillW + 6;
+            }
         }
 
         private void DrawBlocks(Graphics g, Rectangle bounds, List<Block> blocks, MessageItem owner)
@@ -1350,6 +1449,14 @@ namespace GxPT
             }
             if (e.Button == MouseButtons.Left)
             {
+                // Attachment pill click
+                var pill = HitTestAttachmentPill(e.Location);
+                if (pill.Item != null && pill.Index >= 0)
+                {
+                    _pressAttachItem = null; _pressAttachIndex = -1; Invalidate();
+                    OpenAttachmentInViewer(pill.Item, pill.Index);
+                    return;
+                }
                 // Copy button click
                 var ui = HitTestCodeUI(e.Location);
                 if (ui.Hit && ui.Which == CodeUiHit.CopyButton && ui.Item != null)
@@ -1395,6 +1502,12 @@ namespace GxPT
             base.OnMouseDown(e);
             if (e.Button == MouseButtons.Left)
             {
+                var pill = HitTestAttachmentPill(e.Location);
+                if (pill.Item != null && pill.Index >= 0)
+                {
+                    _pressAttachItem = pill.Item; _pressAttachIndex = pill.Index; Invalidate();
+                    return;
+                }
                 var ui = HitTestCodeUI(e.Location);
                 if (ui.Hit)
                 {
@@ -1504,6 +1617,17 @@ namespace GxPT
                 _hoverScrollItem = null; _hoverScrollCodeIndex = -1; _hoverScrollIsTable = false; _hoverScrollTableIndex = -1;
             }
 
+            // Hover over attachment pill
+            var pillHit = HitTestAttachmentPill(e.Location);
+            if (pillHit.Item != null)
+            {
+                overInteractive = true; _hoverAttachItem = pillHit.Item; _hoverAttachIndex = pillHit.Index; Cursor = Cursors.Hand; Invalidate(); return;
+            }
+            else
+            {
+                _hoverAttachItem = null; _hoverAttachIndex = -1;
+            }
+
             string link = HitTestLink(e.Location);
             if (!string.IsNullOrEmpty(link)) { overInteractive = true; Cursor = Cursors.Hand; return; }
 
@@ -1527,7 +1651,111 @@ namespace GxPT
             _hoverCopyItem = null; _hoverCopyCodeIndex = -1;
             _hoverScrollItem = null; _hoverScrollCodeIndex = -1;
             _copyPressedItem = null; _copyPressedCodeIndex = -1;
+            _hoverAttachItem = null; _hoverAttachIndex = -1; _pressAttachItem = null; _pressAttachIndex = -1;
             Invalidate();
+        }
+
+        private struct PillHit
+        {
+            public MessageItem Item; public int Index;
+        }
+        private PillHit HitTestAttachmentPill(Point clientPt)
+        {
+            PillHit ph = new PillHit { Item = null, Index = -1 };
+            Point virt = new Point(clientPt.X, clientPt.Y + _scrollOffset);
+            foreach (var it in _items)
+            {
+                if (it.AttachmentPillRects == null || it.AttachmentPillRects.Count == 0) continue;
+                for (int i = 0; i < it.AttachmentPillRects.Count; i++)
+                {
+                    var r = it.AttachmentPillRects[i];
+                    if (r.Contains(virt)) { ph.Item = it; ph.Index = i; return ph; }
+                }
+            }
+            return ph;
+        }
+
+        private void OpenAttachmentInViewer(MessageItem it, int index)
+        {
+            try
+            {
+                if (it == null || it.Attachments == null || index < 0 || index >= it.Attachments.Count) return;
+                var af = it.Attachments[index]; if (af == null) return;
+                using (var dlg = new FileViewerForm())
+                {
+                    var rtbField = typeof(FileViewerForm).GetField("rtbFileText", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    var rtb = rtbField != null ? (RichTextBox)rtbField.GetValue(dlg) : null;
+                    if (rtb != null)
+                    {
+                        rtb.Text = af.Content ?? string.Empty;
+                        string lang = GuessLanguageFromFileName(af.FileName);
+                        try { RichTextBoxSyntaxHighlighter.Highlight(rtb, lang); }
+                        catch { }
+                    }
+                    dlg.Text = af.FileName ?? "Attachment";
+                    dlg.StartPosition = FormStartPosition.CenterParent;
+                    dlg.ShowDialog(FindForm());
+                }
+            }
+            catch { }
+        }
+
+        private string GuessLanguageFromFileName(string fileName)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(fileName)) return null;
+                string ext = Path.GetExtension(fileName);
+                if (string.IsNullOrEmpty(ext)) return null;
+                ext = ext.TrimStart('.');
+                switch (ext.ToLowerInvariant())
+                {
+                    case "cs": return "csharp";
+                    case "js":
+                    case "mjs":
+                    case "cjs": return "javascript";
+                    case "ts":
+                    case "tsx": return "typescript";
+                    case "json":
+                    case "jsonc":
+                    case "json5": return "json";
+                    case "xml":
+                    case "xaml":
+                    case "xsd":
+                    case "wsdl":
+                    case "resx": return "xml";
+                    case "html":
+                    case "htm": return "html";
+                    case "css": return "css";
+                    case "yml":
+                    case "yaml": return "yaml";
+                    case "py": return "python";
+                    case "rb": return "ruby";
+                    case "rs": return "rust";
+                    case "java": return "java";
+                    case "go": return "go";
+                    case "ps1":
+                    case "psm1":
+                    case "psd1": return "powershell";
+                    case "sh":
+                    case "bash": return "bash";
+                    case "bat":
+                    case "cmd": return "batch";
+                    case "vb":
+                    case "vbs": return "visualbasic";
+                    case "zig": return "zig";
+                    case "c":
+                    case "h": return "c";
+                    case "cpp":
+                    case "cxx":
+                    case "cc":
+                    case "hpp":
+                    case "hxx":
+                    case "hh": return "cpp";
+                }
+            }
+            catch { }
+            return null;
         }
 
         private MessageItem HitTest(Point clientPt)

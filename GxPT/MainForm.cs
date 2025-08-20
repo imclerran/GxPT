@@ -24,6 +24,7 @@ namespace GxPT
         private TabManager _tabManager;
         private ThemeManager _themeManager;
         private InputManager _inputManager;
+        // Attachments are tracked per-tab in TabManager.ChatTabContext.PendingAttachments
 
         private bool _syncingModelCombo; // avoid event feedback loops when syncing combo text
 
@@ -44,6 +45,21 @@ namespace GxPT
             if (this.pnlApiKeyBanner != null)
                 this.pnlApiKeyBanner.Resize += (s, e) => LayoutApiKeyBanner();
             this.Load += (s, e) => UpdateApiKeyBanner();
+
+            // Configure attachments banner container
+            if (this.pnlAttachmentsBanner != null)
+            {
+                this.pnlAttachmentsBanner.AutoSize = false; // we'll manage height so it can grow with wrapping
+                this.pnlAttachmentsBanner.Dock = DockStyle.Bottom;
+                this.pnlAttachmentsBanner.Padding = new Padding(6, 3, 6, 3);
+                this.pnlAttachmentsBanner.WrapContents = true;
+                this.pnlAttachmentsBanner.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+                // Fixed darker color for contrast with input panel
+                this.pnlAttachmentsBanner.BackColor = Color.DarkGray;
+                // Recompute on container resize to grow for wrapped chips
+                if (this.pnlBottom != null)
+                    this.pnlBottom.SizeChanged += (s, e) => RebuildAttachmentsBanner();
+            }
         }
 
         private void InitializeManagers()
@@ -54,7 +70,7 @@ namespace GxPT
             _themeManager = new ThemeManager(this, this.chatTranscript, this.txtMessage,
                 this.btnSend, this.cmbModel, this.lnkOpenSettings, this.lblNoApiKey);
             _inputManager = new InputManager(this, this.txtMessage, this.pnlInput,
-                this.btnSend, this.cmbModel, this.splitContainer1, this.pnlApiKeyBanner);
+                this.btnSend, this.cmbModel, this.splitContainer1, this.pnlApiKeyBanner, this.pnlAttachmentsBanner);
 
             // Wire manager events
             if (_tabManager != null)
@@ -104,6 +120,16 @@ namespace GxPT
                 }
             }
             catch { }
+
+            try
+            {
+                if (this.btnAttach != null)
+                {
+                    this.btnAttach.Click -= btnAttach_Click;
+                    this.btnAttach.Click += btnAttach_Click;
+                }
+            }
+            catch { }
         }
 
         // Event handlers for manager events
@@ -111,6 +137,8 @@ namespace GxPT
         {
             UpdateWindowTitleFromActiveTab();
             SyncComboModelFromActiveTab();
+            // Refresh the attachments banner to reflect the active tab's pending attachments
+            RebuildAttachmentsBanner();
             if (_inputManager != null) _inputManager.FocusInputSoon();
         }
 
@@ -406,7 +434,8 @@ namespace GxPT
             if (ctx == null) return;
 
             // Validate input
-            string text = _inputManager != null ? (_inputManager.GetInputText() ?? string.Empty) : string.Empty;
+            string baseText = _inputManager != null ? (_inputManager.GetInputText() ?? string.Empty) : string.Empty;
+            string text = baseText;
             if (text.Length == 0) return;
             if (ctx.IsSending) return; // ensure only one in-flight request per tab
 
@@ -430,15 +459,46 @@ namespace GxPT
             try
             {
                 Logger.Log("Send", "Begin send. Model=" + GetSelectedModel());
-                // Add to UI and history
-                ctx.Transcript.AddMessage(MessageRole.User, text);
-                ctx.Conversation.AddUserMessage(text);
+
+                // Snapshot pending attachments, but do not append into stored history content
+                List<AttachedFile> attachmentsSnapshot = null;
+                string textForTranscript = baseText; // UI shows only user-entered text
+                if (ctx.PendingAttachments != null && ctx.PendingAttachments.Count > 0)
+                {
+                    attachmentsSnapshot = new List<AttachedFile>(ctx.PendingAttachments.Count);
+                    for (int i = 0; i < ctx.PendingAttachments.Count; i++)
+                    {
+                        var af = ctx.PendingAttachments[i];
+                        if (af == null) continue;
+                        attachmentsSnapshot.Add(new AttachedFile(af.FileName, af.Content));
+                    }
+                }
+                // Add to UI (transcript shows only user-entered text, with pills below)
+                if (attachmentsSnapshot != null && attachmentsSnapshot.Count > 0)
+                    ctx.Transcript.AddMessage(MessageRole.User, textForTranscript, attachmentsSnapshot);
+                else
+                    ctx.Transcript.AddMessage(MessageRole.User, textForTranscript);
+                // Store attachments in-memory on the ChatMessage just before sending, without affecting JSON
+                // Use AddUserMessage to preserve naming behavior, then attach files to the last message in memory.
+                // Store only the base text in history; keep attachments separate in-memory and in persisted JSON
+                ctx.Conversation.AddUserMessage(baseText);
+                try
+                {
+                    if (attachmentsSnapshot != null && attachmentsSnapshot.Count > 0)
+                    {
+                        var last = ctx.Conversation.History.Count > 0 ? ctx.Conversation.History[ctx.Conversation.History.Count - 1] : null;
+                        if (last != null && string.Equals(last.Role, "user", StringComparison.OrdinalIgnoreCase))
+                            last.Attachments = attachmentsSnapshot;
+                    }
+                }
+                catch { }
                 ctx.Conversation.SelectedModel = ctx.SelectedModel;
                 // If this tab was marked as no-save (e.g., help), flip it now and save
                 if (ctx.NoSaveUntilUserSend) ctx.NoSaveUntilUserSend = false;
                 ConversationStore.Save(ctx.Conversation); // save when a new user message starts/continues a convo
                 Logger.Log("Send", "User message added. HistoryCount=" + ctx.Conversation.History.Count);
                 if (_inputManager != null) _inputManager.ClearInput();
+                ClearAttachmentsBanner();
 
                 // Add placeholder assistant message to stream into and capture its index
                 int assistantIndex = ctx.Transcript.AddMessageGetIndex(MessageRole.Assistant, string.Empty);
@@ -477,12 +537,13 @@ namespace GxPT
                     try
                     {
                         // Snapshot the history and log it
-                        var snapshot = ctx.Conversation.History.ToArray();
+                        // Build a model snapshot where attachments are appended to content on-the-fly
+                        var snapshot = BuildMessagesForModel(ctx.Conversation.History);
                         try
                         {
                             var sbSnap = new StringBuilder();
-                            sbSnap.Append("Sending ").Append(snapshot.Length).Append(" messages:\n");
-                            for (int i = 0; i < snapshot.Length; i++)
+                            sbSnap.Append("Sending ").Append(snapshot.Count).Append(" messages:\n");
+                            for (int i = 0; i < snapshot.Count; i++)
                             {
                                 var m = snapshot[i];
                                 string content = m.Content ?? string.Empty;
@@ -565,6 +626,36 @@ namespace GxPT
                 ctx.IsSending = false;
                 throw;
             }
+        }
+
+        // Build a list of messages for the model, appending any attachments to the user message content
+        private static List<ChatMessage> BuildMessagesForModel(List<ChatMessage> history)
+        {
+            var list = new List<ChatMessage>();
+            if (history == null) return list;
+            for (int i = 0; i < history.Count; i++)
+            {
+                var m = history[i];
+                if (m == null) continue;
+                string content = m.Content ?? string.Empty;
+                if (m.Attachments != null && m.Attachments.Count > 0)
+                {
+                    var sb = new StringBuilder();
+                    sb.Append(content);
+                    for (int j = 0; j < m.Attachments.Count; j++)
+                    {
+                        var af = m.Attachments[j];
+                        if (af == null) continue;
+                        sb.AppendLine();
+                        sb.AppendLine("--- Attached File: " + af.FileName + " ---");
+                        sb.AppendLine(af.Content ?? string.Empty);
+                        sb.AppendLine("--- End Attached File: " + af.FileName + " ---");
+                    }
+                    content = sb.ToString();
+                }
+                list.Add(new ChatMessage(m.Role, content));
+            }
+            return list;
         }
 
         private void PopulateModelsFromSettings()
@@ -662,6 +753,7 @@ namespace GxPT
                 if (this.txtMessage != null) this.txtMessage.Enabled = hasKey;
                 if (this.btnSend != null) this.btnSend.Enabled = hasKey;
                 if (this.cmbModel != null) this.cmbModel.Enabled = hasKey;
+                if (this.btnAttach != null) this.btnAttach.Enabled = hasKey;
 
                 // Keep banner layout tidy when toggled
                 if (!hasKey) LayoutApiKeyBanner();
@@ -675,6 +767,7 @@ namespace GxPT
                 if (this.txtMessage != null) this.txtMessage.Enabled = false;
                 if (this.btnSend != null) this.btnSend.Enabled = false;
                 if (this.cmbModel != null) this.cmbModel.Enabled = false;
+                if (this.btnAttach != null) this.btnAttach.Enabled = false;
 
                 // Still try to recalc layout
                 try { if (_inputManager != null) _inputManager.AdjustInputBoxHeight(); }
@@ -699,6 +792,361 @@ namespace GxPT
                 try { if (_themeManager != null) _themeManager.ApplyThemeToAllTranscripts(); }
                 catch { }
             }
+        }
+
+        // ===== Attachments =====
+        private void btnAttach_Click(object sender, EventArgs e)
+        {
+            var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            if (ctx == null) return;
+            using (var ofd = new OpenFileDialog())
+            {
+                ofd.Title = "Attach Text File(s)";
+                ofd.Multiselect = true;
+                ofd.Filter = BuildTextFilesFilter();
+                ofd.CheckFileExists = true;
+                if (ofd.ShowDialog(this) != DialogResult.OK) return;
+
+                foreach (var path in ofd.FileNames)
+                {
+                    if (!IsValidTextFile(path))
+                    {
+                        MessageBox.Show(this, "Skipped non-text file: " + System.IO.Path.GetFileName(path), "Attach File", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        continue;
+                    }
+                    try
+                    {
+                        string content;
+                        using (var sr = new StreamReader(path, Encoding.UTF8, true))
+                            content = sr.ReadToEnd();
+                        ctx.PendingAttachments.Add(new AttachedFile(System.IO.Path.GetFileName(path), content));
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show(this, "Failed to read file: " + ex.Message, "Attach File", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+                RebuildAttachmentsBanner();
+            }
+        }
+
+        private string BuildTextFilesFilter()
+        {
+            // Cover common text files + all highlighter-related types + PowerShell
+            var exts = new List<string>();
+            // General text
+            exts.AddRange(new[] { "*.txt", "*.md", "*.markdown", "*.log", "*.ini", "*.cfg", "*.conf", "*.config", "*.properties", "*.toml", "*.gitignore", "*.dockerfile", "*.makefile", "*.cmake", "*.diff", "*.patch" });
+            // C/C++
+            exts.AddRange(new[] { "*.c", "*.h", "*.cpp", "*.cxx", "*.cc", "*.hpp", "*.hxx", "*.hh" });
+            // C#
+            exts.AddRange(new[] { "*.cs", "*.csx" });
+            // JS/TS
+            exts.AddRange(new[] { "*.js", "*.jsx", "*.ts", "*.tsx", "*.mjs", "*.cjs" });
+            // HTML/XML and related
+            exts.AddRange(new[] { "*.html", "*.htm", "*.xhtml", "*.xml", "*.xaml", "*.xsl", "*.xslt", "*.xsd", "*.svg", "*.rss", "*.atom", "*.plist", "*.resx", "*.settings", "*.manifest", "*.nuspec", "*.wsdl", "*.disco", "*.asmx", "*.sitemap", "*.master", "*.ascx", "*.kml", "*.gpx", "*.tei", "*.docbook", "*.fo", "*.ant", "*.maven", "*.pom", "*.csproj", "*.vbproj", "*.fsproj", "*.vcxproj", "*.proj", "*.targets", "*.props", "*.packages.config", "*.web.config", "*.app.config", "*.machine.config" });
+            // CSS
+            exts.AddRange(new[] { "*.css", "*.scss", "*.sass", "*.less" });
+            // Python
+            exts.AddRange(new[] { "*.py", "*.pyw", "*.pyi", "*.pyx" });
+            // Java
+            exts.AddRange(new[] { "*.java", "*.jav" });
+            // Go
+            exts.Add("*.go");
+            // Rust
+            exts.Add("*.rs");
+            // Ruby
+            exts.AddRange(new[] { "*.rb", "*.rbw", "*.rake", "*.gemspec" });
+            // Perl
+            exts.AddRange(new[] { "*.pl", "*.pm", "*.pod", "*.perl" });
+            // Visual Basic / BASIC
+            exts.AddRange(new[] { "*.vb", "*.vbs", "*.vba", "*.bas", "*.basic" });
+            // Shell/Bash
+            exts.AddRange(new[] { "*.sh", "*.bash", "*.zsh", "*.ksh", "*.fish", "*.csh", "*.tcsh" });
+            // Batch
+            exts.AddRange(new[] { "*.bat", "*.cmd" });
+            // PowerShell
+            exts.AddRange(new[] { "*.ps1", "*.psm1", "*.psd1", "*.ps1xml" });
+            // YAML
+            exts.AddRange(new[] { "*.yml", "*.yaml" });
+            // JSON
+            exts.AddRange(new[] { "*.json", "*.jsonc", "*.json5" });
+            // Regex / EBNF / Zig
+            exts.AddRange(new[] { "*.regex", "*.regexp", "*.re", "*.ebnf", "*.bnf", "*.abnf", "*.grammar", "*.yacc", "*.bison", "*.y", "*.yy", "*.zig" });
+
+            // Deduplicate
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var sb = new StringBuilder();
+            for (int i = 0; i < exts.Count; i++)
+            {
+                string e = exts[i];
+                if (string.IsNullOrEmpty(e)) continue;
+                if (seen.Contains(e)) continue;
+                if (sb.Length > 0) sb.Append(';');
+                sb.Append(e);
+                seen.Add(e);
+            }
+            return "Text Files|" + sb.ToString() + "|All Files|*.*";
+        }
+
+        private bool IsValidTextFile(string filePath)
+        {
+            try
+            {
+                var fi = new FileInfo(filePath);
+                if (fi.Length > 10 * 1024 * 1024) return false; // 10 MB guard
+                int sampleSize = (int)Math.Min(8192, fi.Length);
+                byte[] buffer = new byte[sampleSize];
+                using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
+                {
+                    int read = fs.Read(buffer, 0, buffer.Length);
+                    if (read <= 0) return true; // empty is fine
+                }
+                int nulls = 0, ctrls = 0;
+                for (int i = 0; i < buffer.Length; i++)
+                {
+                    byte b = buffer[i];
+                    if (b == 0) nulls++;
+                    else if (b < 32 && b != 9 && b != 10 && b != 13) ctrls++;
+                }
+                double nratio = (double)nulls / buffer.Length;
+                double cratio = (double)ctrls / buffer.Length;
+                return nratio < 0.01 && cratio < 0.02;
+            }
+            catch { return false; }
+        }
+
+        private void RebuildAttachmentsBanner()
+        {
+            try
+            {
+                if (this.pnlAttachmentsBanner == null) return;
+                var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                this.pnlAttachmentsBanner.SuspendLayout();
+                try
+                {
+                    this.pnlAttachmentsBanner.Controls.Clear();
+                    if (ctx == null || ctx.PendingAttachments == null || ctx.PendingAttachments.Count == 0)
+                    {
+                        this.pnlAttachmentsBanner.Visible = false;
+                        // collapse height when hidden
+                        this.pnlAttachmentsBanner.Height = 0;
+                    }
+                    else
+                    {
+                        this.pnlAttachmentsBanner.Visible = true;
+                        for (int i = 0; i < ctx.PendingAttachments.Count; i++)
+                        {
+                            var af = ctx.PendingAttachments[i];
+                            if (af == null) continue;
+                            var chip = CreateAttachmentChip(af, ctx.PendingAttachments);
+                            this.pnlAttachmentsBanner.Controls.Add(chip);
+                        }
+                        // Ensure the banner grows to fit wrapped rows
+                        int availableWidth = this.pnlAttachmentsBanner.Parent != null ? this.pnlAttachmentsBanner.Parent.ClientSize.Width : this.pnlAttachmentsBanner.Width;
+                        if (availableWidth <= 0) availableWidth = this.ClientSize.Width;
+                        var pref = this.pnlAttachmentsBanner.GetPreferredSize(new Size(availableWidth, 0));
+                        // include padding
+                        int targetHeight = Math.Max(0, pref.Height);
+                        this.pnlAttachmentsBanner.Height = targetHeight;
+                    }
+                }
+                finally
+                {
+                    this.pnlAttachmentsBanner.ResumeLayout();
+                }
+                if (_inputManager != null) _inputManager.AdjustInputBoxHeight();
+            }
+            catch { }
+        }
+
+        private Control CreateAttachmentChip(AttachedFile afRef, IList<AttachedFile> list)
+        {
+            var panel = new Panel();
+            panel.Margin = new Padding(4, 2, 4, 2);
+            panel.Padding = new Padding(10, 4, 10, 4); // slightly smaller chips
+            panel.AutoSize = false; // we'll size explicitly based on text
+            panel.BackColor = Color.Transparent; // we'll paint background ourselves
+            panel.Cursor = Cursors.Hand;
+
+            string text = afRef != null ? (afRef.FileName ?? string.Empty) : string.Empty;
+            panel.Font = (this.txtMessage != null ? this.txtMessage.Font : this.Font);
+
+            // Measure and set size so FlowLayout can lay out correctly
+            Size textSize = TextRenderer.MeasureText(text, panel.Font, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.SingleLine);
+            int width = Math.Max(18, textSize.Width + panel.Padding.Horizontal);
+            int height = Math.Max(18, textSize.Height + panel.Padding.Vertical);
+            panel.Size = new Size(width, height);
+
+            int cornerRadius = 6; // reduce radius for a sharper pill
+            Color baseFill = Color.FromArgb(230, 230, 230);
+            Color hoverFill = Color.FromArgb(240, 240, 240);
+            Color pressFill = Color.FromArgb(210, 210, 210);
+            Color fillColor = baseFill;
+            bool hover = false, pressed = false; // track hover for text color
+
+            // Rounded look via Paint, clip region, and centered text
+            panel.Paint += (s, e) =>
+            {
+                var g = e.Graphics;
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                Rectangle r = new Rectangle(0, 0, Math.Max(1, panel.Width - 1), Math.Max(1, panel.Height - 1));
+                using (var path = ChatTranscriptControl_RoundedRect(r, cornerRadius))
+                using (var b = new SolidBrush(fillColor))
+                using (var pen = new Pen(Color.FromArgb(200, 200, 200)))
+                {
+                    g.FillPath(b, path);
+                    g.DrawPath(pen, path);
+                }
+                var flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine;
+                var textColor = hover ? Color.Red : panel.ForeColor;
+                TextRenderer.DrawText(e.Graphics, text, panel.Font, r, textColor, flags);
+            };
+
+            EventHandler applyRegion = (s, e) =>
+            {
+                try
+                {
+                    Rectangle r = new Rectangle(0, 0, Math.Max(1, panel.Width - 1), Math.Max(1, panel.Height - 1));
+                    using (var path = ChatTranscriptControl_RoundedRect(r, cornerRadius))
+                    { panel.Region = new Region(path); }
+                }
+                catch { }
+            };
+            panel.SizeChanged += applyRegion;
+            panel.HandleCreated += (s, e) => applyRegion(s, e);
+
+            EventHandler repaint = (s, e) => panel.Invalidate();
+            MouseEventHandler onMouseDown = (s, e) => { if (e.Button == MouseButtons.Left) { pressed = true; fillColor = pressFill; repaint(s, e); } };
+            EventHandler onMouseEnter = (s, e) => { hover = true; if (!pressed) fillColor = hoverFill; repaint(s, e); };
+            EventHandler onMouseLeave = (s, e) => { hover = false; pressed = false; fillColor = baseFill; repaint(s, e); };
+            MouseEventHandler onMouseUp = (s, e) =>
+            {
+                if (pressed && e.Button == MouseButtons.Left)
+                {
+                    pressed = false; fillColor = hover ? hoverFill : baseFill; repaint(s, e);
+                    // Remove this attachment by reference
+                    if (afRef != null && list != null)
+                    {
+                        try { list.Remove(afRef); }
+                        catch { }
+                        RebuildAttachmentsBanner();
+                    }
+                }
+            };
+            panel.MouseEnter += onMouseEnter;
+            panel.MouseLeave += onMouseLeave;
+            panel.MouseDown += onMouseDown;
+            panel.MouseUp += onMouseUp;
+
+            // Double-click opens a preview
+            EventHandler onDoubleClick = (s, e) => { if (afRef != null) OpenAttachmentInViewer(afRef); };
+            panel.DoubleClick += onDoubleClick;
+
+            return panel;
+        }
+
+        private void ClearAttachmentsBanner()
+        {
+            var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            try { if (ctx != null && ctx.PendingAttachments != null) ctx.PendingAttachments.Clear(); }
+            catch { }
+            RebuildAttachmentsBanner();
+        }
+
+        private void OpenAttachmentInViewer(AttachedFile af)
+        {
+            if (af == null) return;
+            try
+            {
+                using (var dlg = new FileViewerForm())
+                {
+                    // Access RichTextBox via reflection to keep designer file untouched
+                    var rtbField = typeof(FileViewerForm).GetField("rtbFileText", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    var rtb = rtbField != null ? (RichTextBox)rtbField.GetValue(dlg) : null;
+                    if (rtb != null)
+                    {
+                        rtb.Text = af.Content ?? string.Empty;
+                        string lang = GuessLanguageFromFileName(af.FileName);
+                        try { RichTextBoxSyntaxHighlighter.Highlight(rtb, lang); }
+                        catch { }
+                    }
+                    dlg.Text = af.FileName ?? "Attachment";
+                    dlg.StartPosition = FormStartPosition.CenterParent;
+                    dlg.ShowDialog(this);
+                }
+            }
+            catch { }
+        }
+
+        private string GuessLanguageFromFileName(string fileName)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(fileName)) return null;
+                string ext = System.IO.Path.GetExtension(fileName);
+                if (string.IsNullOrEmpty(ext)) return null;
+                ext = ext.TrimStart('.');
+                // Common mappings to SyntaxHighlighter identifiers
+                switch (ext.ToLowerInvariant())
+                {
+                    case "cs": return "csharp";
+                    case "js":
+                    case "mjs":
+                    case "cjs": return "javascript";
+                    case "ts":
+                    case "tsx": return "typescript";
+                    case "json":
+                    case "jsonc":
+                    case "json5": return "json";
+                    case "xml":
+                    case "xaml":
+                    case "xsd":
+                    case "wsdl":
+                    case "resx": return "xml";
+                    case "html":
+                    case "htm": return "html";
+                    case "css": return "css";
+                    case "yml":
+                    case "yaml": return "yaml";
+                    case "py": return "python";
+                    case "rb": return "ruby";
+                    case "rs": return "rust";
+                    case "java": return "java";
+                    case "go": return "go";
+                    case "ps1":
+                    case "psm1":
+                    case "psd1": return "powershell";
+                    case "sh":
+                    case "bash": return "bash";
+                    case "bat":
+                    case "cmd": return "batch";
+                    case "vb":
+                    case "vbs": return "visualbasic";
+                    case "zig": return "zig";
+                    case "c":
+                    case "h": return "c";
+                    case "cpp":
+                    case "cxx":
+                    case "cc":
+                    case "hpp":
+                    case "hxx":
+                    case "hh": return "cpp";
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private static System.Drawing.Drawing2D.GraphicsPath ChatTranscriptControl_RoundedRect(Rectangle r, int radius)
+        {
+            int d = radius * 2;
+            var gp = new System.Drawing.Drawing2D.GraphicsPath();
+            gp.AddArc(r.X, r.Y, d, d, 180, 90);
+            gp.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            gp.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            gp.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            gp.CloseFigure();
+            return gp;
         }
 
         // Return default model from settings or fallback
@@ -803,9 +1251,16 @@ namespace GxPT
                 foreach (var m in convo.History)
                 {
                     if (string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+                    {
                         ctx.Transcript.AddMessage(MessageRole.Assistant, m.Content);
+                    }
                     else if (string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase))
-                        ctx.Transcript.AddMessage(MessageRole.User, m.Content);
+                    {
+                        if (m.Attachments != null && m.Attachments.Count > 0)
+                            ctx.Transcript.AddMessage(MessageRole.User, m.Content, m.Attachments);
+                        else
+                            ctx.Transcript.AddMessage(MessageRole.User, m.Content);
+                    }
                     // skip system in transcript UI
                 }
             }
@@ -857,9 +1312,16 @@ namespace GxPT
                     foreach (var m in convo.History)
                     {
                         if (string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+                        {
                             ctx.Transcript.AddMessage(MessageRole.Assistant, m.Content);
+                        }
                         else if (string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase))
-                            ctx.Transcript.AddMessage(MessageRole.User, m.Content);
+                        {
+                            if (m.Attachments != null && m.Attachments.Count > 0)
+                                ctx.Transcript.AddMessage(MessageRole.User, m.Content, m.Attachments);
+                            else
+                                ctx.Transcript.AddMessage(MessageRole.User, m.Content);
+                        }
                         // skip system in transcript UI
                     }
                 }

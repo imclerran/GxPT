@@ -14,6 +14,25 @@ namespace GxPT
         public FileViewerForm()
         {
             InitializeComponent();
+            ApplyFontSetting();
+        }
+
+        private void ApplyFontSetting()
+        {
+            try
+            {
+                double fs = AppSettings.GetDouble("font_size", 0);
+                if (fs <= 0) return;
+                float size = (float)Math.Max(6, Math.Min(48, fs));
+                if (this.rtbFileText != null)
+                {
+                    this.rtbFileText.Font = new System.Drawing.Font(
+                        this.rtbFileText.Font.FontFamily,
+                        size,
+                        this.rtbFileText.Font.Style);
+                }
+            }
+            catch { }
         }
     }
 }

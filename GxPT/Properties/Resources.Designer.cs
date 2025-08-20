@@ -60,9 +60,9 @@ namespace GxPT.Properties {
             }
         }
         
-        internal static System.Drawing.Bitmap Attatch {
+        internal static System.Drawing.Bitmap AttatchGrey {
             get {
-                object obj = ResourceManager.GetObject("Attatch", resourceCulture);
+                object obj = ResourceManager.GetObject("AttatchGrey", resourceCulture);
                 return ((System.Drawing.Bitmap)(obj));
             }
         }

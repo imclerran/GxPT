@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Web.Script.Serialization;
+using System.Text;
 
 namespace GxPT
 {
@@ -54,7 +55,7 @@ namespace GxPT
                 Name = convo.Name,
                 SelectedModel = convo.SelectedModel,
                 LastUpdated = convo.LastUpdated,
-                Messages = convo.History.Select(m => new MessageDto { Role = m.Role, Content = m.Content }).ToList()
+                Messages = convo.History.Select(m => new MessageDto { Role = m.Role, Content = m.Content, Attachments = (m.Attachments != null && m.Attachments.Count > 0) ? m.Attachments : null }).ToList()
             };
 
             var ser = new JavaScriptSerializer();
@@ -86,12 +87,19 @@ namespace GxPT
                     foreach (var m in dto.Messages)
                     {
                         if (m == null) continue;
-                        if (string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase))
-                            convo.AddAssistantMessage(m.Content);
-                        else if (string.Equals(m.Role, "system", StringComparison.OrdinalIgnoreCase))
-                            convo.History.Add(new ChatMessage("system", m.Content));
-                        else
-                            convo.AddUserMessage(m.Content);
+                        string role = m.Role ?? "user";
+                        string content = m.Content ?? string.Empty;
+                        List<AttachedFile> atts = m.Attachments;
+                        // Backward-compat: extract attachments if they were embedded in content with markers
+                        string baseContent;
+                        List<AttachedFile> parsed;
+                        if ((atts == null || atts.Count == 0) && TryExtractAttachmentsFromContent(content, out baseContent, out parsed))
+                        {
+                            content = baseContent;
+                            atts = parsed;
+                        }
+                        // Add chat message directly to history (no naming trigger needed on load)
+                        convo.History.Add(new ChatMessage(role, content, atts));
                     }
                 }
                 return convo;
@@ -157,6 +165,72 @@ namespace GxPT
         {
             public string Role { get; set; }
             public string Content { get; set; }
+            public List<AttachedFile> Attachments { get; set; }
+        }
+
+        // Extract attachments embedded using the delimiter format:
+        // --- Attached File: <name> ---\n<content>\n--- End Attached File: <name> ---
+        private static bool TryExtractAttachmentsFromContent(string content, out string baseContent, out List<AttachedFile> attachments)
+        {
+            baseContent = content ?? string.Empty;
+            attachments = null;
+            if (string.IsNullOrEmpty(content)) return false;
+            const string startPrefix = "--- Attached File:";
+            const string endPrefix = "--- End Attached File:";
+
+            var lines = content.Replace('\r', '\n').Split(new[] { '\n' }, StringSplitOptions.None);
+            var baseSb = new StringBuilder();
+            var atts = new List<AttachedFile>();
+            bool inBlock = false;
+            string currentName = null;
+            var fileSb = new StringBuilder();
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i];
+                if (!inBlock)
+                {
+                    if (line != null && line.TrimStart().StartsWith(startPrefix, StringComparison.Ordinal))
+                    {
+                        // Parse file name
+                        string tail = line.Substring(line.IndexOf(startPrefix, StringComparison.Ordinal) + startPrefix.Length).Trim();
+                        if (tail.EndsWith("---", StringComparison.Ordinal)) tail = tail.Substring(0, tail.Length - 3).Trim();
+                        if (tail.StartsWith(":", StringComparison.Ordinal)) tail = tail.Substring(1).Trim();
+                        currentName = tail;
+                        inBlock = true;
+                        fileSb.Length = 0;
+                    }
+                    else
+                    {
+                        baseSb.Append(line ?? string.Empty).Append('\n');
+                    }
+                }
+                else
+                {
+                    if (line != null && line.TrimStart().StartsWith(endPrefix, StringComparison.Ordinal))
+                    {
+                        // End of block
+                        atts.Add(new AttachedFile(currentName, fileSb.ToString()));
+                        inBlock = false;
+                        currentName = null;
+                        fileSb.Length = 0;
+                    }
+                    else
+                    {
+                        fileSb.Append(line ?? string.Empty).Append('\n');
+                    }
+                }
+            }
+
+            if (atts.Count > 0)
+            {
+                baseContent = baseSb.ToString();
+                // Trim trailing newlines added by split/append
+                while (baseContent.EndsWith("\n", StringComparison.Ordinal)) baseContent = baseContent.Substring(0, baseContent.Length - 1);
+                attachments = atts;
+                return true;
+            }
+            return false;
         }
 
         internal sealed class ConversationListItem

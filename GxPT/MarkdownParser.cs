@@ -260,7 +260,13 @@ namespace GxPT
         }
 
         // Very simple inline parser: **bold**, *italic*, __bold__, _italic_, `code`, [text](url)
-        // No nested emphasis beyond bold+italic combos; escapes not handled exhaustively (sufficient for chat)
+        // Notes:
+        // - For underscores, apply stricter rules so identifiers_like_this aren't parsed as emphasis.
+        //   Opening '_' or '__' must be at start-of-text or preceded by whitespace; closing must be
+        //   followed by end-of-text, whitespace, or punctuation. Underscores with letters/digits on
+        //   both sides are treated as literal.
+        // - Asterisks keep the original simple toggle behavior.
+        // - Escapes are not handled exhaustively (sufficient for chat UI).
         public static List<InlineRun> ParseInlines(string text)
         {
             var runs = new List<InlineRun>();
@@ -322,10 +328,9 @@ namespace GxPT
                     continue;
                 }
 
-                // **bold** or __bold__
-                if (i + 1 < text.Length && ((text[i] == '*' && text[i + 1] == '*') || (text[i] == '_' && text[i + 1] == '_')))
+                // **bold** (asterisks only keep simple toggle semantics)
+                if (i + 1 < text.Length && (text[i] == '*' && text[i + 1] == '*'))
                 {
-                    // toggle bold
                     bool turnOn = (style & RunStyle.Bold) == 0;
                     flush();
                     if (turnOn) style |= RunStyle.Bold; else style &= ~RunStyle.Bold;
@@ -333,12 +338,67 @@ namespace GxPT
                     continue;
                 }
 
-                // *italic* or _italic_
-                if (text[i] == '*' || text[i] == '_')
+                // *italic* (asterisk toggle semantics)
+                if (text[i] == '*')
                 {
                     bool turnOn = (style & RunStyle.Italic) == 0;
                     flush();
                     if (turnOn) style |= RunStyle.Italic; else style &= ~RunStyle.Italic;
+                    i++;
+                    continue;
+                }
+
+                // __bold__ with underscores using stricter word-boundary rules
+                if (i + 1 < text.Length && text[i] == '_' && text[i + 1] == '_')
+                {
+                    int openerLen = 2;
+                    if (IsValidUnderscoreOpener(text, i, openerLen))
+                    {
+                        int closeIndex;
+                        if (TryFindUnderscoreCloser(text, i + openerLen, openerLen, out closeIndex))
+                        {
+                            // Found a valid emphasis span; flush text before, then parse inside and apply Bold
+                            flush();
+                            string inner = text.Substring(i + openerLen, closeIndex - (i + openerLen));
+                            var innerRuns = ParseInlines(inner);
+                            foreach (var r in innerRuns)
+                            {
+                                r.Style |= (style | RunStyle.Bold);
+                                runs.Add(r);
+                            }
+                            i = closeIndex + openerLen;
+                            continue;
+                        }
+                    }
+                    // Not a valid opener or no valid closer: treat the first '_' literally and continue
+                    sb.Append(text[i]);
+                    i++;
+                    continue;
+                }
+
+                // _italic_ with underscores using stricter word-boundary rules
+                if (text[i] == '_')
+                {
+                    int openerLen = 1;
+                    if (IsValidUnderscoreOpener(text, i, openerLen))
+                    {
+                        int closeIndex;
+                        if (TryFindUnderscoreCloser(text, i + openerLen, openerLen, out closeIndex))
+                        {
+                            flush();
+                            string inner = text.Substring(i + openerLen, closeIndex - (i + openerLen));
+                            var innerRuns = ParseInlines(inner);
+                            foreach (var r in innerRuns)
+                            {
+                                r.Style |= (style | RunStyle.Italic);
+                                runs.Add(r);
+                            }
+                            i = closeIndex + openerLen;
+                            continue;
+                        }
+                    }
+                    // Not a valid opener or no valid closer: treat as literal
+                    sb.Append(text[i]);
                     i++;
                     continue;
                 }
@@ -518,6 +578,65 @@ namespace GxPT
 
             consumed = Math.Max(2, i - startIndex);
             return tbl;
+        }
+
+        // ---------- Inline underscore helper rules ----------
+        private static bool IsWordChar(char c)
+        {
+            return char.IsLetterOrDigit(c);
+        }
+
+        private static bool IsWhitespace(char c)
+        {
+            return char.IsWhiteSpace(c);
+        }
+
+        private static bool IsPunctuation(char c)
+        {
+            return char.IsPunctuation(c);
+        }
+
+        // Opening '_' or '__' is valid only if at start or preceded by whitespace, and not when both sides are word chars
+        private static bool IsValidUnderscoreOpener(string text, int index, int len)
+        {
+            if (index < 0 || index + len > text.Length) return false;
+
+            // Must be at start or preceded by whitespace
+            if (!(index == 0 || IsWhitespace(text[index - 1]))) return false;
+
+            // If letters/digits on both sides, it's within a word → not an opener
+            char prev = (index > 0) ? text[index - 1] : '\0';
+            char next = (index + len < text.Length) ? text[index + len] : '\0';
+            if (index > 0 && index + len < text.Length && IsWordChar(prev) && IsWordChar(next))
+                return false;
+
+            return true;
+        }
+
+        // Find a matching closer at or after 'searchFrom' for '_' or '__'
+        private static bool TryFindUnderscoreCloser(string text, int searchFrom, int len, out int closeIndex)
+        {
+            closeIndex = -1;
+            if (string.IsNullOrEmpty(text) || searchFrom >= text.Length) return false;
+
+            for (int j = searchFrom; j <= text.Length - len; j++)
+            {
+                bool allUnderscores = true;
+                for (int k = 0; k < len; k++)
+                {
+                    if (text[j + k] != '_') { allUnderscores = false; break; }
+                }
+                if (!allUnderscores) continue;
+
+                int after = j + len;
+                // Closing must be followed by end-of-text, whitespace, or punctuation
+                if (after == text.Length || IsWhitespace(text[after]) || IsPunctuation(text[after]))
+                {
+                    closeIndex = j;
+                    return true;
+                }
+            }
+            return false;
         }
     }
 }

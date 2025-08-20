@@ -52,8 +52,7 @@ namespace GxPT
                 BeginUpdate(rtb);
                 try
                 {
-                    rtb.SelectionStart = 0;
-                    rtb.SelectionLength = 0;
+                    rtb.SelectAll();
                     rtb.SelectionColor = SystemColors.WindowText;
                 }
                 finally
@@ -70,16 +69,20 @@ namespace GxPT
             int savedStart = rtb.SelectionStart;
             int savedLength = rtb.SelectionLength;
 
+            // Build a prefix-sum of carriage returns to translate .NET string indices
+            // (which count "\r\n" as two chars) into RichEdit CP indices (which treat
+            // CRLF as a single line break). This fixes the per-line +1 offset.
+            int[] crPrefix = BuildCrPrefix(text);
+
             BeginUpdate(rtb);
             try
             {
                 // Reset all to default color first
-                rtb.SelectionStart = 0;
-                rtb.SelectionLength = rtb.TextLength;
+                rtb.SelectAll();
                 rtb.SelectionColor = SystemColors.WindowText;
 
-                // Apply token colors
-                int maxLen = rtb.TextLength;
+                // Apply token colors (use .NET text length for token bounds)
+                int maxLen = text.Length;
                 for (int i = 0; i < tokens.Count; i++)
                 {
                     CodeToken t = tokens[i];
@@ -94,18 +97,61 @@ namespace GxPT
                         if (length == 0) continue;
                     }
 
-                    rtb.SelectionStart = t.StartIndex;
-                    rtb.SelectionLength = length;
+                    // Translate indices/length into RichEdit CP space
+                    int selStart = ToRtfIndex(text.Length, crPrefix, t.StartIndex);
+                    int selLen = ToRtfLength(text.Length, crPrefix, t.StartIndex, length);
+                    if (selStart < 0 || selLen <= 0) continue;
+
+                    rtb.SelectionStart = selStart;
+                    rtb.SelectionLength = selLen;
                     rtb.SelectionColor = SyntaxHighlighter.GetTokenColor(t.Type);
                 }
             }
             finally
             {
                 // Restore caret/selection
-                rtb.SelectionStart = Math.Max(0, Math.Min(savedStart, rtb.TextLength));
-                rtb.SelectionLength = Math.Max(0, Math.Min(savedLength, rtb.TextLength - rtb.SelectionStart));
+                // Convert saved selection from .NET string indices to RichEdit CPs
+                int restoreStart = ToRtfIndex(text.Length, crPrefix, savedStart);
+                int restoreLen = ToRtfLength(text.Length, crPrefix, savedStart, savedLength);
+                int totalLenCp = ToRtfIndex(text.Length, crPrefix, rtb.TextLength);
+                rtb.SelectionStart = Math.Max(0, Math.Min(restoreStart, totalLenCp));
+                rtb.SelectionLength = Math.Max(0, Math.Min(restoreLen, totalLenCp - rtb.SelectionStart));
                 EndUpdate(rtb);
             }
+        }
+
+        // Prefix sum of carriage returns ("\r") to help translate indices
+        private static int[] BuildCrPrefix(string s)
+        {
+            int n = s != null ? s.Length : 0;
+            int[] pref = new int[n + 1];
+            if (n == 0) return pref;
+            for (int i = 0; i < n; i++)
+            {
+                pref[i + 1] = pref[i] + (s[i] == '\r' ? 1 : 0);
+            }
+            return pref;
+        }
+
+        // Translate a .NET string index to RichEdit CP by subtracting preceding CRs
+        private static int ToRtfIndex(int textLength, int[] crPrefix, int dotNetIndex)
+        {
+            if (dotNetIndex <= 0) return 0;
+            if (dotNetIndex > textLength) dotNetIndex = textLength;
+            if (crPrefix == null || crPrefix.Length == 0) return dotNetIndex;
+            return dotNetIndex - crPrefix[dotNetIndex];
+        }
+
+        // Translate a .NET substring length to RichEdit CP length by removing CRs in span
+        private static int ToRtfLength(int textLength, int[] crPrefix, int startDotNet, int lengthDotNet)
+        {
+            if (lengthDotNet <= 0) return 0;
+            int start = Math.Max(0, Math.Min(startDotNet, textLength));
+            int end = Math.Max(start, Math.Min(startDotNet + lengthDotNet, textLength));
+            if (crPrefix == null || crPrefix.Length == 0) return end - start;
+            int crsInSpan = crPrefix[end] - crPrefix[start];
+            int len = Math.Max(0, end - start - crsInSpan);
+            return len;
         }
     }
 }

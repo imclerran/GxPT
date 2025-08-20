@@ -35,6 +35,7 @@ namespace GxPT
             public bool IsSending;
             public string SelectedModel;
             public bool NoSaveUntilUserSend;
+            public List<AttachedFile> PendingAttachments = new List<AttachedFile>();
         }
 
         public TabManager(MainForm mainForm, TabControl tabControl, MenuStrip menuStrip)

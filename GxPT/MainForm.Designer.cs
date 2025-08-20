@@ -56,6 +56,7 @@
             this.flowLayoutPanel1 = new System.Windows.Forms.FlowLayoutPanel();
             this.lblNoApiKey = new System.Windows.Forms.Label();
             this.lnkOpenSettings = new System.Windows.Forms.LinkLabel();
+            this.pnlAttachmentsBanner = new System.Windows.Forms.FlowLayoutPanel();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
             this.splitContainer1 = new System.Windows.Forms.SplitContainer();
@@ -279,6 +280,7 @@
             // 
             this.pnlBottom.AutoSize = true;
             this.pnlBottom.Controls.Add(this.pnlApiKeyBanner);
+            this.pnlBottom.Controls.Add(this.pnlAttachmentsBanner);
             this.pnlBottom.Controls.Add(this.pnlInput);
             this.pnlBottom.Dock = System.Windows.Forms.DockStyle.Bottom;
             this.pnlBottom.Location = new System.Drawing.Point(0, 646);
@@ -373,7 +375,7 @@
             // btnAttach
             // 
             this.btnAttach.Dock = System.Windows.Forms.DockStyle.Left;
-            this.btnAttach.Image = global::GxPT.Properties.Resources.Attatch;
+            this.btnAttach.Image = global::GxPT.Properties.Resources.AttatchGrey;
             this.btnAttach.Location = new System.Drawing.Point(0, 0);
             this.btnAttach.Name = "btnAttach";
             this.btnAttach.Size = new System.Drawing.Size(26, 54);
@@ -472,6 +474,7 @@
         private System.Windows.Forms.ToolStripMenuItem miExport;
         private System.Windows.Forms.Button btnAttach;
         private System.Windows.Forms.Panel pnlButtons;
+        private System.Windows.Forms.FlowLayoutPanel pnlAttachmentsBanner;
 
 
     }
