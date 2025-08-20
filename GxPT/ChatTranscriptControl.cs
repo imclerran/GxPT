@@ -188,8 +188,8 @@ namespace GxPT
                 _clrAppBack = Color.FromArgb(0x24, 0x27, 0x3A); // Macchiato Base
                 _clrAppText = Color.FromArgb(230, 230, 230); // light text
                 // Bubbles
-                _clrUserBack = Color.FromArgb(148, 60, 12); // reddish orange
-                _clrUserBorder = Color.FromArgb(116, 46, 10);
+                _clrUserBack = Color.FromArgb(0x66, 0x00, 0x20); // #660020 user bubble background
+                _clrUserBorder = Color.FromArgb(0x99, 0x00, 0x30); // #990030 user bubble border (darker)
                 _clrAsstBack = Color.FromArgb(48, 49, 52);   // darker grey
                 _clrAsstBorder = Color.FromArgb(70, 72, 75);
                 _clrSysBack = Color.FromArgb(64, 60, 40);    // muted warm
