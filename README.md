@@ -11,7 +11,7 @@ A native chatbot client for Windows XP, written in C# and .NET 3.5. GxPT aims to
 - **Modern Chat UI**: Clean, responsive chat transcript display.
 - **Markdown Rendering**: Supports headings, bold/italic, links, bullet and numbered lists (including deeply nested lists), tables, code blocks, and inline code.
 - **Code Syntax Highlighting**: Out-of-the-box support for a wide range of languages, including:
-  - Bash, Batch, C, C++, C#, Go, Java, JavaScript, JSON, Python, Ruby, Rust, TypeScript, Zig
+  - Bash, Basic, Batch, C, C++, C#, CSS, EBNF, Go, HTML, Java, JavaScript, JSON, Perl, Python, Ruby, Regex, Rust, TypeScript, Visual Basic, XML, YAML, Zig
 - **Conversation Management**: Tabbed conversations and conversation history.
 - **Data Stored Locally**: Conversations are stored locally, but may be exported and imported to migrate data across machines.
 - **Settings and Customization**: Customize settings with Visual settings UI or built-in JSON editor. 

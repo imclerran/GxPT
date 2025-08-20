@@ -86,18 +86,27 @@ namespace GxPT
         private static void RegisterDefaultHighlighters()
         {
             RegisterHighlighter(new BashHighlighter());
+            RegisterHighlighter(new BasicHighlighter());
             RegisterHighlighter(new BatchHighlighter());
             RegisterHighlighter(new CHighlighter());
             RegisterHighlighter(new CppHighlighter());
+            RegisterHighlighter(new CssHighlighter());
             RegisterHighlighter(new CSharpHighlighter());
+            RegisterHighlighter(new EbnfHighlighter());
             RegisterHighlighter(new GoHighlighter());
+            RegisterHighlighter(new HtmlHighlighter());
             RegisterHighlighter(new JavaHighlighter());
             RegisterHighlighter(new JavaScriptHighlighter());
             RegisterHighlighter(new JsonHighlighter());
+            RegisterHighlighter(new PerlHighlighter());
             RegisterHighlighter(new PythonHighlighter());
             RegisterHighlighter(new RubyHighlighter());
+            RegisterHighlighter(new RegexHighlighter());
             RegisterHighlighter(new RustHighlighter());
             RegisterHighlighter(new TypeScriptHighlighter());
+            RegisterHighlighter(new VisualBasicHighlighter());
+            RegisterHighlighter(new XmlHighlighter());
+            RegisterHighlighter(new YamlHighlighter());
             RegisterHighlighter(new ZigHighlighter());
         }
 

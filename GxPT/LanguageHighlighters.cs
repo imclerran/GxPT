@@ -158,6 +158,62 @@ namespace GxPT
     }
 
     /// <summary>
+    /// Classic BASIC (GW-BASIC/QBasic/QuickBASIC) syntax highlighter
+    /// </summary>
+    public class BasicHighlighter : RegexHighlighterBase
+    {
+        public override string Language
+        {
+            get { return "basic"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "basic", "qbasic", "quickbasic", "gw-basic", "gwbasic", "bas", "basic-80" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Optional line numbers at start of line
+                new TokenPattern(@"(?im)^\s*\d+\b", TokenType.Number, 1),
+
+                // String literals: "..." with doubled quotes for escapes
+                new TokenPattern(@"""(?:[^""]|"""")*""", TokenType.String, 2),
+
+                // Comments: ' ... and REM ...
+                new TokenPattern(@"(?i)'.*$", TokenType.Comment, 3),
+                new TokenPattern(@"(?i)\bREM\b.*$", TokenType.Comment, 4),
+
+                // Keywords (common across many BASIC dialects)
+                new TokenPattern(@"(?i)\b(?:PRINT|INPUT|LET|IF|THEN|ELSE|ELSEIF|END|STOP|RUN|GOTO|GOSUB|RETURN|FOR|TO|STEP|NEXT|WHILE|WEND|DO|LOOP|UNTIL|SELECT|CASE|ON|ERROR|RESUME|DIM|REDIM|SHARED|STATIC|AS|SUB|FUNCTION|CALL|OPEN|CLOSE|PUT|GET|READ|DATA|RESTORE|DECLARE|TYPE|CONST|RANDOMIZE|OPTION|BASE|PSET|LINE|CIRCLE|PAINT|DRAW|SCREEN|COLOR|CLS|LOCATE)\b", TokenType.Keyword, 5),
+
+                // Built-in functions/constants (highlight as types for color variety)
+                new TokenPattern(@"(?i)\b(?:ABS|ASC|ATN|CHR\$|COS|EXP|FIX|INT|LEFT\$|LEN|LOG|MID\$|RIGHT\$|RND|SGN|SIN|SPACE\$|SQR|STR\$|STRING\$|TAN|TIMER|UCASE\$|LCASE\$|VAL|INSTR|INKEY\$|PEEK|POKE|EOF)\b", TokenType.Type, 6),
+
+                // Variables with type suffix characters ($ % & ! # @)
+                new TokenPattern(@"(?i)\b[A-Za-z][A-Za-z0-9]*[\$\%\&\!\#@]\b", TokenType.Type, 7),
+
+                // Numbers: decimal with optional exponent and type suffix; hex/oct/bin (&H/&O/&B)
+                new TokenPattern(@"(?i)\b(?:&H[0-9A-F]+|&O[0-7]+|&B[01]+|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)(?:[!#%&@])?\b", TokenType.Number, 8),
+
+                // User-defined/built-in function calls (identifier followed by '(')
+                new TokenPattern(@"(?i)\b[A-Za-z][A-Za-z0-9]*\b(?=\s*\()", TokenType.Method, 9),
+
+                // Word operators
+                new TokenPattern(@"(?i)\b(?:AND|OR|NOT|XOR|EQV|IMP|MOD)\b", TokenType.Operator, 10),
+
+                // Symbol operators
+                new TokenPattern(@"<=|>=|<>|<<|>>|[+\-*/^\\=<>]", TokenType.Operator, 11),
+
+                // Punctuation (statement separators, lists, grouping)
+                new TokenPattern(@"[(),;:]", TokenType.Punctuation, 12),
+            };
+        }
+    }
+
+    /// <summary>
     /// Windows Batch (CMD) syntax highlighter
     /// </summary>
     public class BatchHighlighter : RegexHighlighterBase
@@ -315,6 +371,73 @@ namespace GxPT
     }
 
     /// <summary>
+    /// CSS syntax highlighter
+    /// </summary>
+    public class CssHighlighter : RegexHighlighterBase
+    {
+        public override string Language
+        {
+            get { return "css"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "css3", "stylesheet" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Comments
+                new TokenPattern(@"/\*[\s\S]*?\*/", TokenType.Comment, 1),
+
+                // Strings (single and double quotes)
+                new TokenPattern(@"'(?:[^'\\]|\\.)*'|""(?:[^""\\]|\\.)*""", TokenType.String, 2),
+
+                // URLs in url() functions
+                new TokenPattern(@"url\s*\(\s*(?:'(?:[^'\\]|\\.)*'|""(?:[^""\\]|\\.)*""|[^)]*)\s*\)", TokenType.String, 3),
+
+                // Hex colors
+                new TokenPattern(@"#[0-9a-fA-F]{3,8}\b", TokenType.Number, 4),
+
+                // Numbers with units
+                new TokenPattern(@"-?\d+(?:\.\d+)?(?:px|em|rem|%|vh|vw|vmin|vmax|cm|mm|in|pt|pc|ex|ch|fr|deg|rad|grad|turn|s|ms|Hz|kHz|dpi|dpcm|dppx)\b", TokenType.Number, 5),
+
+                // Plain numbers
+                new TokenPattern(@"-?\d+(?:\.\d+)?\b", TokenType.Number, 6),
+
+                // At-rules (@media, @import, @keyframes, etc.)
+                new TokenPattern(@"@(?:media|import|charset|namespace|supports|document|page|font-face|keyframes|-webkit-keyframes|-moz-keyframes)", TokenType.Keyword, 7),
+
+                // Pseudo-classes and pseudo-elements
+                new TokenPattern(@"::?(?:hover|active|focus|visited|link|first-child|last-child|nth-child|nth-of-type|before|after|first-line|first-letter|selection|not|lang|root|empty|target|enabled|disabled|checked|invalid|valid|required|optional)\b", TokenType.Type, 8),
+
+                // CSS properties (common ones)
+                new TokenPattern(@"\b(?:color|background|background-color|background-image|background-repeat|background-position|background-size|background-attachment|border|border-color|border-style|border-width|border-radius|margin|padding|width|height|min-width|max-width|min-height|max-height|display|position|top|right|bottom|left|float|clear|overflow|visibility|opacity|z-index|font|font-family|font-size|font-weight|font-style|font-variant|line-height|text-align|text-decoration|text-transform|text-indent|letter-spacing|word-spacing|white-space|vertical-align|list-style|list-style-type|list-style-position|list-style-image|table-layout|border-collapse|border-spacing|empty-cells|caption-side|content|quotes|counter-reset|counter-increment|outline|outline-color|outline-style|outline-width|cursor|box-shadow|text-shadow|transform|transition|animation|flex|grid|align-items|justify-content)\b", TokenType.Type, 9),
+
+                // CSS values and keywords
+                new TokenPattern(@"\b(?:inherit|initial|unset|revert|auto|none|normal|bold|italic|underline|overline|line-through|uppercase|lowercase|capitalize|left|right|center|justify|top|middle|bottom|block|inline|inline-block|flex|grid|absolute|relative|fixed|static|sticky|hidden|visible|scroll|solid|dashed|dotted|double|groove|ridge|inset|outset|transparent|currentColor|serif|sans-serif|monospace|cursive|fantasy)\b", TokenType.Keyword, 10),
+
+                // Selectors: class names (.class)
+                new TokenPattern(@"\.[a-zA-Z_-][a-zA-Z0-9_-]*", TokenType.Type, 11),
+
+                // Selectors: IDs (#id)
+                new TokenPattern(@"#[a-zA-Z_-][a-zA-Z0-9_-]*", TokenType.Method, 12),
+
+                // HTML tag selectors
+                new TokenPattern(@"\b(?:html|head|title|meta|link|script|style|body|header|nav|main|section|article|aside|footer|h1|h2|h3|h4|h5|h6|p|div|span|a|img|ul|ol|li|table|thead|tbody|tfoot|tr|th|td|form|input|textarea|button|select|option|label|fieldset|legend)\b", TokenType.Method, 13),
+
+                // Important declaration
+                new TokenPattern(@"!important\b", TokenType.Keyword, 14),
+
+                // Punctuation
+                new TokenPattern(@"[{}()\[\]:;,>+~*]", TokenType.Punctuation, 15)
+            };
+        }
+    }
+
+    /// <summary>
     /// C# syntax highlighter
     /// </summary>
     public class CSharpHighlighter : RegexHighlighterBase
@@ -362,6 +485,68 @@ namespace GxPT
                 
                 // Punctuation
                 new TokenPattern(@"[{}()\[\];,.]", TokenType.Punctuation, 10)
+            };
+        }
+    }
+
+    /// <summary>
+    /// EBNF (Extended Backus-Naur Form) syntax highlighter
+    /// </summary>
+    public class EbnfHighlighter : RegexHighlighterBase
+    {
+        public override string Language
+        {
+            get { return "ebnf"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "bnf", "abnf", "grammar", "yacc", "bison" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Comments (various styles: (* ... *), // ..., # ...)
+                new TokenPattern(@"\(\*[\s\S]*?\*\)", TokenType.Comment, 1),
+                new TokenPattern(@"//.*$", TokenType.Comment, 2),
+                new TokenPattern(@"#.*$", TokenType.Comment, 3),
+                new TokenPattern(@"/\*[\s\S]*?\*/", TokenType.Comment, 4),
+
+                // Terminal strings (EBNF style: doubled quotes to escape quotes; backslash is literal)
+                new TokenPattern(@"'(?:[^']|'')*'", TokenType.String, 5),
+                new TokenPattern("\"(?:[^\"]|\"\")*\"", TokenType.String, 6),
+
+                // Character ranges and sets [a-z], [0-9], etc.
+                new TokenPattern(@"\[[^\]]*\]", TokenType.String, 7),
+
+                // Production operators - BEFORE non-terminal patterns
+                new TokenPattern(@"::=|:=|->|=>|=", TokenType.Operator, 8),
+
+                // Non-terminal identifiers (rule names) - left side of production
+                new TokenPattern(@"^\s*[A-Za-z_][A-Za-z0-9_-]*(?=\s*(?:::=|:=|=|->))", TokenType.Method, 9),
+
+                // EBNF operators and meta-symbols - BEFORE non-terminal references
+                new TokenPattern(@"\.\.\.|\.\.|\||&|\+|\*|\?|!", TokenType.Operator, 10),
+
+                // Grouping and optional constructs
+                new TokenPattern(@"[(){}\[\]]", TokenType.Punctuation, 11),
+
+                // Repetition indicators {n}, {n,m}, {n,}
+                new TokenPattern(@"\{\s*\d+(?:\s*,\s*\d*)?\s*\}", TokenType.Number, 12),
+
+                // Special symbols and keywords
+                new TokenPattern(@"\b(?:empty|epsilon|lambda|nil|null|EOF|EOL|START)\b", TokenType.Keyword, 13),
+
+                // Semantic actions in { ... } (for parser generators) - but not repetition
+                new TokenPattern(@"\{(?![0-9\s,}])[^}]*\}", TokenType.Comment, 14),
+
+                // Non-terminal references (identifiers) - LOWER PRIORITY
+                new TokenPattern(@"\b[A-Za-z_][A-Za-z0-9_-]*\b", TokenType.Type, 15),
+
+                // Semicolon and comma separators
+                new TokenPattern(@"[;,.]", TokenType.Punctuation, 16)
             };
         }
     }
@@ -466,6 +651,62 @@ namespace GxPT
 
                 // Punctuation
                 new TokenPattern(@"[{}()\[\];.,]", TokenType.Punctuation, 10)
+            };
+        }
+    }
+
+    /// <summary>
+    /// HTML syntax highlighter
+    /// </summary>
+    public class HtmlHighlighter : RegexHighlighterBase
+    {
+        public override string Language
+        {
+            get { return "html"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "htm", "html5", "xhtml", "hta", "asp", "aspx", "jsp", "php", "erb", "ejs" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // HTML comments
+                new TokenPattern(@"<!--[\s\S]*?-->", TokenType.Comment, 1),
+
+                // DOCTYPE declarations
+                new TokenPattern(@"<!DOCTYPE[^>]*>", TokenType.Comment, 2),
+
+                // CDATA sections
+                new TokenPattern(@"<!\[CDATA\[[\s\S]*?\]\]>", TokenType.String, 3),
+
+                // Script and style content (simplified - treat as strings to avoid conflicts)
+                new TokenPattern(@"(?i)<script[^>]*>[\s\S]*?</script>", TokenType.String, 4),
+                new TokenPattern(@"(?i)<style[^>]*>[\s\S]*?</style>", TokenType.String, 5),
+
+                // String literals within attributes (single and double quotes)
+                new TokenPattern(@"(?<=\s(?:src|href|class|id|name|value|alt|title|data-\w+|style|onclick|onload|onchange|onsubmit|action|method|type|placeholder|content|charset|rel|lang|role|aria-\w+)\s*=\s*)(?:'[^']*'|""[^""]*"")", TokenType.String, 6),
+
+                // Tag names (opening and closing)
+                new TokenPattern(@"(?i)</?(?:html|head|title|meta|link|script|style|body|header|nav|main|section|article|aside|footer|div|span|p|h[1-6]|a|img|ul|ol|li|table|thead|tbody|tfoot|tr|th|td|form|input|textarea|button|select|option|label|fieldset|legend|iframe|embed|object|param|video|audio|source|canvas|svg|figure|figcaption|details|summary|dialog|template|slot|br|hr|area|base|col|embed|input|link|meta|param|source|track|wbr)\b", TokenType.Keyword, 7),
+
+                // Custom elements and unknown tags
+                new TokenPattern(@"(?i)</?[a-zA-Z][a-zA-Z0-9-]*(?:\s|>|/>)", TokenType.Method, 8),
+
+                // Attribute names
+                new TokenPattern(@"(?i)\b(?:id|class|src|href|alt|title|width|height|style|type|name|value|placeholder|content|charset|rel|lang|role|data-[a-zA-Z0-9-]+|aria-[a-zA-Z0-9-]+|onclick|onload|onchange|onsubmit|onfocus|onblur|onmouseover|onmouseout|action|method|target|enctype|accept|autocomplete|autofocus|checked|disabled|hidden|readonly|required|selected|multiple|size|maxlength|min|max|step|pattern)\b(?=\s*=)", TokenType.Type, 9),
+
+                // HTML entities
+                new TokenPattern(@"&(?:[a-zA-Z][a-zA-Z0-9]*|#(?:\d+|[xX][0-9a-fA-F]+));", TokenType.Number, 10),
+
+                // Tag delimiters and self-closing tags
+                new TokenPattern(@"</?|/>|>", TokenType.Punctuation, 11),
+
+                // Attribute assignment
+                new TokenPattern(@"=", TokenType.Operator, 12)
             };
         }
     }
@@ -665,6 +906,67 @@ namespace GxPT
     }
 
     /// <summary>
+    /// Perl syntax highlighter
+    /// </summary>
+    public class PerlHighlighter : RegexHighlighterBase
+    {
+        public override string Language
+        {
+            get { return "perl"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "pl", "pm", "perl5", "perl6", "raku" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Single-line comments
+                new TokenPattern(@"#.*$", TokenType.Comment, 1),
+
+                // POD documentation blocks
+                new TokenPattern(@"^=\w+[\s\S]*?^=cut", TokenType.Comment, 2),
+
+                // Here-documents (simplified pattern)
+                new TokenPattern(@"<<['""]?(\w+)['""]?[\s\S]*?\n\1$", TokenType.String, 3),
+
+                // String literals: single, double quotes, and q operators
+                new TokenPattern(@"q[qwrx]?\s*([^\w\s])[^\\1]*?\1|'(?:[^'\\]|\\.)*'|""(?:[^""\\]|\\.)*""", TokenType.String, 4),
+
+                // Regular expressions: m//, //, s///, tr///
+                new TokenPattern(@"(?:m|qr|s|tr|y)\s*([^\w\s\(\[\{])[^\\1]*?\1(?:[^\\1]*?\1)?[gimosxep]*|/(?:[^/\\\n]|\\.)+/[gimosxep]*", TokenType.String, 5),
+
+                // Numbers (integers, floats, hex, octal, binary)
+                new TokenPattern(@"\b(?:0x[0-9a-fA-F]+|0b[01]+|0[0-7]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b", TokenType.Number, 6),
+
+                // Special variables ($_, $@, $!, $1, etc.)
+                new TokenPattern(@"\$(?:[0-9]+|[_@!?$^&*()+=\[\]{};'"":<>.,|\\/-]|\w+)", TokenType.Type, 7),
+
+                // Array and hash variables (@array, %hash)
+                new TokenPattern(@"[@%][a-zA-Z_][a-zA-Z0-9_]*", TokenType.Type, 8),
+
+                // Keywords
+                new TokenPattern(@"\b(?:BEGIN|END|AUTOLOAD|DESTROY|abs|accept|alarm|and|atan2|bind|binmode|bless|break|caller|chdir|chmod|chomp|chop|chown|chr|chroot|close|closedir|cmp|connect|continue|cos|crypt|dbmclose|dbmopen|defined|delete|die|do|dump|each|else|elsif|endgrent|endhostent|endnetent|endprotoent|endpwent|endservent|eof|eq|eval|exec|exists|exit|exp|fcntl|fileno|flock|for|foreach|fork|format|formline|ge|getc|getgrent|getgrgid|getgrnam|gethostbyaddr|gethostbyname|gethostent|getlogin|getnetbyaddr|getnetbyname|getnetent|getpeername|getpgrp|getppid|getpriority|getprotobyname|getprotobynumber|getprotoent|getpwent|getpwnam|getpwuid|getservbyname|getservbyport|getservent|getsockname|getsockopt|given|glob|gmtime|goto|grep|gt|hex|if|import|index|int|ioctl|join|keys|kill|last|lc|lcfirst|le|length|link|listen|local|localtime|lock|log|lstat|lt|map|mkdir|msgctl|msgget|msgrcv|msgsnd|my|ne|next|no|not|oct|open|opendir|or|ord|our|pack|package|pipe|pop|pos|print|printf|prototype|push|quotemeta|rand|read|readdir|readline|readlink|readpipe|recv|redo|ref|rename|require|reset|return|reverse|rewinddir|rindex|rmdir|scalar|seek|seekdir|select|semctl|semget|semop|send|setgrent|sethostent|setnetent|setpgrp|setpriority|setprotoent|setpwent|setservent|setsockopt|shift|shmctl|shmget|shmread|shmwrite|shutdown|sin|sleep|socket|socketpair|sort|splice|split|sprintf|sqrt|srand|stat|study|sub|substr|symlink|syscall|sysopen|sysread|sysseek|system|syswrite|tell|telldir|tie|tied|time|times|tr|truncate|uc|ucfirst|umask|undef|unless|unlink|unpack|unshift|untie|until|use|utime|values|vec|wait|waitpid|wantarray|warn|when|while|write|xor|y)\b", TokenType.Keyword, 9),
+
+                // Built-in functions and pragmas
+                new TokenPattern(@"\b(?:strict|warnings|utf8|constant|lib|base|parent|Exporter|Carp|Data::Dumper|File::Spec|IO::Handle|Scalar::Util|List::Util)\b", TokenType.Type, 10),
+
+                // Subroutine calls and definitions
+                new TokenPattern(@"&?[a-zA-Z_][a-zA-Z0-9_]*(?=\s*\()|sub\s+[a-zA-Z_][a-zA-Z0-9_]*", TokenType.Method, 11),
+
+                // Operators (including Perl-specific ones)
+                new TokenPattern(@"[+\-*/%=!<>&|^~?:]+|<<|>>|<=>|=>|=~|!~|\+\+|--|&&|\|\||eq|ne|lt|le|gt|ge|cmp|and|or|not|xor|\.\.|\.\.\.", TokenType.Operator, 12),
+
+                // Punctuation
+                new TokenPattern(@"[{}()\[\];,.]", TokenType.Punctuation, 13)
+            };
+        }
+    }
+
+    /// <summary>
     /// Ruby syntax highlighter
     /// </summary>
     public class RubyHighlighter : RegexHighlighterBase
@@ -720,6 +1022,74 @@ namespace GxPT
     }
 
     /// <summary>
+    /// Regular Expression (Regex) syntax highlighter
+    /// </summary>
+    public class RegexHighlighter : RegexHighlighterBase
+    {
+        public override string Language
+        {
+            get { return "regex"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "regexp", "re", "pcre", "posix" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Comments (in extended mode: (?x) or (?#comment))
+                new TokenPattern(@"\(\?\#[^)]*\)", TokenType.Comment, 1),
+
+                // Inline modifiers (?imsx-imsx), lookaheads, lookbehinds
+                new TokenPattern(@"\(\?(?:[imsx+-]*:|\#[^)]*|<?[!=])", TokenType.Keyword, 2),
+
+                // Named groups (?<name>...) and (?P<name>...)
+                new TokenPattern(@"\(\?<?P?<[^>]+>", TokenType.Method, 3),
+
+                // Character classes and ranges [a-z], [^abc], [:alpha:]
+                new TokenPattern(@"\[(?:\^?[^\]\\]|\\[^\]])*\]", TokenType.Type, 4),
+
+                // Predefined character classes \d, \w, \s, \D, \W, \S
+                new TokenPattern(@"\\[dwsWDS]", TokenType.Type, 5),
+
+                // Unicode categories and properties \p{L}, \P{Nd}
+                new TokenPattern(@"\\[pP]\{[^}]+\}", TokenType.Type, 6),
+
+                // Escape sequences \n, \t, \r, \x20, \u0020, \U00000020
+                new TokenPattern(@"\\(?:[nrtfvabe]|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|c[A-Z]|0[0-7]{2})", TokenType.String, 7),
+
+                // Backreferences \1, \2, \k<name>, \g<name>
+                new TokenPattern(@"\\(?:\d+|k<[^>]+>|g<[^>]+>)", TokenType.Number, 8),
+
+                // Anchors ^, $, \A, \Z, \z, \b, \B
+                new TokenPattern(@"[\^$]|\\[AZzBb]", TokenType.Operator, 9),
+
+                // Quantifiers *, +, ?, {n}, {n,m}, {n,} (with optional ? for non-greedy)
+                new TokenPattern(@"[*+?]\??|\{(?:\d+(?:,\d*)?|,\d+)\}\??", TokenType.Operator, 10),
+
+                // Groups () and non-capturing groups (?:...)
+                new TokenPattern(@"\(\?\:", TokenType.Keyword, 11),
+                new TokenPattern(@"[()]", TokenType.Punctuation, 12),
+
+                // Alternation |
+                new TokenPattern(@"\|", TokenType.Operator, 13),
+
+                // Dot (any character except newline)
+                new TokenPattern(@"\.", TokenType.Operator, 14),
+
+                // Escaped special characters \*, \+, \?, etc.
+                new TokenPattern(@"\\[.*+?^${}()|[\]\\]", TokenType.String, 15),
+
+                // Regular characters and literals
+                new TokenPattern(@"[^\\.*+?^${}()|[\]]+", TokenType.Normal, 16)
+            };
+        }
+    }
+
+    /// <summary>
     /// Rust syntax highlighter
     /// </summary>
     public class RustHighlighter : RegexHighlighterBase
@@ -770,6 +1140,200 @@ namespace GxPT
                 
                 // Punctuation
                 new TokenPattern(@"[{}()\[\];,.]", TokenType.Punctuation, 11)
+            };
+        }
+    }
+
+    /// <summary>
+    /// Visual Basic (VB6/VBA/VB.NET) syntax highlighter
+    /// </summary>
+    public class VisualBasicHighlighter : RegexHighlighterBase
+    {
+        public override string Language
+        {
+            get { return "visualbasic"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "vb", "vba", "vb6", "vbnet", "vb.net", "visualbasic", "visual-basic" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // String literals first to avoid "'" inside strings being treated as comments
+                new TokenPattern(@"""(?:[^""]|"""")*""", TokenType.String, 1),
+
+                // Date literals (#...#)
+                new TokenPattern(@"#(?:[^#\r\n])*#", TokenType.String, 2),
+
+                // Comments: ' ... and REM ...
+                new TokenPattern(@"(?i)'.*$", TokenType.Comment, 3),
+                new TokenPattern(@"(?i)\bREM\b.*$", TokenType.Comment, 4),
+
+                // Preprocessor directives (#Region, #If, etc.)
+                new TokenPattern(@"(?im)^\s*#\s*(?:Region|End\s+Region|If|ElseIf|Else|End\s+If|Const|ExternalSource|End\s+ExternalSource)\b.*$", TokenType.Comment, 5),
+
+                // Attributes: <Attr(...)>
+                new TokenPattern(@"(?i)<\s*[A-Za-z_]\w*(?:\s*\([^<>]*\))?\s*>", TokenType.Type, 6),
+
+                // Built-in types (colored as Type)
+                new TokenPattern(@"(?i)\b(?:Boolean|Byte|SByte|Short|UShort|Integer|UInteger|Long|ULong|Decimal|Single|Double|Date|Char|String|Object)\b", TokenType.Type, 7),
+
+                // Numbers: hex/oct/bin and decimals with optional exponent and VB/VB.NET suffixes
+                new TokenPattern(@"(?i)\b(?:&H[0-9A-F_]+|&O[0-7_]+|&B[01_]+|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)(?:[RDFSIL]|UI|UL|US)?\b", TokenType.Number, 8),
+
+                // Variables with legacy type suffixes ($ % & ! # @)
+                new TokenPattern(@"(?i)\b[A-Za-z_]\w*[\$\%\&\!\#@]\b", TokenType.Type, 9),
+
+                // Keywords
+                new TokenPattern(@"(?i)\b(?:AddHandler|AddressOf|Alias|And|AndAlso|As|ByRef|ByVal|Call|Case|Catch|CBool|CByte|CChar|CDate|CDbl|CDec|CInt|Class|CLng|CObj|Const|Continue|CSByte|CShort|CSng|CStr|CType|CUInt|CULng|CUShort|Declare|Default|Delegate|Dim|DirectCast|Do|Each|Else|ElseIf|End|Enum|Erase|Error|Event|Exit|False|Finally|For|Friend|Function|Get|GetType|Global|GoTo|Handles|If|Implements|Imports|In|Inherits|Interface|Is|IsNot|Let|Lib|Like|Loop|Me|Mod|Module|MustInherit|MustOverride|MyBase|MyClass|Namespace|Narrowing|New|Next|Not|Nothing|NotInheritable|NotOverridable|Of|On|Operator|Option|Optional|Or|OrElse|Overloads|Overridable|Overrides|ParamArray|Partial|Private|Property|Protected|Public|RaiseEvent|ReadOnly|ReDim|RemoveHandler|Return|Select|Set|Shadows|Shared|Short|Single|Static|Step|Stop|String|Structure|Sub|SyncLock|Then|Throw|To|True|Try|TryCast|TypeOf|Using|Variant|Wend|When|While|Widening|With|WithEvents|WriteOnly|Xor)\b", TokenType.Keyword, 10),
+
+                // Method/function calls (identifier followed by '(')
+                new TokenPattern(@"(?i)\b[A-Za-z_]\w*(?=\s*\()", TokenType.Method, 11),
+
+                // Word operators (logic/relational)
+                new TokenPattern(@"(?i)\b(?:And|Or|Not|Xor|Mod|Like|Is|IsNot|AndAlso|OrElse)\b", TokenType.Operator, 12),
+
+                // Symbol operators (math, concat, compare, shifts, integer division)
+                new TokenPattern(@"<=|>=|<>|<<|>>|[+\-*/^\\=&]", TokenType.Operator, 13),
+
+                // Punctuation
+                new TokenPattern(@"[{}\[\]().,:;]", TokenType.Punctuation, 14),
+            };
+        }
+    }
+
+    /// <summary>
+    /// XML syntax highlighter
+    /// </summary>
+    public class XmlHighlighter : RegexHighlighterBase
+    {
+        public override string Language
+        {
+            get { return "xml"; }
+        }
+
+        public override string[] Aliases
+        {
+            get
+            {
+                return new string[] { 
+                "xaml", "xsl", "xslt", "xsd", "xhtml", "svg", "rss", "atom", 
+                "plist", "config", "web.config", "app.config", "machine.config",
+                "csproj", "vbproj", "fsproj", "vcxproj", "proj", "targets", "props",
+                "resx", "settings", "manifest", "nuspec", "packages.config",
+                "wsdl", "disco", "asmx", "sitemap", "master", "ascx",
+                "kml", "gpx", "tei", "docbook", "fo", "ant", "maven", "pom"
+            };
+            }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // XML comments
+                new TokenPattern(@"<!--[\s\S]*?-->", TokenType.Comment, 1),
+
+                // XML declarations and processing instructions
+                new TokenPattern(@"<\?[\s\S]*?\?>", TokenType.Comment, 2),
+
+                // DOCTYPE declarations
+                new TokenPattern(@"<!DOCTYPE[\s\S]*?>", TokenType.Comment, 3),
+
+                // CDATA sections
+                new TokenPattern(@"<!\[CDATA\[[\s\S]*?\]\]>", TokenType.String, 4),
+
+                // Attribute values (single and double quotes)
+                new TokenPattern(@"(?<=\s[a-zA-Z:_][a-zA-Z0-9:._-]*\s*=\s*)(?:'[^']*'|""[^""]*"")", TokenType.String, 5),
+
+                // Namespace prefixes and element names
+                new TokenPattern(@"(?i)</?(?:[a-zA-Z_][a-zA-Z0-9._-]*:)?[a-zA-Z_][a-zA-Z0-9._-]*", TokenType.Keyword, 6),
+
+                // Attribute names (including namespaced attributes)
+                new TokenPattern(@"(?i)\b(?:[a-zA-Z_][a-zA-Z0-9._-]*:)?[a-zA-Z_][a-zA-Z0-9._-]*(?=\s*=)", TokenType.Type, 7),
+
+                // Microsoft-specific elements and attributes (highlight differently)
+                new TokenPattern(@"(?i)\b(?:assembly|configuration|system\.web|appSettings|connectionStrings|compilation|authentication|authorization|customErrors|httpModules|httpHandlers|sessionState|globalization|trace|debug|machineKey|trust|webServices|bindings|endpoint|service|contract|behavior|extensions|standardEndpoints|protocolMapping|serviceHostingEnvironment)\b", TokenType.Method, 8),
+
+                // Common XML Schema and namespace URIs
+                new TokenPattern(@"(?i)(?:xmlns|xsi:|xsd:|xml:)", TokenType.Method, 9),
+
+                // XML entities
+                new TokenPattern(@"&(?:[a-zA-Z][a-zA-Z0-9]*|#(?:\d+|[xX][0-9a-fA-F]+));", TokenType.Number, 10),
+
+                // Tag delimiters
+                new TokenPattern(@"</?|/>|>", TokenType.Punctuation, 11),
+
+                // Attribute assignment
+                new TokenPattern(@"=", TokenType.Operator, 12)
+            };
+        }
+    }
+
+    /// <summary>
+    /// YAML syntax highlighter
+    /// </summary>
+    public class YamlHighlighter : RegexHighlighterBase
+    {
+        public override string Language
+        {
+            get { return "yaml"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "yml", "yaml", "docker-compose" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Comments (# comments)
+                new TokenPattern(@"#.*$", TokenType.Comment, 1),
+
+                // Document separators (--- and ...)
+                new TokenPattern(@"^(?:---|\.\.\.)\s*$", TokenType.Operator, 2),
+
+                // Multi-line strings (literal | and folded >)
+                new TokenPattern(@"(?:^|\s)[\|>][-+]?\s*$", TokenType.Operator, 3),
+
+                // Double-quoted strings with escape sequences
+                new TokenPattern(@"""(?:[^""\\]|\\.)*""", TokenType.String, 4),
+
+                // Single-quoted strings
+                new TokenPattern(@"'(?:[^'\\]|\\.)*'", TokenType.String, 5),
+
+                // Unquoted strings that look like values (after : or - )
+                new TokenPattern(@"(?<=:\s)(?![>\|])[^#\r\n]+(?=\s*(?:#|$))|(?<=^-\s)(?![>\|])[^#\r\n]+(?=\s*(?:#|$))", TokenType.String, 6),
+
+                // Numbers (integers, floats, scientific notation, hex, octal, binary)
+                new TokenPattern(@"\b(?:[-+]?(?:0x[0-9a-fA-F]+|0o[0-7]+|0b[01]+|\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)|\.inf|\.Inf|\.INF|\.nan|\.NaN|\.NAN)\b", TokenType.Number, 7),
+
+                // Boolean values
+                new TokenPattern(@"\b(?:true|True|TRUE|false|False|FALSE|yes|Yes|YES|no|No|NO|on|On|ON|off|Off|OFF)\b", TokenType.Keyword, 8),
+
+                // Null values
+                new TokenPattern(@"\b(?:null|Null|NULL|~)\b", TokenType.Keyword, 9),
+
+                // YAML tags (!Tag)
+                new TokenPattern(@"![a-zA-Z_][a-zA-Z0-9_-]*(?:/[a-zA-Z_][a-zA-Z0-9_-]*)*", TokenType.Type, 10),
+
+                // Anchors and aliases (&anchor, *alias)
+                new TokenPattern(@"[&*][a-zA-Z_][a-zA-Z0-9_-]*", TokenType.Type, 11),
+
+                // Keys (words followed by colon, including quoted keys)
+                new TokenPattern(@"(?:^|\s)(?:""(?:[^""\\]|\\.)*""|'(?:[^'\\]|\\.)*'|[^:\s#][^:#]*?)(?=\s*:(?:\s|$))", TokenType.Method, 12),
+
+                // Flow indicators and operators
+                new TokenPattern(@"[{}\[\],]|[-:?](?=\s)", TokenType.Punctuation, 13),
+
+                // YAML merge key (<<)
+                new TokenPattern(@"<<", TokenType.Operator, 14)
             };
         }
     }
