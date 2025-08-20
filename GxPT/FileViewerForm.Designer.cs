@@ -33,6 +33,7 @@
             // 
             // rtbFileText
             // 
+            this.rtbFileText.BackColor = System.Drawing.SystemColors.ControlLightLight;
             this.rtbFileText.Dock = System.Windows.Forms.DockStyle.Fill;
             this.rtbFileText.Location = new System.Drawing.Point(0, 0);
             this.rtbFileText.Name = "rtbFileText";
