@@ -71,6 +71,8 @@ namespace GxPT
                 //catch { }
             }
 
+            // Keep input responsive to container changes; avoid extra listeners that caused visual artifacts
+
             // Recalculate input height when containers resize
             try
             {
@@ -126,15 +128,9 @@ namespace GxPT
 
         public void ResetInputBoxHeight()
         {
-            if (_pnlInput != null)
-            {
-                try { _pnlInput.Height = MinInputHeightPx; }
-                catch { }
-            }
-            if (_txtMessage != null)
-            {
-                _txtMessage.ScrollBars = ScrollBars.None;
-            }
+            // Use the same logic as automatic adjustment to avoid undersizing at various DPI/theme
+            try { AdjustInputBoxHeight(); }
+            catch { }
         }
 
         public void AdjustInputBoxHeight()
@@ -157,19 +153,11 @@ namespace GxPT
             int desired = measured.Height + 8;
 
             // Ensure the input panel is never shorter than the right column (Send + Model)
-            // Use PreferredSize to respect runtime font/DPI scaling and current theme.
+            // Use PreferredSize to respect runtime font/DPI without depending on parent panel quirks.
             int rightMin = 0;
-            try
-            {
-                if (_btnSend != null && _btnSend.Visible)
-                    rightMin += _btnSend.PreferredSize.Height;
-            }
+            try { if (_btnSend != null && _btnSend.Visible) rightMin += _btnSend.PreferredSize.Height; }
             catch { }
-            try
-            {
-                if (_cmbModel != null && _cmbModel.Visible)
-                    rightMin += _cmbModel.PreferredSize.Height;
-            }
+            try { if (_cmbModel != null && _cmbModel.Visible) rightMin += _cmbModel.PreferredSize.Height; }
             catch { }
 
             // Allow exceeding the original maxHeight when the right column needs more space

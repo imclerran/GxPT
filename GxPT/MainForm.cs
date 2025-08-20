@@ -497,7 +497,13 @@ namespace GxPT
                 if (ctx.NoSaveUntilUserSend) ctx.NoSaveUntilUserSend = false;
                 ConversationStore.Save(ctx.Conversation); // save when a new user message starts/continues a convo
                 Logger.Log("Send", "User message added. HistoryCount=" + ctx.Conversation.History.Count);
-                if (_inputManager != null) _inputManager.ClearInput();
+                if (_inputManager != null)
+                {
+                    _inputManager.ClearInput();
+                    // Ensure the input panel is sized correctly immediately after send
+                    try { _inputManager.AdjustInputBoxHeight(); }
+                    catch { }
+                }
                 ClearAttachmentsBanner();
 
                 // Add placeholder assistant message to stream into and capture its index
