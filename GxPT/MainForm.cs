@@ -447,6 +447,30 @@ namespace GxPT
 
                 var modelToUse = GetSelectedModel();
 
+                // Throttle UI updates with a WinForms timer (coalesces rapid deltas)
+                var sbLock = new object();
+                int lastRenderedLen = 0;
+                var renderTimer = new System.Windows.Forms.Timer();
+                renderTimer.Interval = 75; // ~13 fps; adjust between 50-150ms if needed
+                renderTimer.Tick += (s2, e2) =>
+                {
+                    string snapshot;
+                    int len;
+                    lock (sbLock)
+                    {
+                        len = assistantBuilder.Length;
+                        if (len == lastRenderedLen) return; // nothing new
+                        snapshot = assistantBuilder.ToString();
+                        lastRenderedLen = len;
+                    }
+                    // Update on UI thread (timer runs on UI thread)
+                    ctx.Transcript.UpdateMessageAt(assistantIndex, snapshot);
+                };
+                // Keep view pinned to bottom while streaming
+                try { ctx.Transcript.StickToBottomDuringStreaming = true; }
+                catch { }
+                renderTimer.Start();
+
                 // Kick off streaming in background
                 System.Threading.ThreadPool.QueueUserWorkItem(delegate
                 {
@@ -476,18 +500,21 @@ namespace GxPT
                             delegate(string d)
                             {
                                 if (string.IsNullOrEmpty(d)) return;
-                                assistantBuilder.Append(d);
-                                BeginInvoke((MethodInvoker)delegate
-                                {
-                                    ctx.Transcript.UpdateMessageAt(assistantIndex, assistantBuilder.ToString());
-                                });
+                                lock (sbLock) { assistantBuilder.Append(d); }
+                                // no per-delta BeginInvoke; timer will render
                             },
                             delegate
                             {
                                 // finalize on UI thread (update history and unlock send)
-                                string finalText = assistantBuilder.ToString();
+                                string finalText;
+                                lock (sbLock) { finalText = assistantBuilder.ToString(); }
                                 BeginInvoke((MethodInvoker)delegate
                                 {
+                                    try { renderTimer.Stop(); renderTimer.Dispose(); }
+                                    catch { }
+                                    try { ctx.Transcript.StickToBottomDuringStreaming = false; }
+                                    catch { }
+                                    ctx.Transcript.UpdateMessageAt(assistantIndex, finalText);
                                     ctx.Conversation.AddAssistantMessage(finalText);
                                     ctx.Conversation.SelectedModel = ctx.SelectedModel;
                                     // Save assistant completion if allowed
@@ -502,10 +529,13 @@ namespace GxPT
                             },
                             delegate(string err)
                             {
-                                // Treat as fatal only if the process failed; UI already shows placeholder
                                 if (string.IsNullOrEmpty(err)) err = "Unknown error.";
                                 BeginInvoke((MethodInvoker)delegate
                                 {
+                                    try { renderTimer.Stop(); renderTimer.Dispose(); }
+                                    catch { }
+                                    try { ctx.Transcript.StickToBottomDuringStreaming = false; }
+                                    catch { }
                                     ctx.Transcript.UpdateMessageAt(assistantIndex, "Error: " + err);
                                     Logger.Log("Send", "Stream error at index=" + assistantIndex + ": " + err);
                                     ctx.IsSending = false;
@@ -518,6 +548,10 @@ namespace GxPT
                     {
                         BeginInvoke((MethodInvoker)delegate
                         {
+                            try { renderTimer.Stop(); renderTimer.Dispose(); }
+                            catch { }
+                            try { ctx.Transcript.StickToBottomDuringStreaming = false; }
+                            catch { }
                             ctx.Transcript.UpdateMessageAt(assistantIndex, "Error: " + ex.Message);
                             Logger.Log("Send", "Exception in streaming worker: " + ex.Message);
                             ctx.IsSending = false;
@@ -991,10 +1025,7 @@ namespace GxPT
         private void txtMessage_Enter(object sender, EventArgs e)
         {
             _inputManager.RemoveHintText();
-            if (!_inputManager.TextIsHint)
-            {
-                _themeManager.ApplyThemeToTextBox();
-            }
+            _themeManager.ApplyThemeToTextBox();
         }
 
         private void txtMessage_Leave(object sender, EventArgs e)

@@ -94,6 +94,9 @@ namespace GxPT
         // Queue a deferred reflow to run after current layout (avoids stale viewport sizes)
         private bool _reflowQueued;
 
+        // Stick-to-bottom behavior during streaming to avoid calling ScrollToBottom each delta
+        private bool _stickToBottom;
+
         private readonly ContextMenu _ctx;
         private MessageItem _ctxHit;
         // Hover/drag state for code block UI
@@ -328,8 +331,7 @@ namespace GxPT
             it.TableScroll = new List<int>();
             int tables = 0; foreach (var b in it.Blocks) if (b.Type == BlockType.Table) tables++;
             for (int i = 0; i < tables; i++) it.TableScroll.Add(0);
-            Reflow();
-            ScrollToBottom();
+            // Defer heavy layout to coalesce with other updates
             Invalidate();
             ReflowSoon();
         }
@@ -349,8 +351,7 @@ namespace GxPT
             it.TableScroll = new List<int>();
             int tables = 0; foreach (var b in it.Blocks) if (b.Type == BlockType.Table) tables++;
             for (int i = 0; i < tables; i++) it.TableScroll.Add(0);
-            Reflow();
-            ScrollToBottom();
+            // Defer heavy layout to coalesce with other updates
             Invalidate();
             ReflowSoon();
         }
@@ -367,8 +368,7 @@ namespace GxPT
             var it = _items[_items.Count - 1];
             it.RawMarkdown = (it.RawMarkdown ?? string.Empty) + delta;
             it.Blocks = MarkdownParser.ParseMarkdown(it.RawMarkdown);
-            Reflow();
-            ScrollToBottom();
+            // Defer heavy layout to coalesce with other updates
             Invalidate();
             ReflowSoon();
         }
@@ -1734,6 +1734,16 @@ namespace GxPT
             int allowedMaxValue = Math.Max(0, _vbar.Maximum - _vbar.LargeChange + 1);
 
             _vbar.Enabled = maxScrollOffset > 0;
+
+            // Stick to bottom during streaming
+            if (_stickToBottom && _vbar.Enabled)
+            {
+                int desired = Math.Max(0, _contentHeight - view);
+                _scrollOffset = desired;
+                _vbar.Value = Math.Max(_vbar.Minimum, Math.Min(allowedMaxValue, desired));
+                return;
+            }
+
             // Clamp our logical scroll offset to what the scrollbar will accept
             _scrollOffset = Math.Max(0, Math.Min(allowedMaxValue, _scrollOffset));
             _vbar.Value = _scrollOffset;
@@ -1755,6 +1765,20 @@ namespace GxPT
                 });
             }
             catch { _reflowQueued = false; }
+        }
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public bool StickToBottomDuringStreaming
+        {
+            get { return _stickToBottom; }
+            set
+            {
+                if (_stickToBottom == value) return;
+                _stickToBottom = value;
+                UpdateScrollbar();
+                Invalidate();
+            }
         }
 
         private static System.Drawing.Drawing2D.GraphicsPath RoundedRect(Rectangle r, int radius)
