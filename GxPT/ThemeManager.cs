@@ -166,7 +166,7 @@ namespace GxPT
                         _txtMessage.BackColor = Color.FromArgb(0x24, 0x27, 0x3A); // Macchiato Base
 
                         // Do not apply theme foreground color for hint text
-                        if(_txtMessage.ForeColor != System.Drawing.Color.Gray)
+                        if(_txtMessage.ForeColor != System.Drawing.Color.Gray || _txtMessage.Text == "")
                             _txtMessage.ForeColor = Color.FromArgb(230, 230, 230);   // light text like bubbles
                     }
                     else
@@ -174,7 +174,7 @@ namespace GxPT
                         _txtMessage.BackColor = SystemColors.Window;
 
                         // Do not apply theme foreground color for hint text
-                        if (_txtMessage.ForeColor != System.Drawing.Color.Gray)
+                        if (_txtMessage.ForeColor != System.Drawing.Color.Gray || _txtMessage.Text == "")
                             _txtMessage.ForeColor = SystemColors.WindowText;
                     }
                 }
