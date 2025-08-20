@@ -121,6 +121,8 @@ namespace GxPT
                 // Prevent newline and trigger send
                 e.SuppressKeyPress = true;
                 e.Handled = true;
+                // Do not send if we're showing the hint text
+                if (TextIsHint) return;
                 if (_btnSend != null)
                     _btnSend.PerformClick();
             }
@@ -220,6 +222,7 @@ namespace GxPT
         {
             try
             {
+                if (TextIsHint) return string.Empty;
                 return (_txtMessage != null ? _txtMessage.Text : string.Empty).Trim();
             }
             catch
@@ -272,6 +275,8 @@ namespace GxPT
                 // Prevent newline and trigger send
                 e.SuppressKeyPress = true;
                 e.Handled = true;
+                // Do not send if hint is showing
+                if (TextIsHint) return;
                 if (_btnSend != null) _btnSend.PerformClick();
             }
         }
