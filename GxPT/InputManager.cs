@@ -286,6 +286,7 @@ namespace GxPT
             if (TextIsHint)
             {
                 _txtMessage.Text = "";
+                TextIsHint = false;
             }
         }
     }
