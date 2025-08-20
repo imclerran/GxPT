@@ -36,7 +36,7 @@ namespace GxPT
 
             // Setup initial tab context for the designer-created tab
             SetupInitialConversationTab();
-            _inputManager.SetHintText("Ask anything...");
+            _inputManager.SetHintText();
 
             // Wire banner link and ensure it lays out nicely
             if (this.lnkOpenSettings != null)
@@ -990,13 +990,16 @@ namespace GxPT
 
         private void txtMessage_Enter(object sender, EventArgs e)
         {
-            _inputManager.RemoveHintText("Ask anything...");
-            _themeManager.ApplyThemeToTextBox();
+            _inputManager.RemoveHintText();
+            if (!_inputManager.TextIsHint)
+            {
+                _themeManager.ApplyThemeToTextBox();
+            }
         }
 
         private void txtMessage_Leave(object sender, EventArgs e)
         {
-            _inputManager.SetHintText("Ask anything...");
+            _inputManager.SetHintText();
         }
     }
 }

@@ -144,31 +144,7 @@ namespace GxPT
             if (tabManager != null) tabManager.ApplyThemeToAllTranscripts();
 
             // Also apply matching background/foreground to the input textbox
-            try
-            {
-                string theme = null;
-                try { theme = AppSettings.GetString("theme"); }
-                catch { theme = null; }
-
-                bool dark = !string.IsNullOrEmpty(theme) &&
-                    theme.Trim().Equals("dark", StringComparison.OrdinalIgnoreCase);
-
-                if (_txtMessage != null)
-                {
-                    if (dark)
-                    {
-                        // Match ChatTranscriptControl dark app background and bubble text color
-                        _txtMessage.BackColor = Color.FromArgb(0x24, 0x27, 0x3A); // Macchiato Base
-                        _txtMessage.ForeColor = Color.FromArgb(230, 230, 230);   // light text like bubbles
-                    }
-                    else
-                    {
-                        _txtMessage.BackColor = SystemColors.Window;
-                        _txtMessage.ForeColor = SystemColors.WindowText;
-                    }
-                }
-            }
-            catch { }
+            ApplyThemeToTextBox();
         }
 
         public void ApplyThemeToTextBox()
@@ -188,12 +164,18 @@ namespace GxPT
                     {
                         // Match ChatTranscriptControl dark app background and bubble text color
                         _txtMessage.BackColor = Color.FromArgb(0x24, 0x27, 0x3A); // Macchiato Base
-                        _txtMessage.ForeColor = Color.FromArgb(230, 230, 230);   // light text like bubbles
+
+                        // Do not apply theme foreground color for hint text
+                        if(_txtMessage.ForeColor != System.Drawing.Color.Gray)
+                            _txtMessage.ForeColor = Color.FromArgb(230, 230, 230);   // light text like bubbles
                     }
                     else
                     {
                         _txtMessage.BackColor = SystemColors.Window;
-                        _txtMessage.ForeColor = SystemColors.WindowText;
+
+                        // Do not apply theme foreground color for hint text
+                        if (_txtMessage.ForeColor != System.Drawing.Color.Gray)
+                            _txtMessage.ForeColor = SystemColors.WindowText;
                     }
                 }
             }

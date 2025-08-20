@@ -7,6 +7,8 @@ namespace GxPT
     internal sealed class InputManager
     {
         private const int MinInputHeightPx = 75;
+        private const string InputHintText = "Ask anything...";
+        private readonly Color InputHintColor = System.Drawing.Color.Gray;
 
         private readonly MainForm _mainForm;
         private readonly TextBox _txtMessage;
@@ -15,6 +17,9 @@ namespace GxPT
         private readonly ComboBox _cmbModel;
         private readonly SplitContainer _splitContainer;
         private readonly Panel _pnlApiKeyBanner;
+
+        // Automatic property with both getter and setter
+        public bool TextIsHint { get; private set; }
 
         public InputManager(MainForm mainForm, TextBox txtMessage, Panel pnlInput,
             Button btnSend, ComboBox cmbModel, SplitContainer splitContainer,
@@ -267,17 +272,18 @@ namespace GxPT
             }
         }
 
-        public void SetHintText(string hintText) {
+        public void SetHintText() {
             if(string.IsNullOrEmpty(_txtMessage.Text))
             {
-                _txtMessage.Text = hintText;
-                _txtMessage.ForeColor = System.Drawing.Color.Gray;
+                _txtMessage.Text = InputHintText;
+                _txtMessage.ForeColor = InputHintColor;
+                TextIsHint = true;
             }
         }
 
-        public void RemoveHintText(string hintText)
+        public void RemoveHintText()
         {
-            if (_txtMessage.Text == hintText)
+            if (TextIsHint)
             {
                 _txtMessage.Text = "";
             }
