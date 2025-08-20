@@ -4,15 +4,20 @@ A native chatbot client for Windows XP, written in C# and .NET 3.5. GxPT aims to
 
 ## Screenshot
 
-![GxPT Screenshot](GxPT.png)
+### Light Mode:
+![GxPT Light Mode Screenshot](GxPT-light.png)
+### Dark Mode:
+![GxPT Dark Mode Screenshot](GxPT-dark.png)
 
 ## Features
 
 - **Modern Chat UI**: Clean, responsive chat transcript display.
 - **Markdown Rendering**: Supports headings, bold/italic, links, bullet and numbered lists (including deeply nested lists), tables, code blocks, and inline code.
 - **Code Syntax Highlighting**: Out-of-the-box support for a wide range of languages, including:
-  - Bash, Basic, Batch, C, C++, C#, CSS, EBNF, Go, HTML, Java, JavaScript, JSON, Perl, Python, Ruby, Regex, Rust, TypeScript, Visual Basic, XML, YAML, Zig
+  - Bash, Basic, Batch, C, C++, C#, CSS, EBNF, Go, HTML, Java, JavaScript, JSON, Perl, PowerShell, Python, Ruby, Regex, Rust, TypeScript, Visual Basic, XML, YAML, Zig
 - **Conversation Management**: Tabbed conversations and conversation history.
+- **File Attachments**: Add text file attachments to your messages to avoid cluttering up the conversation with long pasted text.
+- **Conversation Editing**: Don't like the response a model gave you? Go back and edit your message and get a new response.
 - **Data Stored Locally**: Conversations are stored locally, but may be exported and imported to migrate data across machines.
 - **Settings and Customization**: Customize settings with Visual settings UI or built-in JSON editor. 
 - **Frontier Model Support**: Support for a huge range of AI models, including frontier models, from the OpenRouter.ai API. 
