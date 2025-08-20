@@ -802,6 +802,157 @@ namespace GxPT
     }
 
     /// <summary>
+    /// Perl syntax highlighter
+    /// </summary>
+    public class PerlHighlighter : RegexHighlighterBase
+    {
+        public override string Language
+        {
+            get { return "perl"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "pl", "pm", "perl5", "perl6", "raku" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Single-line comments
+                new TokenPattern(@"#.*$", TokenType.Comment, 1),
+
+                // POD documentation blocks
+                new TokenPattern(@"^=\w+[\s\S]*?^=cut", TokenType.Comment, 2),
+
+                // Here-documents (simplified pattern)
+                new TokenPattern(@"<<['""]?(\w+)['""]?[\s\S]*?\n\1$", TokenType.String, 3),
+
+                // String literals: single, double quotes, and q operators
+                new TokenPattern(@"q[qwrx]?\s*([^\w\s])[^\\1]*?\1|'(?:[^'\\]|\\.)*'|""(?:[^""\\]|\\.)*""", TokenType.String, 4),
+
+                // Regular expressions: m//, //, s///, tr///
+                new TokenPattern(@"(?:m|qr|s|tr|y)\s*([^\w\s\(\[\{])[^\\1]*?\1(?:[^\\1]*?\1)?[gimosxep]*|/(?:[^/\\\n]|\\.)+/[gimosxep]*", TokenType.String, 5),
+
+                // Numbers (integers, floats, hex, octal, binary)
+                new TokenPattern(@"\b(?:0x[0-9a-fA-F]+|0b[01]+|0[0-7]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b", TokenType.Number, 6),
+
+                // Special variables ($_, $@, $!, $1, etc.)
+                new TokenPattern(@"\$(?:[0-9]+|[_@!?$^&*()+=\[\]{};'"":<>.,|\\/-]|\w+)", TokenType.Type, 7),
+
+                // Array and hash variables (@array, %hash)
+                new TokenPattern(@"[@%][a-zA-Z_][a-zA-Z0-9_]*", TokenType.Type, 8),
+
+                // Keywords
+                new TokenPattern(@"\b(?:BEGIN|END|AUTOLOAD|DESTROY|abs|accept|alarm|and|atan2|bind|binmode|bless|break|caller|chdir|chmod|chomp|chop|chown|chr|chroot|close|closedir|cmp|connect|continue|cos|crypt|dbmclose|dbmopen|defined|delete|die|do|dump|each|else|elsif|endgrent|endhostent|endnetent|endprotoent|endpwent|endservent|eof|eq|eval|exec|exists|exit|exp|fcntl|fileno|flock|for|foreach|fork|format|formline|ge|getc|getgrent|getgrgid|getgrnam|gethostbyaddr|gethostbyname|gethostent|getlogin|getnetbyaddr|getnetbyname|getnetent|getpeername|getpgrp|getppid|getpriority|getprotobyname|getprotobynumber|getprotoent|getpwent|getpwnam|getpwuid|getservbyname|getservbyport|getservent|getsockname|getsockopt|given|glob|gmtime|goto|grep|gt|hex|if|import|index|int|ioctl|join|keys|kill|last|lc|lcfirst|le|length|link|listen|local|localtime|lock|log|lstat|lt|map|mkdir|msgctl|msgget|msgrcv|msgsnd|my|ne|next|no|not|oct|open|opendir|or|ord|our|pack|package|pipe|pop|pos|print|printf|prototype|push|quotemeta|rand|read|readdir|readline|readlink|readpipe|recv|redo|ref|rename|require|reset|return|reverse|rewinddir|rindex|rmdir|scalar|seek|seekdir|select|semctl|semget|semop|send|setgrent|sethostent|setnetent|setpgrp|setpriority|setprotoent|setpwent|setservent|setsockopt|shift|shmctl|shmget|shmread|shmwrite|shutdown|sin|sleep|socket|socketpair|sort|splice|split|sprintf|sqrt|srand|stat|study|sub|substr|symlink|syscall|sysopen|sysread|sysseek|system|syswrite|tell|telldir|tie|tied|time|times|tr|truncate|uc|ucfirst|umask|undef|unless|unlink|unpack|unshift|untie|until|use|utime|values|vec|wait|waitpid|wantarray|warn|when|while|write|xor|y)\b", TokenType.Keyword, 9),
+
+                // Built-in functions and pragmas
+                new TokenPattern(@"\b(?:strict|warnings|utf8|constant|lib|base|parent|Exporter|Carp|Data::Dumper|File::Spec|IO::Handle|Scalar::Util|List::Util)\b", TokenType.Type, 10),
+
+                // Subroutine calls and definitions
+                new TokenPattern(@"&?[a-zA-Z_][a-zA-Z0-9_]*(?=\s*\()|sub\s+[a-zA-Z_][a-zA-Z0-9_]*", TokenType.Method, 11),
+
+                // Operators (including Perl-specific ones)
+                new TokenPattern(@"[+\-*/%=!<>&|^~?:]+|<<|>>|<=>|=>|=~|!~|\+\+|--|&&|\|\||eq|ne|lt|le|gt|ge|cmp|and|or|not|xor|\.\.|\.\.\.", TokenType.Operator, 12),
+
+                // Punctuation
+                new TokenPattern(@"[{}()\[\];,.]", TokenType.Punctuation, 13)
+            };
+        }
+    }
+
+    /// <summary>
+    /// PowerShell syntax highlighter
+    /// </summary>
+    public class PowerShellHighlighter : RegexHighlighterBase
+    {
+        public override string Language
+        {
+            get { return "powershell"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "ps1", "psm1", "psd1", "ps", "pwsh" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Comments: # ... and <# ... #>
+                new TokenPattern(@"<#[\s\S]*?#>", TokenType.Comment, 1),
+                new TokenPattern(@"#.*$", TokenType.Comment, 2),
+
+                // Here-strings: @"..."@, @'...'@
+                new TokenPattern(@"@['""][\s\S]*?['""]@", TokenType.String, 3),
+
+                // String literals: "...", '...', expandable strings
+                new TokenPattern(@"""(?:[^""\\`]|`.|\\[\\""'`bnrt0afv])*""", TokenType.String, 4),
+                new TokenPattern(@"'(?:[^'\\]|\\.)*'", TokenType.String, 5),
+
+                // Variables: $var, ${var}, $global:var, $script:var, etc.
+                new TokenPattern(@"\$(?:(?:global|local|script|private|using):)?(?:\{[^}]+\}|[a-zA-Z_][a-zA-Z0-9_]*|\?|\$|\^|_)", TokenType.Type, 6),
+
+                // Automatic variables
+                new TokenPattern(@"\$(?:\$|0|1|2|3|4|5|6|7|8|9|\?|\^|_|args|input|lastexitcode|matches|myinvocation|pid|profile|pshome|pwd|shellid|host|home|error|executioncontext|false|true|null|foreach|psitem|this|pscmdlet|psversiontable)\b", TokenType.Type, 7),
+
+                // Numbers: integers, floats, hex, scientific notation with optional suffixes
+                new TokenPattern(@"\b(?:0[xX][0-9a-fA-F]+[lL]?|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[dDfFlL]?)\b", TokenType.Number, 8),
+
+                // Keywords
+                new TokenPattern(@"(?i)\b(?:begin|break|catch|class|continue|data|define|do|dynamicparam|else|elseif|end|enum|exit|filter|finally|for|foreach|from|function|hidden|if|in|param|process|return|static|switch|throw|trap|try|until|using|var|while|workflow|parallel|sequence|inlinescript)\b", TokenType.Keyword, 9),
+
+                // Operators (PowerShell-specific)
+                new TokenPattern(@"(?i)-(?:eq|ne|lt|le|gt|ge|like|notlike|match|notmatch|contains|notcontains|in|notin|replace|split|join|is|isnot|as|band|bor|bxor|bnot|shl|shr|and|or|xor|not|f)\b", TokenType.Operator, 10),
+
+                // Type accelerators and .NET types
+                new TokenPattern(@"\[(?:[a-zA-Z_][a-zA-Z0-9_.]*(?:\[\])?)\]", TokenType.Type, 11),
+
+                // Cmdlets (Verb-Noun pattern)
+                new TokenPattern(@"\b(?:Add|Clear|Close|Copy|Enter|Exit|Find|Format|Get|Hide|Join|Lock|Move|New|Open|Optimize|Pop|Push|Redo|Remove|Rename|Reset|Resize|Search|Select|Set|Show|Skip|Split|Step|Switch|Undo|Unlock|Watch|Backup|Checkpoint|Compare|Compress|Convert|ConvertFrom|ConvertTo|Dismount|Edit|Expand|Export|Group|Import|Initialize|Limit|Merge|Mount|Out|Publish|Restore|Save|Sync|Unpublish|Update|Debug|Measure|Ping|Repair|Resolve|Test|Trace|Connect|Disconnect|Read|Receive|Send|Write|Block|Grant|Protect|Revoke|Unblock|Unprotect|Disable|Enable|Install|Register|Request|Restart|Resume|Start|Stop|Submit|Suspend|Uninstall|Unregister|Wait|Invoke|Approve|Assert|Complete|Confirm|Deny|Suspend|Use|New|Set|Get|Remove|Add|Clear|Copy|Move|Rename|Test|Start|Stop|Restart|Suspend|Resume|Wait|Invoke|Import|Export|Convert|Format|Out|Write|Read|Measure|Compare|Sort|Group|Select|Where|ForEach)-[a-zA-Z][a-zA-Z0-9]*\b", TokenType.Method, 12),
+
+                // Function calls and method invocations
+                new TokenPattern(@"\b[a-zA-Z_][a-zA-Z0-9_-]*(?=\s*\()", TokenType.Method, 13),
+
+                // Parameters: -ParameterName
+                new TokenPattern(@"-[a-zA-Z_][a-zA-Z0-9_]*\b", TokenType.Type, 14),
+
+                // Splatting: @variableName
+                new TokenPattern(@"@[a-zA-Z_][a-zA-Z0-9_]*\b", TokenType.Type, 15),
+
+                // Subexpression operators: $(...), @(...)
+                new TokenPattern(@"[\$@](?=\()", TokenType.Operator, 16),
+
+                // Member access and dot sourcing
+                new TokenPattern(@"\.|::", TokenType.Operator, 17),
+
+                // Mathematical and assignment operators
+                new TokenPattern(@"[+\-*/%=!<>&|^~]+|\+\+|--|&&|\|\||==|!=|<=|>=|\+=|-=|\*=|/=|%=", TokenType.Operator, 18),
+
+                // Pipeline operators
+                new TokenPattern(@"\|(?!\||&)", TokenType.Operator, 19),
+
+                // Ampersand (call operator)
+                new TokenPattern(@"&", TokenType.Operator, 20),
+
+                // Semicolon (statement separator)
+                new TokenPattern(@";", TokenType.Punctuation, 21),
+
+                // Parentheses, brackets, braces
+                new TokenPattern(@"[{}\[\]()]", TokenType.Punctuation, 22),
+
+                // Comma
+                new TokenPattern(@",", TokenType.Punctuation, 23),
+
+                // Backtick (escape character and line continuation)
+                new TokenPattern(@"`.", TokenType.String, 24)
+            };
+        }
+    }
+
+    /// <summary>
     /// Python syntax highlighter
     /// </summary>
     public class PythonHighlighter : RegexHighlighterBase
@@ -901,67 +1052,6 @@ namespace GxPT
 
                 // Punctuation
                 new TokenPattern(@"[{}()\[\];,.:]", TokenType.Punctuation, 11)
-            };
-        }
-    }
-
-    /// <summary>
-    /// Perl syntax highlighter
-    /// </summary>
-    public class PerlHighlighter : RegexHighlighterBase
-    {
-        public override string Language
-        {
-            get { return "perl"; }
-        }
-
-        public override string[] Aliases
-        {
-            get { return new string[] { "pl", "pm", "perl5", "perl6", "raku" }; }
-        }
-
-        protected override TokenPattern[] GetPatterns()
-        {
-            return new TokenPattern[]
-            {
-                // Single-line comments
-                new TokenPattern(@"#.*$", TokenType.Comment, 1),
-
-                // POD documentation blocks
-                new TokenPattern(@"^=\w+[\s\S]*?^=cut", TokenType.Comment, 2),
-
-                // Here-documents (simplified pattern)
-                new TokenPattern(@"<<['""]?(\w+)['""]?[\s\S]*?\n\1$", TokenType.String, 3),
-
-                // String literals: single, double quotes, and q operators
-                new TokenPattern(@"q[qwrx]?\s*([^\w\s])[^\\1]*?\1|'(?:[^'\\]|\\.)*'|""(?:[^""\\]|\\.)*""", TokenType.String, 4),
-
-                // Regular expressions: m//, //, s///, tr///
-                new TokenPattern(@"(?:m|qr|s|tr|y)\s*([^\w\s\(\[\{])[^\\1]*?\1(?:[^\\1]*?\1)?[gimosxep]*|/(?:[^/\\\n]|\\.)+/[gimosxep]*", TokenType.String, 5),
-
-                // Numbers (integers, floats, hex, octal, binary)
-                new TokenPattern(@"\b(?:0x[0-9a-fA-F]+|0b[01]+|0[0-7]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b", TokenType.Number, 6),
-
-                // Special variables ($_, $@, $!, $1, etc.)
-                new TokenPattern(@"\$(?:[0-9]+|[_@!?$^&*()+=\[\]{};'"":<>.,|\\/-]|\w+)", TokenType.Type, 7),
-
-                // Array and hash variables (@array, %hash)
-                new TokenPattern(@"[@%][a-zA-Z_][a-zA-Z0-9_]*", TokenType.Type, 8),
-
-                // Keywords
-                new TokenPattern(@"\b(?:BEGIN|END|AUTOLOAD|DESTROY|abs|accept|alarm|and|atan2|bind|binmode|bless|break|caller|chdir|chmod|chomp|chop|chown|chr|chroot|close|closedir|cmp|connect|continue|cos|crypt|dbmclose|dbmopen|defined|delete|die|do|dump|each|else|elsif|endgrent|endhostent|endnetent|endprotoent|endpwent|endservent|eof|eq|eval|exec|exists|exit|exp|fcntl|fileno|flock|for|foreach|fork|format|formline|ge|getc|getgrent|getgrgid|getgrnam|gethostbyaddr|gethostbyname|gethostent|getlogin|getnetbyaddr|getnetbyname|getnetent|getpeername|getpgrp|getppid|getpriority|getprotobyname|getprotobynumber|getprotoent|getpwent|getpwnam|getpwuid|getservbyname|getservbyport|getservent|getsockname|getsockopt|given|glob|gmtime|goto|grep|gt|hex|if|import|index|int|ioctl|join|keys|kill|last|lc|lcfirst|le|length|link|listen|local|localtime|lock|log|lstat|lt|map|mkdir|msgctl|msgget|msgrcv|msgsnd|my|ne|next|no|not|oct|open|opendir|or|ord|our|pack|package|pipe|pop|pos|print|printf|prototype|push|quotemeta|rand|read|readdir|readline|readlink|readpipe|recv|redo|ref|rename|require|reset|return|reverse|rewinddir|rindex|rmdir|scalar|seek|seekdir|select|semctl|semget|semop|send|setgrent|sethostent|setnetent|setpgrp|setpriority|setprotoent|setpwent|setservent|setsockopt|shift|shmctl|shmget|shmread|shmwrite|shutdown|sin|sleep|socket|socketpair|sort|splice|split|sprintf|sqrt|srand|stat|study|sub|substr|symlink|syscall|sysopen|sysread|sysseek|system|syswrite|tell|telldir|tie|tied|time|times|tr|truncate|uc|ucfirst|umask|undef|unless|unlink|unpack|unshift|untie|until|use|utime|values|vec|wait|waitpid|wantarray|warn|when|while|write|xor|y)\b", TokenType.Keyword, 9),
-
-                // Built-in functions and pragmas
-                new TokenPattern(@"\b(?:strict|warnings|utf8|constant|lib|base|parent|Exporter|Carp|Data::Dumper|File::Spec|IO::Handle|Scalar::Util|List::Util)\b", TokenType.Type, 10),
-
-                // Subroutine calls and definitions
-                new TokenPattern(@"&?[a-zA-Z_][a-zA-Z0-9_]*(?=\s*\()|sub\s+[a-zA-Z_][a-zA-Z0-9_]*", TokenType.Method, 11),
-
-                // Operators (including Perl-specific ones)
-                new TokenPattern(@"[+\-*/%=!<>&|^~?:]+|<<|>>|<=>|=>|=~|!~|\+\+|--|&&|\|\||eq|ne|lt|le|gt|ge|cmp|and|or|not|xor|\.\.|\.\.\.", TokenType.Operator, 12),
-
-                // Punctuation
-                new TokenPattern(@"[{}()\[\];,.]", TokenType.Punctuation, 13)
             };
         }
     }
