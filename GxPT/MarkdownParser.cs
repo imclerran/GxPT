@@ -82,6 +82,7 @@ namespace GxPT
             var lines = md.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
             bool inCode = false;
             string codeLanguage = null; // Track the language for current code block
+            string codeFenceIndent = null; // Leading whitespace before opening ``` to strip from code lines
             var codeAccum = new System.Text.StringBuilder();
             var paraAccum = new System.Text.StringBuilder();
             List<ListItem> bulletAccum = null;
@@ -134,7 +135,11 @@ namespace GxPT
             for (int li = 0; li < lines.Length; li++)
             {
                 string line = lines[li];
-                if (line.StartsWith("```"))
+                // Support indented fenced code blocks by checking after leading whitespace
+                int fenceWs = 0;
+                while (fenceWs < line.Length && (line[fenceWs] == ' ' || line[fenceWs] == '\t')) fenceWs++;
+                string lineTrimStart = line.Substring(fenceWs);
+                if (lineTrimStart.TrimStart().StartsWith("```"))
                 {
                     if (!inCode)
                     {
@@ -143,11 +148,13 @@ namespace GxPT
                         flushBullets();
                         flushNumbered();
                         inCode = true;
+                        // Remember the indentation before the opening fence to normalize code lines
+                        codeFenceIndent = line.Substring(0, fenceWs);
 
                         // Extract language from opening fence (e.g., "```csharp")
-                        if (line.Length > 3)
+                        if (lineTrimStart.Length > 3)
                         {
-                            codeLanguage = line.Substring(3).Trim().ToLowerInvariant();
+                            codeLanguage = lineTrimStart.Substring(3).Trim().ToLowerInvariant();
                             if (string.IsNullOrEmpty(codeLanguage))
                                 codeLanguage = null;
                         }
@@ -157,13 +164,18 @@ namespace GxPT
                         // leave code
                         inCode = false;
                         flushCode();
+                        codeFenceIndent = null;
                     }
                     continue;
                 }
 
                 if (inCode)
                 {
-                    codeAccum.Append(line).Append('\n');
+                    // Strip the same indentation that preceded the opening fence, if present
+                    string codeLine = line;
+                    if (!string.IsNullOrEmpty(codeFenceIndent) && codeLine.StartsWith(codeFenceIndent))
+                        codeLine = codeLine.Substring(codeFenceIndent.Length);
+                    codeAccum.Append(codeLine).Append('\n');
                     continue;
                 }
 
@@ -490,7 +502,7 @@ namespace GxPT
                 string tmpNumText; int tmpNumIndent;
                 bool isBullet = IsBullet(l, out tmpBulletText, out tmpBulletIndent);
                 bool isNumbered = IsNumberedItem(l, out tmpNumText, out tmpNumIndent);
-                if (HeadingLevel(l) > 0 || isBullet || isNumbered || l.StartsWith("```")) break;
+                if (HeadingLevel(l) > 0 || isBullet || isNumbered || l.TrimStart().StartsWith("```")) break;
                 if (l.IndexOf('|') < 0) break;
 
                 var rowCells = SplitTableRow(l);
