@@ -4,7 +4,6 @@ using System.ComponentModel;
 using System.Data;
 using System.Drawing;
 using System.Linq;
-using System.Diagnostics;
 using System.Text;
 using System.Windows.Forms;
 using GxPT;
@@ -183,6 +182,13 @@ namespace GxPT
             return _inputManager;
         }
 
+        // Allow TabManager to force-refresh the attachments banner after seeding attachments
+        internal void RefreshAttachmentsBannerUi()
+        {
+            try { RebuildAttachmentsBanner(); }
+            catch { }
+        }
+
         internal void SelectTab(TabPage page)
         {
             if (_tabManager != null) _tabManager.SelectTab(page);
@@ -211,6 +217,31 @@ namespace GxPT
         internal void EnsureConversationId(Conversation conversation)
         {
             ConversationStore.EnsureConversationId(conversation);
+        }
+
+        // Exit edit mode and restore compose UI (used for ESC and unchanged sends)
+        internal void CancelEditingAndRestoreConversation()
+        {
+            try
+            {
+                var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                if (ctx == null) return;
+
+                ctx.PendingEditActive = false;
+                ctx.PendingEditIndex = -1;
+
+                // Clear attachments and refresh banner
+                ClearAttachmentsBanner();
+
+                // Clear input and restore hint
+                if (_inputManager != null)
+                {
+                    _inputManager.ClearInput();
+                    _inputManager.SetHintText();
+                    _inputManager.FocusInputSoon();
+                }
+            }
+            catch { }
         }
 
         internal void OpenConversation(Conversation convo)
@@ -436,8 +467,86 @@ namespace GxPT
             // Validate input
             string baseText = _inputManager != null ? (_inputManager.GetInputText() ?? string.Empty) : string.Empty;
             string text = baseText;
-            if (text.Length == 0) return;
             if (ctx.IsSending) return; // ensure only one in-flight request per tab
+
+            // If editing a prior user message, compare text+attachments; confirm only if changed
+            bool isEditResend = false;
+            if (ctx.PendingEditActive && ctx.PendingEditIndex >= 0)
+            {
+                int cutIndex = ctx.PendingEditIndex;
+                if (cutIndex >= 0 && cutIndex < ctx.Conversation.History.Count)
+                {
+                    var orig = ctx.Conversation.History[cutIndex];
+                    if (orig != null && string.Equals(orig.Role, "user", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Compare text
+                        bool sameText = string.Equals(orig.Content ?? string.Empty, text ?? string.Empty, StringComparison.Ordinal);
+                        // Compare attachments
+                        var pending = ctx.PendingAttachments ?? new List<AttachedFile>();
+                        var origAtt = orig.Attachments ?? new List<AttachedFile>();
+                        bool sameAtt = AreAttachmentsEqual(origAtt, pending);
+                        if (sameText && sameAtt)
+                        {
+                            // Nothing changed: exit edit mode and restore to un-edited state
+                            try { CancelEditingAndRestoreConversation(); }
+                            catch { }
+                            return;
+                        }
+
+                        // Confirm reset
+                        var dr2 = MessageBox.Show(this,
+                            "You are editing a previous user message. The conversation will be reset back to that point. Continue?",
+                            "Reset Conversation?", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
+                        if (dr2 != DialogResult.OK) return;
+
+                        try
+                        {
+                            // Replace content and attachments, then truncate after
+                            orig.Content = text;
+                            if (pending != null && pending.Count > 0)
+                            {
+                                orig.Attachments = new List<AttachedFile>();
+                                for (int i = 0; i < pending.Count; i++)
+                                {
+                                    var af = pending[i]; if (af == null) continue;
+                                    orig.Attachments.Add(new AttachedFile(af.FileName, af.Content));
+                                }
+                            }
+                            else
+                            {
+                                orig.Attachments = null;
+                            }
+
+                            while (ctx.Conversation.History.Count > cutIndex + 1)
+                                ctx.Conversation.History.RemoveAt(ctx.Conversation.History.Count - 1);
+
+                            // Rebuild transcript UI from truncated conversation
+                            ctx.Transcript.ClearMessages();
+                            foreach (var m in ctx.Conversation.History)
+                            {
+                                if (string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+                                    ctx.Transcript.AddMessage(MessageRole.Assistant, m.Content);
+                                else if (string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    if (m.Attachments != null && m.Attachments.Count > 0)
+                                        ctx.Transcript.AddMessage(MessageRole.User, m.Content, m.Attachments);
+                                    else
+                                        ctx.Transcript.AddMessage(MessageRole.User, m.Content);
+                                }
+                            }
+
+                            // Reset edit state and mark as edit resend path
+                            ctx.PendingEditActive = false; ctx.PendingEditIndex = -1; isEditResend = true;
+                            // Clear pending attachments UI for a clean send path
+                            ClearAttachmentsBanner();
+                        }
+                        catch { }
+                    }
+                }
+            }
+
+            // For normal sends, block empty input; allow empty when re-sending an edit (conversation already has the message)
+            if (!isEditResend && text.Length == 0) return;
 
             // Ensure client configured before we lock sending
             if (_client == null || !_client.IsConfigured)
@@ -473,25 +582,26 @@ namespace GxPT
                         attachmentsSnapshot.Add(new AttachedFile(af.FileName, af.Content));
                     }
                 }
-                // Add to UI (transcript shows only user-entered text, with pills below)
-                if (attachmentsSnapshot != null && attachmentsSnapshot.Count > 0)
-                    ctx.Transcript.AddMessage(MessageRole.User, textForTranscript, attachmentsSnapshot);
-                else
-                    ctx.Transcript.AddMessage(MessageRole.User, textForTranscript);
-                // Store attachments in-memory on the ChatMessage just before sending, without affecting JSON
-                // Use AddUserMessage to preserve naming behavior, then attach files to the last message in memory.
-                // Store only the base text in history; keep attachments separate in-memory and in persisted JSON
-                ctx.Conversation.AddUserMessage(baseText);
-                try
+                if (!isEditResend)
                 {
+                    // Normal path: append a new user message to transcript and history
                     if (attachmentsSnapshot != null && attachmentsSnapshot.Count > 0)
+                        ctx.Transcript.AddMessage(MessageRole.User, textForTranscript, attachmentsSnapshot);
+                    else
+                        ctx.Transcript.AddMessage(MessageRole.User, textForTranscript);
+                    // Store in conversation history
+                    ctx.Conversation.AddUserMessage(baseText);
+                    try
                     {
-                        var last = ctx.Conversation.History.Count > 0 ? ctx.Conversation.History[ctx.Conversation.History.Count - 1] : null;
-                        if (last != null && string.Equals(last.Role, "user", StringComparison.OrdinalIgnoreCase))
-                            last.Attachments = attachmentsSnapshot;
+                        if (attachmentsSnapshot != null && attachmentsSnapshot.Count > 0)
+                        {
+                            var last = ctx.Conversation.History.Count > 0 ? ctx.Conversation.History[ctx.Conversation.History.Count - 1] : null;
+                            if (last != null && string.Equals(last.Role, "user", StringComparison.OrdinalIgnoreCase))
+                                last.Attachments = attachmentsSnapshot;
+                        }
                     }
+                    catch { }
                 }
-                catch { }
                 ctx.Conversation.SelectedModel = ctx.SelectedModel;
                 // If this tab was marked as no-save (e.g., help), flip it now and save
                 if (ctx.NoSaveUntilUserSend) ctx.NoSaveUntilUserSend = false;
@@ -1477,6 +1587,29 @@ namespace GxPT
                 dlg.StartPosition = FormStartPosition.CenterParent;
                 dlg.ShowDialog(this);
             }
+        }
+
+        // Compare attachments by filename and content (same order and count)
+        private static bool AreAttachmentsEqual(List<AttachedFile> a, List<AttachedFile> b)
+        {
+            try
+            {
+                int ac = (a != null) ? a.Count : 0;
+                int bc = (b != null) ? b.Count : 0;
+                if (ac != bc) return false;
+                for (int i = 0; i < ac; i++)
+                {
+                    var ai = a[i]; var bi = b[i];
+                    string afn = ai != null ? (ai.FileName ?? string.Empty) : string.Empty;
+                    string bfn = bi != null ? (bi.FileName ?? string.Empty) : string.Empty;
+                    if (!string.Equals(afn, bfn, StringComparison.Ordinal)) return false;
+                    string acnt = ai != null ? (ai.Content ?? string.Empty) : string.Empty;
+                    string bcnt = bi != null ? (bi.Content ?? string.Empty) : string.Empty;
+                    if (!string.Equals(acnt, bcnt, StringComparison.Ordinal)) return false;
+                }
+                return true;
+            }
+            catch { return false; }
         }
 
         // Missing event handlers expected by designer

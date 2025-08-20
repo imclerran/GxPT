@@ -28,7 +28,10 @@
         /// </summary>
         private void InitializeComponent()
         {
+            this.components = new System.ComponentModel.Container();
             this.rtbFileText = new System.Windows.Forms.RichTextBox();
+            this.cmsFileText = new System.Windows.Forms.ContextMenuStrip(this.components);
+            this.mnuCopy = new System.Windows.Forms.ToolStripMenuItem();
             this.SuspendLayout();
             // 
             // rtbFileText
@@ -41,6 +44,23 @@
             this.rtbFileText.Size = new System.Drawing.Size(492, 566);
             this.rtbFileText.TabIndex = 0;
             this.rtbFileText.Text = "";
+            this.rtbFileText.ContextMenuStrip = this.cmsFileText;
+            // 
+            // cmsFileText
+            // 
+            this.cmsFileText.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.mnuCopy});
+            this.cmsFileText.Name = "cmsFileText";
+            this.cmsFileText.Size = new System.Drawing.Size(110, 26);
+            this.cmsFileText.Opening += new System.ComponentModel.CancelEventHandler(this.cmsFileText_Opening);
+            // 
+            // mnuCopy
+            // 
+            this.mnuCopy.Name = "mnuCopy";
+            this.mnuCopy.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.C)));
+            this.mnuCopy.Size = new System.Drawing.Size(109, 22);
+            this.mnuCopy.Text = "Copy";
+            this.mnuCopy.Click += new System.EventHandler(this.mnuCopy_Click);
             // 
             // FileViewerForm
             // 
@@ -57,6 +77,7 @@
         #endregion
 
         private System.Windows.Forms.RichTextBox rtbFileText;
-
+        private System.Windows.Forms.ContextMenuStrip cmsFileText;
+        private System.Windows.Forms.ToolStripMenuItem mnuCopy;
     }
 }

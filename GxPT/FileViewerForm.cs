@@ -34,5 +34,33 @@ namespace GxPT
             }
             catch { }
         }
+
+        private void cmsFileText_Opening(object sender, CancelEventArgs e)
+        {
+            // Enable Copy only when there's a selection
+            if (this.mnuCopy != null)
+            {
+                bool hasSelection = (this.rtbFileText != null) && !string.IsNullOrEmpty(this.rtbFileText.SelectedText);
+                this.mnuCopy.Enabled = hasSelection;
+            }
+        }
+
+        private void mnuCopy_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                if (this.rtbFileText != null && !string.IsNullOrEmpty(this.rtbFileText.SelectedText))
+                {
+                    string sel = this.rtbFileText.SelectedText;
+                    // Normalize all newline variants to Windows CRLF to avoid unknown symbols in some editors
+                    sel = sel.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", Environment.NewLine);
+                    Clipboard.SetText(sel, TextDataFormat.UnicodeText);
+                }
+            }
+            catch
+            {
+                // Ignore clipboard exceptions
+            }
+        }
     }
 }

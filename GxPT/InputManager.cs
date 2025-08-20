@@ -39,6 +39,23 @@ namespace GxPT
             WireEvents();
         }
 
+        // Programmatically set the input text and optionally focus the input box.
+        public void SetInputText(string text, bool focus)
+        {
+            try
+            {
+                if (_txtMessage == null) return;
+                TextIsHint = false;
+                _txtMessage.ForeColor = SystemColors.WindowText;
+                _txtMessage.Text = text ?? string.Empty;
+                try { _txtMessage.SelectionStart = _txtMessage.TextLength; _txtMessage.SelectionLength = 0; }
+                catch { }
+                if (focus) FocusInput();
+                AdjustInputBoxHeight();
+            }
+            catch { }
+        }
+
         private void InitializeInput()
         {
             if (_txtMessage != null)
@@ -106,6 +123,23 @@ namespace GxPT
 
         private void txtMessage_KeyDown(object sender, KeyEventArgs e)
         {
+            // ESC cancels editing (if active), clears input and attachments, and restores state
+            if (e.KeyCode == Keys.Escape)
+            {
+                try
+                {
+                    var tm = _mainForm != null ? _mainForm.GetTabManager() : null;
+                    var ctx = tm != null ? tm.GetActiveContext() : null;
+                    if (ctx != null && ctx.PendingEditActive)
+                    {
+                        e.SuppressKeyPress = true;
+                        e.Handled = true;
+                        _mainForm.CancelEditingAndRestoreConversation();
+                        return;
+                    }
+                }
+                catch { }
+            }
             // Ctrl+A selects all text in the input box
             if (e.Control && e.KeyCode == Keys.A)
             {
@@ -260,6 +294,23 @@ namespace GxPT
 
         public void HandleKeyDown(KeyEventArgs e)
         {
+            // ESC cancels editing (if active), clears input and attachments, and restores state
+            if (e.KeyCode == Keys.Escape)
+            {
+                try
+                {
+                    var tm = _mainForm != null ? _mainForm.GetTabManager() : null;
+                    var ctx = tm != null ? tm.GetActiveContext() : null;
+                    if (ctx != null && ctx.PendingEditActive)
+                    {
+                        e.SuppressKeyPress = true;
+                        e.Handled = true;
+                        _mainForm.CancelEditingAndRestoreConversation();
+                        return;
+                    }
+                }
+                catch { }
+            }
             // Ctrl+A selects all text in the input box
             if (e.Control && e.KeyCode == Keys.A)
             {
@@ -283,12 +334,18 @@ namespace GxPT
 
         public void SetHintText()
         {
-            if (string.IsNullOrEmpty(_txtMessage.Text))
+            if (_txtMessage == null) return;
+            if (!string.IsNullOrEmpty(_txtMessage.Text)) return;
+            // Never show hint while focused
+            if (_txtMessage.Focused)
             {
-                _txtMessage.Text = InputHintText;
-                _txtMessage.ForeColor = InputHintColor;
-                TextIsHint = true;
+                TextIsHint = false;
+                _txtMessage.ForeColor = SystemColors.WindowText;
+                return;
             }
+            _txtMessage.Text = InputHintText;
+            _txtMessage.ForeColor = InputHintColor;
+            TextIsHint = true;
         }
 
         public void RemoveHintText()

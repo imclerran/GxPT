@@ -36,6 +36,9 @@ namespace GxPT
             public string SelectedModel;
             public bool NoSaveUntilUserSend;
             public List<AttachedFile> PendingAttachments = new List<AttachedFile>();
+            // Pending edit of a prior user message (by transcript/history index)
+            public bool PendingEditActive;
+            public int PendingEditIndex = -1;
         }
 
         public TabManager(MainForm mainForm, TabControl tabControl, MenuStrip menuStrip)
@@ -135,6 +138,53 @@ namespace GxPT
                 };
                 ctx.Conversation.SelectedModel = ctx.SelectedModel;
                 _mainForm.EnsureConversationId(ctx.Conversation);
+                // Wire edit request from transcript to input box
+                try
+                {
+                    if (ctx.Transcript != null)
+                    {
+                        ctx.Transcript.UserMessageEditRequested += delegate(int index, string text)
+                        {
+                            try
+                            {
+                                // Map transcript index (user+assistant only) to conversation history index (skipping system)
+                                int histIndex = MapTranscriptToHistoryIndex(ctx.Conversation, index);
+                                if (histIndex < 0 || histIndex >= ctx.Conversation.History.Count)
+                                    return;
+                                var msg = ctx.Conversation.History[histIndex];
+                                if (msg == null || !string.Equals(msg.Role, "user", StringComparison.OrdinalIgnoreCase))
+                                    return; // only allow editing user messages
+
+                                var im = _mainForm.GetInputManager();
+                                if (im != null) im.SetInputText(msg.Content ?? string.Empty, true);
+                                ctx.PendingEditActive = true;
+                                ctx.PendingEditIndex = histIndex;
+                                // Seed pending attachments from the original message being edited
+                                try
+                                {
+                                    var list = new List<AttachedFile>();
+                                    if (msg.Attachments != null)
+                                    {
+                                        for (int i = 0; i < msg.Attachments.Count; i++)
+                                        {
+                                            var af = msg.Attachments[i];
+                                            if (af == null) continue;
+                                            list.Add(new AttachedFile(af.FileName, af.Content));
+                                        }
+                                    }
+                                    ctx.PendingAttachments = list;
+                                    // Refresh attachments banner UI
+                                    try { _mainForm.RefreshAttachmentsBannerUi(); }
+                                    catch { }
+                                }
+                                catch { }
+                                _mainForm.SelectTab(ctx.Page);
+                            }
+                            catch { }
+                        };
+                    }
+                }
+                catch { }
 
                 ctx.Conversation.NameGenerated += delegate(string name)
                 {
@@ -184,6 +234,53 @@ namespace GxPT
             };
             ctx.Conversation.SelectedModel = ctx.SelectedModel;
             _mainForm.EnsureConversationId(ctx.Conversation);
+
+            // Wire edit request from transcript to input box
+            try
+            {
+                if (ctx.Transcript != null)
+                {
+                    ctx.Transcript.UserMessageEditRequested += delegate(int index, string text)
+                    {
+                        try
+                        {
+                            // Map transcript index (user+assistant only) to conversation history index (skipping system)
+                            int histIndex = MapTranscriptToHistoryIndex(ctx.Conversation, index);
+                            if (histIndex < 0 || histIndex >= ctx.Conversation.History.Count)
+                                return;
+                            var msg = ctx.Conversation.History[histIndex];
+                            if (msg == null || !string.Equals(msg.Role, "user", StringComparison.OrdinalIgnoreCase))
+                                return; // only allow editing user messages
+
+                            var im = _mainForm.GetInputManager();
+                            if (im != null) im.SetInputText(msg.Content ?? string.Empty, true);
+                            ctx.PendingEditActive = true;
+                            ctx.PendingEditIndex = histIndex;
+                            // Seed pending attachments from the original message being edited
+                            try
+                            {
+                                var list = new List<AttachedFile>();
+                                if (msg.Attachments != null)
+                                {
+                                    for (int i = 0; i < msg.Attachments.Count; i++)
+                                    {
+                                        var af = msg.Attachments[i];
+                                        if (af == null) continue;
+                                        list.Add(new AttachedFile(af.FileName, af.Content));
+                                    }
+                                }
+                                ctx.PendingAttachments = list;
+                                try { _mainForm.RefreshAttachmentsBannerUi(); }
+                                catch { }
+                            }
+                            catch { }
+                            _mainForm.SelectTab(ctx.Page);
+                        }
+                        catch { }
+                    };
+                }
+            }
+            catch { }
 
             ctx.Conversation.NameGenerated += delegate(string name)
             {
@@ -446,6 +543,29 @@ namespace GxPT
                 }
             }
             catch { }
+        }
+
+        // Map a transcript message index (which excludes system messages) to the corresponding
+        // history index in Conversation.History (which may include system messages).
+        private static int MapTranscriptToHistoryIndex(Conversation convo, int transcriptIndex)
+        {
+            try
+            {
+                if (convo == null || convo.History == null) return -1;
+                if (transcriptIndex < 0) return -1;
+                int count = 0;
+                for (int i = 0; i < convo.History.Count; i++)
+                {
+                    var m = convo.History[i];
+                    if (m == null) continue;
+                    if (string.Equals(m.Role, "system", StringComparison.OrdinalIgnoreCase))
+                        continue; // not shown in transcript
+                    if (count == transcriptIndex) return i;
+                    count++;
+                }
+            }
+            catch { }
+            return -1;
         }
 
         // Custom ToolStripButton with copy-button-like hover/press visuals and +/x glyphs

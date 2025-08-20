@@ -97,8 +97,12 @@ namespace GxPT
         // Stick-to-bottom behavior during streaming to avoid calling ScrollToBottom each delta
         private bool _stickToBottom;
 
-        private readonly ContextMenu _ctx;
+        // Use modern ContextMenuStrip instead of legacy ContextMenu
+        private readonly ContextMenuStrip _ctx;
         private MessageItem _ctxHit;
+
+        // Raised when the user selects Edit… on a user message via context menu
+        public event Action<int, string> UserMessageEditRequested;
         // Hover/drag state for code block UI
         private MessageItem _hoverCopyItem;
         private int _hoverCopyCodeIndex = -1;
@@ -152,10 +156,8 @@ namespace GxPT
             _vbar.ValueChanged += delegate { _scrollOffset = _vbar.Value; Invalidate(); };
             Controls.Add(_vbar);
 
-            _ctx = new ContextMenu(new[]
-            {
-                new MenuItem("Copy", delegate { if (_ctxHit != null) SafeClipboardSetText(_ctxHit.RawMarkdown ?? ""); })
-            });
+            _ctx = new ContextMenuStrip();
+            _ctx.Items.Add("Copy", null, delegate { if (_ctxHit != null) SafeClipboardSetText(_ctxHit.RawMarkdown ?? string.Empty); });
 
             _baseFont = this.Font;
             BuildFonts();
@@ -1444,7 +1446,33 @@ namespace GxPT
             {
                 _ctxHit = HitTest(e.Location);
                 if (_ctxHit != null)
+                {
+                    try
+                    {
+                        // Rebuild context menu items for this hit
+                        _ctx.Items.Clear();
+                        _ctx.Items.Add("Copy", null, delegate { if (_ctxHit != null) SafeClipboardSetText(_ctxHit.RawMarkdown ?? string.Empty); });
+                        if (_ctxHit.Role == MessageRole.User)
+                        {
+                            _ctx.Items.Add("Edit...", null, delegate
+                            {
+                                try
+                                {
+                                    int idx = IndexOfMessageItem(_ctxHit);
+                                    if (idx >= 0)
+                                    {
+                                        var handler = UserMessageEditRequested;
+                                        if (handler != null) handler(idx, _ctxHit.RawMarkdown ?? string.Empty);
+                                    }
+                                }
+                                catch { }
+                            });
+                        }
+                    }
+                    catch { }
+
                     _ctx.Show(this, e.Location);
+                }
                 return;
             }
             if (e.Button == MouseButtons.Left)
@@ -1924,6 +1952,19 @@ namespace GxPT
                 }
             }
             return null;
+        }
+
+        private int IndexOfMessageItem(MessageItem it)
+        {
+            try
+            {
+                for (int i = 0; i < _items.Count; i++)
+                {
+                    if (object.ReferenceEquals(_items[i], it)) return i;
+                }
+            }
+            catch { }
+            return -1;
         }
 
         private void ScrollToBottom()
