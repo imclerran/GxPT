@@ -58,8 +58,10 @@
             this.lnkOpenSettings = new System.Windows.Forms.LinkLabel();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
-            this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.splitContainer1 = new System.Windows.Forms.SplitContainer();
+            this.btnAttach = new System.Windows.Forms.Button();
+            this.pnlButtons = new System.Windows.Forms.Panel();
+            this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.msMain.SuspendLayout();
             this.pnlInput.SuspendLayout();
             this.pnlInputRight.SuspendLayout();
@@ -70,6 +72,7 @@
             this.tabPage1.SuspendLayout();
             this.splitContainer1.Panel2.SuspendLayout();
             this.splitContainer1.SuspendLayout();
+            this.pnlButtons.SuspendLayout();
             this.SuspendLayout();
             // 
             // msMain
@@ -235,7 +238,7 @@
             // 
             // pnlInputRight
             // 
-            this.pnlInputRight.Controls.Add(this.btnSend);
+            this.pnlInputRight.Controls.Add(this.pnlButtons);
             this.pnlInputRight.Controls.Add(this.cmbModel);
             this.pnlInputRight.Dock = System.Windows.Forms.DockStyle.Right;
             this.pnlInputRight.Location = new System.Drawing.Point(710, 0);
@@ -246,9 +249,9 @@
             // btnSend
             // 
             this.btnSend.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.btnSend.Location = new System.Drawing.Point(0, 0);
+            this.btnSend.Location = new System.Drawing.Point(26, 0);
             this.btnSend.Name = "btnSend";
-            this.btnSend.Size = new System.Drawing.Size(175, 54);
+            this.btnSend.Size = new System.Drawing.Size(149, 54);
             this.btnSend.TabIndex = 0;
             this.btnSend.Text = "Send";
             this.btnSend.UseVisualStyleBackColor = true;
@@ -349,18 +352,6 @@
             this.tabPage1.Text = "New Conversation";
             this.tabPage1.UseVisualStyleBackColor = true;
             // 
-            // chatTranscript
-            // 
-            this.chatTranscript.AccessibleName = "Chat transcript";
-            this.chatTranscript.BackColor = System.Drawing.SystemColors.ControlLightLight;
-            this.chatTranscript.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.chatTranscript.ForeColor = System.Drawing.SystemColors.WindowText;
-            this.chatTranscript.Location = new System.Drawing.Point(0, 0);
-            this.chatTranscript.Margin = new System.Windows.Forms.Padding(0);
-            this.chatTranscript.Name = "chatTranscript";
-            this.chatTranscript.Size = new System.Drawing.Size(877, 620);
-            this.chatTranscript.TabIndex = 0;
-            // 
             // splitContainer1
             // 
             this.splitContainer1.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -378,6 +369,39 @@
             this.splitContainer1.SplitterDistance = 6;
             this.splitContainer1.SplitterWidth = 1;
             this.splitContainer1.TabIndex = 1;
+            // 
+            // btnAttach
+            // 
+            this.btnAttach.Dock = System.Windows.Forms.DockStyle.Left;
+            this.btnAttach.Image = global::GxPT.Properties.Resources.Attatch;
+            this.btnAttach.Location = new System.Drawing.Point(0, 0);
+            this.btnAttach.Name = "btnAttach";
+            this.btnAttach.Size = new System.Drawing.Size(26, 54);
+            this.btnAttach.TabIndex = 3;
+            this.btnAttach.UseVisualStyleBackColor = true;
+            // 
+            // pnlButtons
+            // 
+            this.pnlButtons.Controls.Add(this.btnSend);
+            this.pnlButtons.Controls.Add(this.btnAttach);
+            this.pnlButtons.Dock = System.Windows.Forms.DockStyle.Bottom;
+            this.pnlButtons.Location = new System.Drawing.Point(0, 0);
+            this.pnlButtons.Margin = new System.Windows.Forms.Padding(0);
+            this.pnlButtons.Name = "pnlButtons";
+            this.pnlButtons.Size = new System.Drawing.Size(175, 54);
+            this.pnlButtons.TabIndex = 4;
+            // 
+            // chatTranscript
+            // 
+            this.chatTranscript.AccessibleName = "Chat transcript";
+            this.chatTranscript.BackColor = System.Drawing.SystemColors.ControlLightLight;
+            this.chatTranscript.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.chatTranscript.ForeColor = System.Drawing.SystemColors.WindowText;
+            this.chatTranscript.Location = new System.Drawing.Point(0, 0);
+            this.chatTranscript.Margin = new System.Windows.Forms.Padding(0);
+            this.chatTranscript.Name = "chatTranscript";
+            this.chatTranscript.Size = new System.Drawing.Size(877, 620);
+            this.chatTranscript.TabIndex = 0;
             // 
             // MainForm
             // 
@@ -407,6 +431,7 @@
             this.splitContainer1.Panel2.ResumeLayout(false);
             this.splitContainer1.Panel2.PerformLayout();
             this.splitContainer1.ResumeLayout(false);
+            this.pnlButtons.ResumeLayout(false);
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -445,6 +470,8 @@
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator4;
         private System.Windows.Forms.ToolStripMenuItem miImport;
         private System.Windows.Forms.ToolStripMenuItem miExport;
+        private System.Windows.Forms.Button btnAttach;
+        private System.Windows.Forms.Panel pnlButtons;
 
 
     }

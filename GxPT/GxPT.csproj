@@ -86,6 +86,12 @@
     <Compile Include="ChatModels.cs" />
     <Compile Include="Conversation.cs" />
     <Compile Include="ConversationStore.cs" />
+    <Compile Include="FileViewerForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="FileViewerForm.Designer.cs">
+      <DependentUpon>FileViewerForm.cs</DependentUpon>
+    </Compile>
     <Compile Include="InputManager.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="OpenRouterClient.cs">
@@ -117,6 +123,7 @@
     <Compile Include="Properties\Resources.Designer.cs">
       <AutoGen>True</AutoGen>
       <DependentUpon>Resources.resx</DependentUpon>
+      <DesignTime>True</DesignTime>
     </Compile>
     <Content Include="curl-ca-bundle.crt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -146,11 +153,15 @@
     <Compile Include="ThemeManager.cs" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="Attatch.png" />
     <Content Include="curl.exe">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <None Include="icon.ico" />
     <EmbeddedResource Include="ExplorerDelete.png" />
+    <EmbeddedResource Include="FileViewerForm.resx">
+      <DependentUpon>FileViewerForm.cs</DependentUpon>
+    </EmbeddedResource>
     <Content Include="libcurl.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
