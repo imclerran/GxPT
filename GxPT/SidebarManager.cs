@@ -31,6 +31,10 @@ namespace GxPT
         private ListView _lvConversations;
         private Panel _sidebarArrowPanel;
         private ImageList _lvRowHeightImages;
+        private ContextMenuStrip _conversationContextMenu;
+        private TextBox _renameTextBox;
+        private Panel _renameHostPanel;
+        private ListViewItem _renamingItem;
 
         // Open conversations tracking
         private readonly Dictionary<string, TabPage> _openConversationsById = new Dictionary<string, TabPage>();
@@ -321,20 +325,24 @@ namespace GxPT
                 _lvConversations.MultiSelect = false;
                 _lvConversations.ItemActivate += LvConversations_ItemActivate;
                 _lvConversations.MouseUp += LvConversations_MouseUp;
+                _lvConversations.Click += LvConversations_Click;
 
                 // Create context menu but don't assign it directly
-                var cms = new ContextMenuStrip();
+                _conversationContextMenu = new ContextMenuStrip();
                 var miOpen = new ToolStripMenuItem("Open");
+                var miRename = new ToolStripMenuItem("Rename");
                 var miDelete = new ToolStripMenuItem("Delete");
                 var deleteImage = ResourceHelper.GetAssemblyImage("ExplorerDelete.png");
                 miOpen.Click += (s, e) => TryOpenSelectedConversation();
+                miRename.Click += (s, e) => StartRenameSelectedConversation();
                 miDelete.Click += (s, e) => DeleteSelectedConversation();
                 miDelete.Image = deleteImage;
-                cms.Items.Add(miOpen);
-                cms.Items.Add(miDelete);
+                _conversationContextMenu.Items.Add(miOpen);
+                _conversationContextMenu.Items.Add(miRename);
+                _conversationContextMenu.Items.Add(new ToolStripSeparator());
+                _conversationContextMenu.Items.Add(miDelete);
 
-                // Store the context menu for manual display
-                _lvConversations.Tag = cms;
+                // No longer need to store in Tag
 
                 _lvConversations.BackColor = _splitContainer.Panel1.BackColor;
                 _lvConversations.OwnerDraw = false;
@@ -406,6 +414,24 @@ namespace GxPT
             TryOpenSelectedConversation();
         }
 
+        private void LvConversations_Click(object sender, EventArgs e)
+        {
+            // If we're renaming and user clicks elsewhere, finish the rename
+            if (_renamingItem != null)
+            {
+                var me = e as MouseEventArgs;
+                if (me != null)
+                {
+                    var hitTest = _lvConversations.HitTest(me.Location);
+                    // If clicking on a different item or empty space, finish rename
+                    if (hitTest.Item != _renamingItem)
+                    {
+                        FinishRename(true);
+                    }
+                }
+            }
+        }
+
         private void LvConversations_MouseUp(object sender, MouseEventArgs e)
         {
             // Only show context menu for right-clicks that hit an actual item
@@ -420,10 +446,9 @@ namespace GxPT
                         hitTest.Item.Selected = true;
 
                         // Show the context menu
-                        var cms = _lvConversations.Tag as ContextMenuStrip;
-                        if (cms != null)
+                        if (_conversationContextMenu != null)
                         {
-                            cms.Show(_lvConversations, e.Location);
+                            _conversationContextMenu.Show(_lvConversations, e.Location);
                         }
                     }
                 }
@@ -476,13 +501,195 @@ namespace GxPT
             catch { }
         }
 
+        private void StartRenameSelectedConversation()
+        {
+            try
+            {
+                if (_lvConversations == null || _lvConversations.SelectedItems.Count == 0) return;
+                var lvi = _lvConversations.SelectedItems[0];
+                var info = lvi.Tag as ConversationStore.ConversationListItem;
+                if (info == null) return;
+
+                // Don't allow multiple renames at once
+                if (_renamingItem != null) return;
+
+                _renamingItem = lvi;
+
+                // Create textbox for inline editing
+                _renameTextBox = new TextBox();
+                _renameTextBox.Text = lvi.Text;
+                _renameTextBox.BorderStyle = BorderStyle.None;
+                // Allow explicit height by using multiline (single-line behavior preserved by AcceptsReturn=false)
+                _renameTextBox.Multiline = true;
+                _renameTextBox.AcceptsReturn = false;
+                _renameTextBox.AutoSize = false;
+                _renameTextBox.Margin = new Padding(0);
+                _renameTextBox.BackColor = _lvConversations.BackColor;
+                _renameTextBox.ForeColor = _lvConversations.ForeColor;
+
+                // Apply the same font size from settings that the ListView uses
+                try
+                {
+                    double fs = AppSettings.GetDouble("font_size", 0);
+                    if (fs > 0)
+                    {
+                        float size = (float)Math.Max(6, Math.Min(48, fs));
+                        _renameTextBox.Font = new Font(_lvConversations.Font.FontFamily, size, _lvConversations.Font.Style);
+                    }
+                    else
+                    {
+                        _renameTextBox.Font = _lvConversations.Font;
+                    }
+                }
+                catch
+                {
+                    _renameTextBox.Font = _lvConversations.Font;
+                }
+
+                // Position a host panel to cover the entire row, then place the textbox inside aligned to the label area
+                Rectangle rowRect;
+                Rectangle labelRect;
+                try
+                {
+                    rowRect = _lvConversations.GetItemRect(lvi.Index, ItemBoundsPortion.Entire);
+                }
+                catch { rowRect = lvi.Bounds; }
+                try
+                {
+                    labelRect = _lvConversations.GetItemRect(lvi.Index, ItemBoundsPortion.Label);
+                }
+                catch { labelRect = lvi.Bounds; }
+
+                int left = Math.Max(0, labelRect.X);
+                int panelTop = Math.Max(0, rowRect.Y);
+                int panelHeight = Math.Max(1, rowRect.Height);
+
+                // Create/position host panel to cover the row
+                _renameHostPanel = new Panel();
+                _renameHostPanel.Margin = new Padding(0);
+                _renameHostPanel.Padding = new Padding(0);
+                _renameHostPanel.BackColor = _lvConversations.BackColor;
+                _renameHostPanel.Bounds = new Rectangle(0, panelTop, _lvConversations.ClientSize.Width, panelHeight);
+
+                // Measure single line text height for vertical centering
+                int textHeight;
+                try { textHeight = TextRenderer.MeasureText("Ag", _renameTextBox.Font).Height; }
+                catch { textHeight = _renameTextBox.Font.Height + 2; }
+                int tbHeight = Math.Min(panelHeight, Math.Max(_renameTextBox.Font.Height + 2, textHeight));
+                int tbTop = Math.Max(0, (panelHeight - tbHeight) / 2);
+                int tbWidth = Math.Max(20, _lvConversations.ClientSize.Width - left);
+                _renameTextBox.Bounds = new Rectangle(left, tbTop, tbWidth, tbHeight);
+
+                // Wire up events
+                _renameTextBox.KeyDown += RenameTextBox_KeyDown;
+                _renameTextBox.LostFocus += RenameTextBox_LostFocus;
+
+                // Add to host panel, then to ListView and focus
+                _renameHostPanel.Controls.Add(_renameTextBox);
+                _lvConversations.Controls.Add(_renameHostPanel);
+                _renameHostPanel.BringToFront();
+                _renameTextBox.BringToFront();
+                _renameTextBox.SelectAll();
+                _renameTextBox.Focus();
+            }
+            catch { }
+        }
+
+        private void RenameTextBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                FinishRename(true);
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
+            else if (e.KeyCode == Keys.Escape)
+            {
+                FinishRename(false);
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
+        }
+
+        private void RenameTextBox_LostFocus(object sender, EventArgs e)
+        {
+            FinishRename(true);
+        }
+
+        private void FinishRename(bool saveChanges)
+        {
+            try
+            {
+                if (_renameTextBox == null || _renamingItem == null) return;
+
+                string newName = saveChanges ? _renameTextBox.Text.Trim() : null;
+                string originalName = _renamingItem.Text;
+
+                // Remove the textbox and its host panel
+                try
+                {
+                    if (_renameTextBox != null)
+                    {
+                        if (_renameTextBox.Parent != null) _renameTextBox.Parent.Controls.Remove(_renameTextBox);
+                        _renameTextBox.Dispose();
+                    }
+                }
+                catch { }
+                _renameTextBox = null;
+                try
+                {
+                    if (_renameHostPanel != null)
+                    {
+                        _lvConversations.Controls.Remove(_renameHostPanel);
+                        _renameHostPanel.Dispose();
+                    }
+                }
+                catch { }
+                _renameHostPanel = null;
+
+                // Only update if we're saving changes, the new name is valid, and it's actually different
+                if (saveChanges && !string.IsNullOrEmpty(newName) && newName != originalName)
+                {
+                    var info = _renamingItem.Tag as ConversationStore.ConversationListItem;
+                    if (info != null)
+                    {
+                        // Load the conversation, update the name, and save it
+                        var conversation = ConversationStore.Load(_mainForm.GetClient(), info.Path);
+                        if (conversation != null)
+                        {
+                            conversation.Name = newName;
+                            ConversationStore.Save(conversation);
+
+                            // Update any open tab with this conversation
+                            TabPage openPage;
+                            if (!string.IsNullOrEmpty(info.Id) && _openConversationsById.TryGetValue(info.Id, out openPage))
+                            {
+                                openPage.Text = newName;
+                                _mainForm.UpdateWindowTitle();
+                            }
+
+                            // When saving changes (Enter pressed), allow the list to resort by refreshing
+                            _renamingItem = null;
+                            RefreshSidebarList();
+                            return;
+                        }
+                    }
+                }
+
+                // If we didn't save changes (Escape), no changes were made, or failed to save,
+                // just clear the rename state without refreshing the list (preserves position and timestamp)
+                _renamingItem = null;
+            }
+            catch { }
+        }
+
         private void ResizeSidebarColumn()
         {
             try
             {
                 if (_lvConversations == null || _lvConversations.Columns.Count == 0) return;
-                int arrowW = (_sidebarArrowPanel != null ? _sidebarArrowPanel.Width : 0);
-                int target = Math.Max(20, _lvConversations.ClientSize.Width - arrowW - 2);
+                // Make the column fill the ListView's client width to avoid right-side gaps
+                int target = Math.Max(20, _lvConversations.ClientSize.Width);
                 _lvConversations.Columns[0].Width = target;
             }
             catch { }
