@@ -39,6 +39,8 @@ namespace GxPT
             // Pending edit of a prior user message (by transcript/history index)
             public bool PendingEditActive;
             public int PendingEditIndex = -1;
+            // Model that was active when entering edit mode; used to detect resends due to model change
+            public string PendingEditOriginalModel;
         }
 
         public TabManager(MainForm mainForm, TabControl tabControl, MenuStrip menuStrip)
@@ -165,6 +167,8 @@ namespace GxPT
                                 if (im != null) im.SetInputText(msg.Content ?? string.Empty, true);
                                 ctx.PendingEditActive = true;
                                 ctx.PendingEditIndex = histIndex;
+                                // Capture the model at time of entering edit mode
+                                ctx.PendingEditOriginalModel = ctx.SelectedModel;
                                 // Seed pending attachments from the original message being edited
                                 try
                                 {
@@ -262,6 +266,8 @@ namespace GxPT
                             if (im != null) im.SetInputText(msg.Content ?? string.Empty, true);
                             ctx.PendingEditActive = true;
                             ctx.PendingEditIndex = histIndex;
+                            // Capture the model at time of entering edit mode
+                            ctx.PendingEditOriginalModel = ctx.SelectedModel;
                             // Seed pending attachments from the original message being edited
                             try
                             {

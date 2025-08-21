@@ -229,6 +229,7 @@ namespace GxPT
 
                 ctx.PendingEditActive = false;
                 ctx.PendingEditIndex = -1;
+                ctx.PendingEditOriginalModel = null;
 
                 // Clear attachments and refresh banner
                 ClearAttachmentsBanner();
@@ -469,7 +470,7 @@ namespace GxPT
             string text = baseText;
             if (ctx.IsSending) return; // ensure only one in-flight request per tab
 
-            // If editing a prior user message, compare text+attachments; confirm only if changed
+            // If editing a prior user message, compare text+attachments+model; confirm only if changed
             bool isEditResend = false;
             if (ctx.PendingEditActive && ctx.PendingEditIndex >= 0)
             {
@@ -485,7 +486,11 @@ namespace GxPT
                         var pending = ctx.PendingAttachments ?? new List<AttachedFile>();
                         var origAtt = orig.Attachments ?? new List<AttachedFile>();
                         bool sameAtt = AreAttachmentsEqual(origAtt, pending);
-                        if (sameText && sameAtt)
+                        // Compare model (changed model should allow resend/reset)
+                        string modelAtEditStart = ctx.PendingEditOriginalModel ?? ctx.SelectedModel;
+                        string currentModel = ctx.SelectedModel;
+                        bool sameModel = string.Equals(modelAtEditStart ?? string.Empty, currentModel ?? string.Empty, StringComparison.Ordinal);
+                        if (sameText && sameAtt && sameModel)
                         {
                             // Nothing changed: exit edit mode and restore to un-edited state
                             try { CancelEditingAndRestoreConversation(); }
@@ -536,7 +541,7 @@ namespace GxPT
                             }
 
                             // Reset edit state and mark as edit resend path
-                            ctx.PendingEditActive = false; ctx.PendingEditIndex = -1; isEditResend = true;
+                            ctx.PendingEditActive = false; ctx.PendingEditIndex = -1; ctx.PendingEditOriginalModel = null; isEditResend = true;
                             // Clear pending attachments UI for a clean send path
                             ClearAttachmentsBanner();
                         }
