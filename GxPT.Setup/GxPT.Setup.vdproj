@@ -27,6 +27,12 @@
         }
         "Entry"
         {
+        "MsmKey" = "8:_17A7A6CC7CB948238D9A683AE8790A7F"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
         "MsmKey" = "8:_29D492A6B0C9481FA7215710CAB960EC"
         "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
@@ -244,6 +250,26 @@
             {
             "SourcePath" = "8:..\\GxPT\\licenses\\NOTICE-dotnetzip.txt"
             "TargetName" = "8:NOTICE-dotnetzip.txt"
+            "Tag" = "8:"
+            "Folder" = "8:_9E0CB227B1644868B8C46462762E94CC"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_17A7A6CC7CB948238D9A683AE8790A7F"
+            {
+            "SourcePath" = "8:..\\GxPT\\licenses\\LICENSE-itextsharp.txt"
+            "TargetName" = "8:LICENSE-itextsharp.txt"
             "Tag" = "8:"
             "Folder" = "8:_9E0CB227B1644868B8C46462762E94CC"
             "Condition" = "8:"
