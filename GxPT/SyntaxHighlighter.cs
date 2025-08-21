@@ -88,12 +88,14 @@ namespace GxPT
             RegisterHighlighter(new BashHighlighter());
             RegisterHighlighter(new BasicHighlighter());
             RegisterHighlighter(new BatchHighlighter());
+            RegisterHighlighter(new AssemblyHighlighter());
             RegisterHighlighter(new CHighlighter());
             RegisterHighlighter(new CppHighlighter());
             RegisterHighlighter(new CSharpHighlighter());
             RegisterHighlighter(new CssHighlighter());
             RegisterHighlighter(new CsvHighlighter());
             RegisterHighlighter(new EbnfHighlighter());
+            RegisterHighlighter(new FortranHighlighter());
             RegisterHighlighter(new FSharpHighlighter());
             RegisterHighlighter(new GoHighlighter());
             RegisterHighlighter(new HtmlHighlighter());

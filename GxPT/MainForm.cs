@@ -948,65 +948,49 @@ namespace GxPT
 
         private string BuildTextFilesFilter()
         {
-            // Cover common text files + all highlighter-related types + PowerShell
+            // Cover common text files + all highlighter-related types
             var exts = new List<string>();
+
             // General text
-            exts.AddRange(new[] { "*.txt", "*.md", "*.markdown", "*.log", "*.ini", "*.cfg", "*.conf", "*.config", "*.properties", "*.toml", "*.gitignore", "*.dockerfile", "*.makefile", "*.cmake", "*.diff", "*.patch", "*.csv", "*.sln",
-                // Properties/INI-related aliases supported by PropertiesHighlighter
-                "*.desktop", "*.reg", "*.inf", "*.gitconfig"
-            });
+            exts.AddRange(new[] { "*.txt", "*.md", "*.markdown", "*.log", "*.toml", "*.gitignore", "*.dockerfile", "*.makefile", "*.cmake", "*.diff", "*.patch", "*.csv", "*.sln" });
+
             // Dockerfiles & Makefiles (support common no-extension names and variants)
             exts.AddRange(new[] { "Dockerfile", "Dockerfile.*" });
             exts.AddRange(new[] { "Makefile", "makefile", "GNUmakefile", "Makefile.*", "makefile.*" });
-            // C/C++
-            exts.AddRange(new[] { "*.c", "*.h", "*.cpp", "*.cxx", "*.cc", "*.hpp", "*.hxx", "*.hh" });
-            // C#
-            exts.AddRange(new[] { "*.cs", "*.csx" });
-            // F#
-            exts.AddRange(new[] { "*.fs", "*.fsi", "*.fsx" });
-            // JS/TS
-            exts.AddRange(new[] { "*.js", "*.jsx", "*.ts", "*.tsx", "*.mjs", "*.cjs" });
-            // HTML/XML and related
-            exts.AddRange(new[] { "*.html", "*.htm", "*.xhtml", "*.xml", "*.xaml", "*.xsl", "*.xslt", "*.xsd", "*.svg", "*.rss", "*.atom", "*.plist", "*.resx", "*.settings", "*.manifest", "*.nuspec", "*.wsdl", "*.disco", "*.asmx", "*.sitemap", "*.master", "*.ascx", "*.kml", "*.gpx", "*.tei", "*.docbook", "*.fo", "*.ant", "*.maven", "*.pom", "*.csproj", "*.vbproj", "*.fsproj", "*.vcxproj", "*.proj", "*.targets", "*.props", "*.packages.config", "*.web.config", "*.app.config", "*.machine.config",
-                // HTML templating/server-side aliases from HtmlHighlighter
-                "*.asp", "*.aspx", "*.jsp", "*.php", "*.erb", "*.ejs", "*.hta"
-            });
-            // CSS
-            exts.AddRange(new[] { "*.css", "*.scss", "*.sass", "*.less" });
-            // Python
-            exts.AddRange(new[] { "*.py", "*.pyw", "*.pyi", "*.pyx" });
-            // Java
-            exts.AddRange(new[] { "*.java", "*.jav" });
-            // Go
-            exts.Add("*.go");
-            // Rust
-            exts.Add("*.rs");
-            // Lua
-            exts.AddRange(new[] { "*.lua", "*.luau" });
-            // Fortran
-            exts.AddRange(new[] { "*.f", "*.for", "*.ftn", "*.f77", "*.f90", "*.f95", "*.f03", "*.f08" });
-            // Ruby
-            exts.AddRange(new[] { "*.rb", "*.rbw", "*.rake", "*.gemspec" });
-            // Perl
-            exts.AddRange(new[] { "*.pl", "*.pm", "*.pod", "*.perl" });
-            // Visual Basic / BASIC
-            exts.AddRange(new[] { "*.vb", "*.vbs", "*.vba", "*.bas", "*.basic" });
-            // Shell/Bash
-            exts.AddRange(new[] { "*.sh", "*.bash", "*.zsh", "*.ksh", "*.fish", "*.csh", "*.tcsh" });
-            // Batch
-            exts.AddRange(new[] { "*.bat", "*.cmd" });
-            // PowerShell
-            exts.AddRange(new[] { "*.ps1", "*.psm1", "*.psd1", "*.ps1xml" });
-            // SQL
-            exts.AddRange(new[] { "*.sql" });
-            // Pascal / Delphi / Object Pascal
-            exts.AddRange(new[] { "*.pas", "*.pp", "*.dpr", "*.dpk", "*.inc" });
-            // YAML
-            exts.AddRange(new[] { "*.yml", "*.yaml" });
-            // JSON
-            exts.AddRange(new[] { "*.json", "*.jsonc", "*.json5" });
-            // Regex / EBNF / Zig
-            exts.AddRange(new[] { "*.regex", "*.regexp", "*.re", "*.ebnf", "*.bnf", "*.abnf", "*.grammar", "*.yacc", "*.bison", "*.y", "*.yy", "*.zig" });
+
+            // From highlighters
+            exts.AddRange(AssemblyHighlighter.FileTypes);
+            exts.AddRange(BashHighlighter.FileTypes);
+            exts.AddRange(BasicHighlighter.FileTypes);
+            exts.AddRange(BatchHighlighter.FileTypes);
+            exts.AddRange(CHighlighter.FileTypes);
+            exts.AddRange(CppHighlighter.FileTypes);
+            exts.AddRange(CSharpHighlighter.FileTypes);
+            exts.AddRange(CssHighlighter.FileTypes);
+            exts.AddRange(CsvHighlighter.FileTypes);
+            exts.AddRange(EbnfHighlighter.FileTypes);
+            exts.AddRange(FortranHighlighter.FileTypes);
+            exts.AddRange(FSharpHighlighter.FileTypes);
+            exts.AddRange(GoHighlighter.FileTypes);
+            exts.AddRange(HtmlHighlighter.FileTypes);
+            exts.AddRange(JavaHighlighter.FileTypes);
+            exts.AddRange(JavaScriptHighlighter.FileTypes);
+            exts.AddRange(JsonHighlighter.FileTypes);
+            exts.AddRange(LuaHighlighter.FileTypes);
+            exts.AddRange(PascalHighlighter.FileTypes);
+            exts.AddRange(PerlHighlighter.FileTypes);
+            exts.AddRange(PowerShellHighlighter.FileTypes);
+            exts.AddRange(PropertiesHighlighter.FileTypes);
+            exts.AddRange(PythonHighlighter.FileTypes);
+            exts.AddRange(RubyHighlighter.FileTypes);
+            exts.AddRange(RegexHighlighter.FileTypes);
+            exts.AddRange(RustHighlighter.FileTypes);
+            exts.AddRange(SqlHighlighter.FileTypes);
+            exts.AddRange(TypeScriptHighlighter.FileTypes);
+            exts.AddRange(VisualBasicHighlighter.FileTypes);
+            exts.AddRange(XmlHighlighter.FileTypes);
+            exts.AddRange(YamlHighlighter.FileTypes);
+            exts.AddRange(ZigHighlighter.FileTypes);
 
             // Deduplicate
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

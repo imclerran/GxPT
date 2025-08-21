@@ -105,10 +105,133 @@ namespace GxPT
     }
 
     /// <summary>
+    /// Assembly language syntax highlighter - supports x86/x64, ARM/AArch64, and RISC-V
+    /// </summary>
+    public class AssemblyHighlighter : RegexHighlighterBase
+    {
+        public static readonly string[] FileTypes = new string[] { "*.asm", "*.s", "*.S", "*.nasm" };
+        public override string Language
+        {
+            get { return "assembly"; }
+        }
+
+        public override string[] Aliases
+        {
+            get
+            {
+                return new string[]
+            {
+                "asm", "s", "x86", "x64", "arm", "aarch64", "arm64",
+                "nasm", "masm", "gas", "att", "intel",
+                "riscv", "risc-v", "rv32", "rv64"
+            };
+            }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Comments (semicolon, hash, double slash, C-style)
+                new TokenPattern(@";.*$", TokenType.Comment, 1),
+                new TokenPattern(@"#.*$", TokenType.Comment, 2),
+                new TokenPattern(@"//.*$", TokenType.Comment, 3),
+                new TokenPattern(@"/\*[\s\S]*?\*/", TokenType.Comment, 4),
+
+                // String literals (single and double quotes)
+                new TokenPattern(@"'(?:[^'\\]|\\.)*'|""(?:[^""\\]|\\.)*""", TokenType.String, 5),
+
+                // Character literals and escape sequences
+                new TokenPattern(@"'\\[nrtbfav\\']'|'\\[0-7]{1,3}'|'\\x[0-9a-fA-F]{1,2}'", TokenType.String, 6),
+
+                // Numbers (hex, binary, octal, decimal with various prefixes/suffixes)
+                new TokenPattern(@"\b(?:0[xX][0-9a-fA-F]+[hH]?|[0-9a-fA-F]+[hH]|0[bB][01]+[bB]?|[01]+[bB]|0[oO]?[0-7]+[oO]?|\d+[dD]?)\b", TokenType.Number, 7),
+
+                // Assembler directives (NASM/MASM/GAS + some RISC-V-specific)
+                new TokenPattern(@"(?i)\.?(?:section|segment|data|text|bss|rodata|code|const|global|extern|public|extrn|include|incbin|equ|define|macro|endm|proc|endp|struct|ends|align|org|resb|resw|resd|resq|db|dw|dd|dq|dt|times|byte|word|dword|qword|tbyte|ascii|asciz|string|zero|space|comm|lcomm|size|type|weak|hidden|protected|default|rel|abs|entry|end|option|attribute|insn)\b", TokenType.Keyword, 8),
+
+                // x86/x64 registers
+                new TokenPattern(@"(?i)\b(?:eax|ebx|ecx|edx|esi|edi|esp|ebp|ax|bx|cx|dx|si|di|sp|bp|al|ah|bl|bh|cl|ch|dl|dh|rax|rbx|rcx|rdx|rsi|rdi|rsp|rbp|r8|r9|r10|r11|r12|r13|r14|r15|r8d|r9d|r10d|r11d|r12d|r13d|r14d|r15d|r8w|r9w|r10w|r11w|r12w|r13w|r14w|r15w|r8b|r9b|r10b|r11b|r12b|r13b|r14b|r15b|sil|dil|bpl|spl|cs|ds|es|fs|gs|ss|cr0|cr1|cr2|cr3|cr4|cr8|dr0|dr1|dr2|dr3|dr6|dr7|eflags|rflags|eip|rip|st0|st1|st2|st3|st4|st5|st6|st7|mm0|mm1|mm2|mm3|mm4|mm5|mm6|mm7|xmm0|xmm1|xmm2|xmm3|xmm4|xmm5|xmm6|xmm7|xmm8|xmm9|xmm10|xmm11|xmm12|xmm13|xmm14|xmm15|ymm0|ymm1|ymm2|ymm3|ymm4|ymm5|ymm6|ymm7|ymm8|ymm9|ymm10|ymm11|ymm12|ymm13|ymm14|ymm15|zmm0|zmm1|zmm2|zmm3|zmm4|zmm5|zmm6|zmm7|zmm8|zmm9|zmm10|zmm11|zmm12|zmm13|zmm14|zmm15)\b", TokenType.Type, 9),
+
+                // ARM/AArch64 registers
+                new TokenPattern(@"(?i)\b(?:r0|r1|r2|r3|r4|r5|r6|r7|r8|r9|r10|r11|r12|r13|r14|r15|sp|lr|pc|cpsr|spsr|w0|w1|w2|w3|w4|w5|w6|w7|w8|w9|w10|w11|w12|w13|w14|w15|w16|w17|w18|w19|w20|w21|w22|w23|w24|w25|w26|w27|w28|w29|w30|wzr|wsp|x0|x1|x2|x3|x4|x5|x6|x7|x8|x9|x10|x11|x12|x13|x14|x15|x16|x17|x18|x19|x20|x21|x22|x23|x24|x25|x26|x27|x28|x29|x30|xzr|s0|s1|s2|s3|s4|s5|s6|s7|s8|s9|s10|s11|s12|s13|s14|s15|d0|d1|d2|d3|d4|d5|d6|d7|d8|d9|d10|d11|d12|d13|d14|d15|q0|q1|q2|q3|q4|q5|q6|q7|v0|v1|v2|v3|v4|v5|v6|v7|v8|v9|v10|v11|v12|v13|v14|v15|v16|v17|v18|v19|v20|v21|v22|v23|v24|v25|v26|v27|v28|v29|v30|v31)\b", TokenType.Type, 10),
+
+                // RISC-V integer/FPU/vector registers (x0–x31 and ABI names; f0–f31; v0–v31)
+                new TokenPattern(@"(?i)\b(?:
+                    x(?:[12]?\d|3[01]|[0-9])|
+                    zero|ra|sp|gp|tp|
+                    t(?:0|1|2|3|4|5|6)|
+                    s(?:0|1|2|3|4|5|6|7|8|9|10|11)|
+                    a(?:0|1|2|3|4|5|6|7)|
+                    f(?:[12]?\d|3[01])|
+                    ft(?:0|1|2|3|4|5|6|7|8|9|10|11)|fs(?:0|1)|fa(?:0|1|2|3|4|5|6|7)|
+                    v(?:[12]?\d|3[01])|vl|vtype|vlenb
+                )\b", TokenType.Type, 21),
+
+                // Common RISC-V CSRs
+                new TokenPattern(@"(?i)\b(?:mstatus|misa|mie|mip|mtvec|mscratch|mepc|mcause|mtval|mhartid|mvendorid|marchid|mimpid|satp|sstatus|sie|sip|stvec|sscratch|sepc|scause|stval|cycleh?|timeh?|instreth?|fflags|frm|fcsr|ustatus|uie|uip|utvec|uscratch|uepc|ucause|utval)\b", TokenType.Type, 22),
+
+                // x86/x64 instruction mnemonics
+                new TokenPattern(@"(?i)\b(?:mov|movb|movw|movl|movq|movsx|movzx|movsxd|lea|push|pop|xchg|cmpxchg|add|adc|sub|sbb|mul|imul|div|idiv|inc|dec|neg|cmp|test|and|or|xor|not|shl|shr|sal|sar|rol|ror|rcl|rcr|bt|bts|btr|btc|bsf|bsr|jmp|je|jz|jne|jnz|jl|jnge|jle|jng|jg|jnle|jge|jnl|ja|jnbe|jae|jnb|jb|jnae|jbe|jna|js|jns|jp|jpe|jnp|jpo|jc|jnc|jo|jno|call|ret|retn|retf|enter|leave|int|into|iret|iretd|iretq|hlt|nop|wait|lock|rep|repe|repz|repne|repnz|cld|std|cli|sti|clc|stc|cmc|lahf|sahf|pushf|popf|pushfd|popfd|pushfq|popfq|cpuid|rdtsc|rdtscp|prefetch|clflush|mfence|lfence|sfence|pause|ud2|syscall|sysenter|sysexit|sysret)\b", TokenType.Method, 11),
+
+                // ARM/AArch64 instruction mnemonics
+                new TokenPattern(@"(?i)\b(?:add|adds|adc|adcs|sub|subs|sbc|sbcs|rsb|rsbs|rsc|rscs|mul|mla|umull|umlal|smull|smlal|mov|movs|mvn|mvns|cmp|cmn|tst|teq|and|ands|eor|eors|orr|orrs|bic|bics|lsl|lsr|asr|ror|rrx|ldr|ldrb|ldrh|ldrsb|ldrsh|str|strb|strh|ldm|ldmia|ldmib|ldmda|ldmdb|stm|stmia|stmib|stmda|stmdb|push|pop|b|bl|bx|blx|swi|svc|mrs|msr|nop|wfi|wfe|sev|yield|dmb|dsb|isb|ldrex|strex|clrex|adr|adrl|ldp|stp|cbz|cbnz|tbz|tbnz|adrp|br|blr|ret|eret|smc|hvc|hint)\b", TokenType.Method, 12),
+
+                // RISC-V instruction mnemonics (RV32I/RV64I, Zicsr, A, F/D, Zifencei, basic V)
+                new TokenPattern(@"(?i)\b(?:
+                    lui|auipc|jal|jalr|
+                    beq|bne|blt|bge|bltu|bgeu|
+                    lb|lh|lw|lbu|lhu|sb|sh|sw|
+                    lwu|ld|sd|addi|slti|sltiu|xori|ori|andi|
+                    sll|srl|sra|slli|srli|srai|add|sub|slt|sltu|xor|or|and|
+                    fence|fence\.i|ecall|ebreak|
+                    csrrw|csrrs|csrrc|csrrwi|csrrsi|csrrci|
+                    lr\.w|sc\.w|amoswap\.w|amoadd\.w|amoxor\.w|amoand\.w|amoor\.w|amomin\.w|amomax\.w|amominu\.w|amomaxu\.w|
+                    lr\.d|sc\.d|amoswap\.d|amoadd\.d|amoxor\.d|amoand\.d|amoor\.d|amomin\.d|amomax\.d|amominu\.d|amomaxu\.d|
+                    flw|fsw|fld|fsd|fence\.tso|
+                    fadd\.s|fsub\.s|fmul\.s|fdiv\.s|fsqrt\.s|fmin\.s|fmax\.s|fmadd\.s|fmsub\.s|fnmsub\.s|fnmadd\.s|
+                    fadd\.d|fsub\.d|fmul\.d|fdiv\.d|fsqrt\.d|fmin\.d|fmax\.d|fmadd\.d|fmsub\.d|fnmsub\.d|fnmadd\.d|
+                    fcvt\.[sd]\.[sd]|fcvt\.w[ud]\.[sd]|fcvt\.[sd]\.w[ud]|fsgnj\.[sd]|fsgnjn\.[sd]|fsgnjx\.[sd]|
+                    feq\.[sd]|flt\.[sd]|fle\.[sd]|fclass\.[sd]|fmv\.x\.w|fmv\.w\.x|fmv\.x\.d|fmv\.d\.x|
+                    vsetvli|vsetvl|vadd\.vv|vadd\.vx|vmul\.vv|vmul\.vx|vle\d+\.[vb]|vse\d+\.[vb]
+                )\b", TokenType.Method, 23),
+
+                // Condition codes (ARM and x86)
+                new TokenPattern(@"(?i)\b(?:eq|ne|cs|hs|cc|lo|mi|pl|vs|vc|hi|ls|ge|lt|gt|le|al|nv)\b", TokenType.Keyword, 13),
+
+                // Size/type keywords
+                new TokenPattern(@"(?i)\b(?:byte|word|dword|qword|tbyte|ptr|offset|near|far|short|high|low|seg|length|size|type|this)\b", TokenType.Keyword, 14),
+
+                // Labels (identifier followed by ':')
+                new TokenPattern(@"^\s*[a-zA-Z_][a-zA-Z0-9_]*:", TokenType.Method, 15),
+
+                // Memory addressing - x86 style [base+index*scale+disp]
+                new TokenPattern(@"\[(?:[^[\]]+)\]", TokenType.String, 16),
+
+                // Memory addressing - RISC-V style offset(base), e.g., 0(sp) or 0x10(a0)
+                new TokenPattern(@"\b[-+]?(?:\d+|0[xX][0-9a-fA-F]+)\s*\([^)]+\)", TokenType.String, 24),
+
+                // Immediate values (# for ARM, $ for AT&T)
+                new TokenPattern(@"[#$][-+]?(?:0[xX][0-9a-fA-F]+|\d+)", TokenType.Number, 17),
+
+                // Register lists (ARM style {r0-r3,...})
+                new TokenPattern(@"\{[^}]+\}", TokenType.Type, 18),
+
+                // Operators and arithmetic
+                new TokenPattern(@"[+\-*/%&|^~<>!=]+|<<|>>", TokenType.Operator, 19),
+
+                // Punctuation and delimiters
+                new TokenPattern(@"[,():\[\]]", TokenType.Punctuation, 20),
+            };
+        }
+    }
+
+    /// <summary>
     /// Bash/Shell syntax highlighter
     /// </summary>
     public class BashHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.sh", "*.bash", "*.zsh", "*.ksh", "*.fish", "*.csh", "*.tcsh" };
         public override string Language
         {
             get { return "bash"; }
@@ -162,6 +285,7 @@ namespace GxPT
     /// </summary>
     public class BasicHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.bas", "*.basic" };
         public override string Language
         {
             get { return "basic"; }
@@ -218,6 +342,7 @@ namespace GxPT
     /// </summary>
     public class BatchHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.bat", "*.cmd" };
         public override string Language
         {
             get { return "batch"; }
@@ -265,6 +390,7 @@ namespace GxPT
     /// </summary>
     public class CHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.c", "*.h" };
         public override string Language
         {
             get { return "c"; }
@@ -323,6 +449,7 @@ namespace GxPT
     /// </summary>
     public class CppHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.cpp", "*.cxx", "*.cc", "*.hpp", "*.hxx", "*.hh" };
         public override string Language
         {
             get { return "cpp"; }
@@ -375,6 +502,7 @@ namespace GxPT
     /// </summary>
     public class CSharpHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.cs", "*.csx" };
         public override string Language
         {
             get { return "csharp"; }
@@ -427,6 +555,7 @@ namespace GxPT
     /// </summary>
     public class CssHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.css", "*.scss", "*.sass", "*.less" };
         public override string Language
         {
             get { return "css"; }
@@ -496,6 +625,7 @@ namespace GxPT
     /// </summary>
     public class CsvHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.csv" };
         public override string Language
         {
             get { return "csv"; }
@@ -634,6 +764,7 @@ namespace GxPT
     /// </summary>
     public class EbnfHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.ebnf", "*.bnf", "*.abnf", "*.grammar", "*.yacc", "*.bison", "*.y", "*.yy" };
         public override string Language
         {
             get { return "ebnf"; }
@@ -692,10 +823,92 @@ namespace GxPT
     }
 
     /// <summary>
+    /// Fortran syntax highlighter - supports FORTRAN 77 through modern Fortran (2018+)
+    /// </summary>
+    public class FortranHighlighter : RegexHighlighterBase
+    {
+        public static readonly string[] FileTypes = new string[] { "*.f", "*.for", "*.ftn", "*.f77", "*.f90", "*.f95", "*.f03", "*.f08" };
+        public override string Language
+        {
+            get { return "fortran"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "f77", "f90", "f95", "f2003", "f2008", "f2018", "for", "ftn", "f", "fortran77", "fortran90", "fortran95" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Comments: C or * in column 1 (F77 style), or ! anywhere (F90+ style)
+                new TokenPattern(@"^[Cc*].*$", TokenType.Comment, 1),
+                new TokenPattern(@"!.*$", TokenType.Comment, 2),
+
+                // Line continuation: & at end of line (F90+) or non-blank in column 6 (F77)
+                new TokenPattern(@"&\s*$", TokenType.Operator, 3),
+
+                // String literals (single and double quotes)
+                new TokenPattern(@"'(?:[^'\\]|\\.)*'|""(?:[^""\\]|\\.)*""", TokenType.String, 4),
+
+                // Hollerith constants (legacy F77): nHtext
+                new TokenPattern(@"\b\d+H[^\s]*", TokenType.String, 5),
+
+                // Numbers (integers, reals, double precision, complex)
+                new TokenPattern(@"\b(?:\d+\.?\d*|\.\d+)(?:[eEdD][+-]?\d+)?(?:_(?:real|double|quad|int|kind=\d+))?\b", TokenType.Number, 6),
+
+                // Hexadecimal, octal, binary literals (modern Fortran)
+                new TokenPattern(@"\b(?:z|o|b)'[0-9a-fA-F]+'\b|\b(?:z|o|b)""[0-9a-fA-F]+""\b", TokenType.Number, 7),
+
+                // Program units and structure keywords
+                new TokenPattern(@"(?i)\b(?:program|end\s+program|module|end\s+module|submodule|end\s+submodule|interface|end\s+interface|abstract\s+interface|procedure|end\s+procedure|function|end\s+function|subroutine|end\s+subroutine|block\s+data|end\s+block\s+data|type|end\s+type|class|end\s+class|enum|end\s+enum|associate|end\s+associate|block|end\s+block|critical|end\s+critical|forall|end\s+forall|where|end\s+where|select\s+case|end\s+select|select\s+type|end\s+select|do\s+concurrent|end\s+do)\b", TokenType.Keyword, 8),
+
+                // Control flow keywords
+                new TokenPattern(@"(?i)\b(?:if|then|else|elseif|endif|do|enddo|continue|stop|pause|return|call|goto|go\s+to|case|default|exit|cycle|select|where|forall|associate|block|critical)\b", TokenType.Keyword, 9),
+
+                // Declaration keywords
+                new TokenPattern(@"(?i)\b(?:implicit|none|dimension|parameter|data|save|common|equivalence|external|intrinsic|public|private|protected|allocatable|pointer|target|optional|intent|in|out|inout|pure|elemental|recursive|result|bind|abstract|deferred|final|generic|import|non_overridable|nopass|pass|sequence|extends|value|volatile|asynchronous|contiguous|codimension)\b", TokenType.Keyword, 10),
+
+                // Data types (intrinsic and legacy)
+                new TokenPattern(@"(?i)\b(?:integer|real|double\s+precision|complex|double\s+complex|logical|character|byte|type|class|procedure)\b", TokenType.Type, 11),
+
+                // Kind parameters and modern type declarations
+                new TokenPattern(@"(?i)\b(?:kind|len|selected_int_kind|selected_real_kind|selected_char_kind|int8|int16|int32|int64|real32|real64|real128|c_int|c_long|c_float|c_double|c_char|c_bool|iso_c_binding|iso_fortran_env)\b", TokenType.Type, 12),
+
+                // Memory management and pointers
+                new TokenPattern(@"(?i)\b(?:allocate|deallocate|nullify|associated|allocated|null|c_null_ptr|c_null_funptr)\b", TokenType.Keyword, 13),
+
+                // I/O keywords
+                new TokenPattern(@"(?i)\b(?:read|write|print|open|close|rewind|backspace|endfile|inquire|format|namelist|advance|access|action|blank|delim|direct|err|exist|file|fmt|form|formatted|iostat|name|named|nextrec|nml|number|opened|pad|position|readwrite|rec|recl|sequential|size|stat|status|unformatted|unit)\b", TokenType.Keyword, 14),
+
+                // Intrinsic procedures (built-in functions)
+                new TokenPattern(@"(?i)\b(?:abs|achar|acos|adjustl|adjustr|aimag|aint|all|allocated|anint|any|asin|associated|atan|atan2|bit_size|btest|ceiling|char|cmplx|conjg|cos|cosh|count|cshift|date_and_time|dble|digits|dim|dot_product|dprod|eoshift|epsilon|exp|exponent|floor|fraction|huge|iachar|iand|ibclr|ibits|ibset|ichar|ieor|index|int|ior|ishft|ishftc|kind|lbound|len|len_trim|log|log10|logical|matmul|max|maxexponent|maxloc|maxval|merge|min|minexponent|minloc|minval|mod|modulo|nearest|nint|not|pack|precision|present|product|radix|random_number|random_seed|range|real|repeat|reshape|rrspacing|scale|scan|selected_int_kind|selected_real_kind|set_exponent|shape|sign|sin|sinh|size|spacing|spread|sqrt|sum|system_clock|tan|tanh|tiny|transfer|transpose|trim|ubound|unpack|verify)\b(?=\s*\()", TokenType.Method, 15),
+
+                // User-defined functions and subroutines
+                new TokenPattern(@"(?i)\b[a-zA-Z_][a-zA-Z0-9_]*(?=\s*\()", TokenType.Method, 16),
+
+                // Statement labels (numbers at beginning of line in F77)
+                new TokenPattern(@"^\s*\d{1,5}(?=\s)", TokenType.Number, 17),
+
+                // Operators
+                new TokenPattern(@"(?i)\.(?:eq|ne|lt|le|gt|ge|and|or|not|eqv|neqv)\.|\*\*|//|[+\-*/=<>]|=>", TokenType.Operator, 18),
+
+                // Array syntax and slicing
+                new TokenPattern(@"[():]", TokenType.Punctuation, 19),
+
+                // Other punctuation
+                new TokenPattern(@"[{}\[\];,.]", TokenType.Punctuation, 20)
+            };
+        }
+    }
+
+    /// <summary>
     /// F# syntax highlighter - supports F# functional programming syntax
     /// </summary>
     public class FSharpHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.fs", "*.fsi", "*.fsx" };
         public override string Language
         {
             get { return "fsharp"; }
@@ -784,6 +997,7 @@ namespace GxPT
     /// </summary>
     public class GoHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.go" };
         public override string Language
         {
             get { return "go"; }
@@ -836,6 +1050,7 @@ namespace GxPT
     /// </summary>
     public class HtmlHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.html", "*.htm", "*.xhtml", "*.asp", "*.aspx", "*.jsp", "*.php", "*.erb", "*.ejs", "*.hta" };
         public override string Language
         {
             get { return "html"; }
@@ -892,6 +1107,7 @@ namespace GxPT
     /// </summary>
     public class JavaHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.java", "*.jav" };
         public override string Language
         {
             get { return "java"; }
@@ -944,6 +1160,7 @@ namespace GxPT
     /// </summary>
     public class JavaScriptHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.js", "*.jsx", "*.mjs", "*.cjs" };
         public override string Language
         {
             get { return "javascript"; }
@@ -996,6 +1213,7 @@ namespace GxPT
     /// </summary>
     public class JsonHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.json", "*.jsonc", "*.json5" };
         public override string Language
         {
             get { return "json"; }
@@ -1034,6 +1252,7 @@ namespace GxPT
     /// </summary>
     public class LuaHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.lua", "*.luau" };
         public override string Language
         {
             get { return "lua"; }
@@ -1104,6 +1323,7 @@ namespace GxPT
     /// </summary>
     public class PascalHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.pas", "*.pp", "*.dpr", "*.dpk", "*.inc" };
         public override string Language
         {
             get { return "pascal"; }
@@ -1172,6 +1392,7 @@ namespace GxPT
     /// </summary>
     public class PerlHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.pl", "*.pm", "*.pod", "*.perl" };
         public override string Language
         {
             get { return "perl"; }
@@ -1233,6 +1454,7 @@ namespace GxPT
     /// </summary>
     public class PowerShellHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.ps1", "*.psm1", "*.psd1", "*.ps1xml" };
         public override string Language
         {
             get { return "powershell"; }
@@ -1323,6 +1545,7 @@ namespace GxPT
     /// </summary>
     public class PropertiesHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.ini", "*.cfg", "*.conf", "*.config", "*.properties", "*.desktop", "*.reg", "*.inf", "*.gitconfig" };
         public override string Language
         {
             get { return "properties"; }
@@ -1388,6 +1611,7 @@ namespace GxPT
     /// </summary>
     public class PythonHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.py", "*.pyw", "*.pyi", "*.pyx" };
         public override string Language
         {
             get { return "python"; }
@@ -1437,6 +1661,7 @@ namespace GxPT
     /// </summary>
     public class RubyHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.rb", "*.rbw", "*.rake", "*.gemspec" };
         public override string Language
         {
             get { return "ruby"; }
@@ -1492,6 +1717,7 @@ namespace GxPT
     /// </summary>
     public class RegexHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.regex", "*.regexp", "*.re" };
         public override string Language
         {
             get { return "regex"; }
@@ -1560,6 +1786,7 @@ namespace GxPT
     /// </summary>
     public class RustHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.rs" };
         public override string Language
         {
             get { return "rust"; }
@@ -1615,6 +1842,7 @@ namespace GxPT
     /// </summary>
     public class SqlHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.sql" };
         public override string Language
         {
             get { return "sql"; }
@@ -1679,6 +1907,7 @@ namespace GxPT
     /// </summary>
     public class TypeScriptHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.ts", "*.tsx" };
         public override string Language
         {
             get { return "typescript"; }
@@ -1734,6 +1963,7 @@ namespace GxPT
     /// </summary>
     public class VisualBasicHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.vb", "*.vbs", "*.vba" };
         public override string Language
         {
             get { return "visualbasic"; }
@@ -1796,6 +2026,7 @@ namespace GxPT
     /// </summary>
     public class XmlHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.xml", "*.xaml", "*.xsl", "*.xslt", "*.xsd", "*.svg", "*.rss", "*.atom", "*.plist", "*.resx", "*.settings", "*.manifest", "*.nuspec", "*.wsdl", "*.disco", "*.asmx", "*.sitemap", "*.master", "*.ascx", "*.kml", "*.gpx", "*.tei", "*.docbook", "*.fo", "*.ant", "*.maven", "*.pom", "*.csproj", "*.vbproj", "*.fsproj", "*.vcxproj", "*.proj", "*.targets", "*.props", "*.packages.config", "*.web.config", "*.app.config", "*.machine.config", "*.ps1xml" };
         public override string Language
         {
             get { return "xml"; }
@@ -1864,6 +2095,7 @@ namespace GxPT
     /// </summary>
     public class YamlHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.yml", "*.yaml" };
         public override string Language
         {
             get { return "yaml"; }
@@ -1928,6 +2160,7 @@ namespace GxPT
     /// </summary>
     public class ZigHighlighter : RegexHighlighterBase
     {
+        public static readonly string[] FileTypes = new string[] { "*.zig" };
         public override string Language
         {
             get { return "zig"; }

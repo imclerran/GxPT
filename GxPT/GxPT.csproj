@@ -103,7 +103,8 @@
     <Compile Include="MainForm.Designer.cs">
       <DependentUpon>MainForm.cs</DependentUpon>
     </Compile>
-    <Compile Include="LanguageHighlighters.cs" />
+    <Compile Include="LanguageHighlighters.cs">
+    </Compile>
     <Compile Include="MarkdownParser.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
