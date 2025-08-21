@@ -36,6 +36,9 @@ namespace GxPT
         private Panel _renameHostPanel;
         private ListViewItem _renamingItem;
 
+        // Tooltip for the sidebar arrow clickable region
+        private ToolTip _sidebarToolTip;
+
         // Open conversations tracking
         private readonly Dictionary<string, TabPage> _openConversationsById = new Dictionary<string, TabPage>();
 
@@ -68,6 +71,20 @@ namespace GxPT
                 _splitContainer.SplitterWidth = 1;
                 _splitContainer.SplitterDistance = SidebarMinWidth;
                 _sidebarExpanded = false;
+
+                // Create tooltip instance
+                try
+                {
+                    if (_sidebarToolTip == null)
+                    {
+                        _sidebarToolTip = new ToolTip();
+                        _sidebarToolTip.ShowAlways = true;
+                        _sidebarToolTip.AutoPopDelay = 5000;
+                        _sidebarToolTip.InitialDelay = 400;
+                        _sidebarToolTip.ReshowDelay = 100;
+                    }
+                }
+                catch { }
 
                 EnsureSidebarList();
                 EnsureSidebarArrowStrip();
@@ -181,6 +198,9 @@ namespace GxPT
                     UpdateConversationHistoryCheckedState();
 
                     if (SidebarToggled != null) SidebarToggled();
+
+                    // Update tooltip text to reflect new state
+                    UpdateArrowToolTip();
                 }
             }
             catch
@@ -245,6 +265,9 @@ namespace GxPT
                 _splitContainer.Panel1.Controls.Add(_sidebarArrowPanel);
                 _sidebarArrowPanel.BringToFront();
                 LayoutSidebarChildren();
+
+                // Assign initial tooltip
+                UpdateArrowToolTip();
             }
             catch { }
         }
@@ -703,6 +726,27 @@ namespace GxPT
                 {
                     _miConversationHistory.Checked = _sidebarExpanded;
                 }
+            }
+            catch { }
+        }
+
+        // Update the tooltip on the arrow strip to indicate the action on click
+        private void UpdateArrowToolTip()
+        {
+            try
+            {
+                if (_sidebarToolTip == null || _sidebarArrowPanel == null) return;
+                bool willExpand;
+                if (_sidebarAnimating)
+                {
+                    willExpand = _sidebarTargetWidth > _sidebarStartWidth;
+                }
+                else
+                {
+                    willExpand = !_sidebarExpanded;
+                }
+                string text = willExpand ? "Expand conversations" : "Collapse conversations";
+                _sidebarToolTip.SetToolTip(_sidebarArrowPanel, text);
             }
             catch { }
         }

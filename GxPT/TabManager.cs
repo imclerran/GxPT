@@ -101,13 +101,19 @@ namespace GxPT
             {
                 if (menuStrip != null)
                 {
+                    // Ensure the menu strip displays item tooltips
+                    try { menuStrip.ShowItemToolTips = true; }
+                    catch { }
+
                     _btnNewTab = new GlyphToolStripButton(GlyphToolStripButton.GlyphType.Plus);
                     _btnNewTab.Margin = new Padding(2, 2, 2, 2);
+                    _btnNewTab.ToolTipText = "New Tab";
                     _btnNewTab.Click += delegate { CreateConversationTab(); };
                     _btnNewTab.Alignment = ToolStripItemAlignment.Right;
 
                     _btnCloseTab = new GlyphToolStripButton(GlyphToolStripButton.GlyphType.Close);
                     _btnCloseTab.Margin = new Padding(2, 2, 3, 2);
+                    _btnCloseTab.ToolTipText = "Close Tab";
                     _btnCloseTab.Click += delegate { CloseActiveConversationTab(); };
                     _btnCloseTab.Alignment = ToolStripItemAlignment.Right;
 
