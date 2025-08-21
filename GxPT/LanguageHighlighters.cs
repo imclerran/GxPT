@@ -942,6 +942,74 @@ namespace GxPT
     }
 
     /// <summary>
+    /// Pascal/Delphi/Object Pascal syntax highlighter
+    /// </summary>
+    public class PascalHighlighter : RegexHighlighterBase
+    {
+        public override string Language
+        {
+            get { return "pascal"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "pas", "pp", "delphi", "objectpascal", "freepascal", "lazarus", "dpr", "dpk", "inc" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Single-line comments (// style - Delphi/modern Pascal)
+                new TokenPattern(@"//.*$", TokenType.Comment, 1),
+
+                // Multi-line comments (* ... *) and { ... }
+                new TokenPattern(@"\(\*[\s\S]*?\*\)", TokenType.Comment, 2),
+                new TokenPattern(@"\{[\s\S]*?\}", TokenType.Comment, 3),
+
+                // String literals (single quotes, with doubled quotes for escapes)
+                new TokenPattern(@"'(?:[^']|'')*'", TokenType.String, 4),
+
+                // Character literals (#65, #$41, ^A)
+                new TokenPattern(@"#(?:\$[0-9a-fA-F]+|\d+)|\^[A-Za-z]", TokenType.String, 5),
+
+                // Numbers (integers, reals, hex, octal, binary)
+                new TokenPattern(@"(?i)\b(?:\$[0-9a-fA-F]+|&[0-7]+|%[01]+|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\b", TokenType.Number, 6),
+
+                // Pascal/Delphi keywords
+                new TokenPattern(@"(?i)\b(?:and|array|as|asm|begin|case|class|const|constructor|destructor|div|do|downto|else|end|except|exports|file|finalization|finally|for|function|goto|if|implementation|in|inherited|initialization|inline|interface|is|label|library|mod|nil|not|object|of|or|packed|procedure|program|property|raise|record|repeat|set|shl|shr|string|then|threadvar|to|try|type|unit|until|uses|var|while|with|xor)\b", TokenType.Keyword, 7),
+
+                // Delphi-specific keywords (more modern Object Pascal)
+                new TokenPattern(@"(?i)\b(?:absolute|abstract|automated|cdecl|default|dispid|dynamic|export|external|far|forward|index|message|name|near|nodefault|override|pascal|private|protected|public|published|read|readonly|register|reintroduce|resident|safecall|stdcall|stored|virtual|write|writeonly)\b", TokenType.Keyword, 8),
+
+                // Built-in types
+                new TokenPattern(@"(?i)\b(?:boolean|byte|bytebool|cardinal|char|comp|currency|double|extended|int64|integer|longbool|longint|longword|pansichar|pchar|pointer|real|real48|shortint|shortstring|single|smallint|text|variant|widechar|widestring|word|wordbool|ansistring|ansichar|olevariant|pwidechar|utf8string)\b", TokenType.Type, 9),
+
+                // Standard constants
+                new TokenPattern(@"(?i)\b(?:false|true|maxint|pi)\b", TokenType.Keyword, 10),
+
+                // Standard procedures and functions
+                new TokenPattern(@"(?i)\b(?:abs|arctan|chr|cos|dispose|eof|eoln|exp|get|halt|inc|dec|length|ln|new|odd|ord|pack|page|pred|put|read|readln|reset|rewrite|round|sin|sqr|sqrt|succ|trunc|unpack|write|writeln|append|assign|blockread|blockwrite|close|erase|flush|rename|seek|seekeof|seekeoln|truncate|copy|delete|insert|pos|str|val|hi|lo|swap|random|randomize|paramcount|paramstr|getdir|mkdir|rmdir|chdir|upcase|filepos|filesize|sizeof|addr|cseg|dseg|sseg|seg|ofs|ptr|freemem|getmem|maxavail|memavail|move|fillchar)\b(?=\s*\()", TokenType.Method, 11),
+
+                // Procedure/function declarations and calls
+                new TokenPattern(@"(?i)\b[a-zA-Z_][a-zA-Z0-9_]*(?=\s*\()", TokenType.Method, 12),
+
+                // Compiler directives and pragmas {$...}
+                new TokenPattern(@"(?i)\{\$[^}]*\}", TokenType.Comment, 13),
+
+                // Operators
+                new TokenPattern(@":=|<=|>=|<>|\.\.|[+\-*/:=<>]", TokenType.Operator, 14),
+
+                // Assignment operator (separate for clarity)
+                new TokenPattern(@":=", TokenType.Operator, 15),
+
+                // Punctuation (including range operator ..)
+                new TokenPattern(@"[();,\[\]{}@\^.]", TokenType.Punctuation, 16)
+            };
+        }
+    }
+
+    /// <summary>
     /// Perl syntax highlighter
     /// </summary>
     public class PerlHighlighter : RegexHighlighterBase

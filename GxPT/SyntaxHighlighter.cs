@@ -99,6 +99,7 @@ namespace GxPT
             RegisterHighlighter(new JavaHighlighter());
             RegisterHighlighter(new JavaScriptHighlighter());
             RegisterHighlighter(new JsonHighlighter());
+            RegisterHighlighter(new PascalHighlighter());
             RegisterHighlighter(new PerlHighlighter());
             RegisterHighlighter(new PowerShellHighlighter());
             RegisterHighlighter(new PythonHighlighter());
