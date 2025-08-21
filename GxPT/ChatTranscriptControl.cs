@@ -87,6 +87,8 @@ namespace GxPT
         private Font _boldItalicFont;
         private Font _monoFont;         // code spans
         private Font _h1, _h2, _h3, _h4, _h5, _h6;
+        // Cache for dynamically derived styled fonts based on a given base font (preserves size for headings)
+        private readonly Dictionary<string, Font> _styledFontCache = new Dictionary<string, Font>();
 
         private readonly VScrollBar _vbar;
         private int _contentHeight;
@@ -268,6 +270,16 @@ namespace GxPT
             if (_h6 != null) _h6.Dispose();
             _boldFont = _italicFont = _boldItalicFont = _monoFont = null;
             _h1 = _h2 = _h3 = _h4 = _h5 = _h6 = null;
+            // Dispose any cached styled fonts
+            if (_styledFontCache != null && _styledFontCache.Count > 0)
+            {
+                try
+                {
+                    foreach (var kv in _styledFontCache) { if (kv.Value != null) kv.Value.Dispose(); }
+                }
+                catch { }
+                _styledFontCache.Clear();
+            }
         }
 
         protected override void OnFontChanged(EventArgs e)
@@ -683,12 +695,36 @@ namespace GxPT
 
         private Font GetRunFont(RunStyle st, Font baseFont)
         {
+            // Derive styled fonts from the provided baseFont so heading sizes are preserved.
             bool b = (st & RunStyle.Bold) != 0;
             bool i = (st & RunStyle.Italic) != 0;
-            if (b && i) return _boldItalicFont;
-            if (b) return _boldFont;
-            if (i) return _italicFont;
-            return baseFont;
+            if (!b && !i) return baseFont;
+
+            // Start from the baseFont's existing style (e.g., headings are already Bold)
+            FontStyle fs = baseFont.Style;
+            if (b) fs |= FontStyle.Bold;
+            if (i) fs |= FontStyle.Italic;
+
+            // Cache by family|size|style to avoid creating too many Font instances
+            string key = baseFont.FontFamily.Name + "|" + baseFont.Size.ToString(System.Globalization.CultureInfo.InvariantCulture) + "|" + ((int)fs).ToString();
+            Font cached;
+            if (_styledFontCache.TryGetValue(key, out cached) && cached != null)
+                return cached;
+
+            try
+            {
+                var derived = new Font(baseFont, fs);
+                _styledFontCache[key] = derived;
+                return derived;
+            }
+            catch
+            {
+                // Fallback to base or prebuilt fonts if derivation fails
+                if (b && i) return _boldItalicFont ?? baseFont;
+                if (b) return _boldFont ?? baseFont;
+                if (i) return _italicFont ?? baseFont;
+                return baseFont;
+            }
         }
 
         private IEnumerable<LayoutSeg> WordWrapRuns(List<InlineRun> runs, Font baseFont, int maxWidth)
