@@ -33,6 +33,12 @@
         }
         "Entry"
         {
+        "MsmKey" = "8:_2110A350E30DC7F0A2503BFC60E698E2"
+        "OwnerKey" = "8:_E0499EB368C445EBB017CB750C98F6FD"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
         "MsmKey" = "8:_29D492A6B0C9481FA7215710CAB960EC"
         "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
@@ -113,6 +119,12 @@
         {
         "MsmKey" = "8:_UNDEFINED"
         "OwnerKey" = "8:_E0499EB368C445EBB017CB750C98F6FD"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_UNDEFINED"
+        "OwnerKey" = "8:_2110A350E30DC7F0A2503BFC60E698E2"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -284,6 +296,37 @@
             "Register" = "3:1"
             "Exclude" = "11:FALSE"
             "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
+            "{9F6F8455-1EF1-4B85-886A-4223BCC8E7F7}:_2110A350E30DC7F0A2503BFC60E698E2"
+            {
+            "AssemblyRegister" = "3:1"
+            "AssemblyIsInGAC" = "11:FALSE"
+            "AssemblyAsmDisplayName" = "8:itextsharp, Version=5.5.13.1, Culture=neutral, PublicKeyToken=8354ae6d2174ddca, processorArchitecture=MSIL"
+                "ScatterAssemblies"
+                {
+                    "_2110A350E30DC7F0A2503BFC60E698E2"
+                    {
+                    "Name" = "8:itextsharp.dll"
+                    "Attributes" = "3:512"
+                    }
+                }
+            "SourcePath" = "8:itextsharp.dll"
+            "TargetName" = "8:"
+            "Tag" = "8:"
+            "Folder" = "8:_A249DCF40CCD4A129F140A8AAEBBA6B7"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:TRUE"
             "IsolateTo" = "8:"
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_29D492A6B0C9481FA7215710CAB960EC"
@@ -615,14 +658,14 @@
         {
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:GxPT"
-        "ProductCode" = "8:{ABF031A1-F419-4D1C-B781-02532DB7CF3C}"
-        "PackageCode" = "8:{9A3E47B1-08B5-41F1-8750-592FC2F12C47}"
+        "ProductCode" = "8:{6F8B8C2C-7482-4EBB-BF89-ACB1F690CFB1}"
+        "PackageCode" = "8:{1BCEC294-C0F1-4789-9A83-91BA05F380A2}"
         "UpgradeCode" = "8:{18C05863-8BD9-4273-B9E8-061F771066DF}"
         "RestartWWWService" = "11:FALSE"
         "RemovePreviousVersions" = "11:TRUE"
         "DetectNewerInstalledVersion" = "11:TRUE"
         "InstallAllUsers" = "11:TRUE"
-        "ProductVersion" = "8:0.6.4"
+        "ProductVersion" = "8:0.7.0"
         "Manufacturer" = "8:IFM Innovations"
         "ARPHELPTELEPHONE" = "8:"
         "ARPHELPLINK" = "8:"

@@ -25,7 +25,7 @@
     <UpdateRequired>false</UpdateRequired>
     <MapFileExtensions>true</MapFileExtensions>
     <ApplicationRevision>0</ApplicationRevision>
-    <ApplicationVersion>0.6.4.%2a</ApplicationVersion>
+    <ApplicationVersion>0.7.0.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
   </PropertyGroup>
@@ -99,7 +99,7 @@
     <Compile Include="HoverWheelRouter.cs" />
     <Compile Include="InputManager.cs" />
     <Compile Include="Logger.cs" />
-  <Compile Include="HelpConversations.cs" />
+    <Compile Include="HelpConversations.cs" />
     <Compile Include="OpenRouterClient.cs">
     </Compile>
     <Compile Include="MainForm.cs">
@@ -165,8 +165,8 @@
     <Content Include="curl.exe">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-  <EmbeddedResource Include="resources\help_api_keys.json" />
-  <EmbeddedResource Include="resources\help_privacy.json" />
+    <EmbeddedResource Include="resources\help_api_keys.json" />
+    <EmbeddedResource Include="resources\help_privacy.json" />
     <None Include="icon.ico" />
     <EmbeddedResource Include="ExplorerDelete.png" />
     <EmbeddedResource Include="FileViewerForm.resx">

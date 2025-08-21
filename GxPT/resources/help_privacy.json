@@ -7,7 +7,7 @@
     },
     {
       "Role": "assistant",
-      "Content": "GxPT stores conversations only on your device and sends requests over TLS. Chat content is governed by OpenRouter and each model provider's policies. By default, OpenRouter does not store prompts or responses unless you opt in, and you can restrict to providers with Zero Data Retention (ZDR).\n\n- Privacy & logging: https://openrouter.ai/docs/features/privacy-and-logging\n- ZDR: https://openrouter.ai/docs/features/zdr\n- Privacy settings: https://openrouter.ai/settings/privacy"
+      "Content": "GxPT stores your chats and attachments on your device only (AppData/GxPT/Conversations). Nothing is uploaded until you press Send; requests go over HTTPS. Your messages are sent to OpenRouter to reach the selected model, and chat content is governed by OpenRouter and each provider's policies. By default, OpenRouter does not store prompts or responses unless you opt in, and you can limit to providers with Zero Data Retention (ZDR).\n\n- Privacy & logging: https://openrouter.ai/docs/features/privacy-and-logging\n- ZDR: https://openrouter.ai/docs/features/zdr\n- Privacy settings: https://openrouter.ai/settings/privacy"
     }
   ]
 }

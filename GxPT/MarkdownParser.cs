@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 
 namespace GxPT
 {
@@ -284,7 +285,7 @@ namespace GxPT
             {
                 if (sb.Length > 0)
                 {
-                    runs.Add(new InlineRun { Text = sb.ToString(), Style = style });
+                    AddTextWithAutoLinks(runs, sb.ToString(), style);
                     sb.Length = 0;
                 }
             };
@@ -408,6 +409,77 @@ namespace GxPT
             }
             flush();
             return runs;
+        }
+
+        // Detect bare URLs in the given text and split into link/non-link runs.
+        // Keeps existing style flags (e.g., Bold/Italic) and sets Link flag on URL segments.
+        private static void AddTextWithAutoLinks(List<InlineRun> runs, string text, RunStyle baseStyle)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                runs.Add(new InlineRun { Text = string.Empty, Style = baseStyle });
+                return;
+            }
+
+            // Simple http/https URL regex; exclude whitespace and common trailing punctuation.
+            // Examples matched: https://example.com, http://foo.bar/baz?x=1#y
+            Regex rx = new Regex(@"https?://[^\x00-\x20<>""'()\[\]{}]+", RegexOptions.IgnoreCase);
+            int idx = 0;
+            foreach (Match m in rx.Matches(text))
+            {
+                if (!m.Success) continue;
+                if (m.Index > idx)
+                {
+                    string before = text.Substring(idx, m.Index - idx);
+                    if (before.Length > 0)
+                        runs.Add(new InlineRun { Text = before, Style = baseStyle });
+                }
+
+                string url = m.Value;
+                // Trim trailing punctuation that commonly follows URLs in prose
+                url = TrimTrailingPunctuation(url);
+                if (url.Length > 0)
+                {
+                    runs.Add(new InlineRun { Text = url, Style = baseStyle | RunStyle.Link, LinkUrl = url });
+                }
+                idx = m.Index + m.Length;
+            }
+            if (idx < text.Length)
+            {
+                string tail = text.Substring(idx);
+                if (tail.Length > 0)
+                    runs.Add(new InlineRun { Text = tail, Style = baseStyle });
+            }
+        }
+
+        private static string TrimTrailingPunctuation(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return url;
+            // Balance closing parentheses: keep a trailing ')' only if there are more '(' than ')' without it
+            Func<string, bool> hasExtraClosingParen = s =>
+            {
+                int open = 0, close = 0;
+                for (int i = 0; i < s.Length; i++) { if (s[i] == '(') open++; else if (s[i] == ')') close++; }
+                return close > open;
+            };
+
+            // Remove trailing chars commonly not part of the URL
+            while (url.Length > 0)
+            {
+                char c = url[url.Length - 1];
+                if (c == '.' || c == ',' || c == ';' || c == ':' || c == '!' || c == '?' || c == ']' || c == '}' || c == '>' || c == '\'' || c == '"')
+                {
+                    url = url.Substring(0, url.Length - 1);
+                    continue;
+                }
+                if (c == ')' && hasExtraClosingParen(url))
+                {
+                    url = url.Substring(0, url.Length - 1);
+                    continue;
+                }
+                break;
+            }
+            return url;
         }
 
         // ---------- Helper methods ----------
