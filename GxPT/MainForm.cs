@@ -437,13 +437,8 @@ namespace GxPT
                 try
                 {
                     Directory.CreateDirectory(targetDir);
-                    using (var zip = ZipFile.Read(ofd.FileName, new ReadOptions { Encoding = Encoding.UTF8 }))
-                    {
-                        foreach (var entry in zip)
-                        {
-                            entry.Extract(targetDir, ExtractExistingFileAction.OverwriteSilently);
-                        }
-                    }
+                    // Use safe extraction wrapper (guards against zip-slip)
+                    ZipSafe.SafeExtract(ofd.FileName, targetDir, true);
 
                     if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
                     MessageBox.Show(this, "Import completed.", "Import Conversations", MessageBoxButtons.OK, MessageBoxIcon.Information);
