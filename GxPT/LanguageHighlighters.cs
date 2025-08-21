@@ -371,6 +371,58 @@ namespace GxPT
     }
 
     /// <summary>
+    /// C# syntax highlighter
+    /// </summary>
+    public class CSharpHighlighter : RegexHighlighterBase
+    {
+        public override string Language
+        {
+            get { return "csharp"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "cs", "c#", "dotnet", "c-sharp" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Single-line comments (highest priority to avoid conflicts)
+                new TokenPattern(@"//.*$", TokenType.Comment, 1),
+                
+                // Multi-line comments
+                new TokenPattern(@"/\*[\s\S]*?\*/", TokenType.Comment, 2),
+                
+                // String literals (including verbatim strings)
+                new TokenPattern(@"@""(?:[^""]|"""")*""|""(?:[^""\\]|\\.)*""", TokenType.String, 3),
+                
+                // Character literals
+                new TokenPattern(@"'(?:[^'\\]|\\.)'", TokenType.String, 4),
+                
+                // Numbers (integers, floats, hex)
+                new TokenPattern(@"\b(?:0[xX][0-9a-fA-F]+|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[fFdDmM]?)\b", TokenType.Number, 5),
+                
+                // Keywords
+                new TokenPattern(@"\b(?:abstract|as|base|bool|break|byte|case|catch|char|checked|class|const|continue|decimal|default|delegate|do|double|else|enum|event|explicit|extern|false|finally|fixed|float|for|foreach|goto|if|implicit|in|int|interface|internal|is|lock|long|namespace|new|null|object|operator|out|override|params|private|protected|public|readonly|ref|return|sbyte|sealed|short|sizeof|stackalloc|static|string|struct|switch|this|throw|true|try|typeof|uint|ulong|unchecked|unsafe|ushort|using|var|virtual|void|volatile|while)\b", TokenType.Keyword, 6),
+                
+                // Built-in types
+                new TokenPattern(@"\b(?:bool|byte|char|decimal|double|float|int|long|object|sbyte|short|string|uint|ulong|ushort|void)\b", TokenType.Type, 7),
+                
+                // Method calls (identifier followed by opening parenthesis)
+                new TokenPattern(@"\b[a-zA-Z_][a-zA-Z0-9_]*(?=\s*\()", TokenType.Method, 8),
+                
+                // Operators
+                new TokenPattern(@"[+\-*/%=!<>&|^~?:]+|<<|>>|\+\+|--|&&|\|\||==|!=|<=|>=|\?\?", TokenType.Operator, 9),
+                
+                // Punctuation
+                new TokenPattern(@"[{}()\[\];,.]", TokenType.Punctuation, 10)
+            };
+        }
+    }
+
+    /// <summary>
     /// CSS syntax highlighter
     /// </summary>
     public class CssHighlighter : RegexHighlighterBase
@@ -438,54 +490,142 @@ namespace GxPT
     }
 
     /// <summary>
-    /// C# syntax highlighter
+    /// CSV syntax highlighter – highlights columns 1, 2, 3 as different token types and repeats.
+    /// Column mapping (1-based): 1 -> Type, 2 -> Method, 3 -> Keyword, then repeats 1,2,3,...
+    /// Supports RFC 4180-style quoted fields with doubled quote escapes and multi-line fields.
     /// </summary>
-    public class CSharpHighlighter : RegexHighlighterBase
+    public class CsvHighlighter : RegexHighlighterBase
     {
         public override string Language
         {
-            get { return "csharp"; }
+            get { return "csv"; }
         }
 
         public override string[] Aliases
         {
-            get { return new string[] { "cs", "c#", "dotnet", "c-sharp" }; }
+            get { return new string[] { "csv" }; }
         }
 
+        // Not used; CSV uses a custom tokenizer. Return empty to satisfy base ctor.
         protected override TokenPattern[] GetPatterns()
         {
-            return new TokenPattern[]
+            return new TokenPattern[0];
+        }
+
+        public override List<CodeToken> Tokenize(string sourceCode)
+        {
+            var tokens = new List<CodeToken>();
+            if (string.IsNullOrEmpty(sourceCode))
+                return tokens;
+
+            int i = 0;
+            int fieldStart = 0;
+            int columnIndex = 0; // zero-based
+            bool inQuotes = false;
+
+            while (i < sourceCode.Length)
             {
-                // Single-line comments (highest priority to avoid conflicts)
-                new TokenPattern(@"//.*$", TokenType.Comment, 1),
-                
-                // Multi-line comments
-                new TokenPattern(@"/\*[\s\S]*?\*/", TokenType.Comment, 2),
-                
-                // String literals (including verbatim strings)
-                new TokenPattern(@"@""(?:[^""]|"""")*""|""(?:[^""\\]|\\.)*""", TokenType.String, 3),
-                
-                // Character literals
-                new TokenPattern(@"'(?:[^'\\]|\\.)'", TokenType.String, 4),
-                
-                // Numbers (integers, floats, hex)
-                new TokenPattern(@"\b(?:0[xX][0-9a-fA-F]+|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[fFdDmM]?)\b", TokenType.Number, 5),
-                
-                // Keywords
-                new TokenPattern(@"\b(?:abstract|as|base|bool|break|byte|case|catch|char|checked|class|const|continue|decimal|default|delegate|do|double|else|enum|event|explicit|extern|false|finally|fixed|float|for|foreach|goto|if|implicit|in|int|interface|internal|is|lock|long|namespace|new|null|object|operator|out|override|params|private|protected|public|readonly|ref|return|sbyte|sealed|short|sizeof|stackalloc|static|string|struct|switch|this|throw|true|try|typeof|uint|ulong|unchecked|unsafe|ushort|using|var|virtual|void|volatile|while)\b", TokenType.Keyword, 6),
-                
-                // Built-in types
-                new TokenPattern(@"\b(?:bool|byte|char|decimal|double|float|int|long|object|sbyte|short|string|uint|ulong|ushort|void)\b", TokenType.Type, 7),
-                
-                // Method calls (identifier followed by opening parenthesis)
-                new TokenPattern(@"\b[a-zA-Z_][a-zA-Z0-9_]*(?=\s*\()", TokenType.Method, 8),
-                
-                // Operators
-                new TokenPattern(@"[+\-*/%=!<>&|^~?:]+|<<|>>|\+\+|--|&&|\|\||==|!=|<=|>=|\?\?", TokenType.Operator, 9),
-                
-                // Punctuation
-                new TokenPattern(@"[{}()\[\];,.]", TokenType.Punctuation, 10)
-            };
+                char c = sourceCode[i];
+
+                if (inQuotes)
+                {
+                    if (c == '"')
+                    {
+                        // Handle doubled quotes inside quoted field
+                        if (i + 1 < sourceCode.Length && sourceCode[i + 1] == '"')
+                        {
+                            i += 2; // consume escaped quote
+                            continue;
+                        }
+                        inQuotes = false; // closing quote
+                        i++; // include the closing quote in the field token
+                        continue;
+                    }
+                    // Within quoted field: consume character (including newlines)
+                    i++;
+                    continue;
+                }
+                else
+                {
+                    if (c == '"')
+                    {
+                        inQuotes = true;
+                        i++;
+                        continue;
+                    }
+
+                    if (c == ',')
+                    {
+                        // Emit field token (may be empty)
+                        EmitFieldToken(tokens, sourceCode, fieldStart, i - fieldStart, columnIndex);
+
+                        // Comma punctuation
+                        tokens.Add(new CodeToken(",", TokenType.Punctuation, i));
+
+                        // Move to next field/column
+                        i++;
+                        fieldStart = i;
+                        columnIndex++;
+                        continue;
+                    }
+
+                    if (c == '\r' || c == '\n')
+                    {
+                        // Emit the field up to the newline
+                        EmitFieldToken(tokens, sourceCode, fieldStart, i - fieldStart, columnIndex);
+
+                        // Newline punctuation (treat CRLF as a single token)
+                        int nlStart = i;
+                        if (c == '\r' && i + 1 < sourceCode.Length && sourceCode[i + 1] == '\n')
+                        {
+                            i += 2;
+                            tokens.Add(new CodeToken("\r\n", TokenType.Punctuation, nlStart));
+                        }
+                        else
+                        {
+                            i++;
+                            tokens.Add(new CodeToken(sourceCode.Substring(nlStart, 1), TokenType.Punctuation, nlStart));
+                        }
+
+                        // Reset for the next record
+                        fieldStart = i;
+                        columnIndex = 0;
+                        continue;
+                    }
+
+                    // Regular character outside quotes
+                    i++;
+                }
+            }
+
+            // Emit trailing field if any
+            EmitFieldToken(tokens, sourceCode, fieldStart, i - fieldStart, columnIndex);
+
+            return tokens;
+        }
+
+        private static void EmitFieldToken(List<CodeToken> tokens, string source, int start, int length, int columnIndex)
+        {
+            // Emit even for empty fields as a zero-length token? Skip zero-length to avoid clutter.
+            if (length <= 0)
+                return;
+
+            TokenType type;
+            switch (columnIndex % 3)
+            {
+                case 0: // 1st, 4th, 7th, ... columns
+                    type = TokenType.Type;
+                    break;
+                case 1: // 2nd, 5th, 8th, ... columns
+                    type = TokenType.String;
+                    break;
+                default: // 3rd, 6th, 9th, ... columns
+                    type = TokenType.Keyword;
+                    break;
+            }
+
+            string text = source.Substring(start, length);
+            tokens.Add(new CodeToken(text, type, start));
         }
     }
 

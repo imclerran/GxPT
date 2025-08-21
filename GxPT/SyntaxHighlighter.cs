@@ -90,8 +90,9 @@ namespace GxPT
             RegisterHighlighter(new BatchHighlighter());
             RegisterHighlighter(new CHighlighter());
             RegisterHighlighter(new CppHighlighter());
-            RegisterHighlighter(new CssHighlighter());
             RegisterHighlighter(new CSharpHighlighter());
+            RegisterHighlighter(new CssHighlighter());
+            RegisterHighlighter(new CsvHighlighter());
             RegisterHighlighter(new EbnfHighlighter());
             RegisterHighlighter(new GoHighlighter());
             RegisterHighlighter(new HtmlHighlighter());
