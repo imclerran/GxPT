@@ -11,6 +11,9 @@ using System.IO;
 // DotNetZip (Ionic.Zip) v1.12.0.0 for .NET 3.5
 using Ionic.Zip;
 using System.Reflection;
+// iTextSharp 5.5.x
+using iTextSharp.text.pdf;
+using Parser = iTextSharp.text.pdf.parser;
 
 namespace GxPT
 {
@@ -917,15 +920,20 @@ namespace GxPT
             if (ctx == null) return;
             using (var ofd = new OpenFileDialog())
             {
-                ofd.Title = "Attach Text File(s)";
+                ofd.Title = "Attach Text or PDF File(s)";
                 ofd.Multiselect = true;
-                ofd.Filter = BuildTextFilesFilter();
+                ofd.Filter = BuildAttachableFilesFilter();
                 ofd.CheckFileExists = true;
                 if (ofd.ShowDialog(this) != DialogResult.OK) return;
 
                 foreach (var path in ofd.FileNames)
                 {
-                    if (!IsValidTextFile(path))
+                    string ext = null;
+                    try { ext = System.IO.Path.GetExtension(path); }
+                    catch { }
+                    ext = string.IsNullOrEmpty(ext) ? string.Empty : ext.ToLowerInvariant();
+                    bool isPdf = ext == ".pdf";
+                    if (!isPdf && !IsValidTextFile(path))
                     {
                         MessageBox.Show(this, "Skipped non-text file: " + System.IO.Path.GetFileName(path), "Attach File", MessageBoxButtons.OK, MessageBoxIcon.Information);
                         continue;
@@ -933,8 +941,17 @@ namespace GxPT
                     try
                     {
                         string content;
-                        using (var sr = new StreamReader(path, Encoding.UTF8, true))
-                            content = sr.ReadToEnd();
+                        if (isPdf)
+                        {
+                            content = ExtractTextFromPdf(path);
+                            if (string.IsNullOrEmpty(content))
+                                content = ""; // still allow empty to attach as placeholder
+                        }
+                        else
+                        {
+                            using (var sr = new StreamReader(path, Encoding.UTF8, true))
+                                content = sr.ReadToEnd();
+                        }
                         ctx.PendingAttachments.Add(new AttachedFile(System.IO.Path.GetFileName(path), content));
                     }
                     catch (Exception ex)
@@ -944,6 +961,100 @@ namespace GxPT
                 }
                 RebuildAttachmentsBanner();
             }
+        }
+
+        // Include PDF in the filter as well as text-based files
+        private string BuildAttachableFilesFilter()
+        {
+            var textFilter = BuildTextFilesFilter();
+            // BuildTextFilesFilter returns like: "Text Files|<patterns>|All Files|*.*"
+            // Prepend a PDF option for convenience
+            return "Supported Files|" + textFilter + ";*.pdf" + "|Text Files|" + textFilter + "|PDF Files|*.pdf" + "|All Files|*.*";
+        }
+
+        // Extract text from PDF using iTextSharp 5.x LocationTextExtractionStrategy
+        private string ExtractTextFromPdf(string filePath)
+        {
+            try
+            {
+                var sb = new StringBuilder(4096);
+                using (var reader = new PdfReader(filePath))
+                {
+                    int n = reader.NumberOfPages;
+                    for (int page = 1; page <= n; page++)
+                    {
+                        Parser.ITextExtractionStrategy strategy = new Parser.LocationTextExtractionStrategy();
+                        string pageText = Parser.PdfTextExtractor.GetTextFromPage(reader, page, strategy);
+                        pageText = SanitizeDisplayText(pageText);
+                        if (!string.IsNullOrEmpty(pageText))
+                        {
+                            sb.AppendLine(pageText);
+                            sb.AppendLine();
+                        }
+                    }
+                }
+                return sb.ToString();
+            }
+            catch (Exception ex)
+            {
+                try { Logger.Log("PDF", "Failed to extract PDF: " + ex.Message); }
+                catch { }
+                throw;
+            }
+        }
+
+        // Replace NULs and non-printable control chars (except CR/LF/TAB) and normalize newlines.
+        private static string SanitizeDisplayText(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return text ?? string.Empty;
+
+            bool needs = false;
+            for (int i = 0; i < text.Length; i++)
+            {
+                char c = text[i];
+                if (c == '\\')
+                {
+                    if (i + 5 < text.Length && text[i + 1] == 'u' && text[i + 2] == '0' && text[i + 3] == '0' && text[i + 4] == '0' && text[i + 5] == '0')
+                    { needs = true; break; }
+                }
+                if (c == '\0' || (char.IsControl(c) && c != '\r' && c != '\n' && c != '\t'))
+                { needs = true; break; }
+            }
+            if (!needs)
+            {
+                return text.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", Environment.NewLine);
+            }
+
+            var sb = new StringBuilder(text.Length);
+            for (int i = 0; i < text.Length; i++)
+            {
+                char c = text[i];
+                if (c == '\\' && i + 5 < text.Length && text[i + 1] == 'u' && text[i + 2] == '0' && text[i + 3] == '0' && text[i + 4] == '0' && text[i + 5] == '0')
+                {
+                    sb.Append(' ');
+                    i += 5;
+                    continue;
+                }
+                if (c == '\0') { sb.Append(' '); continue; }
+                if (char.IsControl(c) && c != '\r' && c != '\n' && c != '\t') { sb.Append(' '); continue; }
+                if (char.IsSurrogate(c))
+                {
+                    if (char.IsHighSurrogate(c) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
+                    {
+                        sb.Append(c);
+                        sb.Append(text[i + 1]);
+                        i++;
+                        continue;
+                    }
+                    sb.Append(' ');
+                    continue;
+                }
+                sb.Append(c);
+            }
+
+            string cleaned = sb.ToString();
+            cleaned = cleaned.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", Environment.NewLine);
+            return cleaned;
         }
 
         private string BuildTextFilesFilter()
@@ -1004,7 +1115,7 @@ namespace GxPT
                 sb.Append(e);
                 seen.Add(e);
             }
-            return "Text Files|" + sb.ToString() + "|All Files|*.*";
+            return sb.ToString();
         }
 
         private bool IsValidTextFile(string filePath)
@@ -1184,7 +1295,17 @@ namespace GxPT
                     var rtb = rtbField != null ? (RichTextBox)rtbField.GetValue(dlg) : null;
                     if (rtb != null)
                     {
-                        rtb.Text = af.Content ?? string.Empty;
+                        // Sanitize content for RichEdit: replace NULs (\u0000) which truncate display
+                        string content = af.Content ?? string.Empty;
+                        if (content.IndexOf('\0') >= 0)
+                        {
+                            try { Logger.Log("Viewer", "Attachment contains NUL characters; sanitizing for display."); }
+                            catch { }
+                            content = content.Replace('\0', ' ');
+                        }
+                        // Normalize newlines to CRLF for consistent caret/selection math
+                        content = content.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", Environment.NewLine);
+                        rtb.Text = content;
                         string lang = GetFileExtension(af.FileName);
 
                         // Match theme with chat transcript

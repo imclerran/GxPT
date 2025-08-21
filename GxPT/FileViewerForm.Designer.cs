@@ -43,6 +43,7 @@
             this.rtbFileText.ContextMenuStrip = this.cmsFileText;
             this.rtbFileText.Dock = System.Windows.Forms.DockStyle.Fill;
             this.rtbFileText.Location = new System.Drawing.Point(0, 0);
+            this.rtbFileText.MaxLength = 0;
             this.rtbFileText.Name = "rtbFileText";
             this.rtbFileText.ReadOnly = true;
             this.rtbFileText.Size = new System.Drawing.Size(692, 566);
