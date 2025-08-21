@@ -15,6 +15,9 @@ namespace GxPT
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            // Install global hover-to-scroll router (keeps focus where it is)
+            try { HoverWheelRouter.Install(); }
+            catch { }
             Application.Run(new MainForm());
         }
     }

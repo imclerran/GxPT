@@ -92,6 +92,7 @@
     <Compile Include="FileViewerForm.Designer.cs">
       <DependentUpon>FileViewerForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="HoverWheelRouter.cs" />
     <Compile Include="InputManager.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="OpenRouterClient.cs">

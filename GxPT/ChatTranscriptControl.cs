@@ -80,9 +80,6 @@ namespace GxPT
         private Color _clrScrollThumbBorder = Color.FromArgb(160, 160, 160);
         private bool _isDarkTheme;
 
-        // Global hover-wheel support (scroll on hover without taking focus)
-        private static bool _hoverWheelInstalled;
-        private static readonly List<WeakReference> _instances = new List<WeakReference>();
 
         // ---------- Fonts ----------
         private Font _baseFont;         // default UI font
@@ -171,37 +168,6 @@ namespace GxPT
             this.AccessibleName = "Chat transcript";
             this.TabStop = true;
 
-            // Track instance and ensure hover wheel router installed once
-            try
-            {
-                lock (_instances)
-                {
-                    _instances.Add(new WeakReference(this));
-                }
-                EnsureHoverWheelRouter();
-            }
-            catch { }
-        }
-
-        protected override void OnHandleDestroyed(EventArgs e)
-        {
-            base.OnHandleDestroyed(e);
-            // Cleanup dead references periodically
-            try
-            {
-                lock (_instances)
-                {
-                    for (int i = _instances.Count - 1; i >= 0; i--)
-                    {
-                        var wr = _instances[i];
-                        if (wr == null || !wr.IsAlive || object.ReferenceEquals(wr.Target, this))
-                        {
-                            _instances.RemoveAt(i);
-                        }
-                    }
-                }
-            }
-            catch { }
         }
 
         // Public helper to scroll by a wheel delta (positive=away from user, negative=toward)
@@ -221,70 +187,51 @@ namespace GxPT
             catch { }
         }
 
-        // Install an application-level message filter that routes WM_MOUSEWHEEL to any
-        // ChatTranscriptControl under the mouse cursor without changing focus.
-        private static void EnsureHoverWheelRouter()
+        // Called by the global router with screen coordinates and modifier keys for precise hover behavior.
+        public void HandleHoverWheel(int wheelDelta, Point screenPoint, Keys modifiers)
         {
-            if (_hoverWheelInstalled) return;
             try
             {
-                Application.AddMessageFilter(new HoverWheelMessageFilter());
-                _hoverWheelInstalled = true;
+                Point clientPt = PointToClient(screenPoint);
+                if ((modifiers & Keys.Shift) == Keys.Shift)
+                {
+                    var ui = HitTestCodeUI(clientPt);
+                    if (ui.Hit && ui.ContentWidth > ui.ViewportWidth && ui.Item != null)
+                    {
+                        int hStep = Math.Max(16, ScrollStep);
+                        int deltaX = -(wheelDelta / 120) * hStep;
+                        if (ui.IsTable)
+                        {
+                            int idx = ui.TableIndex;
+                            if (ui.Item.TableScroll == null) ui.Item.TableScroll = new List<int>();
+                            while (ui.Item.TableScroll.Count <= idx) ui.Item.TableScroll.Add(0);
+                            int current = ui.Item.TableScroll[idx];
+                            int maxScroll = Math.Max(0, ui.ContentWidth - ui.ViewportWidth);
+                            int next = Math.Max(0, Math.Min(maxScroll, current + deltaX));
+                            ui.Item.TableScroll[idx] = next;
+                            Invalidate();
+                            return;
+                        }
+                        else if (ui.CodeIndex >= 0)
+                        {
+                            int idx = ui.CodeIndex;
+                            if (ui.Item.CodeScroll == null) ui.Item.CodeScroll = new List<int>();
+                            while (ui.Item.CodeScroll.Count <= idx) ui.Item.CodeScroll.Add(0);
+                            int current = ui.Item.CodeScroll[idx];
+                            int maxScroll = Math.Max(0, ui.ContentWidth - ui.ViewportWidth);
+                            int next = Math.Max(0, Math.Min(maxScroll, current + deltaX));
+                            ui.Item.CodeScroll[idx] = next;
+                            Invalidate();
+                            return;
+                        }
+                    }
+                }
+                // Fallback to normal vertical scroll
+                ScrollByWheelDelta(wheelDelta);
             }
             catch { }
         }
 
-        private sealed class HoverWheelMessageFilter : IMessageFilter
-        {
-            private const int WM_MOUSEWHEEL = 0x020A;
-            public bool PreFilterMessage(ref Message m)
-            {
-                if (m.Msg != WM_MOUSEWHEEL) return false;
-                // Extract wheel delta from wParam high word
-                int wparam = m.WParam.ToInt32();
-                int wheelDelta = (short)((wparam >> 16) & 0xFFFF);
-                // Current mouse position in screen coords
-                Point screenPt = Control.MousePosition;
-
-                ChatTranscriptControl target = GetHoveredTranscript(screenPt);
-                if (target == null) return false;
-
-                // Convert to client and ensure inside client rect (safety)
-                try
-                {
-                    Rectangle screenRect = target.RectangleToScreen(target.ClientRectangle);
-                    if (!screenRect.Contains(screenPt)) return false;
-                    target.ScrollByWheelDelta(wheelDelta);
-                    return true; // handled, don't change focus behavior
-                }
-                catch { }
-                return false;
-            }
-
-            private static ChatTranscriptControl GetHoveredTranscript(Point screenPt)
-            {
-                try
-                {
-                    lock (_instances)
-                    {
-                        for (int i = _instances.Count - 1; i >= 0; i--)
-                        {
-                            var wr = _instances[i];
-                            var ctl = wr != null ? wr.Target as ChatTranscriptControl : null;
-                            if (ctl == null || ctl.IsDisposed || !ctl.IsHandleCreated || !ctl.Visible)
-                            {
-                                if (wr == null || wr.Target == null || !wr.IsAlive) _instances.RemoveAt(i);
-                                continue;
-                            }
-                            Rectangle rect = ctl.RectangleToScreen(ctl.ClientRectangle);
-                            if (rect.Contains(screenPt)) return ctl;
-                        }
-                    }
-                }
-                catch { }
-                return null;
-            }
-        }
 
         public void RefreshTheme()
         {
@@ -1578,6 +1525,47 @@ namespace GxPT
         protected override void OnMouseWheel(MouseEventArgs e)
         {
             base.OnMouseWheel(e);
+
+            // If Shift is pressed and we're hovering a horizontally scrollable code block or table,
+            // apply wheel to horizontal scroll instead of the transcript vertical scrollbar.
+            try
+            {
+                if ((Control.ModifierKeys & Keys.Shift) == Keys.Shift)
+                {
+                    var ui = HitTestCodeUI(e.Location);
+                    if (ui.Hit && ui.ContentWidth > ui.ViewportWidth && ui.Item != null)
+                    {
+                        int hStep = Math.Max(16, ScrollStep); // horizontal step per wheel notch
+                        int deltaX = -(e.Delta / 120) * hStep;
+                        if (ui.IsTable)
+                        {
+                            int idx = ui.TableIndex;
+                            if (ui.Item.TableScroll == null) ui.Item.TableScroll = new List<int>();
+                            while (ui.Item.TableScroll.Count <= idx) ui.Item.TableScroll.Add(0);
+                            int current = ui.Item.TableScroll[idx];
+                            int maxScroll = Math.Max(0, ui.ContentWidth - ui.ViewportWidth);
+                            int next = Math.Max(0, Math.Min(maxScroll, current + deltaX));
+                            ui.Item.TableScroll[idx] = next;
+                            Invalidate();
+                            return; // handled
+                        }
+                        else if (ui.CodeIndex >= 0)
+                        {
+                            int idx = ui.CodeIndex;
+                            if (ui.Item.CodeScroll == null) ui.Item.CodeScroll = new List<int>();
+                            while (ui.Item.CodeScroll.Count <= idx) ui.Item.CodeScroll.Add(0);
+                            int current = ui.Item.CodeScroll[idx];
+                            int maxScroll = Math.Max(0, ui.ContentWidth - ui.ViewportWidth);
+                            int next = Math.Max(0, Math.Min(maxScroll, current + deltaX));
+                            ui.Item.CodeScroll[idx] = next;
+                            Invalidate();
+                            return; // handled
+                        }
+                    }
+                }
+            }
+            catch { }
+
             if (!_vbar.Enabled) return;
 
             int delta = -(e.Delta / 120) * ScrollStep;
@@ -2309,6 +2297,11 @@ namespace GxPT
 
                             // Scrollbar rects
                             Rectangle textRect = new Rectangle(box.X + CodeBlockPadding, box.Y + CodeBlockPadding + CodeCopyButtonHeight, box.Width - 2 * CodeBlockPadding, textH);
+                            // Report a generic Text hit when hovering over code content (for Shift+Wheel horizontal scroll)
+                            if (textRect.Contains(virt))
+                            {
+                                info.Hit = true; info.Which = CodeUiHit.Text; info.Item = it; info.Block = blk; info.CodeIndex = codeIdx; info.ContentWidth = content.Width; info.ViewportWidth = textRect.Width; return info;
+                            }
                             if (needH)
                             {
                                 Rectangle track = new Rectangle(textRect.X, textRect.Bottom + 2, textRect.Width, CodeHScrollHeight - 4);
@@ -2381,6 +2374,14 @@ namespace GxPT
                                     { info.Hit = true; info.Which = CodeUiHit.ScrollThumb; info.Item = it; info.Block = blk; info.CodeIndex = -1; info.TableIndex = tableIndex; info.ScrollTrackRect = track; info.ContentWidth = intrinsicW; info.ViewportWidth = track.Width; info.IsTable = true; return info; }
                                     if (track.Contains(virt))
                                     { info.Hit = true; info.Which = CodeUiHit.ScrollTrack; info.Item = it; info.Block = blk; info.CodeIndex = -1; info.TableIndex = tableIndex; info.ScrollTrackRect = track; info.ContentWidth = intrinsicW; info.ViewportWidth = track.Width; info.IsTable = true; return info; }
+                                }
+
+                                // Also report content area as a generic Text hit for tables so Shift+Wheel can be used anywhere over the table
+                                Rectangle tableRect = new Rectangle(contentX, y, Math.Min(contentW, intrinsicW), tableH);
+                                if (tableRect.Contains(virt))
+                                {
+                                    int tableIndex2 = 0; for (int bi = 0; bi < it.Blocks.Count && !object.ReferenceEquals(it.Blocks[bi], blk); bi++) if (it.Blocks[bi].Type == BlockType.Table) tableIndex2++;
+                                    info.Hit = true; info.Which = CodeUiHit.Text; info.Item = it; info.Block = blk; info.CodeIndex = -1; info.TableIndex = tableIndex2; info.ContentWidth = intrinsicW; info.ViewportWidth = Math.Min(contentW, intrinsicW); info.IsTable = true; return info;
                                 }
 
                                 y += tableH + (needH ? CodeHScrollHeight : 0) + 2;
