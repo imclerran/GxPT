@@ -955,10 +955,15 @@ namespace GxPT
                 // Properties/INI-related aliases supported by PropertiesHighlighter
                 "*.desktop", "*.reg", "*.inf", "*.gitconfig"
             });
+            // Dockerfiles & Makefiles (support common no-extension names and variants)
+            exts.AddRange(new[] { "Dockerfile", "Dockerfile.*" });
+            exts.AddRange(new[] { "Makefile", "makefile", "GNUmakefile", "Makefile.*", "makefile.*" });
             // C/C++
             exts.AddRange(new[] { "*.c", "*.h", "*.cpp", "*.cxx", "*.cc", "*.hpp", "*.hxx", "*.hh" });
             // C#
             exts.AddRange(new[] { "*.cs", "*.csx" });
+            // F#
+            exts.AddRange(new[] { "*.fs", "*.fsi", "*.fsx" });
             // JS/TS
             exts.AddRange(new[] { "*.js", "*.jsx", "*.ts", "*.tsx", "*.mjs", "*.cjs" });
             // HTML/XML and related
@@ -976,6 +981,10 @@ namespace GxPT
             exts.Add("*.go");
             // Rust
             exts.Add("*.rs");
+            // Lua
+            exts.AddRange(new[] { "*.lua", "*.luau" });
+            // Fortran
+            exts.AddRange(new[] { "*.f", "*.for", "*.ftn", "*.f77", "*.f90", "*.f95", "*.f03", "*.f08" });
             // Ruby
             exts.AddRange(new[] { "*.rb", "*.rbw", "*.rake", "*.gemspec" });
             // Perl
@@ -988,6 +997,8 @@ namespace GxPT
             exts.AddRange(new[] { "*.bat", "*.cmd" });
             // PowerShell
             exts.AddRange(new[] { "*.ps1", "*.psm1", "*.psd1", "*.ps1xml" });
+            // SQL
+            exts.AddRange(new[] { "*.sql" });
             // Pascal / Delphi / Object Pascal
             exts.AddRange(new[] { "*.pas", "*.pp", "*.dpr", "*.dpk", "*.inc" });
             // YAML
