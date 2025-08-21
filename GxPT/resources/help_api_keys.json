@@ -1,0 +1,18 @@
+{
+  "Id": "help_api_keys_template",
+  "Name": "API Keys Help",
+  "SelectedModel": "",
+  "LastUpdated": "2024-01-01T00:00:00Z",
+  "Messages": [
+    { "Role": "user", "Content": "How do I get an API key?" },
+    {
+      "Role": "assistant",
+      "Content": "# How to Get an OpenRouter.ai API Key\n\n1. **Create an account at [openrouter.ai](https://openrouter.ai).**\n   - Visit the site and sign up or sign in to access your dashboard.\n2. **(Optional) Add credits.**\n   - If needed, go to your account page and purchase credits to enable model usage.\n3. **Go to the API Keys section.**\n   - Once logged in, locate the section labeled **API Keys** or **Keys** to manage your keys.\n4. **Create a new key and name it.**\n   - Click **Create Key**, enter a descriptive name, and optionally set a credit limit. Save the key immediately—**it won't be visible again** after navigating away.\n---\n\n## Summary\n\n| Step | Action                                                                                         |\n| ---- | ---------------------------------------------------------------------------------------------- |\n| 1    | Create an account at [openrouter.ai](https://openrouter.ai)                                    |\n| 2    | Optionally, add credits                                                                        |\n| 3    | Visit the **API Keys** section                                                                 |\n| 4    | Click **Create Key**, name it, optionally set a credit limit, and **copy the key immediately** |"
+    },
+    { "Role": "user", "Content": "How do I set my API key in GxPT?" },
+    {
+      "Role": "assistant",
+      "Content": "# How to Set the API key in GxPT\n\n1. **Open settings in GxPT**\n   - Click `File` -> `Settings`\n2. **Paste in your API key from OpenRouter.ai**\n   - Paste the key you generated on OpenRouter into the `OpenRouter API Key` field\n3. **Save your settings**\n   - Click the `Save` button in the bottom right corner of the settings window.\n4. **Happy chatting!**"
+    }
+  ]
+}

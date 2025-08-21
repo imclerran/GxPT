@@ -1621,57 +1621,103 @@ namespace GxPT
 
             try
             {
-                // Mark this tab as unsaved until the user sends another message
-                ctx.NoSaveUntilUserSend = true;
-
-                // Give the tab a descriptive title and name to bypass auto-naming
-                ctx.Page.Text = "API Keys Help";
-                if (ctx.Conversation != null)
+                // Load base help conversation from embedded resource
+                Conversation convo = null;
+                try
                 {
-                    ctx.Conversation.Name = "API Keys Help";
+                    var asm = typeof(MainForm).Assembly;
+                    // Resource name follows default: RootNamespace.folder.filename
+                    using (var s = asm.GetManifestResourceStream("GxPT.resources.help_api_keys.json"))
+                    {
+                        if (s != null)
+                        {
+                            using (var sr = new StreamReader(s, Encoding.UTF8, true))
+                            {
+                                string json = sr.ReadToEnd();
+                                convo = ConversationStore.LoadFromJson(_client, json);
+                            }
+                        }
+                    }
+                }
+                catch { }
+                if (convo != null)
+                {
+                    // Always treat help templates as no-save until user sends a new message
+                    ctx.NoSaveUntilUserSend = true;
+                    // Clear id so first save creates a new conversation in AppData
+                    try { convo.Id = null; }
+                    catch { }
+                    // Give the tab its name from the conversation
+                    try { ctx.Page.Text = string.IsNullOrEmpty(convo.Name) ? "API Keys Help" : convo.Name; }
+                    catch { }
+                    OpenConversationInTab(ctx, convo);
+                }
+                else
+                {
+                    // No template found: show a notice and do not inject any hardcoded messages
+                    MessageBox.Show(this,
+                        "Help template not found in embedded resources.",
+                        "API Keys Help",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                    return;
                 }
 
-                // Pre-populate messages
-                string userMsg1 = "How do I get an API key?";
-                ctx.Transcript.AddMessage(MessageRole.User, userMsg1);
-                ctx.Conversation.AddUserMessage(userMsg1);
+                UpdateWindowTitleFromActiveTab();
+                if (_inputManager != null) _inputManager.FocusInputSoon();
+            }
+            catch { }
+        }
 
-                string assistantMsg1 =
-                    "# How to Get an OpenRouter.ai API Key\n\n" +
-                    "1. **Create an account at [openrouter.ai](https://openrouter.ai).**\n" +
-                    "   - Visit the site and sign up or sign in to access your dashboard.\n" +
-                    "2. **(Optional) Add credits.**\n" +
-                    "   - If needed, go to your account page and purchase credits to enable model usage.\n" +
-                    "3. **Go to the API Keys section.**\n" +
-                    "   - Once logged in, locate the section labeled **API Keys** or **Keys** to manage your keys.\n" +
-                    "4. **Create a new key and name it.**\n" +
-                    "   - Click **Create Key**, enter a descriptive name, and optionally set a credit limit. Save the key immediately—**it won't be visible again** after navigating away.\n" +
-                    "---\n\n" +
-                    "## Summary\n\n" +
-                    "| Step | Action                                                                                         |\n" +
-                    "| ---- | ---------------------------------------------------------------------------------------------- |\n" +
-                    "| 1    | Create an account at [openrouter.ai](https://openrouter.ai)                                    |\n" +
-                    "| 2    | Optionally, add credits                                                                        |\n" +
-                    "| 3    | Visit the **API Keys** section                                                                 |\n" +
-                    "| 4    | Click **Create Key**, name it, optionally set a credit limit, and **copy the key immediately** |";
-                ctx.Transcript.AddMessage(MessageRole.Assistant, assistantMsg1);
-                ctx.Conversation.AddAssistantMessage(assistantMsg1);
+        private void miPrivacyHelp_Click(object sender, EventArgs e)
+        {
+            // Reuse any blank tab if available (prefer active); otherwise create a new one
+            TabManager.ChatTabContext ctx = FindBlankTabPreferActive();
+            if (ctx == null)
+            {
+                ctx = _tabManager != null ? _tabManager.CreateConversationTab() : null;
+            }
+            if (ctx == null) return;
+            try { SelectTab(ctx.Page); }
+            catch { }
 
-                string userMsg2 = "How do I set my API key in GxPT?";
-                ctx.Transcript.AddMessage(MessageRole.User, userMsg2);
-                ctx.Conversation.AddUserMessage(userMsg2);
-
-                string assistantMsg2 =
-                    "# How to Set the API key in GxPT\n\n" +
-                    "1. **Open settings in GxPT**\n" +
-                    "   - Click `File` -> `Settings`\n" +
-                    "2. **Paste in your API key from OpenRouter.ai**\n" +
-                    "   - Paste the key you generated on OpenRouter into the `OpenRouter API Key` field\n" +
-                    "3. **Save your settings**\n" +
-                    "   - Click the `Save` button in the bottom right corner of the settings window.\n" +
-                    "4. **Happy chatting!**";
-                ctx.Transcript.AddMessage(MessageRole.Assistant, assistantMsg2);
-                ctx.Conversation.AddAssistantMessage(assistantMsg2);
+            try
+            {
+                Conversation convo = null;
+                try
+                {
+                    var asm = typeof(MainForm).Assembly;
+                    using (var s = asm.GetManifestResourceStream("GxPT.resources.help_privacy.json"))
+                    {
+                        if (s != null)
+                        {
+                            using (var sr = new StreamReader(s, Encoding.UTF8, true))
+                            {
+                                string json = sr.ReadToEnd();
+                                convo = ConversationStore.LoadFromJson(_client, json);
+                            }
+                        }
+                    }
+                }
+                catch { }
+                if (convo != null)
+                {
+                    ctx.NoSaveUntilUserSend = true;
+                    try { convo.Id = null; }
+                    catch { }
+                    try { ctx.Page.Text = string.IsNullOrEmpty(convo.Name) ? "Privacy" : convo.Name; }
+                    catch { }
+                    OpenConversationInTab(ctx, convo);
+                }
+                else
+                {
+                    MessageBox.Show(this,
+                        "Help template not found in embedded resources.",
+                        "Privacy",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                    return;
+                }
 
                 UpdateWindowTitleFromActiveTab();
                 if (_inputManager != null) _inputManager.FocusInputSoon();

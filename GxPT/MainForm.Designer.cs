@@ -44,6 +44,7 @@
             this.miConversationHistory = new System.Windows.Forms.ToolStripMenuItem();
             this.miHelp = new System.Windows.Forms.ToolStripMenuItem();
             this.miApiKeysHelp = new System.Windows.Forms.ToolStripMenuItem();
+            this.miPrivacyHelp = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripSeparator3 = new System.Windows.Forms.ToolStripSeparator();
             this.miAbout = new System.Windows.Forms.ToolStripMenuItem();
             this.pnlInput = new System.Windows.Forms.Panel();
@@ -184,6 +185,7 @@
             // 
             this.miHelp.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.miApiKeysHelp,
+            this.miPrivacyHelp,
             this.toolStripSeparator3,
             this.miAbout});
             this.miHelp.Name = "miHelp";
@@ -194,19 +196,26 @@
             // 
             this.miApiKeysHelp.Name = "miApiKeysHelp";
             this.miApiKeysHelp.ShortcutKeys = System.Windows.Forms.Keys.F1;
-            this.miApiKeysHelp.Size = new System.Drawing.Size(147, 22);
+            this.miApiKeysHelp.Size = new System.Drawing.Size(180, 22);
             this.miApiKeysHelp.Text = "API &Keys";
             this.miApiKeysHelp.Click += new System.EventHandler(this.miApiKeysHelp_Click);
+            // 
+            // miPrivacyHelp
+            // 
+            this.miPrivacyHelp.Name = "miPrivacyHelp";
+            this.miPrivacyHelp.Size = new System.Drawing.Size(180, 22);
+            this.miPrivacyHelp.Text = "&Privacy";
+            this.miPrivacyHelp.Click += new System.EventHandler(this.miPrivacyHelp_Click);
             // 
             // toolStripSeparator3
             // 
             this.toolStripSeparator3.Name = "toolStripSeparator3";
-            this.toolStripSeparator3.Size = new System.Drawing.Size(144, 6);
+            this.toolStripSeparator3.Size = new System.Drawing.Size(177, 6);
             // 
             // miAbout
             // 
             this.miAbout.Name = "miAbout";
-            this.miAbout.Size = new System.Drawing.Size(147, 22);
+            this.miAbout.Size = new System.Drawing.Size(180, 22);
             this.miAbout.Text = "&About";
             this.miAbout.Click += new System.EventHandler(this.miAbout_Click);
             // 
@@ -466,6 +475,7 @@
         private System.Windows.Forms.ToolStripMenuItem miConversationHistory;
         private System.Windows.Forms.ToolStripMenuItem miHelp;
         private System.Windows.Forms.ToolStripMenuItem miApiKeysHelp;
+        private System.Windows.Forms.ToolStripMenuItem miPrivacyHelp;
         private System.Windows.Forms.FlowLayoutPanel flowLayoutPanel1;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator3;
         private System.Windows.Forms.ToolStripMenuItem miAbout;

@@ -74,37 +74,56 @@ namespace GxPT
                 string json = File.ReadAllText(path);
                 var ser = new JavaScriptSerializer();
                 var dto = ser.Deserialize<ConversationDto>(json);
-                if (dto == null) return null;
-                var convo = new Conversation(client)
-                {
-                    Id = dto.Id,
-                    Name = dto.Name ?? "New Conversation",
-                    SelectedModel = dto.SelectedModel,
-                    LastUpdated = dto.LastUpdated == default(DateTime) ? File.GetLastWriteTimeUtc(path) : dto.LastUpdated
-                };
-                if (dto.Messages != null)
-                {
-                    foreach (var m in dto.Messages)
-                    {
-                        if (m == null) continue;
-                        string role = m.Role ?? "user";
-                        string content = m.Content ?? string.Empty;
-                        List<AttachedFile> atts = m.Attachments;
-                        // Backward-compat: extract attachments if they were embedded in content with markers
-                        string baseContent;
-                        List<AttachedFile> parsed;
-                        if ((atts == null || atts.Count == 0) && TryExtractAttachmentsFromContent(content, out baseContent, out parsed))
-                        {
-                            content = baseContent;
-                            atts = parsed;
-                        }
-                        // Add chat message directly to history (no naming trigger needed on load)
-                        convo.History.Add(new ChatMessage(role, content, atts));
-                    }
-                }
-                return convo;
+                return FromDto(client, dto, path);
             }
             catch { return null; }
+        }
+
+        public static Conversation LoadFromJson(OpenRouterClient client, string json)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(json)) return null;
+                var ser = new JavaScriptSerializer();
+                var dto = ser.Deserialize<ConversationDto>(json);
+                return FromDto(client, dto, null);
+            }
+            catch { return null; }
+        }
+
+        private static Conversation FromDto(OpenRouterClient client, ConversationDto dto, string path)
+        {
+            if (dto == null) return null;
+            var convo = new Conversation(client)
+            {
+                Id = dto.Id,
+                Name = dto.Name ?? "New Conversation",
+                SelectedModel = dto.SelectedModel,
+                LastUpdated = dto.LastUpdated == default(DateTime) && !string.IsNullOrEmpty(path)
+                    ? File.GetLastWriteTimeUtc(path)
+                    : (dto.LastUpdated == default(DateTime) ? DateTime.Now : dto.LastUpdated)
+            };
+            if (dto.Messages != null)
+            {
+                foreach (var m in dto.Messages)
+                {
+                    if (m == null) continue;
+                    string role = m.Role ?? "user";
+                    string content = m.Content ?? string.Empty;
+                    List<AttachedFile> atts = m.Attachments;
+                    // Backward-compat: extract attachments if they were embedded in content with markers
+                    string baseContent;
+                    List<AttachedFile> parsed;
+                    if ((atts == null || atts.Count == 0) && TryExtractAttachmentsFromContent(content, out baseContent, out parsed))
+                    {
+                        content = baseContent;
+                        atts = parsed;
+                    }
+                    // Add chat message directly to history (no naming trigger needed on load)
+                    convo.History.Add(new ChatMessage(role, content, atts));
+                }
+            }
+            return convo;
         }
 
         public static List<ConversationListItem> ListAll()
