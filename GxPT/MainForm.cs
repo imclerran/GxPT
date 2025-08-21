@@ -956,7 +956,10 @@ namespace GxPT
             // Cover common text files + all highlighter-related types + PowerShell
             var exts = new List<string>();
             // General text
-            exts.AddRange(new[] { "*.txt", "*.md", "*.markdown", "*.log", "*.ini", "*.cfg", "*.conf", "*.config", "*.properties", "*.toml", "*.gitignore", "*.dockerfile", "*.makefile", "*.cmake", "*.diff", "*.patch", "*.csv", "*.sln" });
+            exts.AddRange(new[] { "*.txt", "*.md", "*.markdown", "*.log", "*.ini", "*.cfg", "*.conf", "*.config", "*.properties", "*.toml", "*.gitignore", "*.dockerfile", "*.makefile", "*.cmake", "*.diff", "*.patch", "*.csv", "*.sln",
+                // Properties/INI-related aliases supported by PropertiesHighlighter
+                "*.desktop", "*.reg", "*.inf", "*.gitconfig"
+            });
             // C/C++
             exts.AddRange(new[] { "*.c", "*.h", "*.cpp", "*.cxx", "*.cc", "*.hpp", "*.hxx", "*.hh" });
             // C#
@@ -964,7 +967,10 @@ namespace GxPT
             // JS/TS
             exts.AddRange(new[] { "*.js", "*.jsx", "*.ts", "*.tsx", "*.mjs", "*.cjs" });
             // HTML/XML and related
-            exts.AddRange(new[] { "*.html", "*.htm", "*.xhtml", "*.xml", "*.xaml", "*.xsl", "*.xslt", "*.xsd", "*.svg", "*.rss", "*.atom", "*.plist", "*.resx", "*.settings", "*.manifest", "*.nuspec", "*.wsdl", "*.disco", "*.asmx", "*.sitemap", "*.master", "*.ascx", "*.kml", "*.gpx", "*.tei", "*.docbook", "*.fo", "*.ant", "*.maven", "*.pom", "*.csproj", "*.vbproj", "*.fsproj", "*.vcxproj", "*.proj", "*.targets", "*.props", "*.packages.config", "*.web.config", "*.app.config", "*.machine.config" });
+            exts.AddRange(new[] { "*.html", "*.htm", "*.xhtml", "*.xml", "*.xaml", "*.xsl", "*.xslt", "*.xsd", "*.svg", "*.rss", "*.atom", "*.plist", "*.resx", "*.settings", "*.manifest", "*.nuspec", "*.wsdl", "*.disco", "*.asmx", "*.sitemap", "*.master", "*.ascx", "*.kml", "*.gpx", "*.tei", "*.docbook", "*.fo", "*.ant", "*.maven", "*.pom", "*.csproj", "*.vbproj", "*.fsproj", "*.vcxproj", "*.proj", "*.targets", "*.props", "*.packages.config", "*.web.config", "*.app.config", "*.machine.config",
+                // HTML templating/server-side aliases from HtmlHighlighter
+                "*.asp", "*.aspx", "*.jsp", "*.php", "*.erb", "*.ejs", "*.hta"
+            });
             // CSS
             exts.AddRange(new[] { "*.css", "*.scss", "*.sass", "*.less" });
             // Python
@@ -987,6 +993,8 @@ namespace GxPT
             exts.AddRange(new[] { "*.bat", "*.cmd" });
             // PowerShell
             exts.AddRange(new[] { "*.ps1", "*.psm1", "*.psd1", "*.ps1xml" });
+            // Pascal / Delphi / Object Pascal
+            exts.AddRange(new[] { "*.pas", "*.pp", "*.dpr", "*.dpk", "*.inc" });
             // YAML
             exts.AddRange(new[] { "*.yml", "*.yaml" });
             // JSON
