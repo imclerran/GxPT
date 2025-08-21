@@ -272,7 +272,7 @@ namespace GxPT
 
         public override string[] Aliases
         {
-            get { return new string[] { "ansi-c", "c99", "c11", "c17" }; }
+            get { return new string[] { "ansi-c", "c99", "c11", "c17", "h" }; }
         }
 
         protected override TokenPattern[] GetPatterns()
@@ -330,7 +330,7 @@ namespace GxPT
 
         public override string[] Aliases
         {
-            get { return new string[] { "c++", "cplusplus" }; }
+            get { return new string[] { "c++", "cplusplus", "cpp", "cxx", "cc", "hpp", "hxx", "hh" }; }
         }
 
         protected override TokenPattern[] GetPatterns()
@@ -755,7 +755,7 @@ namespace GxPT
 
         public override string[] Aliases
         {
-            get { return new string[] { "jdk", "jre" }; }
+            get { return new string[] { "jdk", "jre", "jav" }; }
         }
 
         protected override TokenPattern[] GetPatterns()
@@ -863,7 +863,7 @@ namespace GxPT
 
         public override string[] Aliases
         {
-            get { return new string[] { "js", "node", "nodejs" }; }
+            get { return new string[] { "js", "node", "nodejs", "mjs", "cjs" }; }
         }
 
         protected override TokenPattern[] GetPatterns()
@@ -1153,7 +1153,7 @@ namespace GxPT
 
         public override string[] Aliases
         {
-            get { return new string[] { "ts" }; }
+            get { return new string[] { "ts", "tsx" }; }
         }
 
         protected override TokenPattern[] GetPatterns()
@@ -1386,7 +1386,7 @@ namespace GxPT
 
         public override string[] Aliases
         {
-            get { return new string[] { "vb", "vba", "vb6", "vbnet", "vb.net", "visualbasic", "visual-basic" }; }
+            get { return new string[] { "vb", "vba", "vb6", "vbnet", "vb.net", "visualbasic", "visual-basic", "vbs" }; }
         }
 
         protected override TokenPattern[] GetPatterns()
@@ -1454,7 +1454,7 @@ namespace GxPT
                 "xaml", "xsl", "xslt", "xsd", "xhtml", "svg", "rss", "atom", 
                 "plist", "config", "web.config", "app.config", "machine.config",
                 "csproj", "vbproj", "fsproj", "vcxproj", "proj", "targets", "props",
-                "resx", "settings", "manifest", "nuspec", "packages.config",
+                "resx", "settings", "manifest", "nuspec", "packages.config", "ps1xml",
                 "wsdl", "disco", "asmx", "sitemap", "master", "ascx",
                 "kml", "gpx", "tei", "docbook", "fo", "ant", "maven", "pom"
             };
