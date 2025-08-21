@@ -1183,7 +1183,28 @@ namespace GxPT
                     {
                         rtb.Text = af.Content ?? string.Empty;
                         string lang = GetFileExtension(af.FileName);
-                        try { RichTextBoxSyntaxHighlighter.Highlight(rtb, lang); }
+
+                        // Match theme with chat transcript
+                        bool dark = false;
+                        try
+                        {
+                            string theme = AppSettings.GetString("theme");
+                            dark = !string.IsNullOrEmpty(theme) && theme.Trim().Equals("dark", StringComparison.OrdinalIgnoreCase);
+                        }
+                        catch { dark = false; }
+
+                        if (dark)
+                        {
+                            rtb.BackColor = Color.FromArgb(0x24, 0x27, 0x3A); // Macchiato Base
+                            rtb.ForeColor = Color.FromArgb(230, 230, 230);
+                        }
+                        else
+                        {
+                            rtb.BackColor = SystemColors.Window;
+                            rtb.ForeColor = SystemColors.WindowText;
+                        }
+
+                        try { RichTextBoxSyntaxHighlighter.Highlight(rtb, lang, dark); }
                         catch { }
                     }
                     dlg.Text = af.FileName ?? "Attachment";

@@ -38,7 +38,8 @@
             // 
             // rtbFileText
             // 
-            this.rtbFileText.BackColor = System.Drawing.SystemColors.ControlLightLight;
+            this.rtbFileText.BackColor = System.Drawing.SystemColors.Window;
+            this.rtbFileText.BorderStyle = System.Windows.Forms.BorderStyle.None;
             this.rtbFileText.ContextMenuStrip = this.cmsFileText;
             this.rtbFileText.Dock = System.Windows.Forms.DockStyle.Fill;
             this.rtbFileText.Location = new System.Drawing.Point(0, 0);
@@ -47,6 +48,7 @@
             this.rtbFileText.Size = new System.Drawing.Size(692, 566);
             this.rtbFileText.TabIndex = 0;
             this.rtbFileText.Text = "";
+            this.rtbFileText.WordWrap = false;
             // 
             // cmsFileText
             // 

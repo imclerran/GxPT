@@ -39,8 +39,18 @@ namespace GxPT
         /// <summary>
         /// Highlights the RichTextBox content for the given language using registered highlighters.
         /// Non-destructive (preserves caret) and optimized for small to medium texts.
+        /// Uses the light theme palette by default.
         /// </summary>
         public static void Highlight(RichTextBox rtb, string language)
+        {
+            Highlight(rtb, language, false);
+        }
+
+        /// <summary>
+        /// Highlights the RichTextBox content for the given language using registered highlighters.
+        /// When darkTheme=true, uses the dark theme color palette for tokens and default text.
+        /// </summary>
+        public static void Highlight(RichTextBox rtb, string language, bool darkTheme)
         {
             if (rtb == null || rtb.IsDisposed) return;
 
@@ -53,7 +63,7 @@ namespace GxPT
                 try
                 {
                     rtb.SelectAll();
-                    rtb.SelectionColor = SystemColors.WindowText;
+                    rtb.SelectionColor = SyntaxHighlighter.GetTokenColorForTheme(TokenType.Normal, darkTheme);
                 }
                 finally
                 {
@@ -79,7 +89,7 @@ namespace GxPT
             {
                 // Reset all to default color first
                 rtb.SelectAll();
-                rtb.SelectionColor = SystemColors.WindowText;
+                rtb.SelectionColor = SyntaxHighlighter.GetTokenColorForTheme(TokenType.Normal, darkTheme);
 
                 // Apply token colors (use .NET text length for token bounds)
                 int maxLen = text.Length;
@@ -104,7 +114,7 @@ namespace GxPT
 
                     rtb.SelectionStart = selStart;
                     rtb.SelectionLength = selLen;
-                    rtb.SelectionColor = SyntaxHighlighter.GetTokenColor(t.Type);
+                    rtb.SelectionColor = SyntaxHighlighter.GetTokenColorForTheme(t.Type, darkTheme);
                 }
             }
             finally

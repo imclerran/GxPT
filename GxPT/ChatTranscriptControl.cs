@@ -1716,8 +1716,30 @@ namespace GxPT
                     if (rtb != null)
                     {
                         rtb.Text = af.Content ?? string.Empty;
-                        string lang = GuessLanguageFromFileName(af.FileName);
-                        try { RichTextBoxSyntaxHighlighter.Highlight(rtb, lang); }
+
+                        // Determine theme
+                        bool dark = false;
+                        try
+                        {
+                            string theme = AppSettings.GetString("theme");
+                            dark = !string.IsNullOrEmpty(theme) && theme.Trim().Equals("dark", StringComparison.OrdinalIgnoreCase);
+                        }
+                        catch { dark = false; }
+
+                        // Apply themed background/foreground to match chat
+                        if (dark)
+                        {
+                            rtb.BackColor = Color.FromArgb(0x24, 0x27, 0x3A); // Macchiato Base
+                            rtb.ForeColor = Color.FromArgb(230, 230, 230);
+                        }
+                        else
+                        {
+                            rtb.BackColor = SystemColors.Window;
+                            rtb.ForeColor = SystemColors.WindowText;
+                        }
+
+                        string lang = GetFileExtension(af.FileName);
+                        try { RichTextBoxSyntaxHighlighter.Highlight(rtb, lang, dark); }
                         catch { }
                     }
                     dlg.Text = af.FileName ?? "Attachment";
@@ -1728,59 +1750,14 @@ namespace GxPT
             catch { }
         }
 
-        private string GuessLanguageFromFileName(string fileName)
+        private string GetFileExtension(string fileName)
         {
             try
             {
                 if (string.IsNullOrEmpty(fileName)) return null;
                 string ext = Path.GetExtension(fileName);
                 if (string.IsNullOrEmpty(ext)) return null;
-                ext = ext.TrimStart('.');
-                switch (ext.ToLowerInvariant())
-                {
-                    case "cs": return "csharp";
-                    case "js":
-                    case "mjs":
-                    case "cjs": return "javascript";
-                    case "ts":
-                    case "tsx": return "typescript";
-                    case "json":
-                    case "jsonc":
-                    case "json5": return "json";
-                    case "xml":
-                    case "xaml":
-                    case "xsd":
-                    case "wsdl":
-                    case "resx": return "xml";
-                    case "html":
-                    case "htm": return "html";
-                    case "css": return "css";
-                    case "yml":
-                    case "yaml": return "yaml";
-                    case "py": return "python";
-                    case "rb": return "ruby";
-                    case "rs": return "rust";
-                    case "java": return "java";
-                    case "go": return "go";
-                    case "ps1":
-                    case "psm1":
-                    case "psd1": return "powershell";
-                    case "sh":
-                    case "bash": return "bash";
-                    case "bat":
-                    case "cmd": return "batch";
-                    case "vb":
-                    case "vbs": return "visualbasic";
-                    case "zig": return "zig";
-                    case "c":
-                    case "h": return "c";
-                    case "cpp":
-                    case "cxx":
-                    case "cc":
-                    case "hpp":
-                    case "hxx":
-                    case "hh": return "cpp";
-                }
+                return ext.TrimStart('.').ToLowerInvariant();
             }
             catch { }
             return null;

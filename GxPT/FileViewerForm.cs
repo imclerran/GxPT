@@ -15,6 +15,7 @@ namespace GxPT
         {
             InitializeComponent();
             ApplyFontSetting();
+            ApplyThemeFromSettings();
         }
 
         private void ApplyFontSetting()
@@ -61,6 +62,34 @@ namespace GxPT
             {
                 // Ignore clipboard exceptions
             }
+        }
+
+        private void ApplyThemeFromSettings()
+        {
+            try
+            {
+                string theme = null;
+                try { theme = AppSettings.GetString("theme"); }
+                catch { theme = null; }
+
+                bool dark = !string.IsNullOrEmpty(theme) && theme.Trim().Equals("dark", StringComparison.OrdinalIgnoreCase);
+
+                if (this.rtbFileText != null)
+                {
+                    if (dark)
+                    {
+                        // Match ChatTranscriptControl dark app background and text
+                        this.rtbFileText.BackColor = System.Drawing.Color.FromArgb(0x24, 0x27, 0x3A);
+                        this.rtbFileText.ForeColor = System.Drawing.Color.FromArgb(230, 230, 230);
+                    }
+                    else
+                    {
+                        this.rtbFileText.BackColor = System.Drawing.SystemColors.Window;
+                        this.rtbFileText.ForeColor = System.Drawing.SystemColors.WindowText;
+                    }
+                }
+            }
+            catch { }
         }
     }
 }
