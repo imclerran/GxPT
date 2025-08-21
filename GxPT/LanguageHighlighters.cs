@@ -1161,6 +1161,71 @@ namespace GxPT
     }
 
     /// <summary>
+    /// Properties/configuration file syntax highlighter (key=value format)
+    /// </summary>
+    public class PropertiesHighlighter : RegexHighlighterBase
+    {
+        public override string Language
+        {
+            get { return "properties"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "ini", "conf", "cfg", "desktop", "reg", "inf", "gitconfig" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Comments: ; comment and # comment (at start of line or after whitespace)
+                new TokenPattern(@"^\s*[;#].*$", TokenType.Comment, 1),
+                new TokenPattern(@"(?<=\s)[;#].*$", TokenType.Comment, 2),
+
+                // Section headers: [SectionName]
+                new TokenPattern(@"^\s*\[[^\]]*\]", TokenType.Keyword, 3),
+
+                // Key-value pairs: key=value (key part)
+                new TokenPattern(@"^\s*[^=\[\];#\r\n]+(?==)", TokenType.Type, 4),
+
+                // Quoted values: "value", 'value'
+                new TokenPattern(@"(?<==\s*)(?:'[^']*'|""[^""]*"")", TokenType.String, 5),
+
+                // Unquoted values after = (excluding comments)
+                new TokenPattern(@"(?<==\s*)[^;#\r\n]+(?=\s*(?:[;#]|$))", TokenType.String, 6),
+
+                // Environment variable references: %VAR%, ${VAR}, $VAR
+                new TokenPattern(@"%[^%\s]+%|\$\{[^}]+\}|\$[a-zA-Z_][a-zA-Z0-9_]*", TokenType.Method, 7),
+
+                // Numbers (integers and floats)
+                new TokenPattern(@"(?<==\s*)\b\d+(?:\.\d+)?\b(?=\s*(?:[;#]|$))", TokenType.Number, 8),
+
+                // Boolean-like values
+                new TokenPattern(@"(?i)(?<==\s*)\b(?:true|false|yes|no|on|off|enabled|disabled|1|0)\b(?=\s*(?:[;#]|$))", TokenType.Keyword, 9),
+
+                // File paths and URLs (simple heuristic)
+                new TokenPattern(@"(?<==\s*)(?:[a-zA-Z]:[\\\/]|\\\\|\/|https?:\/\/)[^\s;#]*", TokenType.String, 10),
+
+                // Registry-style GUID/UUID values
+                new TokenPattern(@"(?<==\s*)\{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}", TokenType.Number, 11),
+
+                // Hex values (common in Windows INI files)
+                new TokenPattern(@"(?<==\s*)0[xX][0-9a-fA-F]+", TokenType.Number, 12),
+
+                // Assignment operator
+                new TokenPattern(@"=", TokenType.Operator, 13),
+
+                // Continuation lines (backslash at end of line)
+                new TokenPattern(@"\\$", TokenType.Operator, 14),
+
+                // Brackets for array-like syntax [0], [1]
+                new TokenPattern(@"\[\d+\]", TokenType.Punctuation, 15)
+            };
+        }
+    }
+
+    /// <summary>
     /// Python syntax highlighter
     /// </summary>
     public class PythonHighlighter : RegexHighlighterBase

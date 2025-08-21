@@ -102,6 +102,7 @@ namespace GxPT
             RegisterHighlighter(new PascalHighlighter());
             RegisterHighlighter(new PerlHighlighter());
             RegisterHighlighter(new PowerShellHighlighter());
+            RegisterHighlighter(new PropertiesHighlighter());
             RegisterHighlighter(new PythonHighlighter());
             RegisterHighlighter(new RubyHighlighter());
             RegisterHighlighter(new RegexHighlighter());
