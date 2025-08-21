@@ -154,8 +154,6 @@
     <Compile Include="ZipSafe.cs" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="Attatch.png" />
-    <None Include="AttatchBW.png" />
     <None Include="AttatchGrey.png" />
     <Content Include="curl.exe">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

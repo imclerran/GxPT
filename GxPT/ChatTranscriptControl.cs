@@ -80,6 +80,10 @@ namespace GxPT
         private Color _clrScrollThumbBorder = Color.FromArgb(160, 160, 160);
         private bool _isDarkTheme;
 
+        // Global hover-wheel support (scroll on hover without taking focus)
+        private static bool _hoverWheelInstalled;
+        private static readonly List<WeakReference> _instances = new List<WeakReference>();
+
         // ---------- Fonts ----------
         private Font _baseFont;         // default UI font
         private Font _boldFont;
@@ -166,6 +170,120 @@ namespace GxPT
 
             this.AccessibleName = "Chat transcript";
             this.TabStop = true;
+
+            // Track instance and ensure hover wheel router installed once
+            try
+            {
+                lock (_instances)
+                {
+                    _instances.Add(new WeakReference(this));
+                }
+                EnsureHoverWheelRouter();
+            }
+            catch { }
+        }
+
+        protected override void OnHandleDestroyed(EventArgs e)
+        {
+            base.OnHandleDestroyed(e);
+            // Cleanup dead references periodically
+            try
+            {
+                lock (_instances)
+                {
+                    for (int i = _instances.Count - 1; i >= 0; i--)
+                    {
+                        var wr = _instances[i];
+                        if (wr == null || !wr.IsAlive || object.ReferenceEquals(wr.Target, this))
+                        {
+                            _instances.RemoveAt(i);
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // Public helper to scroll by a wheel delta (positive=away from user, negative=toward)
+        public void ScrollByWheelDelta(int wheelDelta)
+        {
+            try
+            {
+                if (!_vbar.Enabled) return;
+                int delta = -(wheelDelta / 120) * ScrollStep;
+                int view = Math.Max(0, ClientSize.Height);
+                int max = Math.Max(0, _contentHeight - view);
+                _scrollOffset = Math.Max(0, Math.Min(max, _scrollOffset + delta));
+                int allowedMax = Math.Max(0, _vbar.Maximum - _vbar.LargeChange + 1);
+                _vbar.Value = Math.Max(_vbar.Minimum, Math.Min(allowedMax, _scrollOffset));
+                Invalidate();
+            }
+            catch { }
+        }
+
+        // Install an application-level message filter that routes WM_MOUSEWHEEL to any
+        // ChatTranscriptControl under the mouse cursor without changing focus.
+        private static void EnsureHoverWheelRouter()
+        {
+            if (_hoverWheelInstalled) return;
+            try
+            {
+                Application.AddMessageFilter(new HoverWheelMessageFilter());
+                _hoverWheelInstalled = true;
+            }
+            catch { }
+        }
+
+        private sealed class HoverWheelMessageFilter : IMessageFilter
+        {
+            private const int WM_MOUSEWHEEL = 0x020A;
+            public bool PreFilterMessage(ref Message m)
+            {
+                if (m.Msg != WM_MOUSEWHEEL) return false;
+                // Extract wheel delta from wParam high word
+                int wparam = m.WParam.ToInt32();
+                int wheelDelta = (short)((wparam >> 16) & 0xFFFF);
+                // Current mouse position in screen coords
+                Point screenPt = Control.MousePosition;
+
+                ChatTranscriptControl target = GetHoveredTranscript(screenPt);
+                if (target == null) return false;
+
+                // Convert to client and ensure inside client rect (safety)
+                try
+                {
+                    Rectangle screenRect = target.RectangleToScreen(target.ClientRectangle);
+                    if (!screenRect.Contains(screenPt)) return false;
+                    target.ScrollByWheelDelta(wheelDelta);
+                    return true; // handled, don't change focus behavior
+                }
+                catch { }
+                return false;
+            }
+
+            private static ChatTranscriptControl GetHoveredTranscript(Point screenPt)
+            {
+                try
+                {
+                    lock (_instances)
+                    {
+                        for (int i = _instances.Count - 1; i >= 0; i--)
+                        {
+                            var wr = _instances[i];
+                            var ctl = wr != null ? wr.Target as ChatTranscriptControl : null;
+                            if (ctl == null || ctl.IsDisposed || !ctl.IsHandleCreated || !ctl.Visible)
+                            {
+                                if (wr == null || wr.Target == null || !wr.IsAlive) _instances.RemoveAt(i);
+                                continue;
+                            }
+                            Rectangle rect = ctl.RectangleToScreen(ctl.ClientRectangle);
+                            if (rect.Contains(screenPt)) return ctl;
+                        }
+                    }
+                }
+                catch { }
+                return null;
+            }
         }
 
         public void RefreshTheme()
