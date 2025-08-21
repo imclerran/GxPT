@@ -744,58 +744,6 @@ namespace GxPT
     }
 
     /// <summary>
-    /// Java syntax highlighter
-    /// </summary>
-    public class JavaHighlighter : RegexHighlighterBase
-    {
-        public override string Language
-        {
-            get { return "java"; }
-        }
-
-        public override string[] Aliases
-        {
-            get { return new string[] { "jdk", "jre", "jav" }; }
-        }
-
-        protected override TokenPattern[] GetPatterns()
-        {
-            return new TokenPattern[]
-            {
-                // Single-line comments
-                new TokenPattern(@"//.*$", TokenType.Comment, 1),
-
-                // Multi-line comments
-                new TokenPattern(@"/\*[\s\S]*?\*/", TokenType.Comment, 2),
-
-                // String literals
-                new TokenPattern(@"""(?:[^""\\]|\\.)*""", TokenType.String, 3),
-
-                // Character literals
-                new TokenPattern(@"'\\?.'", TokenType.String, 4),
-
-                // Numbers (integers, floats, hex, octal, binary)
-                new TokenPattern(@"\b(?:0[xX][0-9a-fA-F]+|0[bB][01]+|0[oO]?[0-7]+|\d+(?:_\d+)*\.\d+(?:[eE][+-]?\d+)?[dDfF]?)\b|\b\d+\b", TokenType.Number, 5),
-
-                // Keywords
-                new TokenPattern(@"\b(?:abstract|assert|boolean|break|byte|case|catch|char|class|const|continue|default|do|double|else|enum|extends|final|finally|float|for|if|goto|implements|import|instanceof|int|interface|long|native|new|null|package|private|protected|public|return|short|static|strictfp|super|switch|synchronized|this|throw|throws|transient|try|void|volatile|while)\b", TokenType.Keyword, 6),
-
-                // Built-in types
-                new TokenPattern(@"\b(?:boolean|byte|char|double|float|int|long|short|void)\b", TokenType.Type, 7),
-
-                // Method and constructor calls
-                new TokenPattern(@"\b[a-zA-Z_][a-zA-Z0-9_]*(?=\s*\()", TokenType.Method, 8),
-
-                // Operators
-                new TokenPattern(@"[+\-*/%=!<>&|^~?:]+|\(\+\+|--|&&|\|\||==|!=|<=|>=|->|::|\.\.\.", TokenType.Operator, 9),
-
-                // Punctuation
-                new TokenPattern(@"[{}()\[\];.,]", TokenType.Punctuation, 10)
-            };
-        }
-    }
-
-    /// <summary>
     /// HTML syntax highlighter
     /// </summary>
     public class HtmlHighlighter : RegexHighlighterBase
@@ -847,6 +795,58 @@ namespace GxPT
 
                 // Attribute assignment
                 new TokenPattern(@"=", TokenType.Operator, 12)
+            };
+        }
+    }
+
+    /// <summary>
+    /// Java syntax highlighter
+    /// </summary>
+    public class JavaHighlighter : RegexHighlighterBase
+    {
+        public override string Language
+        {
+            get { return "java"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "jdk", "jre", "jav" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Single-line comments
+                new TokenPattern(@"//.*$", TokenType.Comment, 1),
+
+                // Multi-line comments
+                new TokenPattern(@"/\*[\s\S]*?\*/", TokenType.Comment, 2),
+
+                // String literals
+                new TokenPattern(@"""(?:[^""\\]|\\.)*""", TokenType.String, 3),
+
+                // Character literals
+                new TokenPattern(@"'\\?.'", TokenType.String, 4),
+
+                // Numbers (integers, floats, hex, octal, binary)
+                new TokenPattern(@"\b(?:0[xX][0-9a-fA-F]+|0[bB][01]+|0[oO]?[0-7]+|\d+(?:_\d+)*\.\d+(?:[eE][+-]?\d+)?[dDfF]?)\b|\b\d+\b", TokenType.Number, 5),
+
+                // Keywords
+                new TokenPattern(@"\b(?:abstract|assert|boolean|break|byte|case|catch|char|class|const|continue|default|do|double|else|enum|extends|final|finally|float|for|if|goto|implements|import|instanceof|int|interface|long|native|new|null|package|private|protected|public|return|short|static|strictfp|super|switch|synchronized|this|throw|throws|transient|try|void|volatile|while)\b", TokenType.Keyword, 6),
+
+                // Built-in types
+                new TokenPattern(@"\b(?:boolean|byte|char|double|float|int|long|short|void)\b", TokenType.Type, 7),
+
+                // Method and constructor calls
+                new TokenPattern(@"\b[a-zA-Z_][a-zA-Z0-9_]*(?=\s*\()", TokenType.Method, 8),
+
+                // Operators
+                new TokenPattern(@"[+\-*/%=!<>&|^~?:]+|\(\+\+|--|&&|\|\||==|!=|<=|>=|->|::|\.\.\.", TokenType.Operator, 9),
+
+                // Punctuation
+                new TokenPattern(@"[{}()\[\];.,]", TokenType.Punctuation, 10)
             };
         }
     }
