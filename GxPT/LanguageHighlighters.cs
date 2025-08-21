@@ -692,6 +692,94 @@ namespace GxPT
     }
 
     /// <summary>
+    /// F# syntax highlighter - supports F# functional programming syntax
+    /// </summary>
+    public class FSharpHighlighter : RegexHighlighterBase
+    {
+        public override string Language
+        {
+            get { return "fsharp"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "fs", "f#", "fsx", "fsi", "ml", "fsharp" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Single-line comments (// comment)
+                new TokenPattern(@"//.*$", TokenType.Comment, 1),
+
+                // Multi-line comments (* comment *)
+                new TokenPattern(@"\(\*[\s\S]*?\*\)", TokenType.Comment, 2),
+
+                // XML documentation comments (/// comment)
+                new TokenPattern(@"///.*$", TokenType.Comment, 3),
+
+                // String literals (regular, verbatim, and triple-quoted)
+                new TokenPattern(@"@""(?:[^""]|"""")*""|""""""[\s\S]*?""""""|""(?:[^""\\]|\\.)*""", TokenType.String, 4),
+
+                // Character literals
+                new TokenPattern(@"'(?:[^'\\]|\\.)'", TokenType.String, 5),
+
+                // Byte strings and byte arrays
+                new TokenPattern(@"B?""(?:[^""\\]|\\.)*""B?", TokenType.String, 6),
+
+                // Numbers (integers, floats, hex, octal, binary with suffixes)
+                new TokenPattern(@"\b(?:0[xX][0-9a-fA-F]+[uUlLyYsSnN]?|0[oO][0-7]+[uUlLyYsSnN]?|0[bB][01]+[uUlLyYsSnN]?|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[fFmMlLyYsSnN]?)\b", TokenType.Number, 7),
+
+                // F# Keywords
+                new TokenPattern(@"\b(?:abstract|and|as|assert|base|begin|class|default|delegate|do|done|downcast|downto|elif|else|end|exception|extern|false|finally|for|fun|function|global|if|in|inherit|inline|interface|internal|lazy|let|match|member|module|mutable|namespace|new|not|null|of|open|or|override|private|public|rec|return|sig|static|struct|then|to|true|try|type|upcast|use|val|void|when|while|with|yield|atomic|break|checked|component|const|constraint|constructor|continue|eager|event|external|fixed|functor|include|method|mixin|object|parallel|process|protected|pure|sealed|tailcall|trait|virtual|volatile)\b", TokenType.Keyword, 8),
+
+                // F# operators and symbols (before other patterns)
+                new TokenPattern(@"<@|@>|<@@|@@>|\|>|<\||>\||<-|->|:>|:?>|:=|;;|::\?|\?\?|<>|\|\||&&|::|\.\.", TokenType.Operator, 9),
+
+                // Computation expressions and workflows
+                new TokenPattern(@"\b(?:async|seq|query|maybe|option|list|array|computation|workflow)\b(?=\s*\{)", TokenType.Keyword, 10),
+
+                // Attributes
+                new TokenPattern(@"\[<[\s\S]*?>\]", TokenType.Type, 11),
+
+                // .NET types and F# types
+                new TokenPattern(@"\b(?:bool|byte|sbyte|int16|uint16|int|int32|uint32|int64|uint64|nativeint|unativeint|float|float32|double|decimal|char|string|unit|obj|exn|bigint|list|option|array|seq|Set|Map|Result|Choice|Async|Lazy|ref|byref|outref|inref)\b", TokenType.Type, 12),
+
+                // .NET Framework types
+                new TokenPattern(@"\b(?:System|Microsoft|FSharp)(?:\.[A-Z][a-zA-Z0-9_]*)+\b", TokenType.Type, 13),
+
+                // Active patterns (|Pattern|_| or |Pattern|)
+                new TokenPattern(@"\|[A-Z][a-zA-Z0-9_]*(?:\|_\||\|)", TokenType.Method, 14),
+
+                // Function and value definitions
+                new TokenPattern(@"(?:let|and|member|override|abstract|default)\s+(?:mutable\s+|inline\s+|rec\s+)?([a-zA-Z_][a-zA-Z0-9_']*)", TokenType.Method, 15),
+
+                // Type definitions
+                new TokenPattern(@"(?:type|and)\s+([A-Z][a-zA-Z0-9_']*)", TokenType.Type, 16),
+
+                // Module and namespace names
+                new TokenPattern(@"(?:module|namespace)\s+([A-Z][a-zA-Z0-9_'.]*)", TokenType.Type, 17),
+
+                // Function calls and method invocations
+                new TokenPattern(@"\b[a-zA-Z_][a-zA-Z0-9_']*(?=\s*\()", TokenType.Method, 18),
+
+                // Generic type parameters
+                new TokenPattern(@"'[a-zA-Z_][a-zA-Z0-9_]*\b", TokenType.Type, 19),
+
+                // Discriminated union cases and record fields
+                new TokenPattern(@"\b[A-Z][a-zA-Z0-9_]*\b", TokenType.Type, 20),
+
+                // Operators (mathematical, comparison, logical)
+                new TokenPattern(@"[+\-*/%=!<>&|^~?:]+|<=|>=|<>", TokenType.Operator, 21),
+
+                // Punctuation and delimiters
+                new TokenPattern(@"[{}()\[\];,.]", TokenType.Punctuation, 22)
+            };
+        }
+    }
+
+    /// <summary>
     /// Go (Golang) syntax highlighter
     /// </summary>
     public class GoHighlighter : RegexHighlighterBase
@@ -937,6 +1025,76 @@ namespace GxPT
                 
                 // Punctuation
                 new TokenPattern(@"[{}()\[\]:,]", TokenType.Punctuation, 5)
+            };
+        }
+    }
+
+    /// <summary>
+    /// Lua syntax highlighter - supports Lua 5.1-5.4 syntax
+    /// </summary>
+    public class LuaHighlighter : RegexHighlighterBase
+    {
+        public override string Language
+        {
+            get { return "lua"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "lua5.1", "lua5.2", "lua5.3", "lua5.4", "luajit", "moonscript" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Single-line comments (-- comment)
+                new TokenPattern(@"--(?!\[\[).*$", TokenType.Comment, 1),
+
+                // Multi-line comments (--[[ comment ]] or --[=[comment]=])
+                new TokenPattern(@"--\[=*\[[\s\S]*?\]=*\]", TokenType.Comment, 2),
+
+                // Long string literals ([[string]] or [=[string]=])
+                new TokenPattern(@"\[=*\[[\s\S]*?\]=*\]", TokenType.String, 3),
+
+                // String literals (single and double quotes)
+                new TokenPattern(@"'(?:[^'\\]|\\.)*'|""(?:[^""\\]|\\.)*""", TokenType.String, 4),
+
+                // Numbers (integers, decimals, hex, scientific notation)
+                new TokenPattern(@"\b(?:0[xX][0-9a-fA-F]+(?:\.[0-9a-fA-F]*)?(?:[pP][+-]?\d+)?|\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)\b", TokenType.Number, 5),
+
+                // Keywords
+                new TokenPattern(@"\b(?:and|break|do|else|elseif|end|false|for|function|goto|if|in|local|nil|not|or|repeat|return|then|true|until|while)\b", TokenType.Keyword, 6),
+
+                // Built-in global variables and constants
+                new TokenPattern(@"\b(?:_G|_VERSION|nil|true|false)\b", TokenType.Type, 7),
+
+                // Standard library functions and modules
+                new TokenPattern(@"\b(?:assert|collectgarbage|dofile|error|getfenv|getmetatable|ipairs|load|loadfile|loadstring|module|next|pairs|pcall|print|rawequal|rawget|rawlen|rawset|require|select|setfenv|setmetatable|tonumber|tostring|type|unpack|xpcall|bit32|coroutine|debug|io|math|os|package|string|table|utf8)\b", TokenType.Type, 8),
+
+                // Common standard library methods (when followed by dot or colon)
+                new TokenPattern(@"\b(?:abs|acos|asin|atan|atan2|ceil|cos|cosh|deg|exp|floor|fmod|frexp|huge|ldexp|log|log10|max|min|modf|pi|pow|rad|random|randomseed|sin|sinh|sqrt|tan|tanh|byte|char|dump|find|format|gmatch|gsub|len|lower|match|rep|reverse|sub|upper|clock|date|difftime|execute|exit|getenv|remove|rename|setlocale|time|tmpname|close|flush|input|lines|open|output|popen|read|stderr|stdin|stdout|tmpfile|type|write|concat|insert|maxn|pack|remove|sort|unpack|create|resume|running|status|wrap|yield)\b(?=\s*[.:])", TokenType.Method, 9),
+
+                // Function calls (identifier followed by opening parenthesis)
+                new TokenPattern(@"\b[a-zA-Z_][a-zA-Z0-9_]*(?=\s*\()", TokenType.Method, 10),
+
+                // Method calls (identifier after dot or colon)
+                new TokenPattern(@"(?<=[.:])[a-zA-Z_][a-zA-Z0-9_]*", TokenType.Method, 11),
+
+                // Metamethods
+                new TokenPattern(@"\b__(?:add|sub|mul|div|mod|pow|unm|idiv|band|bor|bxor|bnot|shl|shr|concat|len|eq|lt|le|index|newindex|call|tostring|gc|mode|name|metatable|pairs|ipairs|close)\b", TokenType.Type, 12),
+
+                // Operators (including Lua-specific ones)
+                new TokenPattern(@"\.\.\.|\.\.|[+\-*/%^=!<>&|~#]+|<=|>=|==|~=|and|or|not", TokenType.Operator, 13),
+
+                // Self reference
+                new TokenPattern(@"\bself\b", TokenType.Keyword, 14),
+
+                // Labels (for goto statements in Lua 5.2+)
+                new TokenPattern(@"::[a-zA-Z_][a-zA-Z0-9_]*::", TokenType.Type, 15),
+
+                // Punctuation
+                new TokenPattern(@"[{}()\[\];,.:?]", TokenType.Punctuation, 16)
             };
         }
     }
@@ -1275,61 +1433,6 @@ namespace GxPT
     }
 
     /// <summary>
-    /// TypeScript syntax highlighter
-    /// </summary>
-    public class TypeScriptHighlighter : RegexHighlighterBase
-    {
-        public override string Language
-        {
-            get { return "typescript"; }
-        }
-
-        public override string[] Aliases
-        {
-            get { return new string[] { "ts", "tsx" }; }
-        }
-
-        protected override TokenPattern[] GetPatterns()
-        {
-            return new TokenPattern[]
-            {
-                // Single-line comments
-                new TokenPattern(@"//.*$", TokenType.Comment, 1),
-
-                // Multi-line comments
-                new TokenPattern(@"/\*[\s\S]*?\*/", TokenType.Comment, 2),
-
-                // String literals (single, double, and template literals)
-                new TokenPattern(@"`(?:[^`\\]|\\.)*`|'(?:[^'\\]|\\.)*'|""(?:[^""\\]|\\.)*""", TokenType.String, 3),
-
-                // Regular expressions
-                new TokenPattern(@"/(?:[^/\\\n]|\\.)+/[gimuy]*", TokenType.String, 4),
-
-                // Numbers
-                new TokenPattern(@"\b(?:0[xX][0-9a-fA-F]+|0[bB][01]+|0[oO][0-7]+|\d+(\.\d+)?([eE][+-]?\d+)?|NaN|Infinity)\b", TokenType.Number, 5),
-
-                // Keywords
-                new TokenPattern(@"\b(?:abstract|any|as|async|await|boolean|break|case|catch|class|const|continue|debugger|declare|default|delete|do|else|enum|export|extends|false|finally|for|from|function|if|implements|import|in|infer|instanceof|interface|is|keyof|let|module|namespace|never|null|number|object|package|private|protected|public|readonly|require|return|string|super|switch|symbol|this|throw|true|try|typeof|undefined|unique|var|void|while|with|yield)\b", TokenType.Keyword, 6),
-
-                // Type annotations
-                new TokenPattern(@"\b(?:Array|Date|Promise|PromiseLike|RegExp|Set|Map|WeakSet|WeakMap|ReadonlyArray|Partial|Required|Readonly|Record|Pick|Omit|InstanceType|Parameters|ReturnType)\b", TokenType.Type, 7),
-
-                // TypeScript specific structures
-                new TokenPattern(@"\b(?:type|interface|implements|extends|constructor|declare|namespace)\b", TokenType.Keyword, 8),
-
-                // Method and function calls
-                new TokenPattern(@"\b[a-zA-Z_$][a-zA-Z0-9_$]*(?=\s*\()", TokenType.Method, 9),
-
-                // Operators
-                new TokenPattern(@"[+\-*/%=!<>&|^~?:]+|<<|>>|\+\+|--|&&|\|\||==|!=|<=|>=|===|!==|\?\?", TokenType.Operator, 10),
-
-                // Punctuation
-                new TokenPattern(@"[{}()\[\];,.:]", TokenType.Punctuation, 11)
-            };
-        }
-    }
-
-    /// <summary>
     /// Ruby syntax highlighter
     /// </summary>
     public class RubyHighlighter : RegexHighlighterBase
@@ -1503,6 +1606,125 @@ namespace GxPT
                 
                 // Punctuation
                 new TokenPattern(@"[{}()\[\];,.]", TokenType.Punctuation, 11)
+            };
+        }
+    }
+
+    /// <summary>
+    /// SQL syntax highlighter - supports standard SQL with common database extensions
+    /// </summary>
+    public class SqlHighlighter : RegexHighlighterBase
+    {
+        public override string Language
+        {
+            get { return "sql"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "mysql", "postgresql", "postgres", "sqlite", "tsql", "mssql", "oracle", "plsql", "mariadb", "sqlserver" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Single-line comments (-- comment)
+                new TokenPattern(@"--.*$", TokenType.Comment, 1),
+
+                // Multi-line comments (/* comment */)
+                new TokenPattern(@"/\*[\s\S]*?\*/", TokenType.Comment, 2),
+
+                // MySQL-style comments (# comment)
+                new TokenPattern(@"#.*$", TokenType.Comment, 3),
+
+                // String literals (single quotes, standard SQL)
+                new TokenPattern(@"'(?:[^'\\]|\\.)*'", TokenType.String, 4),
+
+                // Quoted identifiers (double quotes, backticks for MySQL)
+                new TokenPattern(@"""(?:[^""\\]|\\.)*""|`(?:[^`\\]|\\.)*`", TokenType.String, 5),
+
+                // Square bracket identifiers (SQL Server style)
+                new TokenPattern(@"\[(?:[^\]\\]|\\.)*\]", TokenType.String, 6),
+
+                // Numbers (integers, decimals, scientific notation)
+                new TokenPattern(@"\b(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?\b", TokenType.Number, 7),
+
+                // SQL Keywords (DML, DDL, DCL, TCL)
+                new TokenPattern(@"(?i)\b(?:SELECT|FROM|WHERE|JOIN|INNER|LEFT|RIGHT|FULL|OUTER|CROSS|ON|USING|GROUP|BY|HAVING|ORDER|ASC|DESC|LIMIT|OFFSET|DISTINCT|ALL|UNION|INTERSECT|EXCEPT|MINUS|INSERT|INTO|VALUES|UPDATE|SET|DELETE|TRUNCATE|CREATE|ALTER|DROP|TABLE|VIEW|INDEX|DATABASE|SCHEMA|PROCEDURE|FUNCTION|TRIGGER|SEQUENCE|CONSTRAINT|PRIMARY|FOREIGN|KEY|UNIQUE|CHECK|DEFAULT|NULL|NOT|AUTO_INCREMENT|IDENTITY|SERIAL|GRANT|REVOKE|COMMIT|ROLLBACK|SAVEPOINT|TRANSACTION|BEGIN|END|IF|ELSE|WHILE|LOOP|FOR|CASE|WHEN|THEN|WITH|RECURSIVE|WINDOW|PARTITION|OVER|ROW_NUMBER|RANK|DENSE_RANK|LEAD|LAG|FIRST_VALUE|LAST_VALUE|EXISTS|IN|ANY|SOME|ALL|BETWEEN|LIKE|ILIKE|REGEXP|RLIKE|IS|ESCAPE|AS|CAST|CONVERT|EXTRACT|INTERVAL|CURRENT_DATE|CURRENT_TIME|CURRENT_TIMESTAMP|SYSDATE|GETDATE|NOW)\b", TokenType.Keyword, 8),
+
+                // Data types
+                new TokenPattern(@"(?i)\b(?:CHAR|VARCHAR|VARCHAR2|NCHAR|NVARCHAR|TEXT|NTEXT|CLOB|NCLOB|BLOB|BINARY|VARBINARY|IMAGE|BIT|BOOLEAN|BOOL|TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT|DECIMAL|NUMERIC|NUMBER|FLOAT|REAL|DOUBLE|MONEY|SMALLMONEY|DATE|TIME|DATETIME|DATETIME2|TIMESTAMP|TIMESTAMPTZ|YEAR|UUID|UNIQUEIDENTIFIER|XML|JSON|JSONB|ARRAY|ENUM|GEOMETRY|GEOGRAPHY)\b", TokenType.Type, 9),
+
+                // Built-in functions (aggregate, string, date, math)
+                new TokenPattern(@"(?i)\b(?:COUNT|SUM|AVG|MIN|MAX|STDDEV|VARIANCE|GROUPING|COALESCE|NULLIF|ISNULL|IFNULL|NVL|NVL2|DECODE|GREATEST|LEAST|ABS|CEIL|CEILING|FLOOR|ROUND|TRUNC|TRUNCATE|POWER|SQRT|EXP|LOG|LOG10|SIN|COS|TAN|ASIN|ACOS|ATAN|ATAN2|DEGREES|RADIANS|PI|RAND|RANDOM|UPPER|LOWER|INITCAP|LENGTH|LEN|CHAR_LENGTH|CHARACTER_LENGTH|SUBSTRING|SUBSTR|LEFT|RIGHT|LTRIM|RTRIM|TRIM|REPLACE|TRANSLATE|CONCAT|CONCAT_WS|LPAD|RPAD|REVERSE|ASCII|CHR|CHAR|POSITION|INSTR|LOCATE|CHARINDEX|PATINDEX|SOUNDEX|DIFFERENCE|STUFF|SPACE|REPLICATE|REPEAT|FORMAT|TO_CHAR|TO_NUMBER|TO_DATE|DATEADD|DATEDIFF|DATEPART|DATENAME|YEAR|MONTH|DAY|HOUR|MINUTE|SECOND|WEEKDAY|DAYOFWEEK|DAYOFYEAR|WEEK|QUARTER|LAST_DAY|NEXT_DAY|ADD_MONTHS|MONTHS_BETWEEN|EXTRACT|DATE_FORMAT|STR_TO_DATE|UNIX_TIMESTAMP|FROM_UNIXTIME)\b(?=\s*\()", TokenType.Method, 10),
+
+                // Operators
+                new TokenPattern(@"[+\-*/%=!<>&|^~]+|<<|>>|<>|<=|>=|:=|\|\||&&", TokenType.Operator, 11),
+
+                // Variables and parameters (@ for SQL Server, : for Oracle, $ for PostgreSQL)
+                new TokenPattern(@"[@:$][a-zA-Z_][a-zA-Z0-9_]*", TokenType.Type, 12),
+
+                // Table/column identifiers (unquoted identifiers)
+                new TokenPattern(@"\b[a-zA-Z_][a-zA-Z0-9_]*\b", TokenType.Normal, 13),
+
+                // Punctuation
+                new TokenPattern(@"[(){}\[\];,.]", TokenType.Punctuation, 14)
+            };
+        }
+    }
+
+    /// <summary>
+    /// TypeScript syntax highlighter
+    /// </summary>
+    public class TypeScriptHighlighter : RegexHighlighterBase
+    {
+        public override string Language
+        {
+            get { return "typescript"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "ts", "tsx" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Single-line comments
+                new TokenPattern(@"//.*$", TokenType.Comment, 1),
+
+                // Multi-line comments
+                new TokenPattern(@"/\*[\s\S]*?\*/", TokenType.Comment, 2),
+
+                // String literals (single, double, and template literals)
+                new TokenPattern(@"`(?:[^`\\]|\\.)*`|'(?:[^'\\]|\\.)*'|""(?:[^""\\]|\\.)*""", TokenType.String, 3),
+
+                // Regular expressions
+                new TokenPattern(@"/(?:[^/\\\n]|\\.)+/[gimuy]*", TokenType.String, 4),
+
+                // Numbers
+                new TokenPattern(@"\b(?:0[xX][0-9a-fA-F]+|0[bB][01]+|0[oO][0-7]+|\d+(\.\d+)?([eE][+-]?\d+)?|NaN|Infinity)\b", TokenType.Number, 5),
+
+                // Keywords
+                new TokenPattern(@"\b(?:abstract|any|as|async|await|boolean|break|case|catch|class|const|continue|debugger|declare|default|delete|do|else|enum|export|extends|false|finally|for|from|function|if|implements|import|in|infer|instanceof|interface|is|keyof|let|module|namespace|never|null|number|object|package|private|protected|public|readonly|require|return|string|super|switch|symbol|this|throw|true|try|typeof|undefined|unique|var|void|while|with|yield)\b", TokenType.Keyword, 6),
+
+                // Type annotations
+                new TokenPattern(@"\b(?:Array|Date|Promise|PromiseLike|RegExp|Set|Map|WeakSet|WeakMap|ReadonlyArray|Partial|Required|Readonly|Record|Pick|Omit|InstanceType|Parameters|ReturnType)\b", TokenType.Type, 7),
+
+                // TypeScript specific structures
+                new TokenPattern(@"\b(?:type|interface|implements|extends|constructor|declare|namespace)\b", TokenType.Keyword, 8),
+
+                // Method and function calls
+                new TokenPattern(@"\b[a-zA-Z_$][a-zA-Z0-9_$]*(?=\s*\()", TokenType.Method, 9),
+
+                // Operators
+                new TokenPattern(@"[+\-*/%=!<>&|^~?:]+|<<|>>|\+\+|--|&&|\|\||==|!=|<=|>=|===|!==|\?\?", TokenType.Operator, 10),
+
+                // Punctuation
+                new TokenPattern(@"[{}()\[\];,.:]", TokenType.Punctuation, 11)
             };
         }
     }
