@@ -29,6 +29,7 @@ namespace GxPT
         private sealed class Filter : IMessageFilter
         {
             private const int WM_MOUSEWHEEL = 0x020A;
+            private const int WHEEL_DELTA = 120; // reference only; we forward raw deltas for precision scrolling
 
             [DllImport("user32.dll", CharSet = CharSet.Auto)]
             private static extern IntPtr SendMessage(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
@@ -39,9 +40,11 @@ namespace GxPT
             public bool PreFilterMessage(ref Message m)
             {
                 if (m.Msg != WM_MOUSEWHEEL) return false;
-                // Extract wheel delta from wParam high word
-                int wparam = m.WParam.ToInt32();
-                int wheelDelta = (short)((wparam >> 16) & 0xFFFF);
+                // Extract wheel delta from wParam high word safely on 64-bit
+                long wparam64;
+                try { wparam64 = m.WParam.ToInt64(); }
+                catch { return false; }
+                int wheelDelta = (short)((wparam64 >> 16) & 0xFFFF);
                 Point screenPt = Control.MousePosition;
 
                 // 1) ChatTranscriptControl (if any) under mouse: call its scroll method
@@ -53,9 +56,9 @@ namespace GxPT
                         Rectangle screenRect = transcript.RectangleToScreen(transcript.ClientRectangle);
                         if (screenRect.Contains(screenPt))
                         {
-                            // Let the control decide (supports Shift+Wheel horizontal scrolling)
+                            // Forward raw delta to allow precision scrolling; the control will scale appropriately
                             transcript.HandleHoverWheel(wheelDelta, screenPt, Control.ModifierKeys);
-                            return true;
+                            return true; // consumed
                         }
                     }
                     catch { }
@@ -73,6 +76,7 @@ namespace GxPT
                     {
                         if (cur is ListView || cur is TextBoxBase)
                         {
+                            // Forward the original message unchanged to preserve precision deltas on modern devices
                             SendMessage(cur.Handle, WM_MOUSEWHEEL, m.WParam, m.LParam);
                             return true;
                         }
@@ -83,6 +87,8 @@ namespace GxPT
 
                 return false;
             }
+
+            // No explicit accumulator: raw precision deltas are forwarded, and classic mice send +/-120 multiples
 
             private static ChatTranscriptControl GetHoveredTranscript(Point screenPt)
             {

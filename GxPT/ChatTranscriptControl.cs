@@ -125,6 +125,9 @@ namespace GxPT
         private bool _dragScrollIsTable;        // dragging a table scrollbar vs code
         private bool _hoverScrollIsTable;       // hovering a table scrollbar vs code
 
+        // Accumulator for high-precision (sub-120) vertical wheel deltas
+        private double _wheelRemainderY;
+
         // ---------- Data ----------
         private sealed class MessageItem
         {
@@ -176,12 +179,17 @@ namespace GxPT
             try
             {
                 if (!_vbar.Enabled) return;
-                int delta = -(wheelDelta / 120) * ScrollStep;
-                int view = Math.Max(0, ClientSize.Height);
-                int max = Math.Max(0, _contentHeight - view);
-                _scrollOffset = Math.Max(0, Math.Min(max, _scrollOffset + delta));
-                int allowedMax = Math.Max(0, _vbar.Maximum - _vbar.LargeChange + 1);
-                _vbar.Value = Math.Max(_vbar.Minimum, Math.Min(allowedMax, _scrollOffset));
+                // Proportional pixel scroll: support precision deltas (e.g., trackpads) with remainder accumulation
+                double pixelsD = -(wheelDelta / 120.0) * ScrollStep + _wheelRemainderY;
+                int pixels = (int)System.Math.Truncate(pixelsD); // keep sign; leave fractional remainder for next tick
+                _wheelRemainderY = pixelsD - pixels;
+                if (pixels == 0) return; // nothing to move yet
+
+                int view = System.Math.Max(0, ClientSize.Height);
+                int max = System.Math.Max(0, _contentHeight - view);
+                _scrollOffset = System.Math.Max(0, System.Math.Min(max, _scrollOffset + pixels));
+                int allowedMax = System.Math.Max(0, _vbar.Maximum - _vbar.LargeChange + 1);
+                _vbar.Value = System.Math.Max(_vbar.Minimum, System.Math.Min(allowedMax, _scrollOffset));
                 Invalidate();
             }
             catch { }
@@ -199,7 +207,8 @@ namespace GxPT
                     if (ui.Hit && ui.ContentWidth > ui.ViewportWidth && ui.Item != null)
                     {
                         int hStep = Math.Max(16, ScrollStep);
-                        int deltaX = -(wheelDelta / 120) * hStep;
+                        // Proportional horizontal scroll for precision input; round to nearest pixel
+                        int deltaX = (int)System.Math.Round(-(wheelDelta / 120.0) * hStep, MidpointRounding.AwayFromZero);
                         if (ui.IsTable)
                         {
                             int idx = ui.TableIndex;
@@ -1536,7 +1545,7 @@ namespace GxPT
                     if (ui.Hit && ui.ContentWidth > ui.ViewportWidth && ui.Item != null)
                     {
                         int hStep = Math.Max(16, ScrollStep); // horizontal step per wheel notch
-                        int deltaX = -(e.Delta / 120) * hStep;
+                        int deltaX = (int)System.Math.Round(-(e.Delta / 120.0) * hStep, MidpointRounding.AwayFromZero);
                         if (ui.IsTable)
                         {
                             int idx = ui.TableIndex;
@@ -1566,14 +1575,8 @@ namespace GxPT
             }
             catch { }
 
-            if (!_vbar.Enabled) return;
-
-            int delta = -(e.Delta / 120) * ScrollStep;
-            int view = Math.Max(0, ClientSize.Height);
-            int max = Math.Max(0, _contentHeight - view);
-            _scrollOffset = Math.Max(0, Math.Min(max, _scrollOffset + delta));
-            _vbar.Value = _scrollOffset;
-            Invalidate();
+            // Fallback to vertical scroll using proportional precision handling
+            ScrollByWheelDelta(e.Delta);
         }
 
         protected override void OnMouseUp(MouseEventArgs e)
