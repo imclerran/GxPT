@@ -760,6 +760,60 @@ namespace GxPT
     }
 
     /// <summary>
+    /// Dart syntax highlighter (modern Dart with null safety)
+    /// </summary>
+    public class DartHighlighter : RegexHighlighterBase
+    {
+        public static readonly string[] FileTypes = new string[] { "*.dart" };
+        public override string Language
+        {
+            get { return "dart"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "dart", "flutter" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Line comments and documentation comments
+                new TokenPattern(@"///.*$", TokenType.Comment, 1),
+                new TokenPattern(@"//.*$", TokenType.Comment, 2),
+
+                // Block comments (including doc blocks)
+                new TokenPattern(@"/\*[\s\S]*?\*/", TokenType.Comment, 3),
+
+                // String literals: raw and normal; single/double; triple quotes allow multiline
+                new TokenPattern("r?'''[\\s\\S]*?'''|r?\\\"\\\"\\\"[\\s\\S]*?\\\"\\\"\\\"|r?'(?:[^'\\\\]|\\\\.)*'|r?\\\"(?:[^\\\"\\\\]|\\\\.)*\\\"", TokenType.String, 4),
+
+                // Numbers: decimal and hex, with underscores and exponents
+                new TokenPattern(@"\b(?:0[xX][0-9a-fA-F_]+|(?:\d+(?:_\d+)*\.(?:\d+(?:_\d+)*)?|\d+(?:_\d+)*|\.(?:\d+(?:_\d+)*))(?:[eE][+-]?\d+)?)\b", TokenType.Number, 5),
+
+                // Keywords (Dart 3+, including null-safety related)
+                new TokenPattern(@"\b(?:abstract|as|assert|async|await|break|case|catch|class|const|continue|covariant|default|deferred|do|else|enum|export|extends|extension|external|factory|false|final|finally|for|Function|get|hide|if|implements|import|in|interface|is|late|library|mixin|native|new|null|of|on|operator|part|required|rethrow|return|sealed|set|show|static|super|switch|sync|this|throw|true|try|typedef|var|void|while|with|yield|base)\b", TokenType.Keyword, 6),
+
+                // Built-in and common types (with optional nullable suffix ?)
+                new TokenPattern(@"\b(?:int|double|num|bool|String|List|Map|Set|Iterable|Future|Stream|Object|dynamic|Never|Null|Record|Symbol|Duration|DateTime|BigInt|Pattern|RegExp|Uri|Match|StackTrace|Type)(\?)?\b", TokenType.Type, 7),
+
+                // Metadata annotations: @identifier or @prefix.Identifier
+                new TokenPattern(@"@[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?", TokenType.Type, 8),
+
+                // Function/method invocations
+                new TokenPattern(@"\b[a-zA-Z_][a-zA-Z0-9_]*(?=\s*\()", TokenType.Method, 9),
+
+                // Operators, including null-safety and cascade/spread operators
+                new TokenPattern(@"\?\?=|\?\?|\?\.|\?\.\.|\.\.\.|\?\.\.|\.\.|=>|==|!=|<=|>=|&&|\|\||>>>?=?|<<=?|\+=|-=|\*=|/=|%=|&=|\|=|\^=|~/=|[+\-*/%&|^~!=<>?:.]|!", TokenType.Operator, 10),
+
+                // Punctuation and delimiters
+                new TokenPattern(@"[{}()\[\];,<>]", TokenType.Punctuation, 11)
+            };
+        }
+    }
+
+    /// <summary>
     /// EBNF (Extended Backus-Naur Form) syntax highlighter
     /// </summary>
     public class EbnfHighlighter : RegexHighlighterBase
@@ -1450,6 +1504,86 @@ namespace GxPT
     }
 
     /// <summary>
+    /// PHP syntax highlighter (modern PHP 7/8 with attributes and null coalescing)
+    /// </summary>
+    public class PhpHighlighter : RegexHighlighterBase
+    {
+        public static readonly string[] FileTypes = new string[] { "*.php", "*.phtml", "*.php3", "*.php4", "*.php5", "*.phps" };
+        public override string Language
+        {
+            get { return "php"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "php", "phtml" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Comments
+                new TokenPattern(@"//.*$", TokenType.Comment, 1),
+                new TokenPattern(@"#.*$", TokenType.Comment, 2),
+                new TokenPattern(@"/\*[\s\S]*?\*/", TokenType.Comment, 3),
+
+                // Heredoc / Nowdoc (heuristic; supports optional indent with <<<-)
+                new TokenPattern(@"<<<-?\s*'([A-Za-z_][A-Za-z0-9_]*)'[\s\S]*?^\1;?\s*$", TokenType.String, 4),
+                new TokenPattern(@"<<<-?\s*([A-Za-z_][A-Za-z0-9_]*)[\s\S]*?^\1;?\s*$", TokenType.String, 5),
+
+                // Strings: single and double quoted
+                new TokenPattern(@"'(?:[^'\\]|\\.)*'|""(?:[^""\\]|\\.)*""", TokenType.String, 6),
+
+                // PHP open/close tags
+                new TokenPattern(@"<\?(?:php|=)?|\?>", TokenType.Punctuation, 7),
+
+                // Superglobals (higher priority than regular variables)
+                new TokenPattern(@"\$(?:GLOBALS|_SERVER|_GET|_POST|_FILES|_COOKIE|_SESSION|_REQUEST|_ENV)\b", TokenType.Type, 8),
+
+                // Variables ($var, $this)
+                new TokenPattern(@"\$[A-Za-z_][A-Za-z0-9_]*", TokenType.Type, 9),
+
+                // Magic constants and special
+                new TokenPattern(@"__\w+__\b|\b__halt_compiler\b", TokenType.Keyword, 10),
+
+                // Numbers: hex, bin, oct, decimal (with underscores and exponents)
+                new TokenPattern(@"\b(?:0[xX][0-9a-fA-F_]+|0[bB][01_]+|0[0-7_]+|(?:\d+(?:_\d+)*\.(?:\d+(?:_\d+)*)?|\d+(?:_\d+)*|\.(?:\d+(?:_\d+)*))(?:[eE][+-]?\d+)?)\b", TokenType.Number, 11),
+
+                // Keywords (case-insensitive)
+                new TokenPattern(@"(?i)\b(?:abstract|and|array|as|break|callable|case|catch|class|clone|const|continue|declare|default|die|do|echo|else|elseif|empty|enddeclare|endfor|endforeach|endif|endswitch|endwhile|eval|exit|extends|final|finally|fn|for|foreach|function|global|goto|if|implements|include|include_once|instanceof|insteadof|interface|isset|list|match|namespace|new|or|print|private|protected|public|require|require_once|return|static|switch|throw|trait|try|unset|use|var|while|xor|yield|from|enum|readonly)\b", TokenType.Keyword, 12),
+
+                // Boolean/null literals (case-insensitive)
+                new TokenPattern(@"(?i)\b(?:true|false|null)\b", TokenType.Keyword, 13),
+
+                // Built-in types (with optional nullable suffix ?)
+                new TokenPattern(@"(?i)\b(?:int|float|double|string|bool|boolean|array|object|mixed|void|never|resource|iterable|self|parent|static)(\?)?\b", TokenType.Type, 14),
+
+                // Attribute syntax #[...] (PHP 8+)
+                new TokenPattern(@"#\[[^\]]*\]", TokenType.Type, 15),
+
+                // Namespace and use declarations (qualified names)
+                new TokenPattern(@"(?<=\b(?:namespace|use)\s+)[A-Za-z_\\][A-Za-z0-9_\\]*", TokenType.Type, 16),
+
+                // Class/interface/trait/enum names after declaration
+                new TokenPattern(@"(?<=\b(?:class|interface|trait|enum)\s+)[A-Za-z_][A-Za-z0-9_]*", TokenType.Type, 17),
+
+                // Function definition names
+                new TokenPattern(@"(?<=\bfunction\s+)&?[A-Za-z_][A-Za-z0-9_]*", TokenType.Method, 18),
+
+                // Function/method calls
+                new TokenPattern(@"\\?[A-Za-z_][A-Za-z0-9_\\]*(?=\s*\()", TokenType.Method, 19),
+
+                // Operators (including PHP-specific)
+                new TokenPattern(@"\?\?=|\?\?|<=>|\?->|->|::|===|!==|==|!=|<=|>=|&&|\|\||<<=|>>=|\.=|\+=|-=|\*=|/=|%=|&=|\|=|\^=|<<|>>|\.|~|\?|:|[+\-*/%&|^!=<>]", TokenType.Operator, 20),
+
+                // Punctuation
+                new TokenPattern(@"[{}()\[\];,:]", TokenType.Punctuation, 21)
+            };
+        }
+    }
+
+    /// <summary>
     /// PowerShell syntax highlighter
     /// </summary>
     public class PowerShellHighlighter : RegexHighlighterBase
@@ -1898,6 +2032,63 @@ namespace GxPT
 
                 // Punctuation
                 new TokenPattern(@"[(){}\[\];,.]", TokenType.Punctuation, 14)
+            };
+        }
+    }
+
+    /// <summary>
+    /// Swift syntax highlighter (modern Swift with optionals and concurrency keywords)
+    /// </summary>
+    public class SwiftHighlighter : RegexHighlighterBase
+    {
+        public static readonly string[] FileTypes = new string[] { "*.swift" };
+        public override string Language
+        {
+            get { return "swift"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "swift", "swiftlang" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Comments (doc and single-line)
+                new TokenPattern(@"///.*$", TokenType.Comment, 1),
+                new TokenPattern(@"//.*$", TokenType.Comment, 2),
+
+                // Block comments (including nested in practice, but regex handles basic)
+                new TokenPattern(@"/\*[\s\S]*?\*/", TokenType.Comment, 3),
+
+                // String literals: triple quotes (multiline), raw (#"..."# / ##"..."##), and normal strings
+                new TokenPattern("\"\"\"[\\s\\S]*?\"\"\"|#\\\"(?:[^\\\"\\\\]|\\\\.)*\\\"#|##\\\"(?:[^\\\"\\\\]|\\\\.)*\\\"##|\\\"(?:[^\\\"\\\\]|\\\\.)*\\\"", TokenType.String, 4),
+
+                // Numbers: hex (with optional p-exponent), binary, octal, decimal with underscores and exponents
+                new TokenPattern(@"\b(?:0x[0-9A-Fa-f_]+(?:\.[0-9A-Fa-f_]+)?(?:[pP][+-]?\d+)?|0b[01_]+|0o[0-7_]+|(?:\d+(?:_\d+)*(?:\.\d+(?:_\d+)*)?|\.\d+(?:_\d+)*)(?:[eE][+-]?\d+)?)\b", TokenType.Number, 5),
+
+                // Keywords (including access control, modifiers, error handling, concurrency)
+                new TokenPattern(@"\b(?:actor|as|associatedtype|async|await|break|case|catch|class|continue|convenience|defer|deinit|default|deinit|do|dynamic|else|enum|extension|fallthrough|false|fileprivate|final|for|func|get|guard|if|import|in|indirect|infix|init|inout|internal|is|lazy|let|mutating|nonmutating|nil|none|nonisolated|open|operator|override|postfix|prefix|private|protocol|public|rethrows|return|required|self|Self|set|some|static|struct|subscript|super|switch|throw|throws|true|try|typealias|unowned|weak|where|while|willSet|didSet|yield|yielded|any)\b", TokenType.Keyword, 6),
+
+                // Built-in/common types with optional nullable suffix ?
+                new TokenPattern(@"\b(?:Int|Int8|Int16|Int32|Int64|UInt|UInt8|UInt16|UInt32|UInt64|Float|Double|Bool|String|Character|Any|AnyObject|Never|Optional|Array|Dictionary|Set|Result|Data|URL|UUID|Decimal|Date|Error|NSObject|CGFloat|CGPoint|CGSize|CGRect)(\?)?\b", TokenType.Type, 7),
+
+                // Attributes (annotations) like @available, @objc, @MainActor, etc.
+                new TokenPattern(@"@[A-Za-z_][A-Za-z0-9_]*", TokenType.Type, 8),
+
+                // Compile-time and magic directives: #if, #available, #selector, #file, #line, etc.
+                new TokenPattern(@"#[A-Za-z_][A-Za-z0-9_]*", TokenType.Keyword, 9),
+
+                // Function and method calls (identifier followed by '(')
+                new TokenPattern(@"\b[a-zA-Z_][a-zA-Z0-9_]*(?=\s*\()", TokenType.Method, 10),
+
+                // Operators: ranges, nil-coalescing, optional chaining, assignment and comparisons
+                new TokenPattern(@"\?\?|\?\.|\.\.\.|\.\.<|->|===|!==|==|!=|<=|>=|&&|\|\||<<|>>|\+=|-=|\*=|/=|%=|&=|\|=|\^=|~|\?|:|\.|!|[+\-*/%&|^<>=]", TokenType.Operator, 11),
+
+                // Punctuation
+                new TokenPattern(@"[{}()\[\];,]", TokenType.Punctuation, 12)
             };
         }
     }
