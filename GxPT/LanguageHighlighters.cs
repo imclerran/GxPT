@@ -445,6 +445,68 @@ namespace GxPT
     }
 
     /// <summary>
+    /// Clojure/EDN syntax highlighter
+    /// </summary>
+    public class ClojureHighlighter : RegexHighlighterBase
+    {
+        public static readonly string[] FileTypes = new string[] { "*.clj", "*.cljs", "*.cljc", "*.edn" };
+        public override string Language
+        {
+            get { return "clojure"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "clj", "cljs", "cljc", "edn", "clojure" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Line comments
+                new TokenPattern(@";.*$", TokenType.Comment, 1),
+
+                // (comment ...) forms (heuristic, not balanced)
+                new TokenPattern(@"\(\s*comment\b[\s\S]*?\)", TokenType.Comment, 2),
+
+                // Regex literals: #"..."
+                new TokenPattern(@"#""(?:[^""\\]|\\.)*""", TokenType.String, 3),
+
+                // Strings
+                new TokenPattern(@"""(?:[^""\\]|\\.)*""", TokenType.String, 4),
+
+                // Character literals: \c, \newline, \uXXXX, \oNNN
+                new TokenPattern(@"\\(?:u[0-9A-Fa-f]{4}|o[0-7]{1,3}|newline|space|tab|backspace|formfeed|return|quote|.)", TokenType.String, 5),
+
+                // Numbers: hex, ratios, decimals, base-N (e.g., 2r1010), with optional exponent and N/M suffixes
+                new TokenPattern(@"\b[+-]?(?:\d+r[0-9A-Za-z]+|0[xX][0-9A-Fa-f]+|\d+/\d+|(?:\d+(?:_\d+)*\.(?:\d+(?:_\d+)*)?|\d+(?:_\d+)*|\.(?:\d+(?:_\d+)*))(?:[eE][+-]?\d+)?[MN]?)\b", TokenType.Number, 6),
+
+                // Booleans and nil
+                new TokenPattern(@"\b(?:true|false|nil)\b", TokenType.Keyword, 7),
+
+                // Clojure keywords (:kw, ::kw, :ns/kw)
+                new TokenPattern(@"::{0,1}[A-Za-z0-9_*!+<>=?/\.\-]+(?:/[A-Za-z0-9_*!+<>=?/\.\-]+)?", TokenType.Type, 8),
+
+                // Tagged literals (EDN): #inst, #uuid, #myapp/type
+                new TokenPattern(@"#[A-Za-z_][A-Za-z0-9_.-]*/?[A-Za-z0-9_.-]*", TokenType.Type, 9),
+
+                // Special forms and common macros/functions
+                new TokenPattern(@"\b(?:def|defn|defn-|defmacro|defmulti|defmethod|defonce|defprotocol|extend|extend-type|extend-protocol|reify|proxy|gen-class|ns|in-ns|import|require|use|refer|alias|refer-clojure|let|letfn|loop|recur|if|if-let|if-some|when|when-not|when-let|when-some|cond|condp|case|do|fn|fn\*|try|catch|finally|throw|doseq|dotimes|for|while|->|->>|as->|doto|some->|some->>|binding|with-open|with-redefs)\b", TokenType.Keyword, 10),
+
+                // Function/macro symbol immediately after '(' (typical call position)
+                new TokenPattern(@"(?<=\()[A-Za-z_*!+<>=?/.\-][A-Za-z0-9_*!+<>=?/.\-:]*", TokenType.Method, 11),
+
+                // Reader macro/operators and metadata markers
+                new TokenPattern(@"~@|[`'~^@#]", TokenType.Operator, 12),
+
+                // Punctuation and delimiters: lists, vectors, maps, sets
+                new TokenPattern(@"[()\[\]{}]", TokenType.Punctuation, 13)
+            };
+        }
+    }
+
+    /// <summary>
     /// C++ syntax highlighter
     /// </summary>
     public class CppHighlighter : RegexHighlighterBase
@@ -1100,6 +1162,75 @@ namespace GxPT
     }
 
     /// <summary>
+    /// Haskell syntax highlighter
+    /// </summary>
+    public class HaskellHighlighter : RegexHighlighterBase
+    {
+        public static readonly string[] FileTypes = new string[] { "*.hs", "*.lhs" };
+        public override string Language
+        {
+            get { return "haskell"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "hs", "lhs", "haskell" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Pragmas and block comments (note: nested comments not fully supported by regex)
+                new TokenPattern(@"\{-#[\s\S]*?#-\}", TokenType.Comment, 1),
+                new TokenPattern(@"\{-[\s\S]*?-\}", TokenType.Comment, 2),
+
+                // Line comments
+                new TokenPattern(@"--.*$", TokenType.Comment, 3),
+
+                // Quasiquotes: [qq| ... |] or [name|...|]
+                new TokenPattern(@"\[[A-Za-z_][A-Za-z0-9_]*\|[\s\S]*?\|\]", TokenType.String, 4),
+
+                // String literals (double-quoted with escapes)
+                new TokenPattern(@"""(?:[^""\\]|\\.)*""", TokenType.String, 5),
+
+                // Character literals
+                new TokenPattern(@"'(?:[^'\\]|\\.)'", TokenType.String, 6),
+
+                // Numbers: hex (0x), octal (0o), binary (0b), decimal and floats with exponents
+                new TokenPattern(@"\b(?:0[xX][0-9a-fA-F_]+|0[oO][0-7_]+|0[bB][01_]+|(?:\d+(?:_\d+)*\.(?:\d+(?:_\d+)*)?|\d+(?:_\d+)*|\.(?:\d+(?:_\d+)*))(?:[eE][+-]?\d+)?)\b", TokenType.Number, 7),
+
+                // Keywords (Haskell 2010 + common extensions)
+                new TokenPattern(@"\b(?:as|case|class|data|default|deriving|do|else|family|forall|foreign|hiding|if|import|in|infix|infixl|infixr|instance|let|mdo|module|newtype|of|qualified|then|type|where|pattern|proc|rec|static|stock|via|unsafe)\b", TokenType.Keyword, 8),
+
+                // Boolean and unit literals
+                new TokenPattern(@"\b(?:True|False)\b|\(\)", TokenType.Keyword, 9),
+
+                // Common/built-in types (treat as Type)
+                new TokenPattern(@"\b(?:Int|Integer|Float|Double|Rational|Bool|Char|String|Maybe|Either|Ordering|IO|Read|Show|Eq|Ord|Enum|Bounded|Monad|Functor|Applicative|Foldable|Traversable|Num|Real|Integral|Fractional|Floating|RealFrac|RealFloat|Semigroup|Monoid|Void|Array|List|Map|Set|Vector|ByteString|Text)\b", TokenType.Type, 10),
+
+                // Uppercase-starting identifiers (type/data constructors, modules)
+                new TokenPattern(@"\b[A-Z][A-Za-z0-9_']*(?:\.[A-Z][A-Za-z0-9_']*)*\b", TokenType.Type, 11),
+
+                // Backticked identifiers used as infix: `function`
+                new TokenPattern(@"`[A-Za-z_][A-Za-z0-9_']*`", TokenType.Method, 12),
+
+                // Function/variable definitions at line start (name :: ... or name = ...)
+                new TokenPattern(@"(?m)^[\t ]*[a-z_][A-Za-z0-9_']*(?=\s*(::|=))", TokenType.Method, 13),
+
+                // Function calls: simple heuristic - lowercase identifier followed by space and not definition
+                new TokenPattern(@"\b[a-z_][A-Za-z0-9_']*(?=\s*\()", TokenType.Method, 14),
+
+                // Operators (including common Haskell operators and symbols)
+                new TokenPattern(@"::|->|<-|=>|\\|\.=|\.\.|\.|:|\$|\|\||&&|==|/=|<=|>=|\+\+|!!|\+|-|\*|/|\^|==|/=|<|>|=|@|~|%", TokenType.Operator, 15),
+
+                // Punctuation and delimiters
+                new TokenPattern(@"[{}()\[\];,]", TokenType.Punctuation, 16)
+            };
+        }
+    }
+
+    /// <summary>
     /// HTML syntax highlighter
     /// </summary>
     public class HtmlHighlighter : RegexHighlighterBase
@@ -1205,6 +1336,64 @@ namespace GxPT
 
                 // Punctuation
                 new TokenPattern(@"[{}()\[\];.,]", TokenType.Punctuation, 10)
+            };
+        }
+    }
+
+    /// <summary>
+    /// Kotlin syntax highlighter
+    /// </summary>
+    public class KotlinHighlighter : RegexHighlighterBase
+    {
+        public static readonly string[] FileTypes = new string[] { "*.kt", "*.kts" };
+        public override string Language
+        {
+            get { return "kotlin"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "kt", "kts", "kotlin" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Single-line comments
+                new TokenPattern(@"//.*$", TokenType.Comment, 1),
+
+                // Multi-line comments (/* ... */)
+                new TokenPattern(@"/\*[\s\S]*?\*/", TokenType.Comment, 2),
+
+                // String literals: triple quotes and normal strings
+                new TokenPattern("\"\"\"[\\s\\S]*?\"\"\"|\"(?:[^\"\\\\]|\\\\.)*\"", TokenType.String, 3),
+
+                // Character literals
+                new TokenPattern(@"'(?:[^'\\]|\\.)'", TokenType.String, 4),
+
+                // Numbers: hex, binary, decimal, floats with underscores and suffixes (L, f/F)
+                new TokenPattern(@"\b(?:0[xX][0-9a-fA-F_]+|0[bB][01_]+|(?:\d+(?:_\d+)*\.(?:\d+(?:_\d+)*)?|\d+(?:_\d+)*|\.(?:\d+(?:_\d+)*))(?:[eE][+-]?\d+)?[fFdDlL]?)\b", TokenType.Number, 5),
+
+                // Keywords (includes soft keywords commonly used in declarations)
+                new TokenPattern(@"\b(?:package|import|class|interface|enum|object|companion|fun|operator|infix|inline|noinline|crossinline|tailrec|external|const|vararg|suspend|data|sealed|value|annotation|open|final|abstract|actual|expect|override|private|protected|public|internal|lateinit|by|where|constructor|init|get|set|field|property|receiver|param|setparam|delegate|typealias|as|is|in|out|reified|this|super|return|break|continue|when|if|else|for|while|do|try|catch|finally|throw|true|false|null)
+                \b", TokenType.Keyword, 6),
+
+                // Built-in/common types
+                new TokenPattern(@"\b(?:Any|Nothing|Unit|Boolean|Byte|Short|Int|Long|UByte|UShort|UInt|ULong|Float|Double|Char|String|Array|List|MutableList|Set|MutableSet|Map|MutableMap|Sequence|Pair|Triple|Result)
+                \b", TokenType.Type, 7),
+
+                // Annotations (including use-site targets like @file:, @get:, etc.)
+                new TokenPattern(@"@[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?(?::[A-Za-z_][A-Za-z0-9_]*)?", TokenType.Type, 8),
+
+                // Function and constructor calls (identifier before '(')
+                new TokenPattern(@"\b[a-zA-Z_][a-zA-Z0-9_]*(?=\s*\()", TokenType.Method, 9),
+
+                // Operators: safe calls, elvis, not-null, ranges, assignment and logical/arithmetics
+                new TokenPattern(@"\?\?:|\?\.|::|!!|\.\.<|\.\.|===|!==|==|!=|<=|>=|&&|\|\||->|\+=|-=|\*=|/=|%=|<<|>>|\+\+|--|=|[+\-*/%&|^~!?<>:]", TokenType.Operator, 10),
+
+                // Punctuation
+                new TokenPattern(@"[{}()\[\];,.:]", TokenType.Punctuation, 11)
             };
         }
     }
@@ -1967,6 +2156,64 @@ namespace GxPT
                 
                 // Punctuation
                 new TokenPattern(@"[{}()\[\];,.]", TokenType.Punctuation, 11)
+            };
+        }
+    }
+
+    /// <summary>
+    /// Scala syntax highlighter
+    /// </summary>
+    public class ScalaHighlighter : RegexHighlighterBase
+    {
+        public static readonly string[] FileTypes = new string[] { "*.scala", "*.sc" };
+        public override string Language
+        {
+            get { return "scala"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "scala", "sc" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // ScalaDoc and block comments
+                new TokenPattern(@"/\*\*[\s\S]*?\*/", TokenType.Comment, 1),
+                new TokenPattern(@"/\*[\s\S]*?\*/", TokenType.Comment, 2),
+
+                // Line comments
+                new TokenPattern(@"//.*$", TokenType.Comment, 3),
+
+                // Strings: triple-quoted and normal (optionally with interpolator prefix like s"""...""" or f"...")
+                new TokenPattern("(?:[A-Za-z_]\\w*)?\"\"\"[\\s\\S]*?\"\"\"", TokenType.String, 4),
+                new TokenPattern("(?:[A-Za-z_]\\w*)?\"(?:[^\\\"\\\\]|\\\\.)*\"", TokenType.String, 5),
+
+                // Character literals
+                new TokenPattern(@"'(?:[^'\\]|\\.)'", TokenType.String, 6),
+
+                // Numbers: hex, binary (Scala 3), decimal, floats with optional underscores and suffixes
+                new TokenPattern(@"\b(?:0[xX][0-9a-fA-F_]+|0[bB][01_]+|(?:\d+(?:_\d+)*\.(?:\d+(?:_\d+)*)?|\d+(?:_\d+)*|\.(?:\d+(?:_\d+)*))(?:[eE][+-]?\d+)?[fFdDlL]?)\b", TokenType.Number, 7),
+
+                // Keywords (Scala 2 and 3)
+                new TokenPattern(@"\b(?:abstract|case|catch|class|def|do|else|enum|export|extends|extension|false|final|finally|for|given|if|implicit|import|inline|lazy|match|new|null|object|opaque|open|override|package|private|protected|return|sealed|super|then|this|throw|trait|true|try|type|using|val|var|while|with|yield|end)\b", TokenType.Keyword, 8),
+
+                // Common/built-in types
+                new TokenPattern(@"\b(?:Any|AnyRef|AnyVal|Nothing|Null|Unit|Boolean|Byte|Short|Int|Long|Float|Double|Char|String|Option|Some|None|Either|Left|Right|Try|Success|Failure|List|Vector|Seq|IndexedSeq|Map|Set|Iterator|Future|BigInt|BigDecimal)\b", TokenType.Type, 9),
+
+                // Annotations
+                new TokenPattern(@"@[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*", TokenType.Type, 10),
+
+                // Method/function calls (identifier followed by '(')
+                new TokenPattern(@"\b[a-zA-Z_][a-zA-Z0-9_]*(?=\s*\()", TokenType.Method, 11),
+
+                // Operators: arrows, comparison, boolean, assignment, ranges, cons, etc.
+                new TokenPattern(@"=>|<-|:=|::|:::|\|\||&&|===|!==|==|!=|<=|>=|<<|>>|\+\+|--|\+=|-=|\*=|/=|%=|::=|\.|:|~|\?|[+\-*/%&|^!<>]=?", TokenType.Operator, 12),
+
+                // Punctuation
+                new TokenPattern(@"[{}()\[\];,]", TokenType.Punctuation, 13)
             };
         }
     }

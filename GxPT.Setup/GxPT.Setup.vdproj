@@ -658,14 +658,14 @@
         {
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:GxPT"
-        "ProductCode" = "8:{BC759590-E644-435C-A506-CDD3F426A731}"
-        "PackageCode" = "8:{FCF5DEB3-4418-49C0-9343-45D7940F38B4}"
+        "ProductCode" = "8:{20918215-98BE-4E74-9627-5CB52A111531}"
+        "PackageCode" = "8:{01B82B7B-B168-42C7-9FEB-9CC3964E5F37}"
         "UpgradeCode" = "8:{18C05863-8BD9-4273-B9E8-061F771066DF}"
         "RestartWWWService" = "11:FALSE"
         "RemovePreviousVersions" = "11:TRUE"
         "DetectNewerInstalledVersion" = "11:TRUE"
         "InstallAllUsers" = "11:TRUE"
-        "ProductVersion" = "8:0.7.1"
+        "ProductVersion" = "8:0.7.2"
         "Manufacturer" = "8:IFM Innovations"
         "ARPHELPTELEPHONE" = "8:"
         "ARPHELPLINK" = "8:"
@@ -1313,7 +1313,7 @@
         {
             "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_E0499EB368C445EBB017CB750C98F6FD"
             {
-            "SourcePath" = "8:..\\GxPT\\obj\\Debug\\GxPT.exe"
+            "SourcePath" = "8:..\\GxPT\\obj\\Release\\GxPT.exe"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_A249DCF40CCD4A129F140A8AAEBBA6B7"

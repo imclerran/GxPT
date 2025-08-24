@@ -90,6 +90,7 @@ namespace GxPT
             RegisterHighlighter(new BatchHighlighter());
             RegisterHighlighter(new AssemblyHighlighter());
             RegisterHighlighter(new CHighlighter());
+            RegisterHighlighter(new ClojureHighlighter());
             RegisterHighlighter(new CppHighlighter());
             RegisterHighlighter(new CSharpHighlighter());
             RegisterHighlighter(new CssHighlighter());
@@ -99,8 +100,10 @@ namespace GxPT
             RegisterHighlighter(new FortranHighlighter());
             RegisterHighlighter(new FSharpHighlighter());
             RegisterHighlighter(new GoHighlighter());
+            RegisterHighlighter(new HaskellHighlighter());
             RegisterHighlighter(new HtmlHighlighter());
             RegisterHighlighter(new JavaHighlighter());
+            RegisterHighlighter(new KotlinHighlighter());
             RegisterHighlighter(new JavaScriptHighlighter());
             RegisterHighlighter(new JsonHighlighter());
             RegisterHighlighter(new LuaHighlighter());
@@ -113,6 +116,7 @@ namespace GxPT
             RegisterHighlighter(new RubyHighlighter());
             RegisterHighlighter(new RegexHighlighter());
             RegisterHighlighter(new RustHighlighter());
+            RegisterHighlighter(new ScalaHighlighter());
             RegisterHighlighter(new SqlHighlighter());
             RegisterHighlighter(new SwiftHighlighter());
             RegisterHighlighter(new TypeScriptHighlighter());
