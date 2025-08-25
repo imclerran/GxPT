@@ -80,6 +80,25 @@ namespace GxPT
                 // Clean up temp file
                 try { if (!string.IsNullOrEmpty(dataFile) && File.Exists(dataFile)) File.Delete(dataFile); }
                 catch { }
+                // If curl signaled an HTTP error but kept the body (with --fail-with-body), log the body and any extracted message for debugging
+                try
+                {
+                    if (!string.IsNullOrEmpty(err) && output.Length > 0)
+                    {
+                        Logger.Log("HTTP", "curl error body: " + output);
+                        try
+                        {
+                            var ser2 = new JavaScriptSerializer();
+                            var dict2 = ser2.Deserialize<Dictionary<string, object>>(output);
+                            var msg2 = ExtractErrorMessage(dict2);
+                            if (!string.IsNullOrEmpty(msg2))
+                                Logger.Log("HTTP", "error.message: " + msg2);
+                        }
+                        catch { }
+                    }
+                }
+                catch { }
+
                 if (!string.IsNullOrEmpty(err) && output.Length == 0)
                     throw new Exception("curl error: " + err);
                 return output;
@@ -117,9 +136,16 @@ namespace GxPT
                 string line;
                 var ser = new JavaScriptSerializer();
                 bool sawAnyDelta = false;
+                var stdoutBuf = new StringBuilder();
                 while ((line = sr.ReadLine()) != null)
                 {
                     line = line.Trim();
+                    // Buffer all stdout; if no deltas are seen, we'll inspect this for a JSON error body.
+                    if (line.Length > 0)
+                    {
+                        try { stdoutBuf.AppendLine(line); }
+                        catch { }
+                    }
                     if (line.Length == 0) continue;
                     if (line.StartsWith("data:")) line = line.Substring(5).Trim();
                     if (line == "[DONE]") break;
@@ -151,10 +177,54 @@ namespace GxPT
                 try
                 {
                     string err = er.ReadToEnd();
-                    if (!string.IsNullOrEmpty(err) && !sawAnyDelta)
+                    if (!sawAnyDelta)
                     {
-                        Logger.Log("Stream", "curl stderr (no deltas): " + err);
-                        if (onError != null) onError(err.Trim());
+                        // Prefer any JSON error body sent on stdout (with --fail-with-body)
+                        string rawBody = null;
+                        try { rawBody = stdoutBuf.ToString().Trim(); }
+                        catch { }
+
+                        string userMsg = null;
+                        string extractedMsg = null;
+                        if (!string.IsNullOrEmpty(rawBody))
+                        {
+                            try
+                            {
+                                // Attempt to parse common error shapes
+                                var dict = ser.Deserialize<Dictionary<string, object>>(rawBody);
+                                extractedMsg = ExtractErrorMessage(dict);
+                                userMsg = extractedMsg ?? rawBody;
+                                try { Logger.Log("HTTP", "curl error body (no deltas): " + rawBody); }
+                                catch { }
+                                try
+                                {
+                                    if (!string.IsNullOrEmpty(extractedMsg))
+                                        Logger.Log("HTTP", "error.message: " + extractedMsg);
+                                }
+                                catch { }
+                            }
+                            catch
+                            {
+                                // Not JSON; fall back to raw body text
+                                userMsg = rawBody;
+                                try { Logger.Log("HTTP", "curl non-JSON body (no deltas): " + rawBody); }
+                                catch { }
+                            }
+                        }
+
+                        // Log stderr too for diagnostics
+                        if (!string.IsNullOrEmpty(err))
+                        {
+                            try { Logger.Log("Stream", "curl stderr (no deltas): " + err); }
+                            catch { }
+                        }
+
+                        if (onError != null)
+                        {
+                            // Prefer API error.message if present; otherwise fall back to curl's stderr summary
+                            var msg = !string.IsNullOrEmpty(extractedMsg) ? extractedMsg : (!string.IsNullOrEmpty(err) ? err : "Request failed");
+                            onError(msg.Trim());
+                        }
                         // Clean up temp file
                         try { if (!string.IsNullOrEmpty(dataFile) && File.Exists(dataFile)) File.Delete(dataFile); }
                         catch { }
@@ -203,7 +273,8 @@ namespace GxPT
             dataFilePath = filePath;
 
             var sb = new StringBuilder();
-            sb.Append("https://openrouter.ai/api/v1/chat/completions ");
+            // -sS: silent but still show errors; --fail-with-body: fail on HTTP errors but keep body on stdout
+            sb.Append("-sS --fail-with-body https://openrouter.ai/api/v1/chat/completions ");
             sb.Append("-H \"Content-Type: application/json\" ");
             string apiKeyForCurl = _apiKey;
             sb.Append("-H \"Authorization: Bearer ").Append(apiKeyForCurl).Append("\" ");
@@ -220,7 +291,8 @@ namespace GxPT
         {
             string bodyEscaped = (jsonBody ?? string.Empty).Replace("\"", "\\\"");
             var sb = new StringBuilder();
-            sb.Append("https://openrouter.ai/api/v1/chat/completions ");
+            // -sS: silent but still show errors; --fail-with-body: fail on HTTP errors but keep body on stdout
+            sb.Append("-sS --fail-with-body https://openrouter.ai/api/v1/chat/completions ");
             sb.Append("-H \"Content-Type: application/json\" ");
             string apiKeyForCurl = _apiKey;
             sb.Append("-H \"Authorization: Bearer ").Append(apiKeyForCurl).Append("\" ");
@@ -229,6 +301,57 @@ namespace GxPT
             try { Logger.Log("Stream", "curl args prepared for request (inline fallback)."); }
             catch { }
             return sb.ToString();
+        }
+
+        // Extracts a human-readable error message from common JSON error shapes (C# 3.0 compatible)
+        private static string ExtractErrorMessage(Dictionary<string, object> root)
+        {
+            if (root == null) return null;
+            try
+            {
+                // { "error": { "message": "..." } }
+                object errorObj;
+                if (root.TryGetValue("error", out errorObj))
+                {
+                    var errDict = errorObj as Dictionary<string, object>;
+                    if (errDict != null)
+                    {
+                        object v;
+                        if (errDict.TryGetValue("message", out v))
+                        {
+                            var s = v as string;
+                            if (!string.IsNullOrEmpty(s)) return s;
+                        }
+                        if (errDict.TryGetValue("error", out v))
+                        {
+                            var s2 = v as string;
+                            if (!string.IsNullOrEmpty(s2)) return s2;
+                        }
+                        if (errDict.TryGetValue("detail", out v))
+                        {
+                            var s3 = v as string;
+                            if (!string.IsNullOrEmpty(s3)) return s3;
+                        }
+                    }
+                }
+
+                // { "message": "..." }
+                object msgVal;
+                if (root.TryGetValue("message", out msgVal))
+                {
+                    var msgStr = msgVal as string;
+                    if (!string.IsNullOrEmpty(msgStr)) return msgStr;
+                }
+                // { "detail": "..." }
+                object detVal;
+                if (root.TryGetValue("detail", out detVal))
+                {
+                    var detStr = detVal as string;
+                    if (!string.IsNullOrEmpty(detStr)) return detStr;
+                }
+            }
+            catch { }
+            return null;
         }
     }
 }
