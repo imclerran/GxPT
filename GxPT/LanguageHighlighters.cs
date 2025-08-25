@@ -13,6 +13,35 @@ namespace GxPT
     /// </summary>
     public abstract class RegexHighlighterBase : ISyntaxHighlighter
     {
+        // Shared, process-wide cache of compiled Regex objects to avoid re-compilation per instance
+        // .NET 3.5 safe: guarded by a simple lock; key combines options and pattern
+        private static readonly object s_regexCacheLock = new object();
+        private static readonly Dictionary<string, Regex> s_regexCache = new Dictionary<string, Regex>(StringComparer.Ordinal);
+
+        // Shared, process-wide cache of TokenPattern arrays per highlighter Type.
+        // Many instances of the same highlighter class share the same (sorted) patterns.
+        private static readonly object s_patternCacheLock = new object();
+        private static readonly Dictionary<Type, TokenPattern[]> s_patternCache = new Dictionary<Type, TokenPattern[]>();
+
+        // Default regex options used across patterns (most patterns rely on Multiline for ^/$ anchors)
+        private const RegexOptions DefaultRegexOptions = RegexOptions.Compiled | RegexOptions.Multiline | RegexOptions.CultureInvariant;
+
+        // Returns a shared compiled Regex for a given pattern/options.
+        protected static Regex GetSharedRegex(string pattern, RegexOptions options)
+        {
+            string key = ((int)options).ToString() + "\n" + pattern;
+            Regex rx;
+            lock (s_regexCacheLock)
+            {
+                if (!s_regexCache.TryGetValue(key, out rx))
+                {
+                    rx = new Regex(pattern, options);
+                    s_regexCache[key] = rx;
+                }
+            }
+            return rx;
+        }
+
         protected struct TokenPattern
         {
             public Regex Regex;
@@ -21,7 +50,8 @@ namespace GxPT
 
             public TokenPattern(string pattern, TokenType type, int priority)
             {
-                Regex = new Regex(pattern, RegexOptions.Compiled | RegexOptions.Multiline);
+                // Obtain a shared compiled regex to avoid per-instance compilation costs
+                Regex = GetSharedRegex(pattern, DefaultRegexOptions);
                 Type = type;
                 Priority = priority;
             }
@@ -41,9 +71,20 @@ namespace GxPT
 
         public RegexHighlighterBase()
         {
-            _patterns = GetPatterns();
-            // Sort patterns by priority (lower number = higher priority)
-            Array.Sort(_patterns, (a, b) => a.Priority.CompareTo(b.Priority));
+            // Reuse a single, sorted TokenPattern[] per concrete highlighter type
+            var t = this.GetType();
+            TokenPattern[] cached;
+            lock (s_patternCacheLock)
+            {
+                if (!s_patternCache.TryGetValue(t, out cached))
+                {
+                    cached = GetPatterns();
+                    // Sort patterns by priority (lower number = higher priority)
+                    Array.Sort(cached, delegate(TokenPattern a, TokenPattern b) { return a.Priority.CompareTo(b.Priority); });
+                    s_patternCache[t] = cached;
+                }
+            }
+            _patterns = cached;
         }
 
         public virtual List<CodeToken> Tokenize(string sourceCode)
@@ -250,9 +291,9 @@ namespace GxPT
                 new TokenPattern(@"#.*$", TokenType.Comment, 1),
 
                 // Here-Documents (simple heuristic)
-                    new TokenPattern(@"<<-?['""]?(\w+)['""]?[\s\S]+?\n\1\b", TokenType.String, 2),
+                new TokenPattern(@"<<-?['""]?(\w+)['""]?[\s\S]+?\n\1\b", TokenType.String, 2),
 
-                    new TokenPattern(@"\$?""(?:[^""\\]|\\.)*""|\$?'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`", TokenType.String, 3),
+                // Strings: double, single, and backtick; optional $-prefixed
                 new TokenPattern(@"\$?""(?:[^""\\]|\\.)*""|\$?'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`", TokenType.String, 3),
 
                 // Variables ($VAR, ${VAR}, $1, $@, $#, $$, etc.)
