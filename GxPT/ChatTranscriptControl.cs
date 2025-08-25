@@ -53,6 +53,16 @@ namespace GxPT
         private const int CodeHScrollThumbMin = 24;    // minimum thumb width
         private const int CodeCopyButtonHeight = 14;   // header area for copy button
         private const int CodeCopyButtonPad = 4;       // padding around copy text
+        // Compute header height dynamically so the Copy button accommodates current font size
+        private int GetCodeHeaderHeight()
+        {
+            int baseH = (_baseFont != null) ? _baseFont.Height : CodeCopyButtonHeight;
+            // If we render language label in bold, account for its height too
+            int boldH = (_boldFont != null) ? _boldFont.Height : baseH;
+            int textH = Math.Max(baseH, boldH);
+            // header height = text height + top/bottom padding, with a sane minimum
+            return Math.Max(CodeCopyButtonHeight, textH + CodeCopyButtonPad * 2);
+        }
 
         // Colors (theme-aware); default to light
         private Color _clrAppBack = SystemColors.Window;
@@ -856,8 +866,9 @@ namespace GxPT
                             bool needH = content.Width > viewportW;
                             int boxW = Math.Min(maxWidth, Math.Max(0, Math.Min(content.Width + 2 * CodeBlockPadding, maxWidth)));
                             int textH = Math.Max(_monoFont.Height, content.Height);
-                            int boxH = textH + 2 * CodeBlockPadding + CodeCopyButtonHeight + (needH ? CodeHScrollHeight : 0);
-                            return new Size(Math.Max(24, boxW), Math.Max(CodeCopyButtonHeight + 2 * CodeBlockPadding, boxH));
+                            int headerH = GetCodeHeaderHeight();
+                            int boxH = textH + 2 * CodeBlockPadding + headerH + (needH ? CodeHScrollHeight : 0);
+                            return new Size(Math.Max(24, boxW), Math.Max(headerH + 2 * CodeBlockPadding, boxH));
                         }
                     }
                 case BlockType.Table:
@@ -1304,7 +1315,8 @@ namespace GxPT
                     bool needH = contentNoWrap.Width > viewportW;
                     int boxW = Math.Min(maxWidth, Math.Max(0, Math.Min(contentNoWrap.Width + 2 * CodeBlockPadding, maxWidth)));
                     int textHeight = Math.Max(_monoFont.Height, contentNoWrap.Height);
-                    int boxH = textHeight + 2 * CodeBlockPadding + CodeCopyButtonHeight + (needH ? CodeHScrollHeight : 0);
+                    int headerH = GetCodeHeaderHeight();
+                    int boxH = textHeight + 2 * CodeBlockPadding + headerH + (needH ? CodeHScrollHeight : 0);
                     Rectangle box = new Rectangle(x0, y, boxW, boxH);
 
                     // Draw code block background and border
@@ -1315,7 +1327,10 @@ namespace GxPT
                         g.DrawRectangle(pen, box);
                     }
 
-                    // Copy button
+                    // Header area top (flush with top border to remove extra spacing)
+                    int headerTop = box.Top;
+
+                    // Copy button (top-right)
                     string copyText = "Copy";
                     SizeF copySizeF;
                     using (var fmt = StringFormat.GenericTypographic)
@@ -1324,8 +1339,8 @@ namespace GxPT
                         copySizeF = g.MeasureString(copyText, _baseFont, PointF.Empty, fmt);
                     }
                     int copyW = (int)Math.Ceiling(copySizeF.Width) + CodeCopyButtonPad * 2;
-                    int copyH = CodeCopyButtonHeight - 2;
-                    Rectangle copyRect = new Rectangle(box.Right - CodeCopyButtonPad - copyW, box.Top + CodeCopyButtonPad, copyW, copyH);
+                    int copyH = headerH; // occupy full header height so top/bottom are flush
+                    Rectangle copyRect = new Rectangle(box.Right - CodeCopyButtonPad - copyW, headerTop, copyW, copyH);
 
                     bool hoverCopy = (_hoverCopyItem == owner && _hoverCopyCodeIndex == codeIndex);
                     // Draw copy background on hover or mouse down
@@ -1348,15 +1363,29 @@ namespace GxPT
                         g.DrawString(copyText, _baseFont, brush, textPt, fmt);
                     }
 
+                    // Language label (top-left)
+                    string langLabel = c.Language;
+                    if (!string.IsNullOrEmpty(langLabel))
+                    {
+                        using (var brush = new SolidBrush(ForeColor))
+                        using (var fmt = StringFormat.GenericTypographic)
+                        {
+                            fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+                            var labelFont = _boldFont ?? _baseFont;
+                            var langPt = new PointF(box.Left + CodeCopyButtonPad, headerTop + (headerH - labelFont.Height) / 2f);
+                            g.DrawString(langLabel, labelFont, brush, langPt, fmt);
+                        }
+                    }
+
                     // Header separator line
                     using (var pen = new Pen(_clrCodeBorder))
                     {
-                        int headerBottom = box.Top + CodeCopyButtonHeight + CodeBlockPadding;
+                        int headerBottom = headerTop + headerH;
                         g.DrawLine(pen, box.Left + CodeBlockPadding, headerBottom, box.Right - CodeBlockPadding, headerBottom);
                     }
 
                     // Text viewport
-                    Rectangle textRect = new Rectangle(box.X + CodeBlockPadding, box.Y + CodeBlockPadding + CodeCopyButtonHeight, box.Width - 2 * CodeBlockPadding, textHeight);
+                    Rectangle textRect = new Rectangle(box.X + CodeBlockPadding, headerTop + headerH, box.Width - 2 * CodeBlockPadding, textHeight);
 
                     // Horizontal scrollbar geometry
                     int scrollX = 0;
@@ -2164,7 +2193,8 @@ namespace GxPT
                             int viewportW = Math.Max(0, contentW - 2 * CodeBlockPadding);
                             bool needH = contentNoWrap.Width > viewportW;
                             int textH = Math.Max(_monoFont.Height, contentNoWrap.Height);
-                            int boxH = textH + 2 * CodeBlockPadding + CodeCopyButtonHeight + (needH ? CodeHScrollHeight : 0);
+                            int headerH = GetCodeHeaderHeight();
+                            int boxH = textH + 2 * CodeBlockPadding + headerH + (needH ? CodeHScrollHeight : 0);
                             y += boxH + 4;
                         }
                     }
@@ -2466,21 +2496,23 @@ namespace GxPT
                             int viewportW = Math.Max(0, contentW - 2 * CodeBlockPadding);
                             bool needH = content.Width > viewportW;
                             int textH = Math.Max(_monoFont.Height, content.Height);
-                            int boxH = textH + 2 * CodeBlockPadding + CodeCopyButtonHeight + (needH ? CodeHScrollHeight : 0);
+                            int headerH = GetCodeHeaderHeight();
+                            int boxH = textH + 2 * CodeBlockPadding + headerH + (needH ? CodeHScrollHeight : 0);
                             Rectangle box = new Rectangle(contentX, y, Math.Min(contentW, Math.Max(0, Math.Min(content.Width + 2 * CodeBlockPadding, contentW))), boxH);
 
                             // Copy button rect
                             SizeF copySizeF = g.MeasureString("Copy", _baseFont, PointF.Empty, StringFormat.GenericTypographic);
                             int copyW = (int)Math.Ceiling(copySizeF.Width) + CodeCopyButtonPad * 2;
-                            int copyH = CodeCopyButtonHeight - 2;
-                            Rectangle copyRect = new Rectangle(box.Right - CodeCopyButtonPad - copyW, box.Top + CodeCopyButtonPad, copyW, copyH);
+                            int copyH = headerH;
+                            int headerTop = box.Top;
+                            Rectangle copyRect = new Rectangle(box.Right - CodeCopyButtonPad - copyW, headerTop, copyW, copyH);
                             if (copyRect.Contains(virt))
                             {
                                 info.Hit = true; info.Which = CodeUiHit.CopyButton; info.Item = it; info.Block = blk; info.CodeIndex = codeIdx; return info;
                             }
 
                             // Scrollbar rects
-                            Rectangle textRect = new Rectangle(box.X + CodeBlockPadding, box.Y + CodeBlockPadding + CodeCopyButtonHeight, box.Width - 2 * CodeBlockPadding, textH);
+                            Rectangle textRect = new Rectangle(box.X + CodeBlockPadding, headerTop + headerH, box.Width - 2 * CodeBlockPadding, textH);
                             // Report a generic Text hit when hovering over code content (for Shift+Wheel horizontal scroll)
                             if (textRect.Contains(virt))
                             {
