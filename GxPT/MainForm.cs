@@ -30,6 +30,15 @@ namespace GxPT
 
         private bool _syncingModelCombo; // avoid event feedback loops when syncing combo text
 
+        // Helper DTO for background-parsed messages
+        private sealed class ParsedMessage
+        {
+            public MessageRole Role;
+            public string Text;
+            public List<Block> Blocks;
+            public List<AttachedFile> Attachments; // optional
+        }
+
         public MainForm()
         {
             InitializeComponent();
@@ -62,6 +71,55 @@ namespace GxPT
                 if (this.pnlBottom != null)
                     this.pnlBottom.SizeChanged += (s, e) => RebuildAttachmentsBanner();
             }
+
+            // Kick off background prewarm of syntax highlighters to avoid UI stalls the first time
+            // a code block is measured/drawn. Once warmed, mark ready and request a trivial reflow.
+            try
+            {
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                {
+                    try
+                    {
+                        // Touch the SyntaxHighlighter static state
+                        var langs = SyntaxHighlighter.GetSupportedLanguages();
+                        if (langs != null && langs.Length > 0)
+                        {
+                            // Tokenize a tiny sample for a handful of common languages
+                            string sample = "int x = 42; // warm\n";
+                            for (int i = 0; i < langs.Length; i++)
+                            {
+                                string lang = langs[i];
+                                if (string.IsNullOrEmpty(lang)) continue;
+                                try { SyntaxHighlighter.Highlight(lang, sample); }
+                                catch { }
+                            }
+                        }
+                    }
+                    catch { }
+                    finally
+                    {
+                        try { SyntaxHighlightingRenderer.MarkHighlighterReady(); }
+                        catch { }
+                        // Ask active transcript to reflow once, now that highlighters are ready
+                        try
+                        {
+                            if (IsHandleCreated)
+                            {
+                                BeginInvoke((MethodInvoker)delegate
+                                {
+                                    var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                                    if (ctx != null && ctx.Transcript != null)
+                                    {
+                                        ctx.Transcript.RefreshTheme(); // triggers a reflow
+                                    }
+                                });
+                            }
+                        }
+                        catch { }
+                    }
+                });
+            }
+            catch { }
         }
 
         private void InitializeManagers()
@@ -523,19 +581,27 @@ namespace GxPT
                             while (ctx.Conversation.History.Count > cutIndex + 1)
                                 ctx.Conversation.History.RemoveAt(ctx.Conversation.History.Count - 1);
 
-                            // Rebuild transcript UI from truncated conversation
+                            // Rebuild transcript UI from truncated conversation (batched)
                             ctx.Transcript.ClearMessages();
-                            foreach (var m in ctx.Conversation.History)
+                            ctx.Transcript.BeginBatchUpdates();
+                            try
                             {
-                                if (string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase))
-                                    ctx.Transcript.AddMessage(MessageRole.Assistant, m.Content);
-                                else if (string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase))
+                                foreach (var m in ctx.Conversation.History)
                                 {
-                                    if (m.Attachments != null && m.Attachments.Count > 0)
-                                        ctx.Transcript.AddMessage(MessageRole.User, m.Content, m.Attachments);
-                                    else
-                                        ctx.Transcript.AddMessage(MessageRole.User, m.Content);
+                                    if (string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+                                        ctx.Transcript.AddMessage(MessageRole.Assistant, m.Content);
+                                    else if (string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        if (m.Attachments != null && m.Attachments.Count > 0)
+                                            ctx.Transcript.AddMessage(MessageRole.User, m.Content, m.Attachments);
+                                        else
+                                            ctx.Transcript.AddMessage(MessageRole.User, m.Content);
+                                    }
                                 }
+                            }
+                            finally
+                            {
+                                ctx.Transcript.EndBatchUpdates(true);
                             }
 
                             // Reset edit state and mark as edit resend path
@@ -1456,28 +1522,112 @@ namespace GxPT
             if (_sidebarManager != null && ctx.Conversation != null)
                 _sidebarManager.TrackOpenConversation(ctx.Conversation.Id, ctx.Page);
 
-            // Rebuild transcript UI
+            // Rebuild transcript UI using background parsing and chunked appends to avoid UI freezes
             try
             {
                 ctx.Transcript.ClearMessages();
                 if (_themeManager != null) _themeManager.ApplyFontSetting(ctx.Transcript);
                 try { ctx.Transcript.RefreshTheme(); }
                 catch { }
+
+                // Snapshot messages to process (skip system for transcript)
+                var items = new List<ChatMessage>();
                 foreach (var m in convo.History)
                 {
-                    if (string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase))
-                    {
-                        ctx.Transcript.AddMessage(MessageRole.Assistant, m.Content);
-                    }
-                    else if (string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (m.Attachments != null && m.Attachments.Count > 0)
-                            ctx.Transcript.AddMessage(MessageRole.User, m.Content, m.Attachments);
-                        else
-                            ctx.Transcript.AddMessage(MessageRole.User, m.Content);
-                    }
-                    // skip system in transcript UI
+                    if (m == null) continue;
+                    if (string.Equals(m.Role, "system", StringComparison.OrdinalIgnoreCase)) continue;
+                    items.Add(m);
                 }
+
+                // Producer-consumer: parse off-UI, consume on UI timer in small chunks
+                var parsed = new List<ParsedMessage>(Math.Max(4, items.Count));
+                int produced = 0; // number of parsed items ready in 'parsed'
+                int consumed = 0; // number consumed/appended to transcript
+                bool parsingDone = false;
+                object gate = new object();
+
+                // Start background parsing
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                {
+                    try
+                    {
+                        const int parseChunk = 40; // parse up to N per pass
+                        int i = 0;
+                        while (i < items.Count)
+                        {
+                            int count = Math.Min(parseChunk, items.Count - i);
+                            var local = new ParsedMessage[count];
+                            for (int k = 0; k < count; k++)
+                            {
+                                var m = items[i + k];
+                                var role = string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase) ? MessageRole.Assistant : MessageRole.User;
+                                var text = m.Content ?? string.Empty;
+                                var blocks = MarkdownParser.ParseMarkdown(text);
+                                var att = (m.Attachments != null && m.Attachments.Count > 0) ? new List<AttachedFile>(m.Attachments) : null;
+                                local[k] = new ParsedMessage { Role = role, Text = text, Blocks = blocks, Attachments = att };
+                            }
+                            lock (gate)
+                            {
+                                parsed.AddRange(local);
+                                produced += count;
+                            }
+                            i += count;
+                        }
+                    }
+                    catch { }
+                    finally
+                    {
+                        parsingDone = true;
+                    }
+                });
+
+                // UI timer consumes progressively
+                var timer = new System.Windows.Forms.Timer();
+                timer.Interval = 15; // ~60 fps budget for small bursts
+                timer.Tick += (s2, e2) =>
+                {
+                    int avail;
+                    lock (gate) { avail = produced - consumed; }
+                    if (avail <= 0)
+                    {
+                        if (parsingDone)
+                        {
+                            // Nothing left and parsing finished
+                            timer.Stop();
+                            timer.Dispose();
+                        }
+                        return;
+                    }
+
+                    // Consume a small batch to keep UI fluid
+                    int take = Math.Min(20, avail);
+                    ctx.Transcript.BeginBatchUpdates();
+                    try
+                    {
+                        for (int k = 0; k < take; k++)
+                        {
+                            ParsedMessage msg;
+                            lock (gate)
+                            {
+                                msg = parsed[consumed];
+                                consumed++;
+                            }
+                            if (msg != null)
+                                ctx.Transcript.AddParsedMessage(msg.Role, msg.Text, msg.Blocks, msg.Attachments);
+                        }
+                    }
+                    finally
+                    {
+                        bool last = parsingDone && consumed >= items.Count;
+                        ctx.Transcript.EndBatchUpdates(last);
+                        if (last)
+                        {
+                            timer.Stop();
+                            timer.Dispose();
+                        }
+                    }
+                };
+                timer.Start();
             }
             catch { }
 
@@ -1517,28 +1667,83 @@ namespace GxPT
                 if (_sidebarManager != null && ctx.Conversation != null)
                     _sidebarManager.TrackOpenConversation(ctx.Conversation.Id, ctx.Page);
 
-                // Rebuild transcript UI
+                // Rebuild transcript UI using background parsing and chunked appends
                 try
                 {
                     ctx.Transcript.ClearMessages();
                     if (_themeManager != null) _themeManager.ApplyFontSetting(ctx.Transcript);
                     try { ctx.Transcript.RefreshTheme(); }
                     catch { }
+
+                    var items = new List<ChatMessage>();
                     foreach (var m in convo.History)
                     {
-                        if (string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase))
-                        {
-                            ctx.Transcript.AddMessage(MessageRole.Assistant, m.Content);
-                        }
-                        else if (string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase))
-                        {
-                            if (m.Attachments != null && m.Attachments.Count > 0)
-                                ctx.Transcript.AddMessage(MessageRole.User, m.Content, m.Attachments);
-                            else
-                                ctx.Transcript.AddMessage(MessageRole.User, m.Content);
-                        }
-                        // skip system in transcript UI
+                        if (m == null) continue;
+                        if (string.Equals(m.Role, "system", StringComparison.OrdinalIgnoreCase)) continue;
+                        items.Add(m);
                     }
+
+                    var parsed = new List<ParsedMessage>(Math.Max(4, items.Count));
+                    int produced = 0, consumed = 0; bool parsingDone = false; object gate = new object();
+
+                    System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                    {
+                        try
+                        {
+                            const int parseChunk = 40;
+                            int i = 0;
+                            while (i < items.Count)
+                            {
+                                int count = Math.Min(parseChunk, items.Count - i);
+                                var local = new ParsedMessage[count];
+                                for (int k = 0; k < count; k++)
+                                {
+                                    var m2 = items[i + k];
+                                    var role = string.Equals(m2.Role, "assistant", StringComparison.OrdinalIgnoreCase) ? MessageRole.Assistant : MessageRole.User;
+                                    var text = m2.Content ?? string.Empty;
+                                    var blocks = MarkdownParser.ParseMarkdown(text);
+                                    var att = (m2.Attachments != null && m2.Attachments.Count > 0) ? new List<AttachedFile>(m2.Attachments) : null;
+                                    local[k] = new ParsedMessage { Role = role, Text = text, Blocks = blocks, Attachments = att };
+                                }
+                                lock (gate) { parsed.AddRange(local); produced += count; }
+                                i += count;
+                            }
+                        }
+                        catch { }
+                        finally { parsingDone = true; }
+                    });
+
+                    var timer = new System.Windows.Forms.Timer();
+                    timer.Interval = 15;
+                    timer.Tick += (s2, e2) =>
+                    {
+                        int avail; lock (gate) { avail = produced - consumed; }
+                        if (avail <= 0)
+                        {
+                            if (parsingDone)
+                            {
+                                timer.Stop(); timer.Dispose();
+                            }
+                            return;
+                        }
+                        int take = Math.Min(20, avail);
+                        ctx.Transcript.BeginBatchUpdates();
+                        try
+                        {
+                            for (int k = 0; k < take; k++)
+                            {
+                                ParsedMessage pm; lock (gate) { pm = parsed[consumed]; consumed++; }
+                                if (pm != null) ctx.Transcript.AddParsedMessage(pm.Role, pm.Text, pm.Blocks, pm.Attachments);
+                            }
+                        }
+                        finally
+                        {
+                            bool last = parsingDone && consumed >= items.Count;
+                            ctx.Transcript.EndBatchUpdates(last);
+                            if (last) { timer.Stop(); timer.Dispose(); }
+                        }
+                    };
+                    timer.Start();
                 }
                 catch { }
 

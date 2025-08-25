@@ -30,6 +30,165 @@ namespace GxPT
 
     public static class SyntaxHighlightingRenderer
     {
+        // Until highlighters are prewarmed, avoid touching SyntaxHighlighter at all to prevent UI stalls
+        // caused by expensive regex compilation in its static constructor. MainForm marks readiness once
+        // prewarm completes on a background thread.
+        private static volatile bool _highlighterReady;
+
+        // Async highlight cache and work queue for progressive rendering
+        private static readonly Dictionary<string, List<ColoredSegment>> _cache = new Dictionary<string, List<ColoredSegment>>();
+        private static readonly Dictionary<string, WorkItem> _pending = new Dictionary<string, WorkItem>();
+        private static readonly List<string> _lifo = new List<string>(); // act as a stack (pop from end)
+        private static readonly object _lock = new object();
+        private static System.Threading.Thread _worker;
+
+        private struct WorkItem
+        {
+            public string Key; public string Language; public bool Dark; public string Code; public Font Font;
+        }
+
+        // Raised on a worker thread when a key finishes; UI should marshal to the UI thread before invalidating
+        public static event Action<string> SegmentsReady;
+
+        /// <summary>
+        /// Compute a stable small hash for cache keys (FNV-1a 64-bit).
+        /// </summary>
+        private static string Hash64(string s)
+        {
+            unchecked
+            {
+                const ulong offset = 14695981039346656037UL;
+                const ulong prime = 1099511628211UL;
+                ulong h = offset;
+                if (s != null)
+                {
+                    for (int i = 0; i < s.Length; i++) { h ^= (byte)s[i]; h *= prime; }
+                }
+                return h.ToString("X16", System.Globalization.CultureInfo.InvariantCulture);
+            }
+        }
+
+        private static string MakeKey(string language, bool dark, string code)
+        {
+            if (language == null) language = string.Empty;
+            return (dark ? "D" : "L") + "|" + language + "|" + Hash64(code ?? string.Empty);
+        }
+
+        /// <summary>
+        /// Enqueue a code block for background highlighting. Uses LIFO so the most recently enqueued items
+        /// are processed first. To highlight bottom-up, enqueue in top-to-bottom order.
+        /// </summary>
+        public static void EnqueueHighlight(string language, bool dark, string code, Font monoFont)
+        {
+            if (string.IsNullOrEmpty(code)) return;
+
+            string key = MakeKey(language, dark, code);
+            lock (_lock)
+            {
+                if (_cache.ContainsKey(key) || _pending.ContainsKey(key)) return;
+                var wi = new WorkItem { Key = key, Language = language, Dark = dark, Code = code, Font = monoFont };
+                _pending[key] = wi;
+                _lifo.Add(key); // process last enqueued first
+                EnsureWorker();
+            }
+        }
+
+        private static void EnsureWorker()
+        {
+            if (_worker != null && _worker.IsAlive) return;
+            _worker = new System.Threading.Thread(WorkerLoop);
+            try { _worker.IsBackground = true; }
+            catch { }
+            try { _worker.Priority = System.Threading.ThreadPriority.BelowNormal; }
+            catch { }
+            _worker.Start();
+        }
+
+        private static void WorkerLoop()
+        {
+            while (true)
+            {
+                WorkItem wi;
+                lock (_lock)
+                {
+                    if (_lifo.Count == 0)
+                    {
+                        // No more work; stop thread
+                        _worker = null;
+                        return;
+                    }
+                    int last = _lifo.Count - 1;
+                    string key = _lifo[last];
+                    _lifo.RemoveAt(last);
+                    wi = _pending[key];
+                    _pending.Remove(key);
+                }
+
+                try
+                {
+                    // Compute tokens and convert to colored segments using current theme
+                    var tokens = SyntaxHighlighter.Highlight(wi.Language, wi.Code);
+                    var segs = new List<ColoredSegment>();
+                    if (tokens == null || tokens.Count == 0)
+                    {
+                        // Store without binding to a specific Font to avoid stale references across theme/font changes
+                        segs.Add(new ColoredSegment(wi.Code, SyntaxHighlighter.GetTokenColorForTheme(TokenType.Normal, wi.Dark), null, 0));
+                    }
+                    else
+                    {
+                        int lastEnd = 0;
+                        for (int i = 0; i < tokens.Count; i++)
+                        {
+                            var t = tokens[i];
+                            if (t.StartIndex > lastEnd)
+                            {
+                                string gap = wi.Code.Substring(lastEnd, t.StartIndex - lastEnd);
+                                segs.Add(new ColoredSegment(gap, SyntaxHighlighter.GetTokenColorForTheme(TokenType.Normal, wi.Dark), null, lastEnd));
+                            }
+                            var tokColor = SyntaxHighlighter.GetTokenColorForTheme(t.Type, wi.Dark);
+                            segs.Add(new ColoredSegment(t.Text, tokColor, null, t.StartIndex));
+                            lastEnd = t.StartIndex + t.Length;
+                        }
+                        if (lastEnd < wi.Code.Length)
+                        {
+                            string tail = wi.Code.Substring(lastEnd);
+                            segs.Add(new ColoredSegment(tail, SyntaxHighlighter.GetTokenColorForTheme(TokenType.Normal, wi.Dark), null, lastEnd));
+                        }
+                    }
+
+                    lock (_lock)
+                    {
+                        _cache[wi.Key] = segs;
+                    }
+
+                    var ev = SegmentsReady; // copy for thread-safety
+                    if (ev != null)
+                    {
+                        try { ev(wi.Key); }
+                        catch { }
+                    }
+                }
+                catch
+                {
+                    // Swallow and continue; on failure, leave uncached so future calls can retry
+                }
+
+                // Yield to keep UI responsive
+                try { System.Threading.Thread.Sleep(1); }
+                catch { }
+            }
+        }
+
+        internal static void MarkHighlighterReady()
+        {
+            _highlighterReady = true;
+        }
+
+        internal static bool IsHighlighterReady
+        {
+            get { return _highlighterReady; }
+        }
+
         // Treat tabs as aligned to fixed stops (columns) when drawing/measuring.
         // We expand tabs into spaces because GenericTypographic ignores tab stops.
         private const int TabSize = 4; // columns
@@ -78,41 +237,36 @@ namespace GxPT
             if (string.IsNullOrEmpty(code))
                 return segments;
 
-            var tokens = SyntaxHighlighter.Highlight(language, code);
-            if (tokens == null || tokens.Count == 0)
+            // Check cache first; if present, use it regardless of warm state
+            string key = MakeKey(language, dark, code);
+            List<ColoredSegment> cached = null;
+            lock (_lock)
             {
-                segments.Add(new ColoredSegment(code, SyntaxHighlighter.GetTokenColorForTheme(TokenType.Normal, dark), monoFont, 0));
-                return segments;
-            }
-
-            // Fill in any gaps between tokens with normal text
-            var allSegments = new List<ColoredSegment>();
-            int lastEnd = 0;
-
-            foreach (var token in tokens)
-            {
-                // Add any gap before this token as normal text
-                if (token.StartIndex > lastEnd)
+                if (_cache.TryGetValue(key, out cached))
                 {
-                    string gapText = code.Substring(lastEnd, token.StartIndex - lastEnd);
-                    allSegments.Add(new ColoredSegment(gapText, SyntaxHighlighter.GetTokenColorForTheme(TokenType.Normal, dark), monoFont, lastEnd));
+                    // Rebuild with the current monoFont to avoid stale/Disposed font references
+                    var rebuilt = new List<ColoredSegment>(cached.Count);
+                    for (int i = 0; i < cached.Count; i++)
+                    {
+                        var s = cached[i];
+                        rebuilt.Add(new ColoredSegment(s.Text, s.Color, monoFont, s.StartIndex));
+                    }
+                    return rebuilt;
                 }
-
-                // Add the colored token
-                Color tokenColor = SyntaxHighlighter.GetTokenColorForTheme(token.Type, dark);
-                allSegments.Add(new ColoredSegment(token.Text, tokenColor, monoFont, token.StartIndex));
-
-                lastEnd = token.StartIndex + token.Length;
+                // Not cached yet: ensure it's enqueued; draw plain until ready
+                if (!_pending.ContainsKey(key))
+                {
+                    var wi = new WorkItem { Key = key, Language = language, Dark = dark, Code = code, Font = monoFont };
+                    _pending[key] = wi; _lifo.Add(key); EnsureWorker();
+                }
             }
 
-            // Add any remaining text after the last token
-            if (lastEnd < code.Length)
-            {
-                string remainingText = code.Substring(lastEnd);
-                allSegments.Add(new ColoredSegment(remainingText, SyntaxHighlighter.GetTokenColorForTheme(TokenType.Normal, dark), monoFont, lastEnd));
-            }
-
-            return allSegments;
+            // Fallback plain segment; avoid touching SyntaxHighlighter on the UI thread until warmed
+            Color fallback = IsHighlighterReady
+                ? SyntaxHighlighter.GetTokenColorForTheme(TokenType.Normal, dark)
+                : (dark ? Color.FromArgb(0xCD, 0xD6, 0xF4) : SystemColors.WindowText);
+            segments.Add(new ColoredSegment(code, fallback, monoFont, 0));
+            return segments;
         }
 
         // ---------- Rendering ----------

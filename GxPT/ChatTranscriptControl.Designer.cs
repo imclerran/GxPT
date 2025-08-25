@@ -17,6 +17,8 @@
             {
                 components.Dispose();
             }
+            try { SyntaxHighlightingRenderer.SegmentsReady -= OnSegmentsReady; }
+            catch { }
             base.Dispose(disposing);
         }
 

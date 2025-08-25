@@ -146,6 +146,14 @@ namespace GxPT
         private MessageItem _hoverAttachItem; private int _hoverAttachIndex = -1;
         private MessageItem _pressAttachItem; private int _pressAttachIndex = -1;
 
+        // ---------- Batch update state ----------
+        // Coalesce expensive reflow/paint while adding many messages (e.g., when opening history)
+        private int _batchDepth;
+        private bool _batchNeedsReflow;
+        private bool _batchWantsScrollToBottom;
+        private int _batchStartIndex = -1;        // index of first item potentially affected in this batch
+        private bool _batchAppendOnly = false;    // true when only new items were appended at the end
+
         // ---------- ctor ----------
         public ChatTranscriptControl()
         {
@@ -171,6 +179,83 @@ namespace GxPT
             this.AccessibleName = "Chat transcript";
             this.TabStop = true;
 
+            // Listen for async highlight completions and invalidate the relevant region
+            try
+            {
+                SyntaxHighlightingRenderer.SegmentsReady += OnSegmentsReady;
+            }
+            catch { }
+        }
+
+        // When async highlight for any block completes, repaint to pick up colored segments progressively.
+        private void OnSegmentsReady(string key)
+        {
+            if (!IsHandleCreated) return;
+            try
+            {
+                // Marshal to UI thread
+                if (this.InvokeRequired)
+                {
+                    try { this.BeginInvoke((MethodInvoker)delegate { OnSegmentsReady(key); }); }
+                    catch { }
+                    return;
+                }
+                Invalidate();
+            }
+            catch { }
+        }
+
+        // Dispose is implemented in the Designer partial; avoid duplicate overrides here.
+
+        // ---------- Batching API ----------
+        // Use when adding or updating many messages to avoid per-item reflow/paint.
+        public void BeginBatchUpdates()
+        {
+            _batchDepth++;
+            if (_batchDepth == 1)
+            {
+                try { this.SuspendLayout(); }
+                catch { }
+                // Mark the starting point for potential append-only reflow
+                _batchStartIndex = _items.Count;
+                _batchAppendOnly = true;
+            }
+        }
+
+        public void EndBatchUpdates()
+        {
+            EndBatchUpdates(false);
+        }
+
+        // When scrollToBottom is true, the view will jump to bottom once after the batch finishes.
+        public void EndBatchUpdates(bool scrollToBottom)
+        {
+            if (_batchDepth <= 0) { _batchDepth = 0; return; }
+            _batchDepth--;
+            if (scrollToBottom) _batchWantsScrollToBottom = true;
+            if (_batchDepth == 0)
+            {
+                try { this.ResumeLayout(false); }
+                catch { }
+                if (_batchNeedsReflow)
+                {
+                    // If we only appended new items since BeginBatchUpdates, we can reflow just the tail.
+                    if (_batchAppendOnly && _batchStartIndex >= 0 && _batchStartIndex <= _items.Count)
+                    {
+                        ReflowAppendOnly(_batchStartIndex);
+                    }
+                    else
+                    {
+                        Reflow();
+                    }
+                    if (_batchWantsScrollToBottom) ScrollToBottom();
+                    Invalidate();
+                }
+                _batchNeedsReflow = false;
+                _batchWantsScrollToBottom = false;
+                _batchStartIndex = -1;
+                _batchAppendOnly = false;
+            }
         }
 
         // Public helper to scroll by a wheel delta (positive=away from user, negative=toward)
@@ -368,42 +453,15 @@ namespace GxPT
         public void AddMessage(MessageRole role, string markdown)
         {
             if (markdown == null) markdown = string.Empty;
-            var item = new MessageItem
-            {
-                Role = role,
-                RawMarkdown = markdown,
-                Blocks = MarkdownParser.ParseMarkdown(markdown),
-                CodeScroll = new List<int>(),
-                TableScroll = new List<int>(),
-                Attachments = null,
-                AttachmentPillRects = null
-            };
-            // initialize per-code-block scroll positions
-            int codeCount = 0;
-            foreach (var b in item.Blocks) if (b.Type == BlockType.CodeBlock) codeCount++;
-            for (int i = 0; i < codeCount; i++) item.CodeScroll.Add(0);
-            // initialize per-table scroll positions
-            int tableCount = 0;
-            foreach (var b in item.Blocks) if (b.Type == BlockType.Table) tableCount++;
-            for (int i = 0; i < tableCount; i++) item.TableScroll.Add(0);
-            _items.Add(item);
-            Reflow();
-            ScrollToBottom();
-            Invalidate();
-            // Also schedule a second-pass reflow once layout stabilizes
-            ReflowSoon();
+            var blocks = MarkdownParser.ParseMarkdown(markdown);
+            AddParsedMessage(role, markdown, blocks, null);
         }
 
         public void AddMessage(MessageRole role, string markdown, List<AttachedFile> attachments)
         {
-            AddMessage(role, markdown);
-            if (attachments != null && attachments.Count > 0)
-            {
-                var it = _items[_items.Count - 1];
-                it.Attachments = new List<AttachedFile>(attachments);
-                Reflow();
-                Invalidate();
-            }
+            if (markdown == null) markdown = string.Empty;
+            var blocks = MarkdownParser.ParseMarkdown(markdown);
+            AddParsedMessage(role, markdown, blocks, attachments);
         }
 
         // Add and return the index of the inserted message (to support targeted updates later)
@@ -438,8 +496,16 @@ namespace GxPT
             int tables = 0; foreach (var b in it.Blocks) if (b.Type == BlockType.Table) tables++;
             for (int i = 0; i < tables; i++) it.TableScroll.Add(0);
             // Defer heavy layout to coalesce with other updates
-            Invalidate();
-            ReflowSoon();
+            if (_batchDepth > 0)
+            {
+                _batchNeedsReflow = true;
+                _batchAppendOnly = false; // modified existing item; cannot append-only reflow safely
+            }
+            else
+            {
+                Invalidate();
+                ReflowSoon();
+            }
         }
 
         // Replace content of a specific message by index; safe no-op if out of range
@@ -458,8 +524,16 @@ namespace GxPT
             int tables = 0; foreach (var b in it.Blocks) if (b.Type == BlockType.Table) tables++;
             for (int i = 0; i < tables; i++) it.TableScroll.Add(0);
             // Defer heavy layout to coalesce with other updates
-            Invalidate();
-            ReflowSoon();
+            if (_batchDepth > 0)
+            {
+                _batchNeedsReflow = true;
+                _batchAppendOnly = false; // modified existing item
+            }
+            else
+            {
+                Invalidate();
+                ReflowSoon();
+            }
         }
 
         // Append text to the last message (useful for streaming); will keep as a single paragraph
@@ -475,8 +549,52 @@ namespace GxPT
             it.RawMarkdown = (it.RawMarkdown ?? string.Empty) + delta;
             it.Blocks = MarkdownParser.ParseMarkdown(it.RawMarkdown);
             // Defer heavy layout to coalesce with other updates
-            Invalidate();
-            ReflowSoon();
+            if (_batchDepth > 0)
+            {
+                _batchNeedsReflow = true;
+                _batchAppendOnly = false; // modified existing item
+            }
+            else
+            {
+                Invalidate();
+                ReflowSoon();
+            }
+        }
+
+        // Add a message with pre-parsed markdown blocks (useful to parse off the UI thread)
+        public void AddParsedMessage(MessageRole role, string markdown, List<Block> blocks, List<AttachedFile> attachments)
+        {
+            if (markdown == null) markdown = string.Empty;
+            if (blocks == null) blocks = MarkdownParser.ParseMarkdown(markdown);
+            var item = new MessageItem
+            {
+                Role = role,
+                RawMarkdown = markdown,
+                Blocks = blocks,
+                CodeScroll = new List<int>(),
+                TableScroll = new List<int>(),
+                Attachments = (attachments != null && attachments.Count > 0) ? new List<AttachedFile>(attachments) : null,
+                AttachmentPillRects = null
+            };
+            int codeCount = 0; foreach (var b in item.Blocks) if (b.Type == BlockType.CodeBlock) codeCount++;
+            for (int i = 0; i < codeCount; i++) item.CodeScroll.Add(0);
+            int tableCount = 0; foreach (var b in item.Blocks) if (b.Type == BlockType.Table) tableCount++;
+            for (int i = 0; i < tableCount; i++) item.TableScroll.Add(0);
+            _items.Add(item);
+
+            if (_batchDepth > 0)
+            {
+                _batchNeedsReflow = true;
+                _batchWantsScrollToBottom = true;
+                // still append-only if we keep appending to end
+            }
+            else
+            {
+                Reflow();
+                ScrollToBottom();
+                Invalidate();
+                ReflowSoon();
+            }
         }
 
         // ---------- Layout ----------
@@ -518,6 +636,66 @@ namespace GxPT
                         xLeft = areaLeft;
                     }
 
+                    it.MeasuredHeight = bubbleSize.Height;
+                    it.Bounds = new Rectangle(xLeft, y, bubbleSize.Width, bubbleSize.Height);
+                    y += bubbleSize.Height + GapBetweenBubbles;
+                }
+
+                _contentHeight = y + MarginOuter;
+            }
+
+            UpdateScrollbar();
+        }
+
+        // Reflow only newly appended items from startIndex to end, positioning them after existing content.
+        // Assumes earlier items' bounds are already valid and control width hasn't changed significantly mid-batch.
+        private void ReflowAppendOnly(int startIndex)
+        {
+            if (startIndex < 0) { Reflow(); return; }
+            using (Graphics g = CreateGraphics())
+            {
+                int innerWidth = Math.Max(0, ClientSize.Width - _vbar.Width - 2 * MarginOuter);
+                int areaWidth = Math.Min(innerWidth, _maxContentWidth);
+                int areaLeft = MarginOuter + Math.Max(0, (innerWidth - areaWidth) / 2);
+                int usableWidth = Math.Min(areaWidth, MaxBubbleWidth);
+
+                int y;
+                if (startIndex == 0)
+                {
+                    y = MarginOuter;
+                }
+                else
+                {
+                    // Continue below the last previously laid-out item
+                    var prev = _items[startIndex - 1];
+                    y = prev.Bounds.Bottom + GapBetweenBubbles;
+                }
+
+                for (int idx = startIndex; idx < _items.Count; idx++)
+                {
+                    var it = _items[idx];
+                    if (it.CodeScroll == null) it.CodeScroll = new List<int>();
+                    if (it.TableScroll == null) it.TableScroll = new List<int>();
+                    // ensure length matches number of code/table blocks
+                    int codes = 0; foreach (var b in it.Blocks) if (b.Type == BlockType.CodeBlock) codes++;
+                    while (it.CodeScroll.Count < codes) it.CodeScroll.Add(0);
+                    if (it.CodeScroll.Count > codes) it.CodeScroll.RemoveRange(codes, it.CodeScroll.Count - codes);
+                    int tables = 0; foreach (var b in it.Blocks) if (b.Type == BlockType.Table) tables++;
+                    while (it.TableScroll.Count < tables) it.TableScroll.Add(0);
+                    if (it.TableScroll.Count > tables) it.TableScroll.RemoveRange(tables, it.TableScroll.Count - tables);
+
+                    Size bubbleSize = MeasureBubble(it, usableWidth);
+                    int xLeft;
+                    if (it.Role == MessageRole.User)
+                    {
+                        int minUserWidth = Math.Min(usableWidth, Math.Max(200, usableWidth / 2));
+                        bubbleSize.Width = Math.Max(bubbleSize.Width, minUserWidth);
+                        xLeft = areaLeft + areaWidth - bubbleSize.Width;
+                    }
+                    else
+                    {
+                        xLeft = areaLeft;
+                    }
                     it.MeasuredHeight = bubbleSize.Height;
                     it.Bounds = new Rectangle(xLeft, y, bubbleSize.Width, bubbleSize.Height);
                     y += bubbleSize.Height + GapBetweenBubbles;
@@ -670,6 +848,8 @@ namespace GxPT
                         // Measure colored segments without wrapping to know full content width
                         using (Graphics g = CreateGraphics())
                         {
+                            // Enqueue for async highlight so it gets processed soon; enqueue in top-to-bottom order to get bottom-up processing
+                            SyntaxHighlightingRenderer.EnqueueHighlight(c.Language, _isDarkTheme, c.Text, _monoFont);
                             var colored = SyntaxHighlightingRenderer.GetColoredSegments(c.Text, c.Language, _monoFont, _isDarkTheme);
                             Size content = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, colored);
                             int viewportW = Math.Max(0, maxWidth - 2 * CodeBlockPadding);
@@ -1117,6 +1297,7 @@ namespace GxPT
                 {
                     var c = (CodeBlock)blk;
                     // Colored segments and content size without wrapping
+                    SyntaxHighlightingRenderer.EnqueueHighlight(c.Language, _isDarkTheme, c.Text, _monoFont);
                     var coloredSegments = SyntaxHighlightingRenderer.GetColoredSegments(c.Text, c.Language, _monoFont, _isDarkTheme);
                     Size contentNoWrap = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, coloredSegments);
                     int viewportW = Math.Max(0, maxWidth - 2 * CodeBlockPadding);
