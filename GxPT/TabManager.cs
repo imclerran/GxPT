@@ -231,6 +231,15 @@ namespace GxPT
 
             var transcript = new ChatTranscriptControl();
             transcript.Dock = DockStyle.Fill;
+            // Apply configured transcript width before adding to the page
+            try
+            {
+                int w = (int)Math.Round(AppSettings.GetDouble("transcript_max_width", 1000));
+                if (w <= 0) w = 1000;
+                if (w < 300) w = 300; if (w > 1900) w = 1900;
+                transcript.MaxContentWidth = w;
+            }
+            catch { }
             _mainForm.ApplyFontSetting(transcript);
             page.Controls.Add(transcript);
 
@@ -551,6 +560,20 @@ namespace GxPT
                 foreach (var kv in _tabContexts)
                 {
                     try { if (kv.Value.Transcript != null) kv.Value.Transcript.RefreshTheme(); }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+
+        public void ApplyTranscriptWidthToAllTranscripts(int width)
+        {
+            try
+            {
+                int w = Math.Max(300, Math.Min(1900, width));
+                foreach (var kv in _tabContexts)
+                {
+                    try { if (kv.Value.Transcript != null) kv.Value.Transcript.MaxContentWidth = w; }
                     catch { }
                 }
             }

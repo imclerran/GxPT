@@ -147,6 +147,27 @@ namespace GxPT
             ApplyThemeToTextBox();
         }
 
+        // Apply transcript max width setting to all existing transcripts
+        public void ApplyTranscriptWidthToAllTranscripts()
+        {
+            try
+            {
+                int w = (int)Math.Round(AppSettings.GetDouble("transcript_max_width", 1000));
+                if (w <= 0) w = 1000;
+                if (w < 300) w = 300; if (w > 1900) w = 1900;
+
+                if (_primaryTranscript != null)
+                {
+                    try { _primaryTranscript.MaxContentWidth = w; }
+                    catch { }
+                }
+
+                var tabManager = _mainForm.GetTabManager();
+                if (tabManager != null) tabManager.ApplyTranscriptWidthToAllTranscripts(w);
+            }
+            catch { }
+        }
+
         public void ApplyThemeToTextBox()
         {
             try
@@ -166,7 +187,7 @@ namespace GxPT
                         _txtMessage.BackColor = Color.FromArgb(0x24, 0x27, 0x3A); // Macchiato Base
 
                         // Do not apply theme foreground color for hint text
-                        if(_txtMessage.ForeColor != System.Drawing.Color.Gray || _txtMessage.Text == "")
+                        if (_txtMessage.ForeColor != System.Drawing.Color.Gray || _txtMessage.Text == "")
                             _txtMessage.ForeColor = Color.FromArgb(230, 230, 230);   // light text like bubbles
                     }
                     else

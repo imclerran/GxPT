@@ -348,6 +348,9 @@ namespace GxPT
             // Apply theme across existing transcripts and primary UI
             try { if (_themeManager != null) _themeManager.ApplyThemeToAllTranscripts(); }
             catch { }
+            // Apply transcript width to all transcripts
+            try { if (_themeManager != null) _themeManager.ApplyTranscriptWidthToAllTranscripts(); }
+            catch { }
         }
 
         // Build a context for the existing designer tab (tabPage1 + chatTranscript)
@@ -361,6 +364,15 @@ namespace GxPT
                 var ctx = _tabManager != null ? _tabManager.SetupInitialConversationTab(this.tabPage1, this.chatTranscript) : null;
                 if (ctx != null)
                 {
+                    // Apply initial transcript width from settings for the designer-created control
+                    try
+                    {
+                        int w = (int)Math.Round(AppSettings.GetDouble("transcript_max_width", 1000));
+                        if (w <= 0) w = 1000;
+                        if (w < 300) w = 300; if (w > 1900) w = 1900;
+                        if (ctx.Transcript != null) ctx.Transcript.MaxContentWidth = w;
+                    }
+                    catch { }
                     if (_sidebarManager != null && ctx.Conversation != null)
                         _sidebarManager.TrackOpenConversation(ctx.Conversation.Id, ctx.Page);
                     SyncComboModelFromActiveTab();
@@ -395,6 +407,9 @@ namespace GxPT
                 UpdateApiKeyBanner();
                 // Theme may have changed; re-apply to all open transcripts
                 try { if (_themeManager != null) _themeManager.ApplyThemeToAllTranscripts(); }
+                catch { }
+                // Apply transcript width after settings changes
+                try { if (_themeManager != null) _themeManager.ApplyTranscriptWidthToAllTranscripts(); }
                 catch { }
             }
         }
@@ -975,6 +990,8 @@ namespace GxPT
                 }
                 UpdateApiKeyBanner();
                 try { if (_themeManager != null) _themeManager.ApplyThemeToAllTranscripts(); }
+                catch { }
+                try { if (_themeManager != null) _themeManager.ApplyTranscriptWidthToAllTranscripts(); }
                 catch { }
             }
         }

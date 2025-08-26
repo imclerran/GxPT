@@ -145,6 +145,7 @@ namespace GxPT
             sb.AppendLine("  ],");
             sb.AppendLine("  \"default_model\": \"openai/gpt-4o\",");
             sb.AppendLine("  \"theme\": \"light\",");
+            sb.AppendLine("  \"transcript_max_width\": 1000,");
             sb.AppendLine("  \"font_size\": " + defaultFontSize.ToString(System.Globalization.CultureInfo.InvariantCulture) + ",");
             sb.AppendLine("  \"enable_logging\": false");
             sb.AppendLine("}");
@@ -182,7 +183,8 @@ namespace GxPT
                 default_model = "openai/gpt-4o",
                 enable_logging = false,
                 font_size = GetChatDefaultFontSize(),
-                theme = "light"
+                theme = "light",
+                transcript_max_width = 1000
             };
         }
 
@@ -674,6 +676,16 @@ namespace GxPT
                 s.theme = t;
             }
             catch { s.theme = "light"; }
+
+            // Clamp transcript max width (matches UI min/max 300..1900) and default to 1000
+            try
+            {
+                int w = s.transcript_max_width;
+                if (w <= 0) w = 1000;
+                if (w < 300) w = 300; if (w > 1900) w = 1900;
+                s.transcript_max_width = w;
+            }
+            catch { s.transcript_max_width = 1000; }
         }
 
         // --- Visual controls <-> working settings ---
@@ -735,6 +747,16 @@ namespace GxPT
                 }
             }
             catch { }
+
+            // Transcript max width
+            try
+            {
+                int w = (s.transcript_max_width > 0 ? s.transcript_max_width : 1000);
+                decimal dv = (decimal)Math.Max(300, Math.Min(1900, w));
+                if (this.nudTranscriptMaxWidth != null)
+                    this.nudTranscriptMaxWidth.Value = dv;
+            }
+            catch { }
         }
 
         private void CaptureVisualControlsToSettings(SettingsData target)
@@ -774,6 +796,13 @@ namespace GxPT
                 target.theme = (themeSel ?? "light").Trim().ToLowerInvariant();
             }
             catch { target.theme = "light"; }
+
+            // Transcript max width
+            try
+            {
+                target.transcript_max_width = (int)this.nudTranscriptMaxWidth.Value;
+            }
+            catch { target.transcript_max_width = 1000; }
         }
 
         // When the models textbox changes, add any new non-empty lines to the default model combo box
@@ -941,6 +970,7 @@ namespace GxPT
             public bool enable_logging { get; set; }
             public double font_size { get; set; }
             public string theme { get; set; }
+            public int transcript_max_width { get; set; }
         }
     }
 }
