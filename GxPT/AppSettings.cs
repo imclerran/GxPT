@@ -41,6 +41,20 @@ namespace GxPT
             return json;
         }
 
+        private static void SaveJson(Dictionary<string, object> data)
+        {
+            try
+            {
+                if (data == null) data = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                string dir = SettingsDirectory;
+                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                var ser = new JavaScriptSerializer();
+                string text = ser.Serialize(data);
+                File.WriteAllText(SettingsPath, text, Encoding.UTF8);
+            }
+            catch { }
+        }
+
         public static string GetString(string key)
         {
             var all = LoadJson();
@@ -48,6 +62,14 @@ namespace GxPT
             if (all.TryGetValue(key, out val) && val != null)
                 return Convert.ToString(val);
             return null;
+        }
+
+        public static void SetString(string key, string value)
+        {
+            if (string.IsNullOrEmpty(key)) return;
+            var all = LoadJson();
+            all[key] = value ?? string.Empty;
+            SaveJson(all);
         }
 
         public static List<string> GetList(string key)

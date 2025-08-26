@@ -50,7 +50,9 @@
             this.pnlInput = new System.Windows.Forms.Panel();
             this.txtMessage = new System.Windows.Forms.TextBox();
             this.pnlInputRight = new System.Windows.Forms.Panel();
+            this.pnlButtons = new System.Windows.Forms.Panel();
             this.btnSend = new System.Windows.Forms.Button();
+            this.btnAttach = new System.Windows.Forms.Button();
             this.cmbModel = new System.Windows.Forms.ComboBox();
             this.pnlBottom = new System.Windows.Forms.Panel();
             this.pnlApiKeyBanner = new System.Windows.Forms.Panel();
@@ -60,13 +62,13 @@
             this.pnlAttachmentsBanner = new System.Windows.Forms.FlowLayoutPanel();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
-            this.splitContainer1 = new System.Windows.Forms.SplitContainer();
-            this.btnAttach = new System.Windows.Forms.Button();
-            this.pnlButtons = new System.Windows.Forms.Panel();
             this.chatTranscript = new GxPT.ChatTranscriptControl();
+            this.splitContainer1 = new System.Windows.Forms.SplitContainer();
+            this.miDarkMode = new System.Windows.Forms.ToolStripMenuItem();
             this.msMain.SuspendLayout();
             this.pnlInput.SuspendLayout();
             this.pnlInputRight.SuspendLayout();
+            this.pnlButtons.SuspendLayout();
             this.pnlBottom.SuspendLayout();
             this.pnlApiKeyBanner.SuspendLayout();
             this.flowLayoutPanel1.SuspendLayout();
@@ -74,7 +76,6 @@
             this.tabPage1.SuspendLayout();
             this.splitContainer1.Panel2.SuspendLayout();
             this.splitContainer1.SuspendLayout();
-            this.pnlButtons.SuspendLayout();
             this.SuspendLayout();
             // 
             // msMain
@@ -102,7 +103,7 @@
             this.toolStripSeparator1,
             this.miExit});
             this.miFile.Name = "miFile";
-            this.miFile.Size = new System.Drawing.Size(35, 20);
+            this.miFile.Size = new System.Drawing.Size(37, 20);
             this.miFile.Text = "&File";
             // 
             // miSettings
@@ -110,20 +111,20 @@
             this.miSettings.Name = "miSettings";
             this.miSettings.ShortcutKeyDisplayString = "Ctrl+,";
             this.miSettings.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.Oemcomma)));
-            this.miSettings.Size = new System.Drawing.Size(220, 22);
+            this.miSettings.Size = new System.Drawing.Size(221, 22);
             this.miSettings.Text = "&Settings";
             this.miSettings.Click += new System.EventHandler(this.miSettings_Click);
             // 
             // toolStripSeparator2
             // 
             this.toolStripSeparator2.Name = "toolStripSeparator2";
-            this.toolStripSeparator2.Size = new System.Drawing.Size(217, 6);
+            this.toolStripSeparator2.Size = new System.Drawing.Size(218, 6);
             // 
             // miNewConversation
             // 
             this.miNewConversation.Name = "miNewConversation";
             this.miNewConversation.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.N)));
-            this.miNewConversation.Size = new System.Drawing.Size(220, 22);
+            this.miNewConversation.Size = new System.Drawing.Size(221, 22);
             this.miNewConversation.Text = "&New Conversation";
             this.miNewConversation.Click += new System.EventHandler(this.miNewConversation_Click);
             // 
@@ -131,53 +132,54 @@
             // 
             this.miCloseConversation.Name = "miCloseConversation";
             this.miCloseConversation.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.W)));
-            this.miCloseConversation.Size = new System.Drawing.Size(220, 22);
+            this.miCloseConversation.Size = new System.Drawing.Size(221, 22);
             this.miCloseConversation.Text = "&Close Conversation";
             // 
             // toolStripSeparator4
             // 
             this.toolStripSeparator4.Name = "toolStripSeparator4";
-            this.toolStripSeparator4.Size = new System.Drawing.Size(217, 6);
+            this.toolStripSeparator4.Size = new System.Drawing.Size(218, 6);
             // 
             // miImport
             // 
             this.miImport.Name = "miImport";
-            this.miImport.Size = new System.Drawing.Size(220, 22);
+            this.miImport.Size = new System.Drawing.Size(221, 22);
             this.miImport.Text = "&Import";
             this.miImport.Click += new System.EventHandler(this.miImport_Click);
             // 
             // miExport
             // 
             this.miExport.Name = "miExport";
-            this.miExport.Size = new System.Drawing.Size(220, 22);
+            this.miExport.Size = new System.Drawing.Size(221, 22);
             this.miExport.Text = "&Export";
             this.miExport.Click += new System.EventHandler(this.miExport_Click);
             // 
             // toolStripSeparator1
             // 
             this.toolStripSeparator1.Name = "toolStripSeparator1";
-            this.toolStripSeparator1.Size = new System.Drawing.Size(217, 6);
+            this.toolStripSeparator1.Size = new System.Drawing.Size(218, 6);
             // 
             // miExit
             // 
             this.miExit.Name = "miExit";
-            this.miExit.Size = new System.Drawing.Size(220, 22);
+            this.miExit.Size = new System.Drawing.Size(221, 22);
             this.miExit.Text = "E&xit";
             this.miExit.Click += new System.EventHandler(this.miExit_Click);
             // 
             // miView
             // 
             this.miView.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.miConversationHistory});
+            this.miConversationHistory,
+            this.miDarkMode});
             this.miView.Name = "miView";
-            this.miView.Size = new System.Drawing.Size(41, 20);
+            this.miView.Size = new System.Drawing.Size(44, 20);
             this.miView.Text = "&View";
             // 
             // miConversationHistory
             // 
             this.miConversationHistory.Name = "miConversationHistory";
             this.miConversationHistory.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.H)));
-            this.miConversationHistory.Size = new System.Drawing.Size(225, 22);
+            this.miConversationHistory.Size = new System.Drawing.Size(228, 22);
             this.miConversationHistory.Text = "Conversation &History";
             this.miConversationHistory.Click += new System.EventHandler(this.miConversationHistory_Click);
             // 
@@ -189,33 +191,33 @@
             this.toolStripSeparator3,
             this.miAbout});
             this.miHelp.Name = "miHelp";
-            this.miHelp.Size = new System.Drawing.Size(40, 20);
+            this.miHelp.Size = new System.Drawing.Size(44, 20);
             this.miHelp.Text = "Help";
             // 
             // miApiKeysHelp
             // 
             this.miApiKeysHelp.Name = "miApiKeysHelp";
             this.miApiKeysHelp.ShortcutKeys = System.Windows.Forms.Keys.F1;
-            this.miApiKeysHelp.Size = new System.Drawing.Size(180, 22);
+            this.miApiKeysHelp.Size = new System.Drawing.Size(138, 22);
             this.miApiKeysHelp.Text = "API &Keys";
             this.miApiKeysHelp.Click += new System.EventHandler(this.miApiKeysHelp_Click);
             // 
             // miPrivacyHelp
             // 
             this.miPrivacyHelp.Name = "miPrivacyHelp";
-            this.miPrivacyHelp.Size = new System.Drawing.Size(180, 22);
+            this.miPrivacyHelp.Size = new System.Drawing.Size(138, 22);
             this.miPrivacyHelp.Text = "&Privacy";
             this.miPrivacyHelp.Click += new System.EventHandler(this.miPrivacyHelp_Click);
             // 
             // toolStripSeparator3
             // 
             this.toolStripSeparator3.Name = "toolStripSeparator3";
-            this.toolStripSeparator3.Size = new System.Drawing.Size(177, 6);
+            this.toolStripSeparator3.Size = new System.Drawing.Size(135, 6);
             // 
             // miAbout
             // 
             this.miAbout.Name = "miAbout";
-            this.miAbout.Size = new System.Drawing.Size(180, 22);
+            this.miAbout.Size = new System.Drawing.Size(138, 22);
             this.miAbout.Text = "&About";
             this.miAbout.Click += new System.EventHandler(this.miAbout_Click);
             // 
@@ -225,7 +227,7 @@
             this.pnlInput.Controls.Add(this.txtMessage);
             this.pnlInput.Controls.Add(this.pnlInputRight);
             this.pnlInput.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.pnlInput.Location = new System.Drawing.Point(0, 21);
+            this.pnlInput.Location = new System.Drawing.Point(0, 28);
             this.pnlInput.MinimumSize = new System.Drawing.Size(0, 75);
             this.pnlInput.Name = "pnlInput";
             this.pnlInput.Size = new System.Drawing.Size(885, 75);
@@ -256,6 +258,17 @@
             this.pnlInputRight.Size = new System.Drawing.Size(175, 75);
             this.pnlInputRight.TabIndex = 3;
             // 
+            // pnlButtons
+            // 
+            this.pnlButtons.Controls.Add(this.btnSend);
+            this.pnlButtons.Controls.Add(this.btnAttach);
+            this.pnlButtons.Dock = System.Windows.Forms.DockStyle.Bottom;
+            this.pnlButtons.Location = new System.Drawing.Point(0, 0);
+            this.pnlButtons.Margin = new System.Windows.Forms.Padding(0);
+            this.pnlButtons.Name = "pnlButtons";
+            this.pnlButtons.Size = new System.Drawing.Size(175, 54);
+            this.pnlButtons.TabIndex = 4;
+            // 
             // btnSend
             // 
             this.btnSend.Dock = System.Windows.Forms.DockStyle.Bottom;
@@ -266,6 +279,16 @@
             this.btnSend.Text = "Send";
             this.btnSend.UseVisualStyleBackColor = true;
             this.btnSend.Click += new System.EventHandler(this.btnSend_Click);
+            // 
+            // btnAttach
+            // 
+            this.btnAttach.Dock = System.Windows.Forms.DockStyle.Left;
+            this.btnAttach.Image = global::GxPT.Properties.Resources.AttatchGrey;
+            this.btnAttach.Location = new System.Drawing.Point(0, 0);
+            this.btnAttach.Name = "btnAttach";
+            this.btnAttach.Size = new System.Drawing.Size(26, 54);
+            this.btnAttach.TabIndex = 3;
+            this.btnAttach.UseVisualStyleBackColor = true;
             // 
             // cmbModel
             // 
@@ -292,10 +315,10 @@
             this.pnlBottom.Controls.Add(this.pnlAttachmentsBanner);
             this.pnlBottom.Controls.Add(this.pnlInput);
             this.pnlBottom.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.pnlBottom.Location = new System.Drawing.Point(0, 646);
+            this.pnlBottom.Location = new System.Drawing.Point(0, 639);
             this.pnlBottom.Margin = new System.Windows.Forms.Padding(0, 3, 3, 3);
             this.pnlBottom.Name = "pnlBottom";
-            this.pnlBottom.Size = new System.Drawing.Size(885, 96);
+            this.pnlBottom.Size = new System.Drawing.Size(885, 103);
             this.pnlBottom.TabIndex = 3;
             // 
             // pnlApiKeyBanner
@@ -304,7 +327,7 @@
             this.pnlApiKeyBanner.BackColor = System.Drawing.Color.Gold;
             this.pnlApiKeyBanner.Controls.Add(this.flowLayoutPanel1);
             this.pnlApiKeyBanner.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.pnlApiKeyBanner.Location = new System.Drawing.Point(0, 0);
+            this.pnlApiKeyBanner.Location = new System.Drawing.Point(0, 7);
             this.pnlApiKeyBanner.Margin = new System.Windows.Forms.Padding(0);
             this.pnlApiKeyBanner.Name = "pnlApiKeyBanner";
             this.pnlApiKeyBanner.Padding = new System.Windows.Forms.Padding(6, 4, 6, 4);
@@ -343,6 +366,13 @@
             this.lnkOpenSettings.TabStop = true;
             this.lnkOpenSettings.Text = "Open Settings";
             // 
+            // pnlAttachmentsBanner
+            // 
+            this.pnlAttachmentsBanner.Location = new System.Drawing.Point(0, 0);
+            this.pnlAttachmentsBanner.Name = "pnlAttachmentsBanner";
+            this.pnlAttachmentsBanner.Size = new System.Drawing.Size(200, 100);
+            this.pnlAttachmentsBanner.TabIndex = 2;
+            // 
             // tabControl1
             // 
             this.tabControl1.Controls.Add(this.tabPage1);
@@ -350,7 +380,7 @@
             this.tabControl1.Location = new System.Drawing.Point(0, 0);
             this.tabControl1.Name = "tabControl1";
             this.tabControl1.SelectedIndex = 0;
-            this.tabControl1.Size = new System.Drawing.Size(885, 646);
+            this.tabControl1.Size = new System.Drawing.Size(885, 639);
             this.tabControl1.TabIndex = 4;
             // 
             // tabPage1
@@ -358,10 +388,22 @@
             this.tabPage1.Controls.Add(this.chatTranscript);
             this.tabPage1.Location = new System.Drawing.Point(4, 22);
             this.tabPage1.Name = "tabPage1";
-            this.tabPage1.Size = new System.Drawing.Size(877, 620);
+            this.tabPage1.Size = new System.Drawing.Size(877, 613);
             this.tabPage1.TabIndex = 0;
             this.tabPage1.Text = "New Conversation";
             this.tabPage1.UseVisualStyleBackColor = true;
+            // 
+            // chatTranscript
+            // 
+            this.chatTranscript.AccessibleName = "Chat transcript";
+            this.chatTranscript.BackColor = System.Drawing.SystemColors.ControlLightLight;
+            this.chatTranscript.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.chatTranscript.ForeColor = System.Drawing.SystemColors.WindowText;
+            this.chatTranscript.Location = new System.Drawing.Point(0, 0);
+            this.chatTranscript.Margin = new System.Windows.Forms.Padding(0);
+            this.chatTranscript.Name = "chatTranscript";
+            this.chatTranscript.Size = new System.Drawing.Size(877, 613);
+            this.chatTranscript.TabIndex = 0;
             // 
             // splitContainer1
             // 
@@ -381,38 +423,12 @@
             this.splitContainer1.SplitterWidth = 1;
             this.splitContainer1.TabIndex = 1;
             // 
-            // btnAttach
+            // miDarkMode
             // 
-            this.btnAttach.Dock = System.Windows.Forms.DockStyle.Left;
-            this.btnAttach.Image = global::GxPT.Properties.Resources.AttatchGrey;
-            this.btnAttach.Location = new System.Drawing.Point(0, 0);
-            this.btnAttach.Name = "btnAttach";
-            this.btnAttach.Size = new System.Drawing.Size(26, 54);
-            this.btnAttach.TabIndex = 3;
-            this.btnAttach.UseVisualStyleBackColor = true;
-            // 
-            // pnlButtons
-            // 
-            this.pnlButtons.Controls.Add(this.btnSend);
-            this.pnlButtons.Controls.Add(this.btnAttach);
-            this.pnlButtons.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.pnlButtons.Location = new System.Drawing.Point(0, 0);
-            this.pnlButtons.Margin = new System.Windows.Forms.Padding(0);
-            this.pnlButtons.Name = "pnlButtons";
-            this.pnlButtons.Size = new System.Drawing.Size(175, 54);
-            this.pnlButtons.TabIndex = 4;
-            // 
-            // chatTranscript
-            // 
-            this.chatTranscript.AccessibleName = "Chat transcript";
-            this.chatTranscript.BackColor = System.Drawing.SystemColors.ControlLightLight;
-            this.chatTranscript.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.chatTranscript.ForeColor = System.Drawing.SystemColors.WindowText;
-            this.chatTranscript.Location = new System.Drawing.Point(0, 0);
-            this.chatTranscript.Margin = new System.Windows.Forms.Padding(0);
-            this.chatTranscript.Name = "chatTranscript";
-            this.chatTranscript.Size = new System.Drawing.Size(877, 620);
-            this.chatTranscript.TabIndex = 0;
+            this.miDarkMode.Name = "miDarkMode";
+            this.miDarkMode.Size = new System.Drawing.Size(228, 22);
+            this.miDarkMode.Text = "&Dark Mode";
+            this.miDarkMode.Click += new System.EventHandler(this.miDarkMode_Click);
             // 
             // MainForm
             // 
@@ -431,6 +447,7 @@
             this.pnlInput.ResumeLayout(false);
             this.pnlInput.PerformLayout();
             this.pnlInputRight.ResumeLayout(false);
+            this.pnlButtons.ResumeLayout(false);
             this.pnlBottom.ResumeLayout(false);
             this.pnlBottom.PerformLayout();
             this.pnlApiKeyBanner.ResumeLayout(false);
@@ -442,7 +459,6 @@
             this.splitContainer1.Panel2.ResumeLayout(false);
             this.splitContainer1.Panel2.PerformLayout();
             this.splitContainer1.ResumeLayout(false);
-            this.pnlButtons.ResumeLayout(false);
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -485,8 +501,7 @@
         private System.Windows.Forms.Button btnAttach;
         private System.Windows.Forms.Panel pnlButtons;
         private System.Windows.Forms.FlowLayoutPanel pnlAttachmentsBanner;
-
-
+        private System.Windows.Forms.ToolStripMenuItem miDarkMode;
     }
 }
 

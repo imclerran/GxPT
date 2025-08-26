@@ -349,6 +349,18 @@ namespace GxPT
             try { if (_themeManager != null) _themeManager.ApplyThemeToAllTranscripts(); }
             catch { }
 
+            // Sync Dark Mode menu checked state from settings
+            try
+            {
+                if (this.miDarkMode != null)
+                {
+                    string theme = AppSettings.GetString("theme") ?? "light";
+                    bool isDark = theme.Trim().Equals("dark", StringComparison.OrdinalIgnoreCase);
+                    this.miDarkMode.Checked = isDark;
+                }
+            }
+            catch { }
+
             // Apply transcript/message width settings to existing transcripts
             try
             {
@@ -2041,6 +2053,35 @@ namespace GxPT
         private void txtMessage_Leave(object sender, EventArgs e)
         {
             _inputManager.SetHintText();
+        }
+
+        private void miDarkMode_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                // Toggle theme string between light and dark
+                string theme = AppSettings.GetString("theme") ?? "light";
+                bool isDark = theme.Trim().Equals("dark", StringComparison.OrdinalIgnoreCase);
+                bool toDark = !isDark;
+
+                // Persist setting
+                AppSettings.SetString("theme", toDark ? "dark" : "light");
+
+                // Update menu checked state immediately
+                if (this.miDarkMode != null) this.miDarkMode.Checked = toDark;
+
+                // Apply theme to all transcripts and relevant UI controls now
+                if (_themeManager != null)
+                {
+                    _themeManager.ApplyThemeToAllTranscripts();
+                    _themeManager.ApplyFontSizeSettingToAllUi(); // keep fonts consistent; no-op for theme but safe
+                }
+
+                // Also refresh tab headers (font/color may rely on system colors)
+                try { if (this.tabControl1 != null) this.tabControl1.Invalidate(); }
+                catch { }
+            }
+            catch { }
         }
     }
 }
