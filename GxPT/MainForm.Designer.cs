@@ -42,6 +42,7 @@
             this.miExit = new System.Windows.Forms.ToolStripMenuItem();
             this.miView = new System.Windows.Forms.ToolStripMenuItem();
             this.miConversationHistory = new System.Windows.Forms.ToolStripMenuItem();
+            this.miDarkMode = new System.Windows.Forms.ToolStripMenuItem();
             this.miHelp = new System.Windows.Forms.ToolStripMenuItem();
             this.miApiKeysHelp = new System.Windows.Forms.ToolStripMenuItem();
             this.miPrivacyHelp = new System.Windows.Forms.ToolStripMenuItem();
@@ -64,7 +65,7 @@
             this.tabPage1 = new System.Windows.Forms.TabPage();
             this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.splitContainer1 = new System.Windows.Forms.SplitContainer();
-            this.miDarkMode = new System.Windows.Forms.ToolStripMenuItem();
+            this.miDeleteConversations = new System.Windows.Forms.ToolStripMenuItem();
             this.msMain.SuspendLayout();
             this.pnlInput.SuspendLayout();
             this.pnlInputRight.SuspendLayout();
@@ -100,6 +101,7 @@
             this.toolStripSeparator4,
             this.miImport,
             this.miExport,
+            this.miDeleteConversations,
             this.toolStripSeparator1,
             this.miExit});
             this.miFile.Name = "miFile";
@@ -182,6 +184,13 @@
             this.miConversationHistory.Size = new System.Drawing.Size(228, 22);
             this.miConversationHistory.Text = "Conversation &History";
             this.miConversationHistory.Click += new System.EventHandler(this.miConversationHistory_Click);
+            // 
+            // miDarkMode
+            // 
+            this.miDarkMode.Name = "miDarkMode";
+            this.miDarkMode.Size = new System.Drawing.Size(228, 22);
+            this.miDarkMode.Text = "&Dark Mode";
+            this.miDarkMode.Click += new System.EventHandler(this.miDarkMode_Click);
             // 
             // miHelp
             // 
@@ -423,12 +432,12 @@
             this.splitContainer1.SplitterWidth = 1;
             this.splitContainer1.TabIndex = 1;
             // 
-            // miDarkMode
+            // miDeleteConversations
             // 
-            this.miDarkMode.Name = "miDarkMode";
-            this.miDarkMode.Size = new System.Drawing.Size(228, 22);
-            this.miDarkMode.Text = "&Dark Mode";
-            this.miDarkMode.Click += new System.EventHandler(this.miDarkMode_Click);
+            this.miDeleteConversations.Name = "miDeleteConversations";
+            this.miDeleteConversations.Size = new System.Drawing.Size(221, 22);
+            this.miDeleteConversations.Text = "&Delete All Conversations";
+            this.miDeleteConversations.Click += new System.EventHandler(this.miDeleteConversations_Click);
             // 
             // MainForm
             // 
@@ -502,6 +511,7 @@
         private System.Windows.Forms.Panel pnlButtons;
         private System.Windows.Forms.FlowLayoutPanel pnlAttachmentsBanner;
         private System.Windows.Forms.ToolStripMenuItem miDarkMode;
+        private System.Windows.Forms.ToolStripMenuItem miDeleteConversations;
     }
 }
 

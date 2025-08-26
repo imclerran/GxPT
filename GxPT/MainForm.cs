@@ -558,11 +558,14 @@ namespace GxPT
             {
                 if (ofd.ShowDialog(this) != DialogResult.OK) return;
 
-                if (MessageBox.Show(this,
-                    "Importing will overwrite existing files with the same names. Continue?",
-                    "Import Conversations", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                if (ConversationStore.ListAll().Count > 0)
                 {
-                    return;
+                    if (MessageBox.Show(this,
+                        "Importing will overwrite existing files with the same names. Continue?",
+                        "Import Conversations", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                    {
+                        return;
+                    }
                 }
 
                 string targetDir = ResolveConversationsFolderPath();
@@ -2080,6 +2083,39 @@ namespace GxPT
                 // Also refresh tab headers (font/color may rely on system colors)
                 try { if (this.tabControl1 != null) this.tabControl1.Invalidate(); }
                 catch { }
+            }
+            catch { }
+        }
+
+        private void miDeleteConversations_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                var dr = MessageBox.Show(
+                    this,
+                    "This will permanently delete all saved conversations. This action cannot be undone.\n\nDo you want to continue?",
+                    "Delete All Conversations",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button2);
+                if (dr != DialogResult.Yes) return; // default is No/Cancel
+
+                int deleted = 0;
+                try
+                {
+                    deleted = ConversationStore.DeleteAll();
+                }
+                catch { }
+
+                // Refresh UI (sidebar list, etc.)
+                try { if (_sidebarManager != null) _sidebarManager.RefreshSidebarList(); }
+                catch { }
+
+                MessageBox.Show(this,
+                    deleted > 0 ? "All conversations have been deleted." : "No conversations were found to delete.",
+                    "Delete All Conversations",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
             }
             catch { }
         }

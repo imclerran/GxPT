@@ -165,6 +165,27 @@ namespace GxPT
             catch { }
         }
 
+        public static int DeleteAll()
+        {
+            int count = 0;
+            try
+            {
+                string root = GetRoot();
+                if (!Directory.Exists(root)) return 0;
+                foreach (var path in Directory.GetFiles(root, "*" + FileExt))
+                {
+                    try
+                    {
+                        File.Delete(path);
+                        count++;
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+            return count;
+        }
+
         public static void DeletePath(string path)
         {
             try { if (!string.IsNullOrEmpty(path) && File.Exists(path)) File.Delete(path); }
