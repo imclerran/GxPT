@@ -22,7 +22,24 @@ namespace GxPT
         private const int BubblePadding = 8;
         private const int BubbleRadius = 8;
         private const int ScrollStep = 40;
-        private const int MaxBubbleWidth = 700; // midpoint between original 560 and 1000
+        // Configurable maximum bubble width (capped further by content area width)
+        private int _maxBubbleWidth = 700; // midpoint between original 560 and 1000
+        [Browsable(true)]
+        [Category("Layout")]
+        [Description("Maximum width, in pixels, for individual message bubbles. Actual width is min(MaxContentWidth, this value).")]
+        [DefaultValue(700)]
+        public int MaxBubbleWidth
+        {
+            get { return _maxBubbleWidth; }
+            set
+            {
+                int v = (value < 1) ? 1 : value;
+                if (v == _maxBubbleWidth) return;
+                _maxBubbleWidth = v;
+                Reflow();
+                Invalidate();
+            }
+        }
         private const int BulletIndent = 18;
         private const int BulletGap = 8;
         private const int CodeBlockPadding = 6;
@@ -617,7 +634,7 @@ namespace GxPT
                 // Determine the bounded content area (centered) within which bubbles align
                 int areaWidth = Math.Min(innerWidth, _maxContentWidth);
                 int areaLeft = MarginOuter + Math.Max(0, (innerWidth - areaWidth) / 2);
-                int usableWidth = Math.Min(areaWidth, MaxBubbleWidth);
+                int usableWidth = Math.Min(areaWidth, _maxBubbleWidth);
 
                 foreach (var it in _items)
                 {
@@ -667,7 +684,7 @@ namespace GxPT
                 int innerWidth = Math.Max(0, ClientSize.Width - _vbar.Width - 2 * MarginOuter);
                 int areaWidth = Math.Min(innerWidth, _maxContentWidth);
                 int areaLeft = MarginOuter + Math.Max(0, (innerWidth - areaWidth) / 2);
-                int usableWidth = Math.Min(areaWidth, MaxBubbleWidth);
+                int usableWidth = Math.Min(areaWidth, _maxBubbleWidth);
 
                 int y;
                 if (startIndex == 0)

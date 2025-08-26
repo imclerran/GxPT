@@ -344,6 +344,11 @@
             // 
             // nudMessageMaxWidth
             // 
+            this.nudMessageMaxWidth.Increment = new decimal(new int[] {
+            50,
+            0,
+            0,
+            0});
             this.nudMessageMaxWidth.Location = new System.Drawing.Point(117, 285);
             this.nudMessageMaxWidth.Maximum = new decimal(new int[] {
             1900,

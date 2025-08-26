@@ -215,6 +215,17 @@ namespace GxPT
                 try { ctx.Page.Text = "New Conversation"; }
                 catch { }
 
+                // Apply transcript/message width from settings to the initial transcript
+                try
+                {
+                    int tw = (int)AppSettings.GetDouble("transcript_max_width", 1000);
+                    int mw = (int)AppSettings.GetDouble("message_max_width", 700);
+                    if (tw <= 0) tw = 1000; if (tw < 300) tw = 300; if (tw > 1900) tw = 1900;
+                    if (mw <= 0) mw = 700; if (mw < 100) mw = 100; if (mw > tw) mw = tw;
+                    if (ctx.Transcript != null) { ctx.Transcript.MaxContentWidth = tw; ctx.Transcript.MaxBubbleWidth = mw; }
+                }
+                catch { }
+
                 _tabContexts[initialTab] = ctx;
                 if (TabsChanged != null) TabsChanged();
                 return ctx;
@@ -231,15 +242,6 @@ namespace GxPT
 
             var transcript = new ChatTranscriptControl();
             transcript.Dock = DockStyle.Fill;
-            // Apply configured transcript width before adding to the page
-            try
-            {
-                int w = (int)Math.Round(AppSettings.GetDouble("transcript_max_width", 1000));
-                if (w <= 0) w = 1000;
-                if (w < 300) w = 300; if (w > 1900) w = 1900;
-                transcript.MaxContentWidth = w;
-            }
-            catch { }
             _mainForm.ApplyFontSetting(transcript);
             page.Controls.Add(transcript);
 
@@ -323,6 +325,20 @@ namespace GxPT
 
             _tabControl.TabPages.Add(page);
             try { _tabControl.SelectedTab = page; }
+            catch { }
+
+            // Apply transcript/message width from settings for newly created transcript
+            try
+            {
+                int tw = (int)AppSettings.GetDouble("transcript_max_width", 1000);
+                int mw = (int)AppSettings.GetDouble("message_max_width", 700);
+                if (tw <= 0) tw = 1000; if (tw < 300) tw = 300; if (tw > 1900) tw = 1900;
+                if (mw <= 0) mw = 700; if (mw < 100) mw = 100; if (mw > tw) mw = tw;
+                try { transcript.MaxContentWidth = tw; }
+                catch { }
+                try { transcript.MaxBubbleWidth = mw; }
+                catch { }
+            }
             catch { }
 
             if (TabsChanged != null) TabsChanged();
@@ -566,14 +582,47 @@ namespace GxPT
             catch { }
         }
 
-        public void ApplyTranscriptWidthToAllTranscripts(int width)
+        // Compatibility helpers: apply transcript/message width settings across all transcripts.
+        // These overloads allow older callers to compile regardless of signature.
+        public void ApplyTranscriptWidthToAllTranscripts()
         {
             try
             {
-                int w = Math.Max(300, Math.Min(1900, width));
+                int tw = (int)AppSettings.GetDouble("transcript_max_width", 1000);
+                int mw = (int)AppSettings.GetDouble("message_max_width", 700);
+                if (tw <= 0) tw = 1000; if (tw < 300) tw = 300; if (tw > 1900) tw = 1900;
+                if (mw <= 0) mw = 700; if (mw < 100) mw = 100; if (mw > tw) mw = tw;
+                ApplyTranscriptWidthToAllTranscripts(tw, mw);
+            }
+            catch { }
+        }
+
+        public void ApplyTranscriptWidthToAllTranscripts(int maxContentWidth)
+        {
+            try
+            {
                 foreach (var kv in _tabContexts)
                 {
-                    try { if (kv.Value.Transcript != null) kv.Value.Transcript.MaxContentWidth = w; }
+                    var t = kv.Value != null ? kv.Value.Transcript : null;
+                    if (t == null) continue;
+                    try { t.MaxContentWidth = maxContentWidth; }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+
+        public void ApplyTranscriptWidthToAllTranscripts(int maxContentWidth, int maxBubbleWidth)
+        {
+            try
+            {
+                foreach (var kv in _tabContexts)
+                {
+                    var t = kv.Value != null ? kv.Value.Transcript : null;
+                    if (t == null) continue;
+                    try { t.MaxContentWidth = maxContentWidth; }
+                    catch { }
+                    try { t.MaxBubbleWidth = maxBubbleWidth; }
                     catch { }
                 }
             }

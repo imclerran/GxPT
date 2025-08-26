@@ -348,8 +348,42 @@ namespace GxPT
             // Apply theme across existing transcripts and primary UI
             try { if (_themeManager != null) _themeManager.ApplyThemeToAllTranscripts(); }
             catch { }
-            // Apply transcript width to all transcripts
-            try { if (_themeManager != null) _themeManager.ApplyTranscriptWidthToAllTranscripts(); }
+
+            // Apply transcript/message width settings to existing transcripts
+            try
+            {
+                int tw = (int)AppSettings.GetDouble("transcript_max_width", 1000);
+                int mw = (int)AppSettings.GetDouble("message_max_width", 700);
+                if (tw <= 0) tw = 1000; if (tw < 300) tw = 300; if (tw > 1900) tw = 1900;
+                if (mw <= 0) mw = 700; if (mw < 100) mw = 100; if (mw > tw) mw = tw;
+                // Primary designer transcript
+                try
+                {
+                    if (this.chatTranscript != null)
+                    {
+                        this.chatTranscript.MaxContentWidth = tw;
+                        this.chatTranscript.MaxBubbleWidth = mw;
+                    }
+                }
+                catch { }
+                // All tab transcripts
+                try
+                {
+                    if (_tabManager != null)
+                    {
+                        foreach (var kv in _tabManager.TabContexts)
+                        {
+                            var t = kv.Value != null ? kv.Value.Transcript : null;
+                            if (t == null) continue;
+                            try { t.MaxContentWidth = tw; }
+                            catch { }
+                            try { t.MaxBubbleWidth = mw; }
+                            catch { }
+                        }
+                    }
+                }
+                catch { }
+            }
             catch { }
         }
 
@@ -364,15 +398,6 @@ namespace GxPT
                 var ctx = _tabManager != null ? _tabManager.SetupInitialConversationTab(this.tabPage1, this.chatTranscript) : null;
                 if (ctx != null)
                 {
-                    // Apply initial transcript width from settings for the designer-created control
-                    try
-                    {
-                        int w = (int)Math.Round(AppSettings.GetDouble("transcript_max_width", 1000));
-                        if (w <= 0) w = 1000;
-                        if (w < 300) w = 300; if (w > 1900) w = 1900;
-                        if (ctx.Transcript != null) ctx.Transcript.MaxContentWidth = w;
-                    }
-                    catch { }
                     if (_sidebarManager != null && ctx.Conversation != null)
                         _sidebarManager.TrackOpenConversation(ctx.Conversation.Id, ctx.Page);
                     SyncComboModelFromActiveTab();
@@ -408,8 +433,27 @@ namespace GxPT
                 // Theme may have changed; re-apply to all open transcripts
                 try { if (_themeManager != null) _themeManager.ApplyThemeToAllTranscripts(); }
                 catch { }
-                // Apply transcript width after settings changes
-                try { if (_themeManager != null) _themeManager.ApplyTranscriptWidthToAllTranscripts(); }
+                // Re-apply transcript/message widths in case they changed
+                try
+                {
+                    int tw = (int)AppSettings.GetDouble("transcript_max_width", 1000);
+                    int mw = (int)AppSettings.GetDouble("message_max_width", 700);
+                    if (tw <= 0) tw = 1000; if (tw < 300) tw = 300; if (tw > 1900) tw = 1900;
+                    if (mw <= 0) mw = 700; if (mw < 100) mw = 100; if (mw > tw) mw = tw;
+                    if (this.chatTranscript != null) { this.chatTranscript.MaxContentWidth = tw; this.chatTranscript.MaxBubbleWidth = mw; }
+                    if (_tabManager != null)
+                    {
+                        foreach (var kv in _tabManager.TabContexts)
+                        {
+                            var t = kv.Value != null ? kv.Value.Transcript : null;
+                            if (t == null) continue;
+                            try { t.MaxContentWidth = tw; }
+                            catch { }
+                            try { t.MaxBubbleWidth = mw; }
+                            catch { }
+                        }
+                    }
+                }
                 catch { }
             }
         }
@@ -990,8 +1034,6 @@ namespace GxPT
                 }
                 UpdateApiKeyBanner();
                 try { if (_themeManager != null) _themeManager.ApplyThemeToAllTranscripts(); }
-                catch { }
-                try { if (_themeManager != null) _themeManager.ApplyTranscriptWidthToAllTranscripts(); }
                 catch { }
             }
         }
