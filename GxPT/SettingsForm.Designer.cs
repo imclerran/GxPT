@@ -105,17 +105,17 @@
             this.tblSettings.Controls.Add(this.lblApiKey, 0, 0);
             this.tblSettings.Controls.Add(this.lblModels, 0, 1);
             this.tblSettings.Controls.Add(this.lblDefaultModel, 0, 2);
-            this.tblSettings.Controls.Add(this.lblFontSize, 0, 4);
+            this.tblSettings.Controls.Add(this.lblFontSize, 0, 5);
             this.tblSettings.Controls.Add(this.lblTheme, 0, 3);
             this.tblSettings.Controls.Add(this.lblEnableLogging, 0, 6);
             this.tblSettings.Controls.Add(this.txtApiKey, 1, 0);
             this.tblSettings.Controls.Add(this.txtModels, 1, 1);
             this.tblSettings.Controls.Add(this.cmbDefaultModel, 1, 2);
-            this.tblSettings.Controls.Add(this.nudFontSize, 1, 4);
+            this.tblSettings.Controls.Add(this.nudFontSize, 1, 5);
             this.tblSettings.Controls.Add(this.cmbTheme, 1, 3);
             this.tblSettings.Controls.Add(this.chkEnableLogging, 1, 6);
-            this.tblSettings.Controls.Add(this.lblTranscriptMaxWidth, 0, 5);
-            this.tblSettings.Controls.Add(this.nudTranscriptMaxWidth, 1, 5);
+            this.tblSettings.Controls.Add(this.lblTranscriptMaxWidth, 0, 4);
+            this.tblSettings.Controls.Add(this.nudTranscriptMaxWidth, 1, 4);
             this.tblSettings.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tblSettings.Location = new System.Drawing.Point(3, 3);
             this.tblSettings.Name = "tblSettings";
@@ -127,6 +127,7 @@
             this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle());
+            this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 20F));
             this.tblSettings.Size = new System.Drawing.Size(578, 311);
             this.tblSettings.TabIndex = 2;
             // 
@@ -166,7 +167,7 @@
             // 
             this.lblFontSize.AutoSize = true;
             this.lblFontSize.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblFontSize.Location = new System.Drawing.Point(3, 236);
+            this.lblFontSize.Location = new System.Drawing.Point(3, 262);
             this.lblFontSize.Name = "lblFontSize";
             this.lblFontSize.Size = new System.Drawing.Size(108, 26);
             this.lblFontSize.TabIndex = 8;
@@ -223,15 +224,15 @@
             this.cmbDefaultModel.FormattingEnabled = true;
             this.cmbDefaultModel.Location = new System.Drawing.Point(117, 185);
             this.cmbDefaultModel.Name = "cmbDefaultModel";
-            this.cmbDefaultModel.Size = new System.Drawing.Size(175, 21);
+            this.cmbDefaultModel.Size = new System.Drawing.Size(458, 21);
             this.cmbDefaultModel.TabIndex = 5;
             // 
             // nudFontSize
             // 
             this.nudFontSize.DecimalPlaces = 2;
-            this.nudFontSize.Location = new System.Drawing.Point(117, 239);
+            this.nudFontSize.Location = new System.Drawing.Point(117, 265);
             this.nudFontSize.Name = "nudFontSize";
-            this.nudFontSize.Size = new System.Drawing.Size(80, 20);
+            this.nudFontSize.Size = new System.Drawing.Size(120, 20);
             this.nudFontSize.TabIndex = 9;
             // 
             // cmbTheme
@@ -290,7 +291,7 @@
             // 
             this.lblTranscriptMaxWidth.AutoSize = true;
             this.lblTranscriptMaxWidth.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblTranscriptMaxWidth.Location = new System.Drawing.Point(3, 262);
+            this.lblTranscriptMaxWidth.Location = new System.Drawing.Point(3, 236);
             this.lblTranscriptMaxWidth.Name = "lblTranscriptMaxWidth";
             this.lblTranscriptMaxWidth.Size = new System.Drawing.Size(108, 26);
             this.lblTranscriptMaxWidth.TabIndex = 12;
@@ -304,7 +305,7 @@
             0,
             0,
             0});
-            this.nudTranscriptMaxWidth.Location = new System.Drawing.Point(117, 265);
+            this.nudTranscriptMaxWidth.Location = new System.Drawing.Point(117, 239);
             this.nudTranscriptMaxWidth.Maximum = new decimal(new int[] {
             1900,
             0,
@@ -316,10 +317,10 @@
             0,
             0});
             this.nudTranscriptMaxWidth.Name = "nudTranscriptMaxWidth";
-            this.nudTranscriptMaxWidth.Size = new System.Drawing.Size(80, 20);
+            this.nudTranscriptMaxWidth.Size = new System.Drawing.Size(120, 20);
             this.nudTranscriptMaxWidth.TabIndex = 13;
             this.nudTranscriptMaxWidth.Value = new decimal(new int[] {
-            300,
+            1000,
             0,
             0,
             0});
