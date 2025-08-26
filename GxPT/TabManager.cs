@@ -92,7 +92,7 @@ namespace GxPT
                 _miTabClose.Click += delegate { if (_tabCtxTarget != null) CloseConversationTab(_tabCtxTarget); };
                 _miTabCloseOthers.Click += delegate { if (_tabCtxTarget != null) CloseOtherTabs(_tabCtxTarget); };
 
-                _tabCtxMenu.Items.AddRange(new ToolStripItem[] { _miTabNew, _miTabClose, _miTabCloseOthers });
+                _tabCtxMenu.Items.AddRange(new ToolStripItem[] { _miTabNew, new ToolStripSeparator(), _miTabClose, _miTabCloseOthers });
             }
             catch { }
         }
