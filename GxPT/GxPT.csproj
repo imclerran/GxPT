@@ -99,7 +99,6 @@
     <Compile Include="Services\HoverWheelRouter.cs" />
     <Compile Include="Managers\InputManager.cs" />
     <Compile Include="Services\Logger.cs" />
-    <Compile Include="Services\HelpConversations.cs" />
     <Compile Include="Services\OpenRouterClient.cs">
     </Compile>
     <Compile Include="Forms\MainForm.cs">
