@@ -170,9 +170,9 @@
     <Content Include="Lib\curl.exe">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="Resources\Help\help_api_keys.json">
+    <EmbeddedResource Include="Resources\Help\help_api_keys.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources\Help\help_privacy.json" />
     <None Include="Resources\Icons\icon.ico" />
     <EmbeddedResource Include="Resources\Images\ExplorerDelete.png" />

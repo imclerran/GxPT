@@ -8,10 +8,8 @@ using System.Text;
 using System.Windows.Forms;
 using GxPT;
 using System.IO;
-// DotNetZip (Ionic.Zip) v1.12.0.0 for .NET 3.5
 using Ionic.Zip;
 using System.Reflection;
-// iTextSharp 5.5.x
 using iTextSharp.text.pdf;
 using Parser = iTextSharp.text.pdf.parser;
 
@@ -1906,7 +1904,7 @@ namespace GxPT
                 {
                     var asm = typeof(MainForm).Assembly;
                     // Resource name follows default: RootNamespace.folder.filename
-                    using (var s = asm.GetManifestResourceStream("GxPT.resources.help_api_keys.json"))
+                    using (var s = asm.GetManifestResourceStream("GxPT.Resources.Help.help_api_keys.json"))
                     {
                         if (s != null)
                         {
@@ -1966,7 +1964,7 @@ namespace GxPT
                 try
                 {
                     var asm = typeof(MainForm).Assembly;
-                    using (var s = asm.GetManifestResourceStream("GxPT.resources.help_privacy.json"))
+                    using (var s = asm.GetManifestResourceStream("GxPT.Resources.Help.help_privacy.json"))
                     {
                         if (s != null)
                         {
