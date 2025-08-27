@@ -9,7 +9,7 @@ namespace GxPT
         public static Image GetAssemblyImage(string imageName)
         {
             // Define your namespace here
-            string namespacePrefix = "GxPT.Resources";
+            string namespacePrefix = "GxPT.Resources.Images";
             Assembly assembly = Assembly.GetExecutingAssembly();
 
             // Construct the full resource name using String.Format
@@ -24,8 +24,22 @@ namespace GxPT
                 else
                 {
                     // Optionally, you could log an error or throw an exception here
-                    throw new ArgumentException(String.Format("Resource '{0}' not found in assembly."), resourceName);
+                    throw new ArgumentException(String.Format("Resource '{0}' not found in assembly.", resourceName));
                 }
+            }
+        }
+
+        public static Image TryGetAssemblyImage(string imageName)
+        {
+            try
+            {
+                return GetAssemblyImage(imageName);
+            }
+            catch (Exception ex)
+            {
+                try { Logger.Log("resources", "Image not found: " + imageName + "; " + ex.Message); }
+                catch { }
+                return null;
             }
         }
     }

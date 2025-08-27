@@ -75,6 +75,12 @@
         }
         "Entry"
         {
+        "MsmKey" = "8:_A180D69227FE4B7083CE9AD87CFDF823"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
         "MsmKey" = "8:_B90BB6A99B974FAD927520C13601471C"
         "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
@@ -320,7 +326,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_2D972FE10E1340BAB6027F5E00AF44D2"
             {
-            "SourcePath" = "8:..\\GxPT\\Resources\\icon.ico"
+            "SourcePath" = "8:..\\GxPT\\Resources\\Icons\\icon.ico"
             "TargetName" = "8:icon.ico"
             "Tag" = "8:"
             "Folder" = "8:_24C4BCC179A740BFBC5D45DDB8D16A6D"
@@ -449,6 +455,26 @@
             "IsDependency" = "11:FALSE"
             "IsolateTo" = "8:"
             }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_A180D69227FE4B7083CE9AD87CFDF823"
+            {
+            "SourcePath" = "8:..\\GxPT\\Resources\\Images\\GxPT-banner-install.bmp"
+            "TargetName" = "8:GxPT-banner-install.bmp"
+            "Tag" = "8:"
+            "Folder" = "8:_CD841986AE154170BCBE8CF96BB48935"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:TRUE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_B90BB6A99B974FAD927520C13601471C"
             {
             "SourcePath" = "8:..\\GxPT\\licenses\\LICENSE-zlib.txt"
@@ -466,26 +492,6 @@
             "PackageAs" = "3:1"
             "Register" = "3:1"
             "Exclude" = "11:FALSE"
-            "IsDependency" = "11:FALSE"
-            "IsolateTo" = "8:"
-            }
-            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_B9E74BB654EE42808FA92C969A217033"
-            {
-            "SourcePath" = "8:..\\GxPT\\Resources\\GxPT-banner-install.bmp"
-            "TargetName" = "8:GxPT-banner-install.bmp"
-            "Tag" = "8:"
-            "Folder" = "8:_24C4BCC179A740BFBC5D45DDB8D16A6D"
-            "Condition" = "8:"
-            "Transitive" = "11:FALSE"
-            "Vital" = "11:TRUE"
-            "ReadOnly" = "11:FALSE"
-            "Hidden" = "11:FALSE"
-            "System" = "11:FALSE"
-            "Permanent" = "11:FALSE"
-            "SharedLegacy" = "11:FALSE"
-            "PackageAs" = "3:1"
-            "Register" = "3:1"
-            "Exclude" = "11:TRUE"
             "IsDependency" = "11:FALSE"
             "IsolateTo" = "8:"
             }
@@ -627,6 +633,17 @@
                     "Property" = "8:_56684C74633F4A619A9B95582407F205"
                         "Folders"
                         {
+                            "{9EF0B969-E518-4E46-987F-47570745A589}:_CD841986AE154170BCBE8CF96BB48935"
+                            {
+                            "Name" = "8:Images"
+                            "AlwaysCreate" = "11:FALSE"
+                            "Condition" = "8:"
+                            "Transitive" = "11:FALSE"
+                            "Property" = "8:_DD874FB672404DB19B2026FF7F596B4D"
+                                "Folders"
+                                {
+                                }
+                            }
                         }
                     }
                     "{9EF0B969-E518-4E46-987F-47570745A589}:_9E0CB227B1644868B8C46462762E94CC"
@@ -659,7 +676,7 @@
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:GxPT"
         "ProductCode" = "8:{8CB47737-9567-46B7-8EC9-2E53003095A7}"
-        "PackageCode" = "8:{16500FCB-F357-4CC4-BC23-E480E1D9755E}"
+        "PackageCode" = "8:{5046B033-680D-4D29-A8F0-B3FA92FF63EB}"
         "UpgradeCode" = "8:{18C05863-8BD9-4273-B9E8-061F771066DF}"
         "RestartWWWService" = "11:FALSE"
         "RemovePreviousVersions" = "11:TRUE"
@@ -840,7 +857,7 @@
                             "ContextData" = "8:Bitmap"
                             "Attributes" = "3:4"
                             "Setting" = "3:2"
-                            "Value" = "8:_B9E74BB654EE42808FA92C969A217033"
+                            "Value" = "8:_A180D69227FE4B7083CE9AD87CFDF823"
                             "UsePlugInResources" = "11:TRUE"
                             }
                         }
@@ -872,7 +889,7 @@
                             "ContextData" = "8:Bitmap"
                             "Attributes" = "3:4"
                             "Setting" = "3:2"
-                            "Value" = "8:_B9E74BB654EE42808FA92C969A217033"
+                            "Value" = "8:_A180D69227FE4B7083CE9AD87CFDF823"
                             "UsePlugInResources" = "11:TRUE"
                             }
                             "CopyrightWarning"
@@ -921,7 +938,7 @@
                             "ContextData" = "8:Bitmap"
                             "Attributes" = "3:4"
                             "Setting" = "3:2"
-                            "Value" = "8:_B9E74BB654EE42808FA92C969A217033"
+                            "Value" = "8:_A180D69227FE4B7083CE9AD87CFDF823"
                             "UsePlugInResources" = "11:TRUE"
                             }
                         }
@@ -944,7 +961,7 @@
                             "ContextData" = "8:Bitmap"
                             "Attributes" = "3:4"
                             "Setting" = "3:2"
-                            "Value" = "8:_B9E74BB654EE42808FA92C969A217033"
+                            "Value" = "8:_A180D69227FE4B7083CE9AD87CFDF823"
                             "UsePlugInResources" = "11:TRUE"
                             }
                             "EulaText"
@@ -992,7 +1009,7 @@
                             "ContextData" = "8:Bitmap"
                             "Attributes" = "3:4"
                             "Setting" = "3:2"
-                            "Value" = "8:_B9E74BB654EE42808FA92C969A217033"
+                            "Value" = "8:_A180D69227FE4B7083CE9AD87CFDF823"
                             "UsePlugInResources" = "11:TRUE"
                             }
                             "InstallAllUsersVisible"
@@ -1037,7 +1054,7 @@
                             "ContextData" = "8:Bitmap"
                             "Attributes" = "3:4"
                             "Setting" = "3:2"
-                            "Value" = "8:_B9E74BB654EE42808FA92C969A217033"
+                            "Value" = "8:_A180D69227FE4B7083CE9AD87CFDF823"
                             "UsePlugInResources" = "11:TRUE"
                             }
                             "ShowProgress"
@@ -1082,7 +1099,7 @@
                             "ContextData" = "8:Bitmap"
                             "Attributes" = "3:4"
                             "Setting" = "3:2"
-                            "Value" = "8:_B9E74BB654EE42808FA92C969A217033"
+                            "Value" = "8:_A180D69227FE4B7083CE9AD87CFDF823"
                             "UsePlugInResources" = "11:TRUE"
                             }
                             "UpdateText"
@@ -1127,7 +1144,7 @@
                             "ContextData" = "8:Bitmap"
                             "Attributes" = "3:4"
                             "Setting" = "3:2"
-                            "Value" = "8:_B9E74BB654EE42808FA92C969A217033"
+                            "Value" = "8:_A180D69227FE4B7083CE9AD87CFDF823"
                             "UsePlugInResources" = "11:TRUE"
                             }
                             "EulaText"
@@ -1175,7 +1192,7 @@
                             "ContextData" = "8:Bitmap"
                             "Attributes" = "3:4"
                             "Setting" = "3:2"
-                            "Value" = "8:_B9E74BB654EE42808FA92C969A217033"
+                            "Value" = "8:_A180D69227FE4B7083CE9AD87CFDF823"
                             "UsePlugInResources" = "11:TRUE"
                             }
                             "CopyrightWarning"
@@ -1224,7 +1241,7 @@
                             "ContextData" = "8:Bitmap"
                             "Attributes" = "3:4"
                             "Setting" = "3:2"
-                            "Value" = "8:_B9E74BB654EE42808FA92C969A217033"
+                            "Value" = "8:_A180D69227FE4B7083CE9AD87CFDF823"
                             "UsePlugInResources" = "11:TRUE"
                             }
                         }
@@ -1247,7 +1264,7 @@
                             "ContextData" = "8:Bitmap"
                             "Attributes" = "3:4"
                             "Setting" = "3:2"
-                            "Value" = "8:_B9E74BB654EE42808FA92C969A217033"
+                            "Value" = "8:_A180D69227FE4B7083CE9AD87CFDF823"
                             "UsePlugInResources" = "11:TRUE"
                             }
                         }
@@ -1279,7 +1296,7 @@
                             "ContextData" = "8:Bitmap"
                             "Attributes" = "3:4"
                             "Setting" = "3:2"
-                            "Value" = "8:_B9E74BB654EE42808FA92C969A217033"
+                            "Value" = "8:_A180D69227FE4B7083CE9AD87CFDF823"
                             "UsePlugInResources" = "11:TRUE"
                             }
                             "ShowProgress"
