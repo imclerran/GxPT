@@ -154,6 +154,7 @@
     <Compile Include="Managers\SidebarManager.cs" />
     <Compile Include="Highlighting\SyntaxHighlighter.cs">
     </Compile>
+    <Compile Include="Services\SessionState.cs" />
     <Compile Include="Services\SyntaxHighlightingRenderer.cs" />
     <Compile Include="Managers\TabManager.cs" />
     <Compile Include="Managers\ThemeManager.cs" />

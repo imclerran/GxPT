@@ -53,7 +53,13 @@ namespace GxPT
                 this.lnkOpenSettings.LinkClicked += lnkOpenSettings_LinkClicked;
             if (this.pnlApiKeyBanner != null)
                 this.pnlApiKeyBanner.Resize += (s, e) => LayoutApiKeyBanner();
-            this.Load += (s, e) => UpdateApiKeyBanner();
+            this.Load += (s, e) =>
+            {
+                UpdateApiKeyBanner();
+                try { RestoreOpenTabsOnStartup(); }
+                catch { }
+            };
+            this.FormClosing += MainForm_FormClosing_SaveOpenTabs;
 
             // Configure attachments banner container
             if (this.pnlAttachmentsBanner != null)
@@ -116,6 +122,118 @@ namespace GxPT
                         catch { }
                     }
                 });
+            }
+            catch { }
+        }
+
+        // Persist and restore open tabs (conversation IDs and active tab)
+        private void MainForm_FormClosing_SaveOpenTabs(object sender, FormClosingEventArgs e)
+        {
+            try
+            {
+                var openIds = GetOpenConversationIdsInOrder();
+                string activeId = GetActiveConversationId();
+                SessionState.SaveOpenTabs(openIds, activeId);
+            }
+            catch { }
+        }
+
+        private List<string> GetOpenConversationIdsInOrder()
+        {
+            var list = new List<string>();
+            try
+            {
+                if (this.tabControl1 == null) return list;
+                foreach (TabPage page in this.tabControl1.TabPages)
+                {
+                    try
+                    {
+                        var ctx = _tabManager != null && page != null && _tabManager.TabContexts.ContainsKey(page)
+                            ? _tabManager.TabContexts[page]
+                            : null;
+                        if (ctx != null && ctx.NoSaveUntilUserSend) continue; // skip help/temporary tabs
+                        var id = ctx != null && ctx.Conversation != null ? ctx.Conversation.Id : null;
+                        if (!string.IsNullOrEmpty(id)) list.Add(id);
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+            return list;
+        }
+
+        private string GetActiveConversationId()
+        {
+            try
+            {
+                var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                if (ctx != null && ctx.Conversation != null) return ctx.Conversation.Id;
+            }
+            catch { }
+            return null;
+        }
+
+        private void RestoreOpenTabsOnStartup()
+        {
+            try
+            {
+                List<string> ids; string activeFromFile;
+                SessionState.LoadOpenTabs(out ids, out activeFromFile);
+                if (ids == null || ids.Count == 0) return;
+
+                // We'll reuse the initial blank tab for the first item if suitable
+                bool firstUsed = false;
+                for (int i = 0; i < ids.Count; i++)
+                {
+                    string id = ids[i];
+                    if (string.IsNullOrEmpty(id)) continue;
+                    try
+                    {
+                        string path = ConversationStore.GetPathForId(id);
+                        if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) continue;
+                        var convo = ConversationStore.Load(_client, path);
+                        if (convo == null) continue;
+
+                        // Skip restoring any tabs that were help templates marked as no-save (no id)
+                        if (string.IsNullOrEmpty(convo.Id)) continue;
+
+                        if (!firstUsed)
+                        {
+                            var blank = FindBlankTabPreferActive();
+                            if (blank != null)
+                            {
+                                OpenConversationInTab(blank, convo);
+                                firstUsed = true;
+                                continue;
+                            }
+                        }
+                        OpenConversationInNewTab(convo);
+                    }
+                    catch { }
+                }
+
+                // Reselect previously active tab if still present
+                try
+                {
+                    string active = activeFromFile;
+                    if (!string.IsNullOrEmpty(active) && this.tabControl1 != null && _tabManager != null)
+                    {
+                        foreach (TabPage p in this.tabControl1.TabPages)
+                        {
+                            try
+                            {
+                                var ctx = _tabManager.TabContexts.ContainsKey(p) ? _tabManager.TabContexts[p] : null;
+                                if (ctx != null && ctx.Conversation != null && string.Equals(ctx.Conversation.Id, active, StringComparison.Ordinal))
+                                {
+                                    this.tabControl1.SelectedTab = p;
+                                    break;
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                catch { }
             }
             catch { }
         }
