@@ -12,7 +12,7 @@
     <AssemblyName>GxPT</AssemblyName>
     <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
-    <ApplicationIcon>icon.ico</ApplicationIcon>
+    <ApplicationIcon>Resources\icon.ico</ApplicationIcon>
     <IsWebBootstrapper>false</IsWebBootstrapper>
     <PublishUrl>publish\</PublishUrl>
     <Install>true</Install>
@@ -90,22 +90,22 @@
     <Compile Include="ChatModels.cs" />
     <Compile Include="Conversation.cs" />
     <Compile Include="ConversationStore.cs" />
-    <Compile Include="FileViewerForm.cs">
+    <Compile Include="Forms\FileViewerForm.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="FileViewerForm.Designer.cs">
+    <Compile Include="Forms\FileViewerForm.Designer.cs">
       <DependentUpon>FileViewerForm.cs</DependentUpon>
     </Compile>
     <Compile Include="HoverWheelRouter.cs" />
-    <Compile Include="InputManager.cs" />
+    <Compile Include="Managers\InputManager.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="HelpConversations.cs" />
     <Compile Include="OpenRouterClient.cs">
     </Compile>
-    <Compile Include="MainForm.cs">
+    <Compile Include="Forms\MainForm.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="MainForm.Designer.cs">
+    <Compile Include="Forms\MainForm.Designer.cs">
       <DependentUpon>MainForm.cs</DependentUpon>
     </Compile>
     <Compile Include="LanguageHighlighters.cs">
@@ -116,7 +116,7 @@
     <EmbeddedResource Include="AboutForm.resx">
       <DependentUpon>AboutForm.cs</DependentUpon>
     </EmbeddedResource>
-    <EmbeddedResource Include="MainForm.resx">
+    <EmbeddedResource Include="Forms\MainForm.resx">
       <DependentUpon>MainForm.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
@@ -124,7 +124,7 @@
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
       <SubType>Designer</SubType>
     </EmbeddedResource>
-    <EmbeddedResource Include="SettingsForm.resx">
+    <EmbeddedResource Include="Forms\SettingsForm.resx">
       <DependentUpon>SettingsForm.cs</DependentUpon>
     </EmbeddedResource>
     <Compile Include="Properties\Resources.Designer.cs">
@@ -132,7 +132,7 @@
       <DependentUpon>Resources.resx</DependentUpon>
       <DesignTime>True</DesignTime>
     </Compile>
-    <Content Include="curl-ca-bundle.crt">
+    <Content Include="Lib\curl-ca-bundle.crt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <None Include="Properties\Settings.settings">
@@ -146,35 +146,39 @@
     </Compile>
     <Compile Include="ResourceHelper.cs" />
     <Compile Include="RichTextBoxSyntaxHighlighter.cs" />
-    <Compile Include="SettingsForm.cs">
+    <Compile Include="Forms\SettingsForm.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="SettingsForm.Designer.cs">
+    <Compile Include="Forms\SettingsForm.Designer.cs">
       <DependentUpon>SettingsForm.cs</DependentUpon>
     </Compile>
-    <Compile Include="SidebarManager.cs" />
+    <Compile Include="Managers\SidebarManager.cs" />
     <Compile Include="SyntaxHighlighter.cs">
     </Compile>
     <Compile Include="SyntaxHighlightingRenderer.cs" />
-    <Compile Include="TabManager.cs" />
-    <Compile Include="ThemeManager.cs" />
+    <Compile Include="Managers\TabManager.cs" />
+    <Compile Include="Managers\ThemeManager.cs" />
     <Compile Include="ZipSafe.cs" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="AttatchGrey.png" />
-    <Content Include="curl.exe">
+    <None Include="Resources\AttatchGrey.png" />
+    <Content Include="Lib\curl.exe">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <EmbeddedResource Include="resources\help_api_keys.json" />
-    <EmbeddedResource Include="resources\help_privacy.json" />
-    <None Include="icon.ico" />
+    <EmbeddedResource Include="Resources\help_api_keys.json" />
+    <EmbeddedResource Include="Resources\help_privacy.json" />
+    <None Include="Resources\icon.ico" />
     <EmbeddedResource Include="ExplorerDelete.png" />
-    <EmbeddedResource Include="FileViewerForm.resx">
+    <EmbeddedResource Include="Forms\FileViewerForm.resx">
       <DependentUpon>FileViewerForm.cs</DependentUpon>
     </EmbeddedResource>
-    <Content Include="libcurl.dll">
+    <Content Include="Lib\libcurl.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="Lib\DotNetZip.dll" />
+    <Content Include="Lib\DotNetZip.xml" />
+    <Content Include="Lib\itextsharp.dll" />
+    <Content Include="Lib\iTextSharp.xml" />
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include="Microsoft.Net.Client.3.5">
