@@ -355,7 +355,7 @@ namespace GxPT
                 var miOpen = new ToolStripMenuItem("Open");
                 var miRename = new ToolStripMenuItem("Rename");
                 var miDelete = new ToolStripMenuItem("Delete");
-                var deleteImage = ResourceHelper.GetAssemblyImage("ExplorerDelete.png");
+                var deleteImage = ResourceManager.GetAssemblyImage("ExplorerDelete.png");
                 miOpen.Click += (s, e) => TryOpenSelectedConversation();
                 miRename.Click += (s, e) => StartRenameSelectedConversation();
                 miDelete.Click += (s, e) => DeleteSelectedConversation();

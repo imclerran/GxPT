@@ -144,7 +144,7 @@
       <DependentUpon>Settings.settings</DependentUpon>
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
     </Compile>
-    <Compile Include="ResourceHelper.cs" />
+    <Compile Include="ResourceManager.cs" />
     <Compile Include="RichTextBoxSyntaxHighlighter.cs" />
     <Compile Include="Forms\SettingsForm.cs">
       <SubType>Form</SubType>

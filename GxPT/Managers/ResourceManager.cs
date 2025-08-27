@@ -4,12 +4,12 @@ using System.Reflection;
 
 namespace GxPT
 {
-    class ResourceHelper
+    class ResourceManager
     {
         public static Image GetAssemblyImage(string imageName)
         {
             // Define your namespace here
-            string namespacePrefix = "GxPT";
+            string namespacePrefix = "GxPT.Resources";
             Assembly assembly = Assembly.GetExecutingAssembly();
 
             // Construct the full resource name using String.Format
