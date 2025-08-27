@@ -13,7 +13,7 @@ namespace GxPT
             {
                 if (string.IsNullOrEmpty(fileName)) return null;
                 string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                string path1 = Path.Combine(baseDir, "Help");
+                string path1 = Path.Combine(baseDir, "Resources\\Help");
                 string path = Path.Combine(path1, fileName);
                 if (!File.Exists(path))
                 {
