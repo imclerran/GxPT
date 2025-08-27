@@ -146,6 +146,92 @@ namespace GxPT
     }
 
     /// <summary>
+    /// Ada syntax highlighter - supports Ada 83, Ada 95, Ada 2005, Ada 2012, and Ada 2022
+    /// </summary>
+    public class AdaHighlighter : RegexHighlighterBase
+    {
+        public static readonly string[] FileTypes = new string[] { "*.ada", "*.adb", "*.ads", "*.gpr" };
+        public override string Language
+        {
+            get { return "ada"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "ada83", "ada95", "ada2005", "ada2012", "ada2022", "gnat", "spark" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Comments (-- comment, single line only in Ada)
+                new TokenPattern(@"--.*$", TokenType.Comment, 1),
+
+                // String literals (double quotes)
+                new TokenPattern(@"""(?:[^""]|"""")*""", TokenType.String, 2),
+
+                // Character literals (single quotes)
+                new TokenPattern(@"'(?:[^'\\]|\\.|'')'", TokenType.String, 3),
+
+                // Based literals (16#FF#, 2#1010#, 8#777#) and numeric literals
+                new TokenPattern(@"(?i)\b(?:\d+#[0-9a-f_]+(?:\.[0-9a-f_]+)?#(?:[eE][+-]?\d+)?|\d+(?:_\d+)*(?:\.\d+(?:_\d+)*)?(?:[eE][+-]?\d+)?)\b", TokenType.Number, 4),
+
+                // Attributes ('First, 'Last, 'Length, 'Range, etc.) - before keywords to avoid conflicts
+                new TokenPattern(@"(?i)'(?:Access|Address|Adjacent|Aft|Alignment|Base|Bit_Order|Body_Version|Callable|Caller|Ceiling|Class|Component_Size|Compose|Copy_Sign|Count|Definite|Delta|Denorm|Digits|Exponent|External_Tag|First|First_Bit|Floor|Fore|Fraction|Identity|Image|Input|Last|Last_Bit|Leading_Part|Length|Machine|Machine_Emax|Machine_Emin|Machine_Mantissa|Machine_Overflows|Machine_Radix|Machine_Rounds|Max|Max_Size_In_Storage_Elements|Min|Mod|Model|Model_Emin|Model_Epsilon|Model_Mantissa|Model_Small|Modulus|Output|Partition_ID|Pos|Position|Pred|Range|Read|Remainder|Round|Rounding|Safe_First|Safe_Last|Scale|Scaling|Signed_Zeros|Size|Small|Storage_Pool|Storage_Size|Stream_Size|Succ|Tag|Terminated|Truncation|Unbiased_Rounding|Unchecked_Access|Val|Valid|Value|Version|Wide_Image|Wide_Value|Wide_Width|Width|Write)\b", TokenType.Type, 5),
+
+                // Pragmas (compiler directives)
+                new TokenPattern(@"(?i)\bpragma\s+[A-Za-z_][A-Za-z0-9_]*", TokenType.Comment, 6),
+
+                // Ada keywords (case-insensitive)
+                new TokenPattern(@"(?i)\b(?:abort|abs|abstract|accept|access|aliased|all|and|array|at|begin|body|case|constant|declare|delay|delta|digits|do|else|elsif|end|entry|exception|exit|for|function|generic|goto|if|in|interface|is|limited|loop|mod|new|not|null|of|or|others|out|overriding|package|pragma|private|procedure|protected|raise|range|record|rem|renames|requeue|return|reverse|select|separate|some|subtype|synchronized|tagged|task|terminate|then|type|until|use|when|while|with|xor)\b", TokenType.Keyword, 7),
+
+                // Standard types and subtypes
+                new TokenPattern(@"(?i)\b(?:Boolean|Integer|Natural|Positive|Float|Long_Float|Short_Float|Duration|Character|Wide_Character|Wide_Wide_Character|String|Wide_String|Wide_Wide_String|Root_Integer|Root_Real|Universal_Integer|Universal_Real|System\.Address|Storage_Offset|Storage_Count|Interfaces\.C\.int|Interfaces\.C\.char|Text_IO\.File_Type|Calendar\.Time)\b", TokenType.Type, 8),
+
+                // Package names and qualified names (Package.Identifier)
+                new TokenPattern(@"(?i)\b[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+\b", TokenType.Type, 9),
+
+                // Exception names (by convention, end with _Error or Error)
+                new TokenPattern(@"(?i)\b[A-Za-z_][A-Za-z0-9_]*_Error\b|\bError\b|\b[A-Za-z_][A-Za-z0-9_]*_Exception\b|\bException\b", TokenType.Type, 10),
+
+                // Type and subtype declarations
+                new TokenPattern(@"(?i)(?<=\b(?:type|subtype)\s+)[A-Za-z_][A-Za-z0-9_]*", TokenType.Type, 11),
+
+                // Procedure and function declarations
+                new TokenPattern(@"(?i)(?<=\b(?:procedure|function)\s+)[A-Za-z_][A-Za-z0-9_]*", TokenType.Method, 12),
+
+                // Package declarations
+                new TokenPattern(@"(?i)(?<=\bpackage\s+(?:body\s+)?)[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*", TokenType.Type, 13),
+
+                // Task and protected object names
+                new TokenPattern(@"(?i)(?<=\b(?:task|protected)\s+(?:type\s+|body\s+)?)[A-Za-z_][A-Za-z0-9_]*", TokenType.Type, 14),
+
+                // Generic instantiations and with clauses
+                new TokenPattern(@"(?i)(?<=\b(?:with|use)\s+)[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*", TokenType.Type, 15),
+
+                // Function and procedure calls
+                new TokenPattern(@"(?i)\b[A-Za-z_][A-Za-z0-9_]*(?=\s*\()", TokenType.Method, 16),
+
+                // Operators (including Ada-specific ones)
+                new TokenPattern(@"(?i)\*\*|=>|<>|<<|>>|:=|\.\.|[+\-*/:=<>&]|\b(?:and\s+then|or\s+else|mod|rem|abs|not|and|or|xor)\b", TokenType.Operator, 17),
+
+                // Assignment and association
+                new TokenPattern(@":=|=>", TokenType.Operator, 18),
+
+                // Ada-specific punctuation (including discriminants and constraints)
+                new TokenPattern(@"[();,.'|]", TokenType.Punctuation, 19),
+
+                // Range operators and constraints
+                new TokenPattern(@"\.\.", TokenType.Operator, 20),
+
+                // Ada identifiers (remaining unmatched identifiers)
+                new TokenPattern(@"(?i)\b[A-Za-z_][A-Za-z0-9_]*\b", TokenType.Normal, 21)
+            };
+        }
+    }
+
+    /// <summary>
     /// Assembly language syntax highlighter - supports x86/x64, ARM/AArch64, and RISC-V
     /// </summary>
     public class AssemblyHighlighter : RegexHighlighterBase
@@ -481,68 +567,6 @@ namespace GxPT
                 
                 // Punctuation
                 new TokenPattern(@"[{}()\[\];,.]", TokenType.Punctuation, 12)
-            };
-        }
-    }
-
-    /// <summary>
-    /// Clojure/EDN syntax highlighter
-    /// </summary>
-    public class ClojureHighlighter : RegexHighlighterBase
-    {
-        public static readonly string[] FileTypes = new string[] { "*.clj", "*.cljs", "*.cljc", "*.edn" };
-        public override string Language
-        {
-            get { return "clojure"; }
-        }
-
-        public override string[] Aliases
-        {
-            get { return new string[] { "clj", "cljs", "cljc", "edn", "clojure" }; }
-        }
-
-        protected override TokenPattern[] GetPatterns()
-        {
-            return new TokenPattern[]
-            {
-                // Line comments
-                new TokenPattern(@";.*$", TokenType.Comment, 1),
-
-                // (comment ...) forms (heuristic, not balanced)
-                new TokenPattern(@"\(\s*comment\b[\s\S]*?\)", TokenType.Comment, 2),
-
-                // Regex literals: #"..."
-                new TokenPattern(@"#""(?:[^""\\]|\\.)*""", TokenType.String, 3),
-
-                // Strings
-                new TokenPattern(@"""(?:[^""\\]|\\.)*""", TokenType.String, 4),
-
-                // Character literals: \c, \newline, \uXXXX, \oNNN
-                new TokenPattern(@"\\(?:u[0-9A-Fa-f]{4}|o[0-7]{1,3}|newline|space|tab|backspace|formfeed|return|quote|.)", TokenType.String, 5),
-
-                // Numbers: hex, ratios, decimals, base-N (e.g., 2r1010), with optional exponent and N/M suffixes
-                new TokenPattern(@"\b[+-]?(?:\d+r[0-9A-Za-z]+|0[xX][0-9A-Fa-f]+|\d+/\d+|(?:\d+(?:_\d+)*\.(?:\d+(?:_\d+)*)?|\d+(?:_\d+)*|\.(?:\d+(?:_\d+)*))(?:[eE][+-]?\d+)?[MN]?)\b", TokenType.Number, 6),
-
-                // Booleans and nil
-                new TokenPattern(@"\b(?:true|false|nil)\b", TokenType.Keyword, 7),
-
-                // Clojure keywords (:kw, ::kw, :ns/kw)
-                new TokenPattern(@"::{0,1}[A-Za-z0-9_*!+<>=?/\.\-]+(?:/[A-Za-z0-9_*!+<>=?/\.\-]+)?", TokenType.Type, 8),
-
-                // Tagged literals (EDN): #inst, #uuid, #myapp/type
-                new TokenPattern(@"#[A-Za-z_][A-Za-z0-9_.-]*/?[A-Za-z0-9_.-]*", TokenType.Type, 9),
-
-                // Special forms and common macros/functions
-                new TokenPattern(@"\b(?:def|defn|defn-|defmacro|defmulti|defmethod|defonce|defprotocol|extend|extend-type|extend-protocol|reify|proxy|gen-class|ns|in-ns|import|require|use|refer|alias|refer-clojure|let|letfn|loop|recur|if|if-let|if-some|when|when-not|when-let|when-some|cond|condp|case|do|fn|fn\*|try|catch|finally|throw|doseq|dotimes|for|while|->|->>|as->|doto|some->|some->>|binding|with-open|with-redefs)\b", TokenType.Keyword, 10),
-
-                // Function/macro symbol immediately after '(' (typical call position)
-                new TokenPattern(@"(?<=\()[A-Za-z_*!+<>=?/.\-][A-Za-z0-9_*!+<>=?/.\-:]*", TokenType.Method, 11),
-
-                // Reader macro/operators and metadata markers
-                new TokenPattern(@"~@|[`'~^@#]", TokenType.Operator, 12),
-
-                // Punctuation and delimiters: lists, vectors, maps, sets
-                new TokenPattern(@"[()\[\]{}]", TokenType.Punctuation, 13)
             };
         }
     }
@@ -1034,6 +1058,91 @@ namespace GxPT
 
                 // Punctuation and delimiters
                 new TokenPattern(@"[{}\[\]();,.:]", TokenType.Punctuation, 12)
+            };
+        }
+    }
+
+    /// <summary>
+    /// Erlang syntax highlighter - supports Erlang/OTP syntax including modules, processes, and pattern matching
+    /// </summary>
+    public class ErlangHighlighter : RegexHighlighterBase
+    {
+        public static readonly string[] FileTypes = new string[] { "*.erl", "*.hrl", "*.escript", "*.app", "*.app.src", "*.config", "*.rel", "*.script", "*.boot" };
+
+        public override string Language
+        {
+            get { return "erlang"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "erl", "erlang", "escript", "hrl" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Comments (% comment)
+                new TokenPattern(@"%.*$", TokenType.Comment, 1),
+
+                // String literals (double quotes with escape sequences)
+                new TokenPattern(@"""(?:[^""\\]|\\.)*""", TokenType.String, 2),
+
+                // Character literals ($a, $\n, $\123, $\x41)
+                new TokenPattern(@"\$(?:\\(?:[bdefnrtv\\'""]|[0-7]{1,3}|x[0-9a-fA-F]{2})|.)", TokenType.String, 3),
+
+                // Atoms: quoted 'atom' and unquoted atom_name
+                new TokenPattern(@"'(?:[^'\\]|\\.)*'", TokenType.Type, 4),
+
+                // Numbers: integers (various bases), floats, scientific notation
+                new TokenPattern(@"\b(?:\d+#[0-9a-zA-Z]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b", TokenType.Number, 5),
+
+                // Binary/bitstring syntax <<...>>
+                new TokenPattern(@"<<[^>]*>>", TokenType.String, 6),
+
+                // Module attributes (-module, -export, -import, -define, etc.)
+                new TokenPattern(@"-[a-zA-Z_][a-zA-Z0-9_]*", TokenType.Keyword, 7),
+
+                // Keywords and reserved words
+                new TokenPattern(@"\b(?:after|and|andalso|band|begin|bnot|bor|bsl|bsr|bxor|case|catch|cond|div|end|fun|if|let|not|of|or|orelse|receive|rem|try|when|xor)\b", TokenType.Keyword, 8),
+
+                // Built-in guard functions and BIFs (Built-In Functions)
+                new TokenPattern(@"\b(?:abs|element|float|hd|length|node|round|self|size|tl|trunc|tuple_size|atom|binary|bitstring|boolean|function|integer|list|number|pid|port|record|reference|tuple|is_alive|is_atom|is_binary|is_bitstring|is_boolean|is_builtin|is_float|is_function|is_integer|is_list|is_number|is_pid|is_port|is_record|is_reference|is_tuple|spawn|spawn_link|spawn_monitor|spawn_opt|link|unlink|monitor|demonitor|exit|throw|error|apply|make_ref|now|date|time|halt|statistics|process_flag|process_info|register|unregister|whereis|registered)\b(?=\s*\()", TokenType.Method, 9),
+
+                // Process operations and message passing
+                new TokenPattern(@"\b(?:self|spawn|spawn_link|spawn_monitor|link|unlink|monitor|demonitor|process_flag|process_info|register|unregister|whereis|registered|send|receive|exit|kill)\b", TokenType.Type, 10),
+
+                // Variables (must start with uppercase or underscore)
+                new TokenPattern(@"\b[A-Z_][a-zA-Z0-9_]*\b", TokenType.Type, 11),
+
+                // Unquoted atoms (lowercase start, alphanumeric + underscore)
+                new TokenPattern(@"\b[a-z][a-zA-Z0-9_]*(?:@[a-zA-Z0-9_]+)?\b", TokenType.Normal, 12),
+
+                // Function calls and module:function syntax
+                new TokenPattern(@"\b[a-z][a-zA-Z0-9_]*:[a-z][a-zA-Z0-9_]*(?=\s*\()", TokenType.Method, 13),
+                new TokenPattern(@"\b[a-z][a-zA-Z0-9_]*(?=\s*\()", TokenType.Method, 14),
+
+                // Records (#record{} syntax)
+                new TokenPattern(@"#[a-z][a-zA-Z0-9_]*(?=\s*\{)", TokenType.Type, 15),
+
+                // Message send operator (!)
+                new TokenPattern(@"!", TokenType.Operator, 16),
+
+                // Pattern matching and comparison operators
+                new TokenPattern(@"=:=|=/=|==|/=|=<|>=|->|<-|\+\+|--|<<|>>|\|\||::|[=<>/+\-*]", TokenType.Operator, 17),
+
+                // List comprehension and generator syntax
+                new TokenPattern(@"\|\||\|", TokenType.Operator, 18),
+
+                // Punctuation (including Erlang-specific syntax)
+                new TokenPattern(@"[{}\[\]();,.:?#]", TokenType.Punctuation, 19),
+
+                // Macros (?MODULE, ?LINE, ?FILE, user-defined ?MACRO)
+                new TokenPattern(@"\?[A-Z_][A-Z0-9_]*", TokenType.Type, 20),
+
+                // Clause separator (;) and statement terminator (.)
+                new TokenPattern(@"[;.]", TokenType.Punctuation, 21)
             };
         }
     }
@@ -1586,6 +1695,89 @@ namespace GxPT
 
                 // Punctuation
                 new TokenPattern(@"[{}()\[\];,.:]", TokenType.Punctuation, 11)
+            };
+        }
+    }
+
+    /// <summary>
+    /// Universal Lisp syntax highlighter - supports Common Lisp, Scheme, Clojure, and Emacs Lisp
+    /// </summary>
+    public class LispHighlighter : RegexHighlighterBase
+    {
+        public static readonly string[] FileTypes = new string[] { 
+        "*.lisp", "*.lsp", "*.l", "*.cl", "*.fasl",  // Common Lisp
+        "*.scm", "*.ss", "*.sch", "*.rkt",           // Scheme/Racket  
+        "*.clj", "*.cljs", "*.cljc", "*.edn",        // Clojure
+        "*.el", "*.emacs"                            // Emacs Lisp
+    };
+
+        public override string Language
+        {
+            get { return "lisp"; }
+        }
+
+        public override string[] Aliases
+        {
+            get
+            {
+                return new string[] { 
+                    "lisp", "commonlisp", "common-lisp", "cl",
+                    "scheme", "racket", "guile", 
+                    "clojure", "clj", "cljs", "edn",
+                    "elisp", "emacs-lisp", "emacs"
+                };
+            }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Comments (all dialects use semicolon)
+                new TokenPattern(@";.*$", TokenType.Comment, 1),
+
+                // Multi-line comments (Clojure (comment ...) and #| |# style)
+                new TokenPattern(@"#\|[\s\S]*?\|#", TokenType.Comment, 2),
+                new TokenPattern(@"\(\s*comment\b[\s\S]*?\)", TokenType.Comment, 3),
+
+                // Strings (double quotes with escapes)
+                new TokenPattern(@"""(?:[^""\\]|\\.)*""", TokenType.String, 4),
+
+                // Character literals (all dialects support #\c style)
+                new TokenPattern(@"#\\(?:\w+|.)", TokenType.String, 5),
+
+                // Clojure regex literals #"..."
+                new TokenPattern(@"#""(?:[^""\\]|\\.)*""", TokenType.String, 6),
+
+                // Numbers (supporting various Lisp number formats)
+                new TokenPattern(@"[+-]?(?:\d+/\d+|\d+\.?\d*(?:[eE][+-]?\d+)?|0[xX][0-9a-fA-F]+)", TokenType.Number, 7),
+
+                // Keywords - Clojure style (:keyword) and others
+                new TokenPattern(@"::{0,2}[A-Za-z0-9_*!+<>=?/.\-]+(?:/[A-Za-z0-9_*!+<>=?/.\-]+)?", TokenType.Type, 8),
+
+                // Special constants
+                new TokenPattern(@"\b(?:nil|null|true|false|t)\b", TokenType.Keyword, 9),
+
+                // Reader macros and dispatch
+                new TokenPattern(@"#[A-Za-z_*!+<>=?/.\-]*", TokenType.Type, 10),
+
+                // Common Lisp/Scheme special forms and macros
+                new TokenPattern(@"\b(?:defun|defmacro|defvar|defparameter|defconstant|lambda|let|let\*|letrec|if|when|unless|cond|case|do|dotimes|dolist|loop|setf|setq|quote|function|eval|apply|mapcar|define|define-syntax|syntax-rules|call/cc|call-with-current-continuation)\b", TokenType.Keyword, 11),
+
+                // Clojure specific forms
+                new TokenPattern(@"\b(?:def|defn|defn-|defmacro|defmulti|defmethod|defonce|ns|let|if-let|when-let|loop|recur|fn|->|->>|doto|binding|with-open)\b", TokenType.Keyword, 12),
+
+                // Emacs Lisp specific
+                new TokenPattern(@"\b(?:defun|defvar|defcustom|defgroup|defface|interactive|save-excursion|save-restriction|with-current-buffer|condition-case)\b", TokenType.Keyword, 13),
+
+                // Function calls - symbol at start of list (heuristic)
+                new TokenPattern(@"(?<=\()[A-Za-z_*!+<>=?/.\-][A-Za-z0-9_*!+<>=?/.\-:]*", TokenType.Method, 14),
+
+                // Quote forms
+                new TokenPattern(@"[`',@~#]+", TokenType.Operator, 15),
+
+                // Parentheses and brackets  
+                new TokenPattern(@"[(){}\[\]]", TokenType.Punctuation, 16)
             };
         }
     }

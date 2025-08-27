@@ -85,12 +85,12 @@ namespace GxPT
         /// </summary>
         private static void RegisterDefaultHighlighters()
         {
+            RegisterHighlighter(new AdaHighlighter());
+            RegisterHighlighter(new AssemblyHighlighter());
             RegisterHighlighter(new BashHighlighter());
             RegisterHighlighter(new BasicHighlighter());
             RegisterHighlighter(new BatchHighlighter());
-            RegisterHighlighter(new AssemblyHighlighter());
             RegisterHighlighter(new CHighlighter());
-            RegisterHighlighter(new ClojureHighlighter());
             RegisterHighlighter(new CppHighlighter());
             RegisterHighlighter(new CSharpHighlighter());
             RegisterHighlighter(new CssHighlighter());
@@ -98,6 +98,7 @@ namespace GxPT
             RegisterHighlighter(new DartHighlighter());
             RegisterHighlighter(new EbnfHighlighter());
             RegisterHighlighter(new ElixirHighlighter());
+            RegisterHighlighter(new ErlangHighlighter());
             RegisterHighlighter(new FortranHighlighter());
             RegisterHighlighter(new FSharpHighlighter());
             RegisterHighlighter(new GoHighlighter());
@@ -107,6 +108,7 @@ namespace GxPT
             RegisterHighlighter(new JavaScriptHighlighter());
             RegisterHighlighter(new JsonHighlighter());
             RegisterHighlighter(new KotlinHighlighter());
+            RegisterHighlighter(new LispHighlighter());
             RegisterHighlighter(new LuaHighlighter());
             RegisterHighlighter(new OcamlHighlighter());
             RegisterHighlighter(new PascalHighlighter());
