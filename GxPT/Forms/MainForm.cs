@@ -339,7 +339,7 @@ namespace GxPT
             // Read API key from settings.json in %AppData%\GxPT
             string apiKey = AppSettings.GetString("openrouter_api_key");
             // curl.exe expected next to executable (bin/Debug)
-            string curlPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "curl.exe");
+            string curlPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Lib\\curl.exe");
             _client = new OpenRouterClient(apiKey, curlPath);
             // Populate models from settings and reflect configuration
             PopulateModelsFromSettings();
@@ -696,8 +696,8 @@ namespace GxPT
             {
                 string reason = _client == null
                     ? "Client not initialized."
-                    : (!System.IO.File.Exists(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "curl.exe"))
-                        ? "curl.exe not found next to the app."
+                    : (!System.IO.File.Exists(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Lib\\curl.exe"))
+                        ? "curl.exe could not be found."
                         : "Missing API key in settings.");
                 // Show error as assistant bubble (no placeholder first)
                 ctx.Transcript.AddMessage(MessageRole.Assistant, "Error: " + reason);

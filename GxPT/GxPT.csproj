@@ -162,13 +162,15 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Resources\AttatchGrey.png" />
+    <Content Include="Resources\GxPT-banner-install.bmp" />
+    <Content Include="Resources\GxPT-logo-400.png" />
     <Content Include="Lib\curl.exe">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <EmbeddedResource Include="Resources\help_api_keys.json" />
     <EmbeddedResource Include="Resources\help_privacy.json" />
     <None Include="Resources\icon.ico" />
-    <EmbeddedResource Include="ExplorerDelete.png" />
+    <EmbeddedResource Include="Resources\ExplorerDelete.png" />
     <EmbeddedResource Include="Forms\FileViewerForm.resx">
       <DependentUpon>FileViewerForm.cs</DependentUpon>
     </EmbeddedResource>
