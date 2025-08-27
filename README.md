@@ -8,6 +8,8 @@ A native chatbot client for Windows XP, written in C# and .NET 3.5. GxPT aims to
 ![GxPT Light Mode Screenshot](GxPT-light.png)
 ### Dark Mode:
 ![GxPT Dark Mode Screenshot](GxPT-dark.png)
+### Windows 7:
+![GxPT Windows 7 Screenshot](GxPT-win7.png)
 
 ## Features
 
