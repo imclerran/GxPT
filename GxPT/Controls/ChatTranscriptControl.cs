@@ -2329,6 +2329,17 @@ namespace GxPT
             }
         }
 
+        // Public helper to jump to the top of the transcript (used for help templates)
+        public void ScrollToTop()
+        {
+            _scrollOffset = 0;
+            if (_vbar.Enabled)
+            {
+                _vbar.Value = _vbar.Minimum;
+            }
+            Invalidate();
+        }
+
         private void UpdateScrollbar()
         {
             int view = Math.Max(0, ClientSize.Height);

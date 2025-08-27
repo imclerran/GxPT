@@ -1,5 +1,6 @@
 {
-  "Name": "Privacy",
+  "Id": "help:privacy",
+  "Name": "Privacy Help",
   "Messages": [
     {
       "Role": "user",

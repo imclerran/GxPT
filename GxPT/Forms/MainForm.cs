@@ -18,6 +18,8 @@ namespace GxPT
     public partial class MainForm : Form
     {
         private OpenRouterClient _client;
+        private const string HelpApiKeysId = "help:api_keys";
+        private const string HelpPrivacyId = "help:privacy";
 
         // Manager classes for UI concerns
         private SidebarManager _sidebarManager;
@@ -57,6 +59,16 @@ namespace GxPT
             {
                 UpdateApiKeyBanner();
                 try { RestoreOpenTabsOnStartup(); }
+                catch { }
+                // After restoring tabs, if no API key is configured, open the API Keys Help tab and focus it
+                try
+                {
+                    string k = AppSettings.GetString("openrouter_api_key");
+                    if (k == null || k.Trim().Length == 0)
+                    {
+                        miApiKeysHelp_Click(this, EventArgs.Empty);
+                    }
+                }
                 catch { }
             };
             this.FormClosing += MainForm_FormClosing_SaveOpenTabs;
@@ -151,9 +163,11 @@ namespace GxPT
                         var ctx = _tabManager != null && page != null && _tabManager.TabContexts.ContainsKey(page)
                             ? _tabManager.TabContexts[page]
                             : null;
-                        if (ctx != null && ctx.NoSaveUntilUserSend) continue; // skip help/temporary tabs
                         var id = ctx != null && ctx.Conversation != null ? ctx.Conversation.Id : null;
-                        if (!string.IsNullOrEmpty(id)) list.Add(id);
+                        if (string.IsNullOrEmpty(id)) continue;
+                        // Include help tabs (by known help ids) even if marked NoSaveUntilUserSend
+                        if (ctx != null && ctx.NoSaveUntilUserSend && !IsHelpConversationId(id)) continue;
+                        list.Add(id);
                     }
                     catch { }
                 }
@@ -189,25 +203,30 @@ namespace GxPT
                     if (string.IsNullOrEmpty(id)) continue;
                     try
                     {
-                        string path = ConversationStore.GetPathForId(id);
-                        if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) continue;
-                        var convo = ConversationStore.Load(_client, path);
-                        if (convo == null) continue;
-
-                        // Skip restoring any tabs that were help templates marked as no-save (no id)
-                        if (string.IsNullOrEmpty(convo.Id)) continue;
-
-                        if (!firstUsed)
+                        if (IsHelpConversationId(id))
                         {
-                            var blank = FindBlankTabPreferActive();
-                            if (blank != null)
-                            {
-                                OpenConversationInTab(blank, convo);
-                                firstUsed = true;
-                                continue;
-                            }
+                            // Reopen help tab from embedded resource by id
+                            OpenHelpConversationById(id, ref firstUsed);
                         }
-                        OpenConversationInNewTab(convo);
+                        else
+                        {
+                            string path = ConversationStore.GetPathForId(id);
+                            if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) continue;
+                            var convo = ConversationStore.Load(_client, path);
+                            if (convo == null) continue;
+
+                            if (!firstUsed)
+                            {
+                                var blank = FindBlankTabPreferActive();
+                                if (blank != null)
+                                {
+                                    OpenConversationInTab(blank, convo);
+                                    firstUsed = true;
+                                    continue;
+                                }
+                            }
+                            OpenConversationInNewTab(convo);
+                        }
                     }
                     catch { }
                 }
@@ -236,6 +255,73 @@ namespace GxPT
                 catch { }
             }
             catch { }
+        }
+
+        private bool IsHelpConversationId(string id)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(id)) return false;
+                if (string.Equals(id, HelpApiKeysId, StringComparison.Ordinal)) return true;
+                if (string.Equals(id, HelpPrivacyId, StringComparison.Ordinal)) return true;
+                return id.StartsWith("help_", StringComparison.Ordinal);
+            }
+            catch { return false; }
+        }
+
+        private void OpenHelpConversationById(string id, ref bool firstUsed)
+        {
+            try
+            {
+                Conversation convo = LoadHelpConversationById(id);
+                if (convo == null) return;
+                // Keep specialized help id to restore by id later
+                // Mark as help/no-save until user sends
+                var ctx = !firstUsed ? FindBlankTabPreferActive() : null;
+                if (!firstUsed && ctx != null)
+                {
+                    ctx.NoSaveUntilUserSend = true;
+                    OpenConversationInTab(ctx, convo);
+                    try { if (ctx.Transcript != null) ctx.Transcript.ScrollToTop(); }
+                    catch { }
+                    firstUsed = true;
+                }
+                else
+                {
+                    // New tab
+                    var ctx2 = _tabManager != null ? _tabManager.CreateConversationTab() : null;
+                    if (ctx2 == null) return;
+                    ctx2.NoSaveUntilUserSend = true;
+                    OpenConversationInTab(ctx2, convo);
+                    try { if (ctx2.Transcript != null) ctx2.Transcript.ScrollToTop(); }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+
+        private Conversation LoadHelpConversationById(string id)
+        {
+            try
+            {
+                string resourceName = null;
+                if (string.Equals(id, HelpApiKeysId, StringComparison.Ordinal)) resourceName = "GxPT.Resources.Help.help_api_keys.json";
+                else if (string.Equals(id, HelpPrivacyId, StringComparison.Ordinal)) resourceName = "GxPT.Resources.Help.help_privacy.json";
+                else return null;
+
+                var asm = typeof(MainForm).Assembly;
+                using (var s = asm.GetManifestResourceStream(resourceName))
+                {
+                    if (s == null) return null;
+                    using (var sr = new StreamReader(s, Encoding.UTF8, true))
+                    {
+                        string json = sr.ReadToEnd();
+                        var convo = ConversationStore.LoadFromJson(_client, json);
+                        return convo;
+                    }
+                }
+            }
+            catch { return null; }
         }
 
         private void InitializeManagers()
@@ -862,8 +948,23 @@ namespace GxPT
                     catch { }
                 }
                 ctx.Conversation.SelectedModel = ctx.SelectedModel;
-                // If this tab was marked as no-save (e.g., help), flip it now and save
-                if (ctx.NoSaveUntilUserSend) ctx.NoSaveUntilUserSend = false;
+                // If this tab was a help template, convert to a standard conversation id now
+                if (ctx.NoSaveUntilUserSend)
+                {
+                    try
+                    {
+                        if (IsHelpConversationId(ctx.Conversation.Id))
+                        {
+                            // Clear id so a new standard id is generated on save
+                            ctx.Conversation.Id = null;
+                            ConversationStore.EnsureConversationId(ctx.Conversation);
+                            // Update sidebar tracking to reflect new id
+                            if (_sidebarManager != null) _sidebarManager.TrackOpenConversation(ctx.Conversation.Id, ctx.Page);
+                        }
+                    }
+                    catch { }
+                    ctx.NoSaveUntilUserSend = false;
+                }
                 ConversationStore.Save(ctx.Conversation); // save when a new user message starts/continues a convo
                 Logger.Log("Send", "User message added. HistoryCount=" + ctx.Conversation.History.Count);
                 if (_inputManager != null)
@@ -1809,9 +1910,13 @@ namespace GxPT
                     finally
                     {
                         bool last = parsingDone && consumed >= items.Count;
-                        ctx.Transcript.EndBatchUpdates(last);
+                        bool scrollToBottom = last && !(ctx != null && ctx.NoSaveUntilUserSend);
+                        ctx.Transcript.EndBatchUpdates(scrollToBottom);
                         if (last)
                         {
+                            // For help templates (no-save until user sends), ensure we land at the top
+                            try { if (ctx != null && ctx.NoSaveUntilUserSend && ctx.Transcript != null) ctx.Transcript.ScrollToTop(); }
+                            catch { }
                             timer.Stop();
                             timer.Dispose();
                         }
@@ -1929,8 +2034,16 @@ namespace GxPT
                         finally
                         {
                             bool last = parsingDone && consumed >= items.Count;
-                            ctx.Transcript.EndBatchUpdates(last);
-                            if (last) { timer.Stop(); timer.Dispose(); }
+                            bool scrollToBottom = last && !(ctx != null && ctx.NoSaveUntilUserSend);
+                            ctx.Transcript.EndBatchUpdates(scrollToBottom);
+                            if (last)
+                            {
+                                // For help templates (no-save until user sends), ensure we land at the top
+                                try { if (ctx != null && ctx.NoSaveUntilUserSend && ctx.Transcript != null) ctx.Transcript.ScrollToTop(); }
+                                catch { }
+                                timer.Stop();
+                                timer.Dispose();
+                            }
                         }
                     };
                     timer.Start();
@@ -2004,6 +2117,26 @@ namespace GxPT
 
         private void miApiKeysHelp_Click(object sender, EventArgs e)
         {
+            // If an API Keys help tab is already open, focus it
+            try
+            {
+                if (this.tabControl1 != null && _tabManager != null)
+                {
+                    foreach (TabPage p in this.tabControl1.TabPages)
+                    {
+                        var ctxOpen = _tabManager.TabContexts.ContainsKey(p) ? _tabManager.TabContexts[p] : null;
+                        if (ctxOpen != null && ctxOpen.Conversation != null && string.Equals(ctxOpen.Conversation.Id, HelpApiKeysId, StringComparison.Ordinal))
+                        {
+                            SelectTab(p);
+                            UpdateWindowTitleFromActiveTab();
+                            try { if (ctxOpen.Transcript != null) ctxOpen.Transcript.ScrollToTop(); }
+                            catch { }
+                            return;
+                        }
+                    }
+                }
+            }
+            catch { }
             // Reuse any blank tab if available (prefer active); otherwise create a new one
             TabManager.ChatTabContext ctx = FindBlankTabPreferActive();
             if (ctx == null)
@@ -2039,13 +2172,14 @@ namespace GxPT
                 {
                     // Always treat help templates as no-save until user sends a new message
                     ctx.NoSaveUntilUserSend = true;
-                    // Clear id so first save creates a new conversation in AppData
-                    try { convo.Id = null; }
-                    catch { }
+                    // Keep the specialized help id from the template for restoration
                     // Give the tab its name from the conversation
                     try { ctx.Page.Text = string.IsNullOrEmpty(convo.Name) ? "API Keys Help" : convo.Name; }
                     catch { }
                     OpenConversationInTab(ctx, convo);
+                    // Ensure help opens scrolled to the top
+                    try { if (ctx.Transcript != null) ctx.Transcript.ScrollToTop(); }
+                    catch { }
                 }
                 else
                 {
@@ -2066,6 +2200,26 @@ namespace GxPT
 
         private void miPrivacyHelp_Click(object sender, EventArgs e)
         {
+            // If a Privacy help tab is already open, focus it
+            try
+            {
+                if (this.tabControl1 != null && _tabManager != null)
+                {
+                    foreach (TabPage p in this.tabControl1.TabPages)
+                    {
+                        var ctxOpen = _tabManager.TabContexts.ContainsKey(p) ? _tabManager.TabContexts[p] : null;
+                        if (ctxOpen != null && ctxOpen.Conversation != null && string.Equals(ctxOpen.Conversation.Id, HelpPrivacyId, StringComparison.Ordinal))
+                        {
+                            SelectTab(p);
+                            UpdateWindowTitleFromActiveTab();
+                            try { if (ctxOpen.Transcript != null) ctxOpen.Transcript.ScrollToTop(); }
+                            catch { }
+                            return;
+                        }
+                    }
+                }
+            }
+            catch { }
             // Reuse any blank tab if available (prefer active); otherwise create a new one
             TabManager.ChatTabContext ctx = FindBlankTabPreferActive();
             if (ctx == null)
@@ -2098,11 +2252,12 @@ namespace GxPT
                 if (convo != null)
                 {
                     ctx.NoSaveUntilUserSend = true;
-                    try { convo.Id = null; }
-                    catch { }
                     try { ctx.Page.Text = string.IsNullOrEmpty(convo.Name) ? "Privacy" : convo.Name; }
                     catch { }
                     OpenConversationInTab(ctx, convo);
+                    // Ensure help opens scrolled to the top
+                    try { if (ctx.Transcript != null) ctx.Transcript.ScrollToTop(); }
+                    catch { }
                 }
                 else
                 {
