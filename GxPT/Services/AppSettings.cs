@@ -152,5 +152,38 @@ namespace GxPT
         {
             return GetDouble(key, 0);
         }
+
+        // Read boolean values (accepts true/false, 1/0, yes/no, on/off, strings or numbers)
+        public static bool GetBool(string key, bool defaultValue)
+        {
+            var all = LoadJson();
+            object val;
+            if (!all.TryGetValue(key, out val) || val == null) return defaultValue;
+            try
+            {
+                if (val is bool) return (bool)val;
+                if (val is string)
+                {
+                    string s = Convert.ToString(val);
+                    if (string.IsNullOrEmpty(s)) return defaultValue;
+                    s = s.Trim();
+                    if (string.Equals(s, "true", StringComparison.OrdinalIgnoreCase)) return true;
+                    if (string.Equals(s, "false", StringComparison.OrdinalIgnoreCase)) return false;
+                    if (string.Equals(s, "yes", StringComparison.OrdinalIgnoreCase)) return true;
+                    if (string.Equals(s, "no", StringComparison.OrdinalIgnoreCase)) return false;
+                    if (string.Equals(s, "on", StringComparison.OrdinalIgnoreCase)) return true;
+                    if (string.Equals(s, "off", StringComparison.OrdinalIgnoreCase)) return false;
+                    int i;
+                    if (int.TryParse(s, out i)) return i != 0;
+                }
+                if (val is int) return ((int)val) != 0;
+                if (val is long) return ((long)val) != 0L;
+                if (val is double) return ((double)val) != 0.0;
+                if (val is float) return ((float)val) != 0f;
+                if (val is decimal) return ((decimal)val) != 0m;
+            }
+            catch { }
+            return defaultValue;
+        }
     }
 }

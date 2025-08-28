@@ -1063,10 +1063,29 @@ namespace GxPT
                         }
                         catch { }
 
+                        // Determine provider data collection preference from settings: if text contains "Not" then false, else true
+                        bool providerAllow = true;
+                        try
+                        {
+                            // Prefer boolean setting
+                            providerAllow = AppSettings.GetBool("provider_data_collection", true);
+                        }
+                        catch
+                        {
+                            // Fallback to string combobox text semantics if needed
+                            try
+                            {
+                                string pdc = AppSettings.GetString("provider_data_collection");
+                                if (!string.IsNullOrEmpty(pdc))
+                                    providerAllow = pdc.IndexOf("Not", StringComparison.OrdinalIgnoreCase) < 0;
+                            }
+                            catch { providerAllow = true; }
+                        }
+
                         _client.CreateCompletionStream(
                             modelToUse,
                             snapshot,
-                            new ClientProperties { Stream = true },
+                            new ClientProperties { Stream = true, ProviderDataCollectionAllowed = providerAllow },
                             delegate(string d)
                             {
                                 if (string.IsNullOrEmpty(d)) return;

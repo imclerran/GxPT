@@ -49,11 +49,11 @@
             this.nudMessageMaxWidth = new System.Windows.Forms.NumericUpDown();
             this.nudFontSize = new System.Windows.Forms.NumericUpDown();
             this.chkEnableLogging = new System.Windows.Forms.CheckBox();
+            this.lblProviderDataCollection = new System.Windows.Forms.Label();
+            this.cmbProviderDataCollection = new System.Windows.Forms.ComboBox();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabVisual = new System.Windows.Forms.TabPage();
             this.tabJson = new System.Windows.Forms.TabPage();
-            this.lblProviderDataCollection = new System.Windows.Forms.Label();
-            this.cmbProviderDataCollection = new System.Windows.Forms.ComboBox();
             this.flowLayoutPanel1.SuspendLayout();
             this.tblSettings.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.nudTranscriptMaxWidth)).BeginInit();
@@ -333,6 +333,30 @@
             this.chkEnableLogging.TabIndex = 4;
             this.chkEnableLogging.UseVisualStyleBackColor = true;
             // 
+            // lblProviderDataCollection
+            // 
+            this.lblProviderDataCollection.AutoSize = true;
+            this.lblProviderDataCollection.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblProviderDataCollection.Location = new System.Drawing.Point(3, 202);
+            this.lblProviderDataCollection.Name = "lblProviderDataCollection";
+            this.lblProviderDataCollection.Size = new System.Drawing.Size(121, 27);
+            this.lblProviderDataCollection.TabIndex = 16;
+            this.lblProviderDataCollection.Text = "Provider Data Collection";
+            this.lblProviderDataCollection.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            // 
+            // cmbProviderDataCollection
+            // 
+            this.cmbProviderDataCollection.Dock = System.Windows.Forms.DockStyle.Left;
+            this.cmbProviderDataCollection.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.cmbProviderDataCollection.FormattingEnabled = true;
+            this.cmbProviderDataCollection.Items.AddRange(new object[] {
+            "May Collect (Data may be used for training)",
+            "May Not Collect (May still retain for abuse monitoring)"});
+            this.cmbProviderDataCollection.Location = new System.Drawing.Point(130, 205);
+            this.cmbProviderDataCollection.Name = "cmbProviderDataCollection";
+            this.cmbProviderDataCollection.Size = new System.Drawing.Size(300, 21);
+            this.cmbProviderDataCollection.TabIndex = 17;
+            // 
             // tabControl1
             // 
             this.tabControl1.Controls.Add(this.tabVisual);
@@ -365,30 +389,6 @@
             this.tabJson.TabIndex = 1;
             this.tabJson.Text = "JSON";
             this.tabJson.UseVisualStyleBackColor = true;
-            // 
-            // lblProviderDataCollection
-            // 
-            this.lblProviderDataCollection.AutoSize = true;
-            this.lblProviderDataCollection.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblProviderDataCollection.Location = new System.Drawing.Point(3, 202);
-            this.lblProviderDataCollection.Name = "lblProviderDataCollection";
-            this.lblProviderDataCollection.Size = new System.Drawing.Size(121, 27);
-            this.lblProviderDataCollection.TabIndex = 16;
-            this.lblProviderDataCollection.Text = "Provider Data Retention";
-            this.lblProviderDataCollection.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            // 
-            // cmbProviderDataCollection
-            // 
-            this.cmbProviderDataCollection.Dock = System.Windows.Forms.DockStyle.Left;
-            this.cmbProviderDataCollection.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cmbProviderDataCollection.FormattingEnabled = true;
-            this.cmbProviderDataCollection.Items.AddRange(new object[] {
-            "May Retain",
-            "May Not Retain (Some models unavailable)"});
-            this.cmbProviderDataCollection.Location = new System.Drawing.Point(130, 205);
-            this.cmbProviderDataCollection.Name = "cmbProviderDataCollection";
-            this.cmbProviderDataCollection.Size = new System.Drawing.Size(250, 21);
-            this.cmbProviderDataCollection.TabIndex = 17;
             // 
             // SettingsForm
             // 

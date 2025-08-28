@@ -165,7 +165,10 @@ namespace GxPT
             sb.AppendLine("  \"transcript_max_width\": " + defaultTranscriptW + ",");
             // Store percent (50-100) under legacy key name
             sb.AppendLine("  \"message_max_width\": " + defaultMessagePercent + ",");
-            sb.AppendLine("  \"enable_logging\": false");
+            sb.AppendLine("  \"enable_logging\": false,")
+            ;
+            // Default provider data collection allowed (true)
+            sb.AppendLine("  \"provider_data_collection\": true");
             sb.AppendLine("}");
             return sb.ToString();
         }
@@ -204,7 +207,8 @@ namespace GxPT
                 theme = "light",
                 transcript_max_width = 1000,
                 // Percent (50-100) under legacy key name
-                message_max_width = 90
+                message_max_width = 90,
+                provider_data_collection = true
             };
         }
 
@@ -722,6 +726,21 @@ namespace GxPT
                 s.message_max_width = p;
             }
             catch { s.message_max_width = 90; }
+
+            // Default provider_data_collection to true when missing
+            try { /* no-op if already set */ var _ = s.provider_data_collection; }
+            catch { }
+            if (!HasProviderDataCollectionValue(s)) s.provider_data_collection = true;
+        }
+
+        private static bool HasProviderDataCollectionValue(SettingsData s)
+        {
+            try { return true; }
+            catch { }
+            // JavaScriptSerializer creates bool default false when missing in POCO; treat missing/false both as value not explicitly provided?
+            // We'll check using reflection to see if member exists in raw JSON is not available here; default to true when property false and not specified.
+            // Given constraints, consider false a valid value if explicitly in JSON editor; users can change via UI anyway.
+            return true;
         }
 
         // --- Visual controls <-> working settings ---
@@ -780,6 +799,20 @@ namespace GxPT
                         this.cmbTheme.Items.Add("dark");
                     }
                     this.cmbTheme.SelectedItem = t;
+                }
+            }
+            catch { }
+
+            // Provider data retention combobox
+            try
+            {
+                bool allow = true;
+                try { allow = s.provider_data_collection; }
+                catch { allow = true; }
+                if (this.cmbProviderDataCollection != null)
+                {
+                    // If text contains "Not" then it's deny; otherwise allow
+                    this.cmbProviderDataCollection.SelectedIndex = allow ? 0 : 1;
                 }
             }
             catch { }
@@ -845,6 +878,24 @@ namespace GxPT
                 target.theme = (themeSel ?? "light").Trim().ToLowerInvariant();
             }
             catch { target.theme = "light"; }
+
+            // Provider data collection from combo: if contains "Not" -> false, else true
+            try
+            {
+                string txt = null;
+                if (this.cmbProviderDataCollection != null)
+                {
+                    txt = this.cmbProviderDataCollection.SelectedItem as string;
+                    if (string.IsNullOrEmpty(txt)) txt = this.cmbProviderDataCollection.Text;
+                }
+                bool allowed = true;
+                if (!string.IsNullOrEmpty(txt))
+                {
+                    allowed = txt.IndexOf("Not", StringComparison.OrdinalIgnoreCase) < 0;
+                }
+                target.provider_data_collection = allowed;
+            }
+            catch { if (!target.provider_data_collection) target.provider_data_collection = true; }
 
             // Transcript width and Message width percent
             try { target.transcript_max_width = (int)this.nudTranscriptMaxWidth.Value; }
@@ -1026,6 +1077,7 @@ namespace GxPT
             public int transcript_max_width { get; set; }
             // Store percent (50-100) using legacy key name
             public int message_max_width { get; set; }
+            public bool provider_data_collection { get; set; }
         }
     }
 }

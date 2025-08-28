@@ -59,10 +59,23 @@ namespace GxPT
                         "You generate short, descriptive conversation titles from the conversation so far. If the conversation so far is only a greeting (e.g., 'hi', 'hello', 'hey there') or lacks any clear topical content, return exactly: New Conversation. Otherwise, return only the title: 3 to 6 words, Title Case, no quotes, no trailing punctuation. You only generate conversation titles. Do not answer any user prompts."));
                     msgs.Add(History.Last());
 
+                    // Read provider data collection preference: if setting text contains "Not" => false, else true
+                    bool providerAllow = true;
+                    try { providerAllow = AppSettings.GetBool("provider_data_collection", true); }
+                    catch
+                    {
+                        try
+                        {
+                            string pdc = AppSettings.GetString("provider_data_collection");
+                            if (!string.IsNullOrEmpty(pdc)) providerAllow = pdc.IndexOf("Not", StringComparison.OrdinalIgnoreCase) < 0;
+                        }
+                        catch { providerAllow = true; }
+                    }
+
                     string json = _client.CreateCompletion(
                         "google/gemini-2.0-flash-001",
                         msgs,
-                        new ClientProperties { Stream = false }
+                        new ClientProperties { Stream = false, ProviderDataCollectionAllowed = providerAllow }
                     );
                     string title = ExtractTitleFromJson(json);
                     title = CleanTitle(title);
