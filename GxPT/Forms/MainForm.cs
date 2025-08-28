@@ -1034,6 +1034,7 @@ namespace GxPT
                         _client.CreateCompletionStream(
                             modelToUse,
                             snapshot,
+                            new ClientProperties { Stream = true },
                             delegate(string d)
                             {
                                 if (string.IsNullOrEmpty(d)) return;

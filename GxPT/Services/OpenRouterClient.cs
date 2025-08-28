@@ -23,12 +23,13 @@ namespace GxPT
             get { return !string.IsNullOrEmpty(_apiKey) && File.Exists(_curlPath); }
         }
 
-        // Build request body for non-stream and stream=true modes
-        private static string BuildRequestBody(string model, IList<ChatMessage> messages, bool stream)
+        // Build request body using provided client properties (including stream and provider options)
+        private static string BuildRequestBody(string model, IList<ChatMessage> messages, ClientProperties props)
         {
             var payload = new Dictionary<string, object>();
             payload["model"] = string.IsNullOrEmpty(model) ? "openai/gpt-4o" : model;
-            payload["stream"] = stream;
+            bool streamFlag = (props != null && props.Stream.HasValue) ? props.Stream.Value : false;
+            payload["stream"] = streamFlag;
             var msgs = new List<Dictionary<string, string>>();
             // Prepend a system instruction to avoid emoji in all responses
             msgs.Add(new Dictionary<string, string> {
@@ -43,13 +44,68 @@ namespace GxPT
                 }
             }
             payload["messages"] = msgs;
+
+            // Optionally add provider object if any of the provider properties are set
+            try
+            {
+                if (props == null)
+                {
+                    var ser0 = new JavaScriptSerializer();
+                    return ser0.Serialize(payload);
+                }
+                var provider = new Dictionary<string, object>();
+
+                // data_collection: include if set (true => allow, false => deny)
+                if (props.ProviderDataCollectionAllowed.HasValue)
+                {
+                    provider["data_collection"] = props.ProviderDataCollectionAllowed.Value ? "allow" : "deny";
+                }
+
+                // only: include non-empty list
+                if (props.ProviderOnly != null && props.ProviderOnly.Count > 0)
+                {
+                    // copy to a new list to avoid serializing non-generic types
+                    var onlyList = new List<string>();
+                    foreach (var s in props.ProviderOnly)
+                    {
+                        if (!string.IsNullOrEmpty(s)) onlyList.Add(s);
+                    }
+                    if (onlyList.Count > 0)
+                        provider["only"] = onlyList;
+                }
+
+                // max_price: include any provided fields
+                var maxPrice = new Dictionary<string, object>();
+                if (props.ProviderMaxPricePrompt.HasValue)
+                    maxPrice["prompt"] = props.ProviderMaxPricePrompt.Value;
+                if (props.ProviderMaxPriceCompletion.HasValue)
+                    maxPrice["completion"] = props.ProviderMaxPriceCompletion.Value;
+                if (maxPrice.Count > 0)
+                    provider["max_price"] = maxPrice;
+
+                if (provider.Count > 0)
+                {
+                    payload["provider"] = provider;
+                }
+            }
+            catch { }
             var ser = new JavaScriptSerializer();
             return ser.Serialize(payload);
         }
 
         public string CreateCompletion(string model, IList<ChatMessage> messages)
         {
-            string body = BuildRequestBody(model, messages, false);
+            // Backward-compatible API: defaults to non-stream
+            return CreateCompletion(model, messages, null);
+        }
+
+        // New overload accepting ClientProperties
+        public string CreateCompletion(string model, IList<ChatMessage> messages, ClientProperties props)
+        {
+            // Ensure stream flag defaults to false for non-stream API
+            if (props == null) props = new ClientProperties();
+            if (!props.Stream.HasValue) props.Stream = false;
+            string body = BuildRequestBody(model, messages, props);
             string dataFile;
             string args = BuildCurlArgs(body, out dataFile);
 
@@ -107,7 +163,17 @@ namespace GxPT
 
         public void CreateCompletionStream(string model, IList<ChatMessage> messages, Action<string> onDelta, Action onDone, Action<string> onError)
         {
-            string body = BuildRequestBody(model, messages, true);
+            // Backward-compatible API: defaults to stream
+            CreateCompletionStream(model, messages, null, onDelta, onDone, onError);
+        }
+
+        // New overload accepting ClientProperties
+        public void CreateCompletionStream(string model, IList<ChatMessage> messages, ClientProperties props, Action<string> onDelta, Action onDone, Action<string> onError)
+        {
+            if (props == null) props = new ClientProperties();
+            // Ensure stream flag defaults to true for stream API
+            if (!props.Stream.HasValue) props.Stream = true;
+            string body = BuildRequestBody(model, messages, props);
             string dataFile;
             string args = BuildCurlArgs(body, out dataFile);
 
@@ -353,5 +419,18 @@ namespace GxPT
             catch { }
             return null;
         }
+    }
+
+    // DTO for configuring request options per-call.
+    public sealed class ClientProperties
+    {
+        // When null, the caller/method will set a sensible default based on the API used.
+        public bool? Stream { get; set; }
+
+        // Provider options
+        public bool? ProviderDataCollectionAllowed { get; set; }
+        public IList<string> ProviderOnly { get; set; }
+        public decimal? ProviderMaxPricePrompt { get; set; }
+        public decimal? ProviderMaxPriceCompletion { get; set; }
     }
 }
