@@ -379,6 +379,9 @@ namespace GxPT
                     this.cmbModel.SelectedIndexChanged += cmbModel_SelectedIndexChanged;
                     this.cmbModel.TextUpdate -= cmbModel_TextUpdate;
                     this.cmbModel.TextUpdate += cmbModel_TextUpdate;
+                    // Adjust dropdown width dynamically to fit the widest item
+                    this.cmbModel.DropDown -= cmbModel_DropDownAdjustWidth;
+                    this.cmbModel.DropDown += cmbModel_DropDownAdjustWidth;
                 }
             }
             catch { }
@@ -1200,11 +1203,47 @@ namespace GxPT
                     {
                         this.cmbModel.EndUpdate();
                     }
+                    // Ensure dropdown width fits longest item (or control width if shorter)
+                    try { AdjustComboDropDownWidth(this.cmbModel); }
+                    catch { }
                     // Ensure the active context stores whatever is shown
                     var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
                     if (ctx != null) ctx.SelectedModel = GetSelectedModel();
                 }
             }
+            catch { }
+        }
+
+        // Ensure the combo's dropdown width accommodates the widest item text
+        private void AdjustComboDropDownWidth(ComboBox combo)
+        {
+            if (combo == null) return;
+            try
+            {
+                int maxWidth = combo.Width; // at least the control width
+                // Measure each item text
+                for (int i = 0; i < combo.Items.Count; i++)
+                {
+                    string s = combo.GetItemText(combo.Items[i]) ?? string.Empty;
+                    if (s.Length == 0) continue;
+                    // TextRenderer accounts for ComboBox text rendering in WinForms
+                    int w = TextRenderer.MeasureText(s, combo.Font, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.SingleLine).Width;
+                    if (w > maxWidth) maxWidth = w;
+                }
+                // Add space for vertical scrollbar if it will appear, plus a small margin
+                int extra = 10;
+                try { if (combo.Items.Count > combo.MaxDropDownItems) extra += SystemInformation.VerticalScrollBarWidth; }
+                catch { }
+                int target = Math.Max(combo.Width, Math.Min(maxWidth + extra, 2000)); // reasonable upper bound
+                combo.DropDownWidth = target;
+            }
+            catch { }
+        }
+
+        // Recompute dropdown width right before it opens
+        private void cmbModel_DropDownAdjustWidth(object sender, EventArgs e)
+        {
+            try { AdjustComboDropDownWidth(this.cmbModel); }
             catch { }
         }
 
