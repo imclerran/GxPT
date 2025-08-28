@@ -52,6 +52,8 @@
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabVisual = new System.Windows.Forms.TabPage();
             this.tabJson = new System.Windows.Forms.TabPage();
+            this.lblProviderDataCollection = new System.Windows.Forms.Label();
+            this.cmbProviderDataCollection = new System.Windows.Forms.ComboBox();
             this.flowLayoutPanel1.SuspendLayout();
             this.tblSettings.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.nudTranscriptMaxWidth)).BeginInit();
@@ -108,25 +110,28 @@
             this.tblSettings.Controls.Add(this.lblApiKey, 0, 0);
             this.tblSettings.Controls.Add(this.lblModels, 0, 1);
             this.tblSettings.Controls.Add(this.lblDefaultModel, 0, 2);
-            this.tblSettings.Controls.Add(this.lblTheme, 0, 3);
-            this.tblSettings.Controls.Add(this.lblTranscriptMaxWidth, 0, 4);
-            this.tblSettings.Controls.Add(this.lblMessageMaxWidth, 0, 5);
-            this.tblSettings.Controls.Add(this.lblFontSize, 0, 6);
-            this.tblSettings.Controls.Add(this.lblEnableLogging, 0, 7);
+            this.tblSettings.Controls.Add(this.lblTheme, 0, 4);
+            this.tblSettings.Controls.Add(this.lblTranscriptMaxWidth, 0, 5);
+            this.tblSettings.Controls.Add(this.lblMessageMaxWidth, 0, 6);
+            this.tblSettings.Controls.Add(this.lblFontSize, 0, 7);
+            this.tblSettings.Controls.Add(this.lblEnableLogging, 0, 8);
             this.tblSettings.Controls.Add(this.txtApiKey, 1, 0);
             this.tblSettings.Controls.Add(this.txtModels, 1, 1);
             this.tblSettings.Controls.Add(this.cmbDefaultModel, 1, 2);
-            this.tblSettings.Controls.Add(this.cmbTheme, 1, 3);
-            this.tblSettings.Controls.Add(this.nudTranscriptMaxWidth, 1, 4);
-            this.tblSettings.Controls.Add(this.nudMessageMaxWidth, 1, 5);
-            this.tblSettings.Controls.Add(this.nudFontSize, 1, 6);
-            this.tblSettings.Controls.Add(this.chkEnableLogging, 1, 7);
+            this.tblSettings.Controls.Add(this.cmbTheme, 1, 4);
+            this.tblSettings.Controls.Add(this.nudTranscriptMaxWidth, 1, 5);
+            this.tblSettings.Controls.Add(this.nudMessageMaxWidth, 1, 6);
+            this.tblSettings.Controls.Add(this.nudFontSize, 1, 7);
+            this.tblSettings.Controls.Add(this.chkEnableLogging, 1, 8);
+            this.tblSettings.Controls.Add(this.lblProviderDataCollection, 0, 3);
+            this.tblSettings.Controls.Add(this.cmbProviderDataCollection, 1, 3);
             this.tblSettings.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tblSettings.Location = new System.Drawing.Point(3, 3);
             this.tblSettings.Name = "tblSettings";
-            this.tblSettings.RowCount = 8;
+            this.tblSettings.RowCount = 9;
             this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle());
@@ -161,7 +166,7 @@
             // lblDefaultModel
             // 
             this.lblDefaultModel.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblDefaultModel.Location = new System.Drawing.Point(3, 202);
+            this.lblDefaultModel.Location = new System.Drawing.Point(3, 175);
             this.lblDefaultModel.Name = "lblDefaultModel";
             this.lblDefaultModel.Size = new System.Drawing.Size(121, 27);
             this.lblDefaultModel.TabIndex = 2;
@@ -234,14 +239,11 @@
             // txtModels
             // 
             this.txtModels.AcceptsReturn = true;
-            this.txtModels.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
-                        | System.Windows.Forms.AnchorStyles.Left)
-                        | System.Windows.Forms.AnchorStyles.Right)));
             this.txtModels.Location = new System.Drawing.Point(130, 29);
             this.txtModels.Multiline = true;
             this.txtModels.Name = "txtModels";
             this.txtModels.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.txtModels.Size = new System.Drawing.Size(457, 170);
+            this.txtModels.Size = new System.Drawing.Size(457, 143);
             this.txtModels.TabIndex = 6;
             // 
             // cmbDefaultModel
@@ -250,7 +252,7 @@
             this.cmbDefaultModel.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cmbDefaultModel.DropDownWidth = 175;
             this.cmbDefaultModel.FormattingEnabled = true;
-            this.cmbDefaultModel.Location = new System.Drawing.Point(130, 205);
+            this.cmbDefaultModel.Location = new System.Drawing.Point(130, 178);
             this.cmbDefaultModel.Name = "cmbDefaultModel";
             this.cmbDefaultModel.Size = new System.Drawing.Size(457, 21);
             this.cmbDefaultModel.TabIndex = 5;
@@ -364,6 +366,30 @@
             this.tabJson.Text = "JSON";
             this.tabJson.UseVisualStyleBackColor = true;
             // 
+            // lblProviderDataCollection
+            // 
+            this.lblProviderDataCollection.AutoSize = true;
+            this.lblProviderDataCollection.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblProviderDataCollection.Location = new System.Drawing.Point(3, 202);
+            this.lblProviderDataCollection.Name = "lblProviderDataCollection";
+            this.lblProviderDataCollection.Size = new System.Drawing.Size(121, 27);
+            this.lblProviderDataCollection.TabIndex = 16;
+            this.lblProviderDataCollection.Text = "Provider Data Retention";
+            this.lblProviderDataCollection.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            // 
+            // cmbProviderDataCollection
+            // 
+            this.cmbProviderDataCollection.Dock = System.Windows.Forms.DockStyle.Left;
+            this.cmbProviderDataCollection.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.cmbProviderDataCollection.FormattingEnabled = true;
+            this.cmbProviderDataCollection.Items.AddRange(new object[] {
+            "May Retain",
+            "May Not Retain (Some models unavailable)"});
+            this.cmbProviderDataCollection.Location = new System.Drawing.Point(130, 205);
+            this.cmbProviderDataCollection.Name = "cmbProviderDataCollection";
+            this.cmbProviderDataCollection.Size = new System.Drawing.Size(250, 21);
+            this.cmbProviderDataCollection.TabIndex = 17;
+            // 
             // SettingsForm
             // 
             this.AcceptButton = this.btnSave;
@@ -415,5 +441,7 @@
         private System.Windows.Forms.NumericUpDown nudTranscriptMaxWidth;
         private System.Windows.Forms.Label lblMessageMaxWidth;
         private System.Windows.Forms.NumericUpDown nudMessageMaxWidth;
+        private System.Windows.Forms.Label lblProviderDataCollection;
+        private System.Windows.Forms.ComboBox cmbProviderDataCollection;
     }
 }
