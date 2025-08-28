@@ -219,10 +219,22 @@ namespace GxPT
                 try
                 {
                     int tw = (int)AppSettings.GetDouble("transcript_max_width", 1000);
-                    int mw = (int)AppSettings.GetDouble("message_max_width", 700);
                     if (tw <= 0) tw = 1000; if (tw < 300) tw = 300; if (tw > 1900) tw = 1900;
-                    if (mw <= 0) mw = 700; if (mw < 100) mw = 100; if (mw > tw) mw = tw;
-                    if (ctx.Transcript != null) { ctx.Transcript.MaxContentWidth = tw; ctx.Transcript.MaxBubbleWidth = mw; }
+                    int rawMp = (int)AppSettings.GetDouble("message_max_width", 90);
+                    int mp = rawMp;
+                    if (mp < 50 || mp > 100)
+                    {
+                        int computed = (rawMp <= 0) ? 90 : (int)Math.Round(100.0 * rawMp / Math.Max(1, tw));
+                        if (computed < 50) computed = 50; if (computed > 100) computed = 100;
+                        mp = computed;
+                    }
+                    if (mp < 50) mp = 50; if (mp > 100) mp = 100;
+                    if (ctx.Transcript != null)
+                    {
+                        ctx.Transcript.MaxContentWidth = tw;
+                        try { ctx.Transcript.BubbleWidthPercent = mp; }
+                        catch { }
+                    }
                 }
                 catch { }
 
@@ -331,13 +343,21 @@ namespace GxPT
             try
             {
                 int tw = (int)AppSettings.GetDouble("transcript_max_width", 1000);
-                int mw = (int)AppSettings.GetDouble("message_max_width", 700);
                 if (tw <= 0) tw = 1000; if (tw < 300) tw = 300; if (tw > 1900) tw = 1900;
-                if (mw <= 0) mw = 700; if (mw < 100) mw = 100; if (mw > tw) mw = tw;
+                int rawMp = (int)AppSettings.GetDouble("message_max_width", 90);
+                int mp = rawMp;
+                if (mp < 50 || mp > 100)
+                {
+                    int computed = (rawMp <= 0) ? 90 : (int)Math.Round(100.0 * rawMp / Math.Max(1, tw));
+                    if (computed < 50) computed = 50; if (computed > 100) computed = 100;
+                    mp = computed;
+                }
+                if (mp < 50) mp = 50; if (mp > 100) mp = 100;
                 try { transcript.MaxContentWidth = tw; }
                 catch { }
-                try { transcript.MaxBubbleWidth = mw; }
+                try { transcript.BubbleWidthPercent = mp; }
                 catch { }
+
             }
             catch { }
 
@@ -589,23 +609,24 @@ namespace GxPT
             try
             {
                 int tw = (int)AppSettings.GetDouble("transcript_max_width", 1000);
-                int mw = (int)AppSettings.GetDouble("message_max_width", 700);
                 if (tw <= 0) tw = 1000; if (tw < 300) tw = 300; if (tw > 1900) tw = 1900;
-                if (mw <= 0) mw = 700; if (mw < 100) mw = 100; if (mw > tw) mw = tw;
-                ApplyTranscriptWidthToAllTranscripts(tw, mw);
-            }
-            catch { }
-        }
+                int rawMp = (int)AppSettings.GetDouble("message_max_width", 90);
+                int mp = rawMp;
+                if (mp < 50 || mp > 100)
+                {
+                    int computed = (rawMp <= 0) ? 90 : (int)Math.Round(100.0 * rawMp / Math.Max(1, tw));
+                    if (computed < 50) computed = 50; if (computed > 100) computed = 100;
+                    mp = computed;
+                }
+                if (mp < 50) mp = 50; if (mp > 100) mp = 100;
 
-        public void ApplyTranscriptWidthToAllTranscripts(int maxContentWidth)
-        {
-            try
-            {
                 foreach (var kv in _tabContexts)
                 {
                     var t = kv.Value != null ? kv.Value.Transcript : null;
                     if (t == null) continue;
-                    try { t.MaxContentWidth = maxContentWidth; }
+                    try { t.MaxContentWidth = tw; }
+                    catch { }
+                    try { t.BubbleWidthPercent = mp; }
                     catch { }
                 }
             }
@@ -623,6 +644,22 @@ namespace GxPT
                     try { t.MaxContentWidth = maxContentWidth; }
                     catch { }
                     try { t.MaxBubbleWidth = maxBubbleWidth; }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+
+        // Back-compat: apply only content width; leave bubble width unchanged
+        public void ApplyTranscriptWidthToAllTranscripts(int maxContentWidth)
+        {
+            try
+            {
+                foreach (var kv in _tabContexts)
+                {
+                    var t = kv.Value != null ? kv.Value.Transcript : null;
+                    if (t == null) continue;
+                    try { t.MaxContentWidth = maxContentWidth; }
                     catch { }
                 }
             }

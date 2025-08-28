@@ -36,30 +36,30 @@
             this.lblApiKey = new System.Windows.Forms.Label();
             this.lblModels = new System.Windows.Forms.Label();
             this.lblDefaultModel = new System.Windows.Forms.Label();
-            this.lblFontSize = new System.Windows.Forms.Label();
             this.lblTheme = new System.Windows.Forms.Label();
+            this.lblTranscriptMaxWidth = new System.Windows.Forms.Label();
+            this.lblMessageMaxWidth = new System.Windows.Forms.Label();
+            this.lblFontSize = new System.Windows.Forms.Label();
             this.lblEnableLogging = new System.Windows.Forms.Label();
             this.txtApiKey = new System.Windows.Forms.TextBox();
             this.txtModels = new System.Windows.Forms.TextBox();
             this.cmbDefaultModel = new System.Windows.Forms.ComboBox();
-            this.nudFontSize = new System.Windows.Forms.NumericUpDown();
             this.cmbTheme = new System.Windows.Forms.ComboBox();
-            this.chkEnableLogging = new System.Windows.Forms.CheckBox();
-            this.lblTranscriptMaxWidth = new System.Windows.Forms.Label();
             this.nudTranscriptMaxWidth = new System.Windows.Forms.NumericUpDown();
+            this.nudMessageMaxWidth = new System.Windows.Forms.NumericUpDown();
+            this.nudFontSize = new System.Windows.Forms.NumericUpDown();
+            this.chkEnableLogging = new System.Windows.Forms.CheckBox();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabVisual = new System.Windows.Forms.TabPage();
             this.tabJson = new System.Windows.Forms.TabPage();
-            this.lblMessageMaxWidth = new System.Windows.Forms.Label();
-            this.nudMessageMaxWidth = new System.Windows.Forms.NumericUpDown();
             this.flowLayoutPanel1.SuspendLayout();
             this.tblSettings.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.nudFontSize)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudTranscriptMaxWidth)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudMessageMaxWidth)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudFontSize)).BeginInit();
             this.tabControl1.SuspendLayout();
             this.tabVisual.SuspendLayout();
             this.tabJson.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.nudMessageMaxWidth)).BeginInit();
             this.SuspendLayout();
             // 
             // flowLayoutPanel1
@@ -95,7 +95,7 @@
             this.rtbJson.Location = new System.Drawing.Point(3, 3);
             this.rtbJson.Name = "rtbJson";
             this.rtbJson.ScrollBars = System.Windows.Forms.RichTextBoxScrollBars.ForcedBoth;
-            this.rtbJson.Size = new System.Drawing.Size(578, 311);
+            this.rtbJson.Size = new System.Drawing.Size(590, 357);
             this.rtbJson.TabIndex = 1;
             this.rtbJson.Text = "";
             this.rtbJson.WordWrap = false;
@@ -142,7 +142,7 @@
             this.lblApiKey.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblApiKey.Location = new System.Drawing.Point(3, 0);
             this.lblApiKey.Name = "lblApiKey";
-            this.lblApiKey.Size = new System.Drawing.Size(108, 26);
+            this.lblApiKey.Size = new System.Drawing.Size(121, 26);
             this.lblApiKey.TabIndex = 0;
             this.lblApiKey.Text = "OpenRouter API Key";
             this.lblApiKey.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
@@ -151,7 +151,7 @@
             // 
             this.lblModels.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.lblModels.AutoSize = true;
-            this.lblModels.Location = new System.Drawing.Point(70, 32);
+            this.lblModels.Location = new System.Drawing.Point(83, 32);
             this.lblModels.Margin = new System.Windows.Forms.Padding(3, 6, 3, 0);
             this.lblModels.Name = "lblModels";
             this.lblModels.Size = new System.Drawing.Size(41, 13);
@@ -163,21 +163,10 @@
             this.lblDefaultModel.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblDefaultModel.Location = new System.Drawing.Point(3, 202);
             this.lblDefaultModel.Name = "lblDefaultModel";
-            this.lblDefaultModel.Size = new System.Drawing.Size(108, 27);
+            this.lblDefaultModel.Size = new System.Drawing.Size(121, 27);
             this.lblDefaultModel.TabIndex = 2;
             this.lblDefaultModel.Text = "Default Model";
             this.lblDefaultModel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            // 
-            // lblFontSize
-            // 
-            this.lblFontSize.AutoSize = true;
-            this.lblFontSize.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblFontSize.Location = new System.Drawing.Point(3, 308);
-            this.lblFontSize.Name = "lblFontSize";
-            this.lblFontSize.Size = new System.Drawing.Size(108, 26);
-            this.lblFontSize.TabIndex = 8;
-            this.lblFontSize.Text = "Font Size";
-            this.lblFontSize.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             // 
             // lblTheme
             // 
@@ -185,17 +174,50 @@
             this.lblTheme.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblTheme.Location = new System.Drawing.Point(3, 229);
             this.lblTheme.Name = "lblTheme";
-            this.lblTheme.Size = new System.Drawing.Size(108, 27);
+            this.lblTheme.Size = new System.Drawing.Size(121, 27);
             this.lblTheme.TabIndex = 10;
             this.lblTheme.Text = "Theme";
             this.lblTheme.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            // 
+            // lblTranscriptMaxWidth
+            // 
+            this.lblTranscriptMaxWidth.AutoSize = true;
+            this.lblTranscriptMaxWidth.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblTranscriptMaxWidth.Location = new System.Drawing.Point(3, 256);
+            this.lblTranscriptMaxWidth.Name = "lblTranscriptMaxWidth";
+            this.lblTranscriptMaxWidth.Size = new System.Drawing.Size(121, 26);
+            this.lblTranscriptMaxWidth.TabIndex = 12;
+            this.lblTranscriptMaxWidth.Text = "Transcript Max Width";
+            this.lblTranscriptMaxWidth.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            // 
+            // lblMessageMaxWidth
+            // 
+            this.lblMessageMaxWidth.AutoSize = true;
+            this.lblMessageMaxWidth.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblMessageMaxWidth.Location = new System.Drawing.Point(3, 282);
+            this.lblMessageMaxWidth.Name = "lblMessageMaxWidth";
+            this.lblMessageMaxWidth.Size = new System.Drawing.Size(121, 26);
+            this.lblMessageMaxWidth.TabIndex = 14;
+            this.lblMessageMaxWidth.Text = "Message Max Width (%)";
+            this.lblMessageMaxWidth.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            // 
+            // lblFontSize
+            // 
+            this.lblFontSize.AutoSize = true;
+            this.lblFontSize.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblFontSize.Location = new System.Drawing.Point(3, 308);
+            this.lblFontSize.Name = "lblFontSize";
+            this.lblFontSize.Size = new System.Drawing.Size(121, 26);
+            this.lblFontSize.TabIndex = 8;
+            this.lblFontSize.Text = "Font Size";
+            this.lblFontSize.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             // 
             // lblEnableLogging
             // 
             this.lblEnableLogging.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblEnableLogging.Location = new System.Drawing.Point(3, 334);
             this.lblEnableLogging.Name = "lblEnableLogging";
-            this.lblEnableLogging.Size = new System.Drawing.Size(108, 23);
+            this.lblEnableLogging.Size = new System.Drawing.Size(121, 23);
             this.lblEnableLogging.TabIndex = 3;
             this.lblEnableLogging.Text = "Enable Logging";
             this.lblEnableLogging.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
@@ -204,9 +226,9 @@
             // 
             this.txtApiKey.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
                         | System.Windows.Forms.AnchorStyles.Right)));
-            this.txtApiKey.Location = new System.Drawing.Point(117, 3);
+            this.txtApiKey.Location = new System.Drawing.Point(130, 3);
             this.txtApiKey.Name = "txtApiKey";
-            this.txtApiKey.Size = new System.Drawing.Size(470, 20);
+            this.txtApiKey.Size = new System.Drawing.Size(457, 20);
             this.txtApiKey.TabIndex = 7;
             // 
             // txtModels
@@ -215,11 +237,11 @@
             this.txtModels.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
                         | System.Windows.Forms.AnchorStyles.Left)
                         | System.Windows.Forms.AnchorStyles.Right)));
-            this.txtModels.Location = new System.Drawing.Point(117, 29);
+            this.txtModels.Location = new System.Drawing.Point(130, 29);
             this.txtModels.Multiline = true;
             this.txtModels.Name = "txtModels";
             this.txtModels.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.txtModels.Size = new System.Drawing.Size(470, 170);
+            this.txtModels.Size = new System.Drawing.Size(457, 170);
             this.txtModels.TabIndex = 6;
             // 
             // cmbDefaultModel
@@ -228,48 +250,18 @@
             this.cmbDefaultModel.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cmbDefaultModel.DropDownWidth = 175;
             this.cmbDefaultModel.FormattingEnabled = true;
-            this.cmbDefaultModel.Location = new System.Drawing.Point(117, 205);
+            this.cmbDefaultModel.Location = new System.Drawing.Point(130, 205);
             this.cmbDefaultModel.Name = "cmbDefaultModel";
-            this.cmbDefaultModel.Size = new System.Drawing.Size(470, 21);
+            this.cmbDefaultModel.Size = new System.Drawing.Size(457, 21);
             this.cmbDefaultModel.TabIndex = 5;
-            // 
-            // nudFontSize
-            // 
-            this.nudFontSize.DecimalPlaces = 2;
-            this.nudFontSize.Location = new System.Drawing.Point(117, 311);
-            this.nudFontSize.Name = "nudFontSize";
-            this.nudFontSize.Size = new System.Drawing.Size(120, 20);
-            this.nudFontSize.TabIndex = 9;
             // 
             // cmbTheme
             // 
             this.cmbTheme.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cmbTheme.Location = new System.Drawing.Point(117, 232);
+            this.cmbTheme.Location = new System.Drawing.Point(130, 232);
             this.cmbTheme.Name = "cmbTheme";
             this.cmbTheme.Size = new System.Drawing.Size(120, 21);
             this.cmbTheme.TabIndex = 11;
-            // 
-            // chkEnableLogging
-            // 
-            this.chkEnableLogging.AutoSize = true;
-            this.chkEnableLogging.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.chkEnableLogging.Location = new System.Drawing.Point(117, 340);
-            this.chkEnableLogging.Margin = new System.Windows.Forms.Padding(3, 6, 3, 3);
-            this.chkEnableLogging.Name = "chkEnableLogging";
-            this.chkEnableLogging.Size = new System.Drawing.Size(470, 14);
-            this.chkEnableLogging.TabIndex = 4;
-            this.chkEnableLogging.UseVisualStyleBackColor = true;
-            // 
-            // lblTranscriptMaxWidth
-            // 
-            this.lblTranscriptMaxWidth.AutoSize = true;
-            this.lblTranscriptMaxWidth.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblTranscriptMaxWidth.Location = new System.Drawing.Point(3, 256);
-            this.lblTranscriptMaxWidth.Name = "lblTranscriptMaxWidth";
-            this.lblTranscriptMaxWidth.Size = new System.Drawing.Size(108, 26);
-            this.lblTranscriptMaxWidth.TabIndex = 12;
-            this.lblTranscriptMaxWidth.Text = "Transcript Max Width";
-            this.lblTranscriptMaxWidth.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             // 
             // nudTranscriptMaxWidth
             // 
@@ -278,7 +270,7 @@
             0,
             0,
             0});
-            this.nudTranscriptMaxWidth.Location = new System.Drawing.Point(117, 259);
+            this.nudTranscriptMaxWidth.Location = new System.Drawing.Point(130, 259);
             this.nudTranscriptMaxWidth.Maximum = new decimal(new int[] {
             1900,
             0,
@@ -297,6 +289,47 @@
             0,
             0,
             0});
+            // 
+            // nudMessageMaxWidth
+            // 
+            this.nudMessageMaxWidth.Increment = new decimal(new int[] {
+            5,
+            0,
+            0,
+            0});
+            this.nudMessageMaxWidth.Location = new System.Drawing.Point(130, 285);
+            this.nudMessageMaxWidth.Minimum = new decimal(new int[] {
+            50,
+            0,
+            0,
+            0});
+            this.nudMessageMaxWidth.Name = "nudMessageMaxWidth";
+            this.nudMessageMaxWidth.Size = new System.Drawing.Size(120, 20);
+            this.nudMessageMaxWidth.TabIndex = 15;
+            this.nudMessageMaxWidth.Value = new decimal(new int[] {
+            100,
+            0,
+            0,
+            0});
+            // 
+            // nudFontSize
+            // 
+            this.nudFontSize.DecimalPlaces = 2;
+            this.nudFontSize.Location = new System.Drawing.Point(130, 311);
+            this.nudFontSize.Name = "nudFontSize";
+            this.nudFontSize.Size = new System.Drawing.Size(120, 20);
+            this.nudFontSize.TabIndex = 9;
+            // 
+            // chkEnableLogging
+            // 
+            this.chkEnableLogging.AutoSize = true;
+            this.chkEnableLogging.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.chkEnableLogging.Location = new System.Drawing.Point(130, 340);
+            this.chkEnableLogging.Margin = new System.Windows.Forms.Padding(3, 6, 3, 3);
+            this.chkEnableLogging.Name = "chkEnableLogging";
+            this.chkEnableLogging.Size = new System.Drawing.Size(457, 14);
+            this.chkEnableLogging.TabIndex = 4;
+            this.chkEnableLogging.UseVisualStyleBackColor = true;
             // 
             // tabControl1
             // 
@@ -326,48 +359,10 @@
             this.tabJson.Location = new System.Drawing.Point(4, 22);
             this.tabJson.Name = "tabJson";
             this.tabJson.Padding = new System.Windows.Forms.Padding(3);
-            this.tabJson.Size = new System.Drawing.Size(584, 317);
+            this.tabJson.Size = new System.Drawing.Size(596, 363);
             this.tabJson.TabIndex = 1;
             this.tabJson.Text = "JSON";
             this.tabJson.UseVisualStyleBackColor = true;
-            // 
-            // lblMessageMaxWidth
-            // 
-            this.lblMessageMaxWidth.AutoSize = true;
-            this.lblMessageMaxWidth.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblMessageMaxWidth.Location = new System.Drawing.Point(3, 282);
-            this.lblMessageMaxWidth.Name = "lblMessageMaxWidth";
-            this.lblMessageMaxWidth.Size = new System.Drawing.Size(108, 26);
-            this.lblMessageMaxWidth.TabIndex = 14;
-            this.lblMessageMaxWidth.Text = "Message Max Width";
-            this.lblMessageMaxWidth.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            // 
-            // nudMessageMaxWidth
-            // 
-            this.nudMessageMaxWidth.Increment = new decimal(new int[] {
-            50,
-            0,
-            0,
-            0});
-            this.nudMessageMaxWidth.Location = new System.Drawing.Point(117, 285);
-            this.nudMessageMaxWidth.Maximum = new decimal(new int[] {
-            1900,
-            0,
-            0,
-            0});
-            this.nudMessageMaxWidth.Minimum = new decimal(new int[] {
-            300,
-            0,
-            0,
-            0});
-            this.nudMessageMaxWidth.Name = "nudMessageMaxWidth";
-            this.nudMessageMaxWidth.Size = new System.Drawing.Size(120, 20);
-            this.nudMessageMaxWidth.TabIndex = 15;
-            this.nudMessageMaxWidth.Value = new decimal(new int[] {
-            700,
-            0,
-            0,
-            0});
             // 
             // SettingsForm
             // 
@@ -384,12 +379,12 @@
             this.flowLayoutPanel1.ResumeLayout(false);
             this.tblSettings.ResumeLayout(false);
             this.tblSettings.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.nudFontSize)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudTranscriptMaxWidth)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudMessageMaxWidth)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudFontSize)).EndInit();
             this.tabControl1.ResumeLayout(false);
             this.tabVisual.ResumeLayout(false);
             this.tabJson.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)(this.nudMessageMaxWidth)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 

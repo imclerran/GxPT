@@ -567,16 +567,31 @@ namespace GxPT
             try
             {
                 int tw = (int)AppSettings.GetDouble("transcript_max_width", 1000);
-                int mw = (int)AppSettings.GetDouble("message_max_width", 700);
                 if (tw <= 0) tw = 1000; if (tw < 300) tw = 300; if (tw > 1900) tw = 1900;
-                if (mw <= 0) mw = 700; if (mw < 100) mw = 100; if (mw > tw) mw = tw;
+
+                // Read message_max_width which now stores a percent (50-100). If outside that range,
+                // interpret it as legacy pixels, convert to percent of transcript width, clamp, and persist.
+                int rawMp = (int)AppSettings.GetDouble("message_max_width", 90);
+                int mp = rawMp;
+                if (mp < 50 || mp > 100)
+                {
+                    int computed = (rawMp <= 0) ? 90 : (int)Math.Round(100.0 * rawMp / Math.Max(1, tw));
+                    if (computed < 50) computed = 50; if (computed > 100) computed = 100;
+                    mp = computed;
+                    try { AppSettings.SetInt("message_max_width", mp); }
+                    catch { }
+                }
+                // Final safety clamp
+                if (mp < 50) mp = 50; if (mp > 100) mp = 100;
                 // Primary designer transcript
                 try
                 {
                     if (this.chatTranscript != null)
                     {
                         this.chatTranscript.MaxContentWidth = tw;
-                        this.chatTranscript.MaxBubbleWidth = mw;
+                        // Set percent-based bubble width
+                        try { this.chatTranscript.BubbleWidthPercent = mp; }
+                        catch { }
                     }
                 }
                 catch { }
@@ -591,7 +606,7 @@ namespace GxPT
                             if (t == null) continue;
                             try { t.MaxContentWidth = tw; }
                             catch { }
-                            try { t.MaxBubbleWidth = mw; }
+                            try { t.BubbleWidthPercent = mp; }
                             catch { }
                         }
                     }
@@ -651,10 +666,24 @@ namespace GxPT
                 try
                 {
                     int tw = (int)AppSettings.GetDouble("transcript_max_width", 1000);
-                    int mw = (int)AppSettings.GetDouble("message_max_width", 700);
                     if (tw <= 0) tw = 1000; if (tw < 300) tw = 300; if (tw > 1900) tw = 1900;
-                    if (mw <= 0) mw = 700; if (mw < 100) mw = 100; if (mw > tw) mw = tw;
-                    if (this.chatTranscript != null) { this.chatTranscript.MaxContentWidth = tw; this.chatTranscript.MaxBubbleWidth = mw; }
+                    int rawMp = (int)AppSettings.GetDouble("message_max_width", 90);
+                    int mp = rawMp;
+                    if (mp < 50 || mp > 100)
+                    {
+                        int computed = (rawMp <= 0) ? 90 : (int)Math.Round(100.0 * rawMp / Math.Max(1, tw));
+                        if (computed < 50) computed = 50; if (computed > 100) computed = 100;
+                        mp = computed;
+                        try { AppSettings.SetInt("message_max_width", mp); }
+                        catch { }
+                    }
+                    if (mp < 50) mp = 50; if (mp > 100) mp = 100;
+                    if (this.chatTranscript != null)
+                    {
+                        this.chatTranscript.MaxContentWidth = tw;
+                        try { this.chatTranscript.BubbleWidthPercent = mp; }
+                        catch { }
+                    }
                     if (_tabManager != null)
                     {
                         foreach (var kv in _tabManager.TabContexts)
@@ -663,7 +692,7 @@ namespace GxPT
                             if (t == null) continue;
                             try { t.MaxContentWidth = tw; }
                             catch { }
-                            try { t.MaxBubbleWidth = mw; }
+                            try { t.BubbleWidthPercent = mp; }
                             catch { }
                         }
                     }

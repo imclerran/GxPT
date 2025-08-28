@@ -72,6 +72,24 @@ namespace GxPT
             SaveJson(all);
         }
 
+        // Store a numeric (double) value, preserving numeric type in JSON
+        public static void SetDouble(string key, double value)
+        {
+            if (string.IsNullOrEmpty(key)) return;
+            var all = LoadJson();
+            all[key] = value;
+            SaveJson(all);
+        }
+
+        // Store an integer value (convenience)
+        public static void SetInt(string key, int value)
+        {
+            if (string.IsNullOrEmpty(key)) return;
+            var all = LoadJson();
+            all[key] = value;
+            SaveJson(all);
+        }
+
         public static List<string> GetList(string key)
         {
             var result = new List<string>();

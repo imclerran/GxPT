@@ -22,11 +22,13 @@ namespace GxPT
         private const int BubblePadding = 8;
         private const int BubbleRadius = 8;
         private const int ScrollStep = 40;
-        // Configurable maximum bubble width (capped further by content area width)
-        private int _maxBubbleWidth = 700; // midpoint between original 560 and 1000
+        // Configurable maximum bubble width (legacy pixels) and new percentage-based width
+        // Note: Layout now prefers BubbleWidthPercent; MaxBubbleWidth remains for backward compatibility.
+        private int _maxBubbleWidth = 700; // legacy pixel cap
+        private int _bubbleWidthPercent = 90; // percent of usable transcript width
         [Browsable(true)]
         [Category("Layout")]
-        [Description("Maximum width, in pixels, for individual message bubbles. Actual width is min(MaxContentWidth, this value).")]
+        [Description("[Legacy] Maximum width, in pixels, for individual message bubbles. If BubbleWidthPercent is set (>0), that is used instead.")]
         [DefaultValue(700)]
         public int MaxBubbleWidth
         {
@@ -36,6 +38,23 @@ namespace GxPT
                 int v = (value < 1) ? 1 : value;
                 if (v == _maxBubbleWidth) return;
                 _maxBubbleWidth = v;
+                Reflow();
+                Invalidate();
+            }
+        }
+        [Browsable(true)]
+        [Category("Layout")]
+        [Description("Maximum bubble width as a percentage of the usable transcript width (1-100). When > 0, this overrides MaxBubbleWidth.")]
+        [DefaultValue(90)]
+        public int BubbleWidthPercent
+        {
+            get { return _bubbleWidthPercent; }
+            set
+            {
+                int v = value;
+                if (v < 1) v = 1; if (v > 100) v = 100;
+                if (v == _bubbleWidthPercent) return;
+                _bubbleWidthPercent = v;
                 Reflow();
                 Invalidate();
             }
@@ -634,7 +653,7 @@ namespace GxPT
                 // Determine the bounded content area (centered) within which bubbles align
                 int areaWidth = Math.Min(innerWidth, _maxContentWidth);
                 int areaLeft = MarginOuter + Math.Max(0, (innerWidth - areaWidth) / 2);
-                int usableWidth = Math.Min(areaWidth, _maxBubbleWidth);
+                int usableWidth = ComputeUsableBubbleWidth(areaWidth);
 
                 foreach (var it in _items)
                 {
@@ -674,6 +693,25 @@ namespace GxPT
             UpdateScrollbar();
         }
 
+        // Compute the max usable bubble width based on percentage of the content area,
+        // falling back to the legacy pixel cap if needed.
+        private int ComputeUsableBubbleWidth(int areaWidth)
+        {
+            try
+            {
+                int perc = _bubbleWidthPercent;
+                if (perc > 0)
+                {
+                    if (perc < 1) perc = 1; if (perc > 100) perc = 100;
+                    int byPercent = (int)Math.Round(areaWidth * (perc / 100.0));
+                    return Math.Max(1, Math.Min(areaWidth, byPercent));
+                }
+            }
+            catch { }
+            // Legacy path
+            return Math.Max(1, Math.Min(areaWidth, _maxBubbleWidth));
+        }
+
         // Reflow only newly appended items from startIndex to end, positioning them after existing content.
         // Assumes earlier items' bounds are already valid and control width hasn't changed significantly mid-batch.
         private void ReflowAppendOnly(int startIndex)
@@ -684,7 +722,7 @@ namespace GxPT
                 int innerWidth = Math.Max(0, ClientSize.Width - _vbar.Width - 2 * MarginOuter);
                 int areaWidth = Math.Min(innerWidth, _maxContentWidth);
                 int areaLeft = MarginOuter + Math.Max(0, (innerWidth - areaWidth) / 2);
-                int usableWidth = Math.Min(areaWidth, _maxBubbleWidth);
+                int usableWidth = ComputeUsableBubbleWidth(areaWidth);
 
                 int y;
                 if (startIndex == 0)

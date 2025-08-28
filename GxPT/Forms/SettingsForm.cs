@@ -87,22 +87,16 @@ namespace GxPT
             _jsonHighlightTimer.Tick += JsonHighlightTimer_Tick;
             this.rtbJson.TextChanged += RtbJson_TextChanged;
 
-            // Link message max width maximum to transcript max width
+            // Configure message max width as percentage UI (50-100)
             try
             {
-                if (this.nudTranscriptMaxWidth != null && this.nudMessageMaxWidth != null)
+                if (this.lblMessageMaxWidth != null) this.lblMessageMaxWidth.Text = "Message Max Width (%)";
+                if (this.nudMessageMaxWidth != null)
                 {
-                    this.nudTranscriptMaxWidth.ValueChanged += delegate
-                    {
-                        try { this.nudMessageMaxWidth.Maximum = this.nudTranscriptMaxWidth.Value; }
-                        catch { }
-                        try
-                        {
-                            if (this.nudMessageMaxWidth.Value > this.nudMessageMaxWidth.Maximum)
-                                this.nudMessageMaxWidth.Value = this.nudMessageMaxWidth.Maximum;
-                        }
-                        catch { }
-                    };
+                    this.nudMessageMaxWidth.Minimum = 50;
+                    this.nudMessageMaxWidth.Maximum = 100;
+                    if (this.nudMessageMaxWidth.Value < 50 || this.nudMessageMaxWidth.Value > 100)
+                        this.nudMessageMaxWidth.Value = 90;
                 }
             }
             catch { }
@@ -153,7 +147,7 @@ namespace GxPT
             // defaults: empty key, sensible model list, default model, and font size from chat's default
             float defaultFontSize = GetChatDefaultFontSize();
             int defaultTranscriptW = 1000;
-            int defaultMessageW = 700;
+            int defaultMessagePercent = 90;
             var sb = new StringBuilder();
             sb.AppendLine("{");
             sb.AppendLine("  \"openrouter_api_key\": \"\",");
@@ -169,7 +163,8 @@ namespace GxPT
             sb.AppendLine("  \"theme\": \"light\",");
             sb.AppendLine("  \"font_size\": " + defaultFontSize.ToString(System.Globalization.CultureInfo.InvariantCulture) + ",");
             sb.AppendLine("  \"transcript_max_width\": " + defaultTranscriptW + ",");
-            sb.AppendLine("  \"message_max_width\": " + defaultMessageW + ",");
+            // Store percent (50-100) under legacy key name
+            sb.AppendLine("  \"message_max_width\": " + defaultMessagePercent + ",");
             sb.AppendLine("  \"enable_logging\": false");
             sb.AppendLine("}");
             return sb.ToString();
@@ -208,7 +203,8 @@ namespace GxPT
                 font_size = GetChatDefaultFontSize(),
                 theme = "light",
                 transcript_max_width = 1000,
-                message_max_width = 700
+                // Percent (50-100) under legacy key name
+                message_max_width = 90
             };
         }
 
@@ -712,13 +708,20 @@ namespace GxPT
             catch { s.transcript_max_width = 1000; }
             try
             {
-                int mw = s.message_max_width;
                 int tw = s.transcript_max_width > 0 ? s.transcript_max_width : 1000;
-                if (mw <= 0) mw = 700;
-                if (mw < 100) mw = 100; if (mw > tw) mw = tw;
-                s.message_max_width = mw;
+                int raw = s.message_max_width;
+                int p;
+                // If outside 50..100, interpret as legacy pixels and convert to percent
+                if (raw < 50 || raw > 100)
+                {
+                    if (raw <= 0) p = 90;
+                    else p = (int)Math.Round(100.0 * raw / tw);
+                }
+                else p = raw;
+                if (p < 50) p = 50; if (p > 100) p = 100;
+                s.message_max_width = p;
             }
-            catch { s.message_max_width = Math.Min(700, s.transcript_max_width > 0 ? s.transcript_max_width : 1000); }
+            catch { s.message_max_width = 90; }
         }
 
         // --- Visual controls <-> working settings ---
@@ -781,7 +784,7 @@ namespace GxPT
             }
             catch { }
 
-            // Transcript/Message Max Widths
+            // Transcript Max Width and Message Max Width (%)
             try
             {
                 if (this.nudTranscriptMaxWidth != null)
@@ -793,13 +796,13 @@ namespace GxPT
                 }
                 if (this.nudMessageMaxWidth != null)
                 {
-                    // Ensure maximum follows transcript value
-                    try { this.nudMessageMaxWidth.Maximum = (this.nudTranscriptMaxWidth != null ? this.nudTranscriptMaxWidth.Value : this.nudMessageMaxWidth.Maximum); }
+                    // Configure as percentage 50..100
+                    try { this.nudMessageMaxWidth.Minimum = 50; this.nudMessageMaxWidth.Maximum = 100; }
                     catch { }
-                    decimal mw = (decimal)(s.message_max_width > 0 ? s.message_max_width : 700);
-                    if (mw < this.nudMessageMaxWidth.Minimum) mw = this.nudMessageMaxWidth.Minimum;
-                    if (mw > this.nudMessageMaxWidth.Maximum) mw = this.nudMessageMaxWidth.Maximum;
-                    this.nudMessageMaxWidth.Value = mw;
+                    decimal p = (decimal)(s.message_max_width > 0 ? s.message_max_width : 90);
+                    if (p < this.nudMessageMaxWidth.Minimum) p = this.nudMessageMaxWidth.Minimum;
+                    if (p > this.nudMessageMaxWidth.Maximum) p = this.nudMessageMaxWidth.Maximum;
+                    this.nudMessageMaxWidth.Value = p;
                 }
             }
             catch { }
@@ -843,11 +846,16 @@ namespace GxPT
             }
             catch { target.theme = "light"; }
 
-            // Transcript/Message widths
+            // Transcript width and Message width percent
             try { target.transcript_max_width = (int)this.nudTranscriptMaxWidth.Value; }
             catch { if (target.transcript_max_width <= 0) target.transcript_max_width = 1000; }
-            try { target.message_max_width = Math.Min((int)this.nudTranscriptMaxWidth.Value, (int)this.nudMessageMaxWidth.Value); }
-            catch { if (target.message_max_width <= 0) target.message_max_width = Math.Min(700, target.transcript_max_width); }
+            try
+            {
+                int p = (int)this.nudMessageMaxWidth.Value;
+                if (p < 50) p = 50; if (p > 100) p = 100;
+                target.message_max_width = p; // store percent
+            }
+            catch { if (target.message_max_width <= 0) target.message_max_width = 90; }
         }
 
         // When the models textbox changes, add any new non-empty lines to the default model combo box
@@ -1016,6 +1024,7 @@ namespace GxPT
             public double font_size { get; set; }
             public string theme { get; set; }
             public int transcript_max_width { get; set; }
+            // Store percent (50-100) using legacy key name
             public int message_max_width { get; set; }
         }
     }
