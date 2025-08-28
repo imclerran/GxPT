@@ -47,16 +47,37 @@ namespace GxPT
                 int wheelDelta = (short)((wparam64 >> 16) & 0xFFFF);
                 Point screenPt = Control.MousePosition;
 
-                // 1) ChatTranscriptControl (if any) under mouse: call its scroll method
-                ChatTranscriptControl transcript = GetHoveredTranscript(screenPt);
-                if (transcript != null)
+                // Hit-test the window under the cursor
+                IntPtr hwnd = IntPtr.Zero;
+                Control hit = null;
+                try
+                {
+                    hwnd = WindowFromPoint(screenPt);
+                    if (hwnd == IntPtr.Zero) return false;
+                    hit = Control.FromHandle(hwnd);
+                    if (hit == null) return false; // not one of our controls
+                }
+                catch { return false; }
+
+                // Determine the host form and ensure it matches the active form
+                Form hostForm = hit.FindForm();
+                Form active = Form.ActiveForm;
+                if (hostForm == null) return false;
+                if (active != null && !ReferenceEquals(hostForm, active))
+                {
+                    // Respect the active form: do not scroll inactive windows
+                    return false;
+                }
+
+                // 1) If a ChatTranscriptControl is in the ancestry, route to it
+                ChatTranscriptControl transcript = FindAncestorChatTranscript(hit);
+                if (transcript != null && transcript.Visible && !transcript.IsDisposed)
                 {
                     try
                     {
                         Rectangle screenRect = transcript.RectangleToScreen(transcript.ClientRectangle);
                         if (screenRect.Contains(screenPt))
                         {
-                            // Forward raw delta to allow precision scrolling; the control will scale appropriately
                             transcript.HandleHoverWheel(wheelDelta, screenPt, Control.ModifierKeys);
                             return true; // consumed
                         }
@@ -64,19 +85,15 @@ namespace GxPT
                     catch { }
                 }
 
-                // 2) Otherwise forward to ListView or TextBoxBase under mouse
+                // 2) Otherwise forward to ListView or TextBoxBase in the ancestry
                 try
                 {
-                    IntPtr hwnd = WindowFromPoint(screenPt);
-                    if (hwnd == IntPtr.Zero) return false;
-                    Control ctl = Control.FromHandle(hwnd);
-                    if (ctl == null) return false;
-                    Control cur = ctl;
-                    for (int i = 0; i < 3 && cur != null; i++)
+                    Control cur = hit;
+                    int guard = 0;
+                    while (cur != null && guard++ < 10)
                     {
-                        if (cur is ListView || cur is TextBoxBase)
+                        if ((cur is ListView || cur is TextBoxBase || cur is ComboBox || cur is UpDownBase) && cur.Visible)
                         {
-                            // Forward the original message unchanged to preserve precision deltas on modern devices
                             SendMessage(cur.Handle, WM_MOUSEWHEEL, m.WParam, m.LParam);
                             return true;
                         }
@@ -90,38 +107,20 @@ namespace GxPT
 
             // No explicit accumulator: raw precision deltas are forwarded, and classic mice send +/-120 multiples
 
-            private static ChatTranscriptControl GetHoveredTranscript(Point screenPt)
+            private static ChatTranscriptControl FindAncestorChatTranscript(Control start)
             {
                 try
                 {
-                    // Iterate open forms and search for a ChatTranscriptControl whose client rect contains the point
-                    for (int i = Application.OpenForms.Count - 1; i >= 0; i--)
+                    Control cur = start;
+                    int guard = 0;
+                    while (cur != null && guard++ < 20)
                     {
-                        var form = Application.OpenForms[i];
-                        if (form == null || form.IsDisposed || !form.Visible) continue;
-                        // Walk all controls (shallow scan first; ChatTranscriptControl instances are few)
-                        ChatTranscriptControl found = FindTranscriptIn(form, screenPt);
-                        if (found != null) return found;
+                        ChatTranscriptControl ctc = cur as ChatTranscriptControl;
+                        if (ctc != null) return ctc;
+                        cur = cur.Parent;
                     }
                 }
                 catch { }
-                return null;
-            }
-
-            private static ChatTranscriptControl FindTranscriptIn(Control parent, Point screenPt)
-            {
-                if (parent == null || parent.IsDisposed || !parent.Visible) return null;
-                foreach (Control c in parent.Controls)
-                {
-                    if (c == null || c.IsDisposed || !c.Visible) continue;
-                    if (c is ChatTranscriptControl)
-                    {
-                        Rectangle r = c.RectangleToScreen(c.ClientRectangle);
-                        if (r.Contains(screenPt)) return (ChatTranscriptControl)c;
-                    }
-                    var nested = FindTranscriptIn(c, screenPt);
-                    if (nested != null) return nested;
-                }
                 return null;
             }
         }
