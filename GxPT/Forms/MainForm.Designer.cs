@@ -38,6 +38,7 @@
             this.toolStripSeparator4 = new System.Windows.Forms.ToolStripSeparator();
             this.miImport = new System.Windows.Forms.ToolStripMenuItem();
             this.miExport = new System.Windows.Forms.ToolStripMenuItem();
+            this.miDeleteConversations = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.miExit = new System.Windows.Forms.ToolStripMenuItem();
             this.miView = new System.Windows.Forms.ToolStripMenuItem();
@@ -65,7 +66,6 @@
             this.tabPage1 = new System.Windows.Forms.TabPage();
             this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.splitContainer1 = new System.Windows.Forms.SplitContainer();
-            this.miDeleteConversations = new System.Windows.Forms.ToolStripMenuItem();
             this.msMain.SuspendLayout();
             this.pnlInput.SuspendLayout();
             this.pnlInputRight.SuspendLayout();
@@ -156,6 +156,13 @@
             this.miExport.Text = "&Export";
             this.miExport.Click += new System.EventHandler(this.miExport_Click);
             // 
+            // miDeleteConversations
+            // 
+            this.miDeleteConversations.Name = "miDeleteConversations";
+            this.miDeleteConversations.Size = new System.Drawing.Size(221, 22);
+            this.miDeleteConversations.Text = "&Delete All Conversations";
+            this.miDeleteConversations.Click += new System.EventHandler(this.miDeleteConversations_Click);
+            // 
             // toolStripSeparator1
             // 
             this.toolStripSeparator1.Name = "toolStripSeparator1";
@@ -236,7 +243,7 @@
             this.pnlInput.Controls.Add(this.txtMessage);
             this.pnlInput.Controls.Add(this.pnlInputRight);
             this.pnlInput.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.pnlInput.Location = new System.Drawing.Point(0, 28);
+            this.pnlInput.Location = new System.Drawing.Point(0, 21);
             this.pnlInput.MinimumSize = new System.Drawing.Size(0, 75);
             this.pnlInput.Name = "pnlInput";
             this.pnlInput.Size = new System.Drawing.Size(885, 75);
@@ -324,10 +331,10 @@
             this.pnlBottom.Controls.Add(this.pnlAttachmentsBanner);
             this.pnlBottom.Controls.Add(this.pnlInput);
             this.pnlBottom.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.pnlBottom.Location = new System.Drawing.Point(0, 639);
+            this.pnlBottom.Location = new System.Drawing.Point(0, 646);
             this.pnlBottom.Margin = new System.Windows.Forms.Padding(0, 3, 3, 3);
             this.pnlBottom.Name = "pnlBottom";
-            this.pnlBottom.Size = new System.Drawing.Size(885, 103);
+            this.pnlBottom.Size = new System.Drawing.Size(885, 96);
             this.pnlBottom.TabIndex = 3;
             // 
             // pnlApiKeyBanner
@@ -336,7 +343,7 @@
             this.pnlApiKeyBanner.BackColor = System.Drawing.Color.Gold;
             this.pnlApiKeyBanner.Controls.Add(this.flowLayoutPanel1);
             this.pnlApiKeyBanner.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.pnlApiKeyBanner.Location = new System.Drawing.Point(0, 7);
+            this.pnlApiKeyBanner.Location = new System.Drawing.Point(0, 0);
             this.pnlApiKeyBanner.Margin = new System.Windows.Forms.Padding(0);
             this.pnlApiKeyBanner.Name = "pnlApiKeyBanner";
             this.pnlApiKeyBanner.Padding = new System.Windows.Forms.Padding(6, 4, 6, 4);
@@ -379,7 +386,7 @@
             // 
             this.pnlAttachmentsBanner.Location = new System.Drawing.Point(0, 0);
             this.pnlAttachmentsBanner.Name = "pnlAttachmentsBanner";
-            this.pnlAttachmentsBanner.Size = new System.Drawing.Size(200, 100);
+            this.pnlAttachmentsBanner.Size = new System.Drawing.Size(0, 0);
             this.pnlAttachmentsBanner.TabIndex = 2;
             // 
             // tabControl1
@@ -389,7 +396,7 @@
             this.tabControl1.Location = new System.Drawing.Point(0, 0);
             this.tabControl1.Name = "tabControl1";
             this.tabControl1.SelectedIndex = 0;
-            this.tabControl1.Size = new System.Drawing.Size(885, 639);
+            this.tabControl1.Size = new System.Drawing.Size(885, 646);
             this.tabControl1.TabIndex = 4;
             // 
             // tabPage1
@@ -397,7 +404,7 @@
             this.tabPage1.Controls.Add(this.chatTranscript);
             this.tabPage1.Location = new System.Drawing.Point(4, 22);
             this.tabPage1.Name = "tabPage1";
-            this.tabPage1.Size = new System.Drawing.Size(877, 613);
+            this.tabPage1.Size = new System.Drawing.Size(877, 620);
             this.tabPage1.TabIndex = 0;
             this.tabPage1.Text = "New Conversation";
             this.tabPage1.UseVisualStyleBackColor = true;
@@ -411,7 +418,7 @@
             this.chatTranscript.Location = new System.Drawing.Point(0, 0);
             this.chatTranscript.Margin = new System.Windows.Forms.Padding(0);
             this.chatTranscript.Name = "chatTranscript";
-            this.chatTranscript.Size = new System.Drawing.Size(877, 613);
+            this.chatTranscript.Size = new System.Drawing.Size(877, 620);
             this.chatTranscript.TabIndex = 0;
             // 
             // splitContainer1
@@ -431,13 +438,6 @@
             this.splitContainer1.SplitterDistance = 6;
             this.splitContainer1.SplitterWidth = 1;
             this.splitContainer1.TabIndex = 1;
-            // 
-            // miDeleteConversations
-            // 
-            this.miDeleteConversations.Name = "miDeleteConversations";
-            this.miDeleteConversations.Size = new System.Drawing.Size(221, 22);
-            this.miDeleteConversations.Text = "&Delete All Conversations";
-            this.miDeleteConversations.Click += new System.EventHandler(this.miDeleteConversations_Click);
             // 
             // MainForm
             // 
