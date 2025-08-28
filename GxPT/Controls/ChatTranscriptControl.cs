@@ -186,6 +186,8 @@ namespace GxPT
             public List<int> TableScroll; // per-table horizontal scroll offsets
             public List<AttachedFile> Attachments; // optional attachments to show as pills
             public List<Rectangle> AttachmentPillRects; // computed per-draw for hit testing
+            // Link hit rectangles captured at draw time (virtual coordinates)
+            public List<LinkHit> LinkHits;
         }
 
         private readonly List<MessageItem> _items = new List<MessageItem>();
@@ -1220,6 +1222,8 @@ namespace GxPT
 
             // Content area
             Rectangle content = new Rectangle(r.X + BubblePadding, r.Y + BubblePadding, r.Width - 2 * BubblePadding, r.Height - 2 * BubblePadding);
+            // Reset link hit rectangles for this item before drawing
+            if (it.LinkHits == null) it.LinkHits = new List<LinkHit>(); else it.LinkHits.Clear();
             DrawBlocks(g, content, it.Blocks, it);
 
             // Draw attachment pills at the bottom of content area
@@ -1289,7 +1293,7 @@ namespace GxPT
                 {
                     var h = (HeadingBlock)blk;
                     Font f = GetHeadingFont(h.Level);
-                    y += DrawInlineParagraph(g, x0, y, maxWidth, h.Inlines, f);
+                    y += DrawInlineParagraph(g, x0, y, maxWidth, h.Inlines, f, owner);
                     y += 4;
                     // Reset numbering when leaving list context
                     numberedCounters.Clear();
@@ -1297,7 +1301,7 @@ namespace GxPT
                 else if (blk.Type == BlockType.Paragraph)
                 {
                     var p = (ParagraphBlock)blk;
-                    y += DrawInlineParagraph(g, x0, y, maxWidth, p.Inlines, _baseFont);
+                    y += DrawInlineParagraph(g, x0, y, maxWidth, p.Inlines, _baseFont, owner);
                     y += 2;
                     // Reset numbering when leaving list context
                     numberedCounters.Clear();
@@ -1323,7 +1327,7 @@ namespace GxPT
                                 g.FillRectangle(b, indentX, y + _baseFont.Height / 2 - 1, 3, 3);
                         }
                         int textX = indentX + BulletIndent;
-                        int used = DrawInlineParagraph(g, textX, y, maxWidth - (textX - x0), item.Content, _baseFont);
+                        int used = DrawInlineParagraph(g, textX, y, maxWidth - (textX - x0), item.Content, _baseFont, owner);
                         y += Math.Max(used, _baseFont.Height) + 2;
                     }
                 }
@@ -1355,7 +1359,7 @@ namespace GxPT
                         }
 
                         int textX = indentX + numberSize.Width + 4; // 4px gap after number
-                        int used = DrawInlineParagraph(g, textX, y, maxWidth - (textX - x0), item.Content, _baseFont);
+                        int used = DrawInlineParagraph(g, textX, y, maxWidth - (textX - x0), item.Content, _baseFont, owner);
                         y += Math.Max(used, _baseFont.Height) + 2;
                     }
                 }
@@ -1562,7 +1566,7 @@ namespace GxPT
                                 int textX = cellRect.X + cellPad;
                                 int avail = colWidths[c];
                                 var inl = (c < t.Header.Count) ? t.Header[c] : new List<InlineRun>();
-                                DrawInlineParagraph(g, textX, cellRect.Y + (cellRect.Height - _baseFont.Height) / 2, avail, inl, _baseFont);
+                                DrawInlineParagraph(g, textX, cellRect.Y + (cellRect.Height - _baseFont.Height) / 2, avail, inl, _baseFont, owner);
                                 g.DrawRectangle(pen, new Rectangle(cellRect.X - 1, cellRect.Y - 1, cellRect.Width + 1, cellRect.Height + 1));
                                 x += cellRect.Width + 1;
                             }
@@ -1579,7 +1583,7 @@ namespace GxPT
                                     int textX = cellRect.X + cellPad;
                                     int avail = colWidths[c];
                                     var inl = (c < t.Rows[r].Count) ? t.Rows[r][c] : new List<InlineRun>();
-                                    DrawInlineParagraph(g, textX, cellRect.Y + cellPad, avail, inl, _baseFont);
+                                    DrawInlineParagraph(g, textX, cellRect.Y + cellPad, avail, inl, _baseFont, owner);
                                     g.DrawRectangle(pen, new Rectangle(cellRect.X - 1, cellRect.Y - 1, cellRect.Width + 1, cellRect.Height + 1));
                                     x += cellRect.Width + 1;
                                 }
@@ -1620,7 +1624,7 @@ namespace GxPT
             }
         }
 
-        private int DrawInlineParagraph(Graphics g, int x, int y, int maxWidth, List<InlineRun> runs, Font baseFont)
+        private int DrawInlineParagraph(Graphics g, int x, int y, int maxWidth, List<InlineRun> runs, Font baseFont, MessageItem owner)
         {
             int xCursor = x;
             int yCursor = y;
@@ -1683,19 +1687,76 @@ namespace GxPT
                 {
                     using (var brush = new SolidBrush(_clrLink)) // link color per theme
                     {
-                        // Draw text
+                        // Draw text using typographic metrics for better positioning
                         using (var fmt = StringFormat.GenericTypographic)
                         {
                             fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
                             g.DrawString(seg.Text, seg.Font, brush, (PointF)r.Location, fmt);
-                            SizeF w = g.MeasureString(seg.Text, seg.Font, PointF.Empty, fmt);
-                            int underlineWidth = (int)Math.Ceiling(w.Width);
-                            int underlineY = r.Bottom - 2;
-                            using (var pen = new Pen(brush.Color))
+
+                            // Baseline-aligned underline using font metrics
+                            float em = seg.Font.FontFamily.GetEmHeight(seg.Font.Style);
+                            float asc = seg.Font.FontFamily.GetCellAscent(seg.Font.Style);
+                            float desc = seg.Font.FontFamily.GetCellDescent(seg.Font.Style);
+                            float pxPerEm = seg.Font.SizeInPoints * g.DpiY / 72f;
+                            float ascentPx = pxPerEm * asc / Math.Max(1f, em);
+                            float descentPx = pxPerEm * desc / Math.Max(1f, em);
+                            int baselineY = yCursor + (int)Math.Round(ascentPx);
+                            // Place underline a bit lower into the descent so it doesn't touch glyph bottoms
+                            int underlineY = baselineY + Math.Max(1, (int)Math.Round(descentPx * 0.65f));
+                            // Ensure underline stays within the current line box
+                            int underlineMax = yCursor + lineHeight - 1;
+                            if (underlineY > underlineMax) underlineY = underlineMax;
+                            int thickness = Math.Max(1, (int)Math.Round(pxPerEm / 14f));
+                            // Compute tight glyph bounds using character ranges to avoid size-dependent overshoot
+                            int underlineWidth;
+                            RectangleF layoutRect = new RectangleF(r.Left, r.Top, 100000f, lineHeight);
+                            using (var fmtTight = (StringFormat)StringFormat.GenericTypographic.Clone())
                             {
+                                fmtTight.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+                                fmtTight.SetMeasurableCharacterRanges(new CharacterRange[] { new CharacterRange(0, seg.Text != null ? seg.Text.Length : 0) });
+                                var regions = g.MeasureCharacterRanges(seg.Text ?? string.Empty, seg.Font, layoutRect, fmtTight);
+                                RectangleF tight = (regions != null && regions.Length > 0) ? regions[0].GetBounds(g) : new RectangleF(r.Left, r.Top, 0f, 0f);
+                                // Dispose regions to avoid GDI handle leaks
+                                if (regions != null)
+                                {
+                                    for (int ri = 0; ri < regions.Length; ri++)
+                                    {
+                                        if (regions[ri] != null) regions[ri].Dispose();
+                                    }
+                                }
+                                underlineWidth = Math.Max(0, (int)Math.Round(tight.Width));
+                            }
+                            using (var pen = new Pen(brush.Color, thickness))
+                            {
+                                // Snap to whole pixels for crispness
                                 g.DrawLine(pen, r.Left, underlineY, r.Left + underlineWidth, underlineY);
                             }
                         }
+                    }
+                    // Record hit rectangle covering the full line height for reliable clicking
+                    if (owner != null)
+                    {
+                        // Use tight glyph bounds width for the hitbox as well
+                        int hitW;
+                        RectangleF layoutRect2 = new RectangleF(xCursor, yCursor, 100000f, lineHeight);
+                        using (var fmtTight2 = (StringFormat)StringFormat.GenericTypographic.Clone())
+                        {
+                            fmtTight2.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+                            fmtTight2.SetMeasurableCharacterRanges(new CharacterRange[] { new CharacterRange(0, seg.Text != null ? seg.Text.Length : 0) });
+                            var regions2 = g.MeasureCharacterRanges(seg.Text ?? string.Empty, seg.Font, layoutRect2, fmtTight2);
+                            RectangleF tight2 = (regions2 != null && regions2.Length > 0) ? regions2[0].GetBounds(g) : new RectangleF(xCursor, yCursor, 0f, 0f);
+                            if (regions2 != null)
+                            {
+                                for (int ri = 0; ri < regions2.Length; ri++)
+                                {
+                                    if (regions2[ri] != null) regions2[ri].Dispose();
+                                }
+                            }
+                            hitW = Math.Max(0, (int)Math.Round(tight2.Width));
+                        }
+                        var hitRect = new Rectangle(xCursor, yCursor, hitW, lineHeight);
+                        if (owner.LinkHits == null) owner.LinkHits = new List<LinkHit>();
+                        owner.LinkHits.Add(new LinkHit { Rect = hitRect, Url = seg.LinkUrl });
                     }
                 }
                 else
@@ -2186,157 +2247,17 @@ namespace GxPT
 
         private string HitTestLink(Point clientPt)
         {
-            // Determine which message
+            // Fast path: use recorded link rectangles captured at draw time
             Point virt = new Point(clientPt.X, clientPt.Y + _scrollOffset);
             foreach (var it in _items)
             {
+                if (it.LinkHits == null || it.LinkHits.Count == 0) continue;
+                // Only consider items whose bubble intersects the point for quick rejection
                 if (!it.Bounds.Contains(virt)) continue;
-                // Re-layout its blocks to locate link rectangles (simple approach; could cache)
-                int contentX = it.Bounds.X + BubblePadding;
-                int contentY = it.Bounds.Y + BubblePadding;
-                int contentW = it.Bounds.Width - 2 * BubblePadding;
-                int y = contentY;
-                foreach (var blk in it.Blocks)
+                for (int i = 0; i < it.LinkHits.Count; i++)
                 {
-                    if (blk.Type == BlockType.Paragraph || blk.Type == BlockType.Heading)
-                    {
-                        List<InlineRun> inlines;
-                        Font baseFont;
-                        if (blk.Type == BlockType.Heading)
-                        {
-                            var h = (HeadingBlock)blk;
-                            inlines = h.Inlines;
-                            baseFont = GetHeadingFont(h.Level);
-                        }
-                        else
-                        {
-                            var p = (ParagraphBlock)blk;
-                            inlines = p.Inlines;
-                            baseFont = _baseFont;
-                        }
-                        int x0 = contentX;
-                        int lineHeight = baseFont.Height;
-                        int xCursor = x0;
-                        var wrapped = new List<LayoutSeg>();
-                        foreach (var seg in WordWrapRuns(inlines, baseFont, contentW)) wrapped.Add(seg);
-                        int yCursor = y;
-                        foreach (var seg in wrapped)
-                        {
-                            if (seg.IsNewLine)
-                            {
-                                yCursor += lineHeight + 2;
-                                xCursor = x0;
-                                lineHeight = baseFont.Height;
-                                continue;
-                            }
-                            Rectangle r = new Rectangle(xCursor, yCursor, seg.Rect.Width, seg.Rect.Height);
-                            if (seg.IsLink && r.Contains(virt)) return seg.LinkUrl;
-                            xCursor += r.Width;
-                            lineHeight = Math.Max(lineHeight, seg.Font.Height);
-                        }
-                        y = yCursor + lineHeight + 2 + 2; // account for added gaps
-                    }
-                    else if (blk.Type == BlockType.CodeBlock)
-                    {
-                        // skip; links not in code blocks
-                        // Advance y using the same calculation as drawing (no wrap, include copy header and optional h-scroll)
-                        var cb = (CodeBlock)blk;
-                        using (Graphics g = CreateGraphics())
-                        {
-                            var colored = SyntaxHighlightingRenderer.GetColoredSegments(cb.Text, cb.Language, _monoFont, _isDarkTheme);
-                            Size contentNoWrap = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, colored);
-                            int viewportW = Math.Max(0, contentW - 2 * CodeBlockPadding);
-                            bool needH = contentNoWrap.Width > viewportW;
-                            int textH = Math.Max(_monoFont.Height, contentNoWrap.Height);
-                            int headerH = GetCodeHeaderHeight();
-                            int boxH = textH + 2 * CodeBlockPadding + headerH + (needH ? CodeHScrollHeight : 0);
-                            y += boxH + 4;
-                        }
-                    }
-                    else if (blk.Type == BlockType.BulletList)
-                    {
-                        // Rough skip for bullets (no links expected yet)
-                        var list = (BulletListBlock)blk;
-                        foreach (var item in list.Items)
-                        {
-                            var wrapped = new List<LayoutSeg>();
-                            foreach (var seg in WordWrapRuns(item.Content, _baseFont, contentW - BulletIndent)) wrapped.Add(seg);
-                            int lineHeight = _baseFont.Height;
-                            int xCursor = contentX + (item.IndentLevel * BulletIndent) + BulletIndent;
-                            int yCursor = y;
-                            foreach (var seg in wrapped)
-                            {
-                                if (seg.IsNewLine)
-                                {
-                                    yCursor += lineHeight + 2; xCursor = contentX + (item.IndentLevel * BulletIndent) + BulletIndent; lineHeight = _baseFont.Height; continue;
-                                }
-                                Rectangle r2 = new Rectangle(xCursor, yCursor, seg.Rect.Width, seg.Rect.Height);
-                                if (seg.IsLink && r2.Contains(virt)) return seg.LinkUrl;
-                                xCursor += r2.Width;
-                                lineHeight = Math.Max(lineHeight, seg.Font.Height);
-                            }
-                            y = yCursor + lineHeight + 2 + 2;
-                        }
-                    }
-                    else if (blk.Type == BlockType.NumberedList)
-                    {
-                        var list = (NumberedListBlock)blk;
-                        int itemNo = 1;
-                        foreach (var item in list.Items)
-                        {
-                            var wrapped = new List<LayoutSeg>();
-                            foreach (var seg in WordWrapRuns(item.Content, _baseFont, contentW - BulletIndent)) wrapped.Add(seg);
-                            int lineHeight = _baseFont.Height;
-                            int xCursor = contentX + (item.IndentLevel * BulletIndent) + BulletIndent + 16; // approximate number width
-                            int yCursor = y;
-                            foreach (var seg in wrapped)
-                            {
-                                if (seg.IsNewLine)
-                                { yCursor += lineHeight + 2; xCursor = contentX + (item.IndentLevel * BulletIndent) + BulletIndent + 16; lineHeight = _baseFont.Height; continue; }
-                                Rectangle r2 = new Rectangle(xCursor, yCursor, seg.Rect.Width, seg.Rect.Height);
-                                if (seg.IsLink && r2.Contains(virt)) return seg.LinkUrl;
-                                xCursor += r2.Width;
-                                lineHeight = Math.Max(lineHeight, seg.Font.Height);
-                            }
-                            y = yCursor + lineHeight + 2 + 2;
-                            itemNo++;
-                        }
-                    }
-                    else if (blk.Type == BlockType.Table)
-                    {
-                        // Advance y past table area (without link detection within table for now)
-                        var t = (TableBlock)blk;
-                        int cols = Math.Max(0, t.Alignments != null ? t.Alignments.Count : 0);
-                        if (cols > 0)
-                        {
-                            int cellPad = 6; int border = 1;
-                            int[] colWidths = new int[cols]; int headerH = 0;
-                            for (int c = 0; c < cols; c++)
-                            {
-                                var inl = (c < t.Header.Count) ? t.Header[c] : new List<InlineRun>();
-                                Size sz = MeasureInlineParagraph(inl, _baseFont, int.MaxValue / 4, false);
-                                colWidths[c] = Math.Max(colWidths[c], sz.Width);
-                                headerH = Math.Max(headerH, sz.Height);
-                            }
-                            int[] rowHeights = new int[t.Rows.Count];
-                            for (int r = 0; r < t.Rows.Count; r++)
-                            {
-                                int rowH = 0;
-                                for (int c = 0; c < cols; c++)
-                                {
-                                    var inl = (c < t.Rows[r].Count) ? t.Rows[r][c] : new List<InlineRun>();
-                                    Size sz = MeasureInlineParagraph(inl, _baseFont, int.MaxValue / 4, false);
-                                    colWidths[c] = Math.Max(colWidths[c], sz.Width);
-                                    rowH = Math.Max(rowH, sz.Height);
-                                }
-                                rowHeights[r] = rowH;
-                            }
-                            int intrinsicW = border; for (int c = 0; c < cols; c++) intrinsicW += colWidths[c] + cellPad * 2 + border;
-                            int tableH = 1 + headerH + cellPad * 2 + 1; for (int r = 0; r < rowHeights.Length; r++) tableH += rowHeights[r] + cellPad * 2 + 1;
-                            bool needH = intrinsicW > contentW;
-                            y += tableH + (needH ? CodeHScrollHeight : 0) + 2;
-                        }
-                    }
+                    var lh = it.LinkHits[i];
+                    if (lh.Rect.Contains(virt)) return lh.Url;
                 }
             }
             return null;
@@ -2683,6 +2604,13 @@ namespace GxPT
                 if (it.Bounds.Y + BubblePadding == contentTopY) return it;
             }
             return null;
+        }
+
+        // ---------- Link hit model ----------
+        private struct LinkHit
+        {
+            public Rectangle Rect;
+            public string Url;
         }
     }
 }
