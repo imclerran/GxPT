@@ -323,7 +323,7 @@ namespace GxPT
             };
             d.Dark = new ThemeColors
             {
-                UiBackground = Color.FromArgb(0x24, 0x27, 0x3A), // Macchiato Base
+                UiBackground = Color.FromArgb(0x24, 0x24, 0x24),
                 UiForeground = Color.FromArgb(230, 230, 230),
                 UserBubbleBack = ColorTranslator.FromHtml("#0b4e7a"), // deep blue
                 UserBubbleBorder = ColorTranslator.FromHtml("#0f6aa1"),
@@ -376,7 +376,7 @@ namespace GxPT
             // Dark based on current dark palette
             d.Dark = new ThemeColors
             {
-                UiBackground = Color.FromArgb(0x24, 0x27, 0x3A),
+                UiBackground = Color.FromArgb(0x24, 0x24, 0x24),
                 UiForeground = Color.FromArgb(230, 230, 230),
                 UserBubbleBack = ColorTranslator.FromHtml("#660020"),
                 UserBubbleBorder = ColorTranslator.FromHtml("#990030"),
@@ -427,7 +427,7 @@ namespace GxPT
             };
             d.Dark = new ThemeColors
             {
-                UiBackground = Color.FromArgb(0x24, 0x27, 0x3A),
+                UiBackground = Color.FromArgb(0x24, 0x24, 0x24),
                 UiForeground = Color.FromArgb(230, 230, 230),
                 UserBubbleBack = ColorTranslator.FromHtml("#5a2f00"),
                 UserBubbleBorder = ColorTranslator.FromHtml("#8a4500"),

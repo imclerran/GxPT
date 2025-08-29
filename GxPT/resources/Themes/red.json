@@ -17,7 +17,7 @@
     "scrollThumbBorder": "#A0A0A0"
   },
   "dark": {
-    "uiBackground": "#24273A",
+    "uiBackground": "#242424",
     "uiForeground": "#E6E6E6",
     "userBubble": { "background": "#660020", "border": "#990030" },
     "assistantBubble": { "background": "#303134", "border": "#46484B" },
