@@ -1810,7 +1810,7 @@ namespace GxPT
         }
 
         // Return default model from settings or fallback
-        private string GetConfiguredDefaultModel()
+        internal string GetConfiguredDefaultModel()
         {
             try
             {
@@ -1824,7 +1824,7 @@ namespace GxPT
         }
 
         // Sync the model combo box to the active tab's SelectedModel
-        private void SyncComboModelFromActiveTab()
+        internal void SyncComboModelFromActiveTab()
         {
             try
             {

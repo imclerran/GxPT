@@ -142,7 +142,7 @@ namespace GxPT
                     Transcript = initialTranscript,
                     Conversation = new Conversation(_mainForm.GetClient()),
                     IsSending = false,
-                    SelectedModel = _mainForm.GetSelectedModel()
+                    SelectedModel = _mainForm.GetConfiguredDefaultModel()
                 };
                 ctx.Conversation.SelectedModel = ctx.SelectedModel;
                 _mainForm.EnsureConversationId(ctx.Conversation);
@@ -263,7 +263,7 @@ namespace GxPT
                 Transcript = transcript,
                 Conversation = new Conversation(_mainForm.GetClient()),
                 IsSending = false,
-                SelectedModel = _mainForm.GetSelectedModel()
+                SelectedModel = _mainForm.GetConfiguredDefaultModel()
             };
             ctx.Conversation.SelectedModel = ctx.SelectedModel;
             _mainForm.EnsureConversationId(ctx.Conversation);
@@ -409,6 +409,14 @@ namespace GxPT
                         catch { }
                         if (ctx.Transcript != null) ctx.Transcript.ClearMessages();
                         ctx.Conversation = new Conversation(_mainForm.GetClient());
+                        // Reset model to default on a fresh blank tab
+                        try
+                        {
+                            ctx.SelectedModel = _mainForm.GetConfiguredDefaultModel();
+                            ctx.Conversation.SelectedModel = ctx.SelectedModel;
+                            _mainForm.SyncComboModelFromActiveTab();
+                        }
+                        catch { }
                         // re-hook name event
                         ctx.Conversation.NameGenerated += delegate(string name)
                         {
