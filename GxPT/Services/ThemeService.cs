@@ -407,8 +407,8 @@ namespace GxPT
             {
                 UiBackground = SystemColors.Window,
                 UiForeground = SystemColors.WindowText,
-                UserBubbleBack = ColorTranslator.FromHtml("#fff0e0"),
-                UserBubbleBorder = ColorTranslator.FromHtml("#e8b98a"),
+                UserBubbleBack = ColorTranslator.FromHtml("#ffe7d9"),
+                UserBubbleBorder = ColorTranslator.FromHtml("#ffcfb3"),
                 AssistantBubbleBack = Color.FromArgb(235, 235, 235),
                 AssistantBubbleBorder = Color.FromArgb(200, 200, 200),
                 SystemBubbleBack = Color.FromArgb(255, 250, 220),

@@ -4,7 +4,7 @@
   "light": {
     "uiBackground": "Window",
     "uiForeground": "WindowText",
-    "userBubble": { "background": "#FFF0E0", "border": "#E8B98A" },
+    "userBubble": { "background": "#ffe7d9", "border": "#ffcfb3" },
     "assistantBubble": { "background": "#EBEBEB", "border": "#C8C8C8" },
     "systemBubble": { "background": "#FFFACE", "border": "#D2C896" },
     "code": { "background": "#F5F5F5", "border": "#D2D2D2", "inlineBackground": "#F0F0F0", "inlineBorder": "#C8C8C8" },
