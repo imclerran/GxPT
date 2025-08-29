@@ -1762,16 +1762,9 @@ namespace GxPT
                         }
                         catch { dark = false; }
 
-                        if (dark)
-                        {
-                            rtb.BackColor = Color.FromArgb(0x24, 0x27, 0x3A); // Macchiato Base
-                            rtb.ForeColor = Color.FromArgb(230, 230, 230);
-                        }
-                        else
-                        {
-                            rtb.BackColor = SystemColors.Window;
-                            rtb.ForeColor = SystemColors.WindowText;
-                        }
+                        var colors = ThemeService.GetColors(dark);
+                        rtb.BackColor = colors.UiBackground;
+                        rtb.ForeColor = colors.UiForeground;
 
                         try { RichTextBoxSyntaxHighlighter.Highlight(rtb, lang, dark); }
                         catch { }

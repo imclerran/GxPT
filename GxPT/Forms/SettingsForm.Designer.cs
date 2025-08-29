@@ -54,6 +54,8 @@
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabVisual = new System.Windows.Forms.TabPage();
             this.tabJson = new System.Windows.Forms.TabPage();
+            this.lblColor = new System.Windows.Forms.Label();
+            this.cmbColor = new System.Windows.Forms.ComboBox();
             this.flowLayoutPanel1.SuspendLayout();
             this.tblSettings.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.nudTranscriptMaxWidth)).BeginInit();
@@ -111,26 +113,29 @@
             this.tblSettings.Controls.Add(this.lblModels, 0, 1);
             this.tblSettings.Controls.Add(this.lblDefaultModel, 0, 2);
             this.tblSettings.Controls.Add(this.lblTheme, 0, 4);
-            this.tblSettings.Controls.Add(this.lblTranscriptMaxWidth, 0, 5);
-            this.tblSettings.Controls.Add(this.lblMessageMaxWidth, 0, 6);
-            this.tblSettings.Controls.Add(this.lblFontSize, 0, 7);
-            this.tblSettings.Controls.Add(this.lblEnableLogging, 0, 8);
+            this.tblSettings.Controls.Add(this.lblTranscriptMaxWidth, 0, 6);
+            this.tblSettings.Controls.Add(this.lblMessageMaxWidth, 0, 7);
+            this.tblSettings.Controls.Add(this.lblFontSize, 0, 8);
+            this.tblSettings.Controls.Add(this.lblEnableLogging, 0, 9);
             this.tblSettings.Controls.Add(this.txtApiKey, 1, 0);
             this.tblSettings.Controls.Add(this.txtModels, 1, 1);
             this.tblSettings.Controls.Add(this.cmbDefaultModel, 1, 2);
             this.tblSettings.Controls.Add(this.cmbTheme, 1, 4);
-            this.tblSettings.Controls.Add(this.nudTranscriptMaxWidth, 1, 5);
-            this.tblSettings.Controls.Add(this.nudMessageMaxWidth, 1, 6);
-            this.tblSettings.Controls.Add(this.nudFontSize, 1, 7);
-            this.tblSettings.Controls.Add(this.chkEnableLogging, 1, 8);
+            this.tblSettings.Controls.Add(this.nudTranscriptMaxWidth, 1, 6);
+            this.tblSettings.Controls.Add(this.nudMessageMaxWidth, 1, 7);
+            this.tblSettings.Controls.Add(this.nudFontSize, 1, 8);
+            this.tblSettings.Controls.Add(this.chkEnableLogging, 1, 9);
             this.tblSettings.Controls.Add(this.lblProviderDataCollection, 0, 3);
             this.tblSettings.Controls.Add(this.cmbProviderDataCollection, 1, 3);
+            this.tblSettings.Controls.Add(this.lblColor, 0, 5);
+            this.tblSettings.Controls.Add(this.cmbColor, 1, 5);
             this.tblSettings.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tblSettings.Location = new System.Drawing.Point(3, 3);
             this.tblSettings.Name = "tblSettings";
-            this.tblSettings.RowCount = 9;
+            this.tblSettings.RowCount = 10;
             this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle());
@@ -166,7 +171,7 @@
             // lblDefaultModel
             // 
             this.lblDefaultModel.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblDefaultModel.Location = new System.Drawing.Point(3, 175);
+            this.lblDefaultModel.Location = new System.Drawing.Point(3, 148);
             this.lblDefaultModel.Name = "lblDefaultModel";
             this.lblDefaultModel.Size = new System.Drawing.Size(121, 27);
             this.lblDefaultModel.TabIndex = 2;
@@ -177,7 +182,7 @@
             // 
             this.lblTheme.AutoSize = true;
             this.lblTheme.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblTheme.Location = new System.Drawing.Point(3, 229);
+            this.lblTheme.Location = new System.Drawing.Point(3, 202);
             this.lblTheme.Name = "lblTheme";
             this.lblTheme.Size = new System.Drawing.Size(121, 27);
             this.lblTheme.TabIndex = 10;
@@ -243,7 +248,7 @@
             this.txtModels.Multiline = true;
             this.txtModels.Name = "txtModels";
             this.txtModels.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.txtModels.Size = new System.Drawing.Size(457, 143);
+            this.txtModels.Size = new System.Drawing.Size(457, 116);
             this.txtModels.TabIndex = 6;
             // 
             // cmbDefaultModel
@@ -252,7 +257,7 @@
             this.cmbDefaultModel.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cmbDefaultModel.DropDownWidth = 175;
             this.cmbDefaultModel.FormattingEnabled = true;
-            this.cmbDefaultModel.Location = new System.Drawing.Point(130, 178);
+            this.cmbDefaultModel.Location = new System.Drawing.Point(130, 151);
             this.cmbDefaultModel.Name = "cmbDefaultModel";
             this.cmbDefaultModel.Size = new System.Drawing.Size(457, 21);
             this.cmbDefaultModel.TabIndex = 5;
@@ -260,7 +265,7 @@
             // cmbTheme
             // 
             this.cmbTheme.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cmbTheme.Location = new System.Drawing.Point(130, 232);
+            this.cmbTheme.Location = new System.Drawing.Point(130, 205);
             this.cmbTheme.Name = "cmbTheme";
             this.cmbTheme.Size = new System.Drawing.Size(120, 21);
             this.cmbTheme.TabIndex = 11;
@@ -337,7 +342,7 @@
             // 
             this.lblProviderDataCollection.AutoSize = true;
             this.lblProviderDataCollection.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblProviderDataCollection.Location = new System.Drawing.Point(3, 202);
+            this.lblProviderDataCollection.Location = new System.Drawing.Point(3, 175);
             this.lblProviderDataCollection.Name = "lblProviderDataCollection";
             this.lblProviderDataCollection.Size = new System.Drawing.Size(121, 27);
             this.lblProviderDataCollection.TabIndex = 16;
@@ -352,7 +357,7 @@
             this.cmbProviderDataCollection.Items.AddRange(new object[] {
             "May Collect (Data may be used for training)",
             "May Not Collect (May still retain for abuse monitoring)"});
-            this.cmbProviderDataCollection.Location = new System.Drawing.Point(130, 205);
+            this.cmbProviderDataCollection.Location = new System.Drawing.Point(130, 178);
             this.cmbProviderDataCollection.Name = "cmbProviderDataCollection";
             this.cmbProviderDataCollection.Size = new System.Drawing.Size(300, 21);
             this.cmbProviderDataCollection.TabIndex = 17;
@@ -389,6 +394,26 @@
             this.tabJson.TabIndex = 1;
             this.tabJson.Text = "JSON";
             this.tabJson.UseVisualStyleBackColor = true;
+            // 
+            // lblColor
+            // 
+            this.lblColor.AutoSize = true;
+            this.lblColor.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblColor.Location = new System.Drawing.Point(3, 229);
+            this.lblColor.Name = "lblColor";
+            this.lblColor.Size = new System.Drawing.Size(121, 27);
+            this.lblColor.TabIndex = 18;
+            this.lblColor.Text = "Chat Color";
+            this.lblColor.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            // 
+            // cmbColor
+            // 
+            this.cmbColor.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.cmbColor.FormattingEnabled = true;
+            this.cmbColor.Location = new System.Drawing.Point(130, 232);
+            this.cmbColor.Name = "cmbColor";
+            this.cmbColor.Size = new System.Drawing.Size(121, 21);
+            this.cmbColor.TabIndex = 19;
             // 
             // SettingsForm
             // 
@@ -443,5 +468,7 @@
         private System.Windows.Forms.NumericUpDown nudMessageMaxWidth;
         private System.Windows.Forms.Label lblProviderDataCollection;
         private System.Windows.Forms.ComboBox cmbProviderDataCollection;
+        private System.Windows.Forms.Label lblColor;
+        private System.Windows.Forms.ComboBox cmbColor;
     }
 }

@@ -181,23 +181,11 @@ namespace GxPT
 
                 if (_txtMessage != null)
                 {
-                    if (dark)
-                    {
-                        // Match ChatTranscriptControl dark app background and bubble text color
-                        _txtMessage.BackColor = Color.FromArgb(0x24, 0x27, 0x3A); // Macchiato Base
-
-                        // Do not apply theme foreground color for hint text
-                        if (_txtMessage.ForeColor != System.Drawing.Color.Gray || _txtMessage.Text == "")
-                            _txtMessage.ForeColor = Color.FromArgb(230, 230, 230);   // light text like bubbles
-                    }
-                    else
-                    {
-                        _txtMessage.BackColor = SystemColors.Window;
-
-                        // Do not apply theme foreground color for hint text
-                        if (_txtMessage.ForeColor != System.Drawing.Color.Gray || _txtMessage.Text == "")
-                            _txtMessage.ForeColor = SystemColors.WindowText;
-                    }
+                    var colors = ThemeService.GetColors(dark);
+                    _txtMessage.BackColor = colors.UiBackground;
+                    // Do not apply theme foreground color for hint text
+                    if (_txtMessage.ForeColor != System.Drawing.Color.Gray || _txtMessage.Text == "")
+                        _txtMessage.ForeColor = colors.UiForeground;
                 }
             }
             catch { }

@@ -384,60 +384,34 @@ namespace GxPT
 
         private void ApplyThemeFromSettings()
         {
-            // Read theme from AppSettings; fallback to light
+            // Determine light/dark from legacy setting
             string theme = null;
             try { theme = AppSettings.GetString("theme"); }
             catch { theme = null; }
             bool dark = !string.IsNullOrEmpty(theme) && theme.Trim().Equals("dark", StringComparison.OrdinalIgnoreCase);
             _isDarkTheme = dark;
 
-            if (dark)
-            {
-                // App background and text
-                _clrAppBack = Color.FromArgb(0x24, 0x27, 0x3A); // Macchiato Base
-                _clrAppText = Color.FromArgb(230, 230, 230); // light text
-                // Bubbles
-                _clrUserBack = Color.FromArgb(0x66, 0x00, 0x20); // #660020 user bubble background
-                _clrUserBorder = Color.FromArgb(0x99, 0x00, 0x30); // #990030 user bubble border (darker)
-                _clrAsstBack = Color.FromArgb(48, 49, 52);   // darker grey
-                _clrAsstBorder = Color.FromArgb(70, 72, 75);
-                _clrSysBack = Color.FromArgb(64, 60, 40);    // muted warm
-                _clrSysBorder = Color.FromArgb(90, 85, 60);
-                // Code blocks
-                _clrCodeBack = Color.FromArgb(28, 29, 31);
-                _clrCodeBorder = Color.FromArgb(70, 72, 75);
-                _clrInlineCodeBack = Color.FromArgb(45, 46, 49);
-                _clrInlineCodeBorder = Color.FromArgb(70, 72, 75);
-                _clrLink = Color.FromArgb(120, 170, 255);
-                _clrCopyHover = Color.FromArgb(60, 62, 66);
-                _clrCopyPressed = Color.FromArgb(52, 54, 58);
-                _clrScrollTrack = Color.FromArgb(45, 46, 49);
-                _clrScrollThumb = Color.FromArgb(90, 92, 96);
-                _clrScrollTrackBorder = Color.FromArgb(70, 72, 75);
-                _clrScrollThumbBorder = Color.FromArgb(110, 112, 116);
-            }
-            else
-            {
-                _clrAppBack = SystemColors.Window;
-                _clrAppText = SystemColors.WindowText;
-                _clrUserBack = Color.FromArgb(225, 240, 255);
-                _clrUserBorder = Color.FromArgb(160, 190, 220);
-                _clrAsstBack = Color.FromArgb(235, 235, 235);
-                _clrAsstBorder = Color.FromArgb(200, 200, 200);
-                _clrSysBack = Color.FromArgb(255, 250, 220);
-                _clrSysBorder = Color.FromArgb(210, 200, 150);
-                _clrCodeBack = Color.FromArgb(245, 245, 245);
-                _clrCodeBorder = Color.FromArgb(210, 210, 210);
-                _clrInlineCodeBack = Color.FromArgb(240, 240, 240);
-                _clrInlineCodeBorder = Color.FromArgb(200, 200, 200);
-                _clrLink = Color.FromArgb(0, 102, 204);
-                _clrCopyHover = Color.FromArgb(230, 230, 230);
-                _clrCopyPressed = Color.FromArgb(210, 210, 210);
-                _clrScrollTrack = Color.FromArgb(235, 235, 235);
-                _clrScrollThumb = Color.FromArgb(200, 200, 200);
-                _clrScrollTrackBorder = Color.FromArgb(210, 210, 210);
-                _clrScrollThumbBorder = Color.FromArgb(160, 160, 160);
-            }
+            // Resolve current color theme (defaults to Blue) and apply
+            ThemeColors t = ThemeService.GetColors(dark);
+            _clrAppBack = t.UiBackground;
+            _clrAppText = t.UiForeground;
+            _clrUserBack = t.UserBubbleBack;
+            _clrUserBorder = t.UserBubbleBorder;
+            _clrAsstBack = t.AssistantBubbleBack;
+            _clrAsstBorder = t.AssistantBubbleBorder;
+            _clrSysBack = t.SystemBubbleBack;
+            _clrSysBorder = t.SystemBubbleBorder;
+            _clrCodeBack = t.CodeBack;
+            _clrCodeBorder = t.CodeBorder;
+            _clrInlineCodeBack = t.InlineCodeBack;
+            _clrInlineCodeBorder = t.InlineCodeBorder;
+            _clrLink = t.Link;
+            _clrCopyHover = t.CopyHover;
+            _clrCopyPressed = t.CopyPressed;
+            _clrScrollTrack = t.ScrollTrack;
+            _clrScrollThumb = t.ScrollThumb;
+            _clrScrollTrackBorder = t.ScrollTrackBorder;
+            _clrScrollThumbBorder = t.ScrollThumbBorder;
 
             BackColor = _clrAppBack;
             ForeColor = _clrAppText;
@@ -2198,16 +2172,9 @@ namespace GxPT
                         catch { dark = false; }
 
                         // Apply themed background/foreground to match chat
-                        if (dark)
-                        {
-                            rtb.BackColor = Color.FromArgb(0x24, 0x27, 0x3A); // Macchiato Base
-                            rtb.ForeColor = Color.FromArgb(230, 230, 230);
-                        }
-                        else
-                        {
-                            rtb.BackColor = SystemColors.Window;
-                            rtb.ForeColor = SystemColors.WindowText;
-                        }
+                        var colors = ThemeService.GetColors(dark);
+                        rtb.BackColor = colors.UiBackground;
+                        rtb.ForeColor = colors.UiForeground;
 
                         string lang = GetFileExtension(af.FileName);
                         try { RichTextBoxSyntaxHighlighter.Highlight(rtb, lang, dark); }

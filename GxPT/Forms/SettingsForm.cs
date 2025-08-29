@@ -65,8 +65,9 @@ namespace GxPT
                 {
                     this.cmbTheme.DropDownStyle = ComboBoxStyle.DropDownList;
                     this.cmbTheme.Items.Clear();
-                    this.cmbTheme.Items.Add("light");
-                    this.cmbTheme.Items.Add("dark");
+                    // Display in Pascal case for readability
+                    this.cmbTheme.Items.Add("Light");
+                    this.cmbTheme.Items.Add("Dark");
                 }
             }
             catch { }
@@ -161,6 +162,8 @@ namespace GxPT
             sb.AppendLine("  ],");
             sb.AppendLine("  \"default_model\": \"openai/gpt-4o\",");
             sb.AppendLine("  \"theme\": \"light\",");
+            // Default UI color theme
+            sb.AppendLine("  \"color_theme\": \"blue\",");
             sb.AppendLine("  \"font_size\": " + defaultFontSize.ToString(System.Globalization.CultureInfo.InvariantCulture) + ",");
             sb.AppendLine("  \"transcript_max_width\": " + defaultTranscriptW + ",");
             // Store percent (50-100) under legacy key name
@@ -205,6 +208,7 @@ namespace GxPT
                 enable_logging = false,
                 font_size = GetChatDefaultFontSize(),
                 theme = "light",
+                color_theme = "blue",
                 transcript_max_width = 1000,
                 // Percent (50-100) under legacy key name
                 message_max_width = 90,
@@ -701,6 +705,17 @@ namespace GxPT
             }
             catch { s.theme = "light"; }
 
+            // Color theme normalization (id string)
+            try
+            {
+                string ct = s.color_theme ?? "blue";
+                ct = ct.Trim();
+                if (ct.Length == 0) ct = "blue";
+                // Keep as-is; ThemeService will fallback if unknown
+                s.color_theme = ct;
+            }
+            catch { s.color_theme = "blue"; }
+
             // Transcript/message width normalization
             try
             {
@@ -791,14 +806,40 @@ namespace GxPT
                 string t = s.theme ?? "light";
                 if (this.cmbTheme != null)
                 {
-                    if (!this.cmbTheme.Items.Contains(t))
+                    // Ensure items are Pascal case
+                    this.cmbTheme.Items.Clear();
+                    this.cmbTheme.Items.Add("Light");
+                    this.cmbTheme.Items.Add("Dark");
+                    // Map stored lowercase to displayed Pascal case
+                    string disp = string.Equals(t, "dark", StringComparison.OrdinalIgnoreCase) ? "Dark" : "Light";
+                    this.cmbTheme.SelectedItem = disp;
+                }
+            }
+            catch { }
+
+            // Color Theme (populate from ThemeService)
+            try
+            {
+                if (this.cmbColor != null)
+                {
+                    var themes = ThemeService.GetAvailableThemes();
+                    // Provide a stable list even if service returns none
+                    if (themes == null) themes = new List<ThemeInfo>();
+                    this.cmbColor.BeginUpdate();
+                    try
                     {
-                        // ensure items present
-                        this.cmbTheme.Items.Clear();
-                        this.cmbTheme.Items.Add("light");
-                        this.cmbTheme.Items.Add("dark");
+                        this.cmbColor.DataSource = null; // reset binding
+                        this.cmbColor.Items.Clear();
+                        // Bind to theme list showing Name with Id as value
+                        this.cmbColor.DisplayMember = "Name";
+                        this.cmbColor.ValueMember = "Id";
+                        this.cmbColor.DataSource = themes;
+                        // Select current color theme id (default blue)
+                        string ct = s.color_theme;
+                        if (string.IsNullOrEmpty(ct)) ct = "blue";
+                        this.cmbColor.SelectedValue = ct;
                     }
-                    this.cmbTheme.SelectedItem = t;
+                    finally { this.cmbColor.EndUpdate(); }
                 }
             }
             catch { }
@@ -875,9 +916,26 @@ namespace GxPT
                 var themeSel = this.cmbTheme != null ? (this.cmbTheme.SelectedItem as string) : null;
                 if (string.IsNullOrEmpty(themeSel) && this.cmbTheme != null) themeSel = this.cmbTheme.Text;
                 if (string.IsNullOrEmpty(themeSel)) themeSel = "light";
+                // Store as lowercase regardless of displayed casing
                 target.theme = (themeSel ?? "light").Trim().ToLowerInvariant();
             }
             catch { target.theme = "light"; }
+
+            // Color Theme id
+            try
+            {
+                string ct = null;
+                if (this.cmbColor != null)
+                {
+                    // Prefer SelectedValue from data-bound list
+                    object val = this.cmbColor.SelectedValue;
+                    if (val != null) ct = Convert.ToString(val);
+                    if (string.IsNullOrEmpty(ct)) ct = this.cmbColor.Text;
+                }
+                if (string.IsNullOrEmpty(ct)) ct = "blue";
+                target.color_theme = ct;
+            }
+            catch { if (string.IsNullOrEmpty(target.color_theme)) target.color_theme = "blue"; }
 
             // Provider data collection from combo: if contains "Not" -> false, else true
             try
@@ -1074,6 +1132,7 @@ namespace GxPT
             public bool enable_logging { get; set; }
             public double font_size { get; set; }
             public string theme { get; set; }
+            public string color_theme { get; set; }
             public int transcript_max_width { get; set; }
             // Store percent (50-100) using legacy key name
             public int message_max_width { get; set; }

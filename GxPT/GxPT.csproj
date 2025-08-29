@@ -158,6 +158,7 @@
     <Compile Include="Services\SyntaxHighlightingRenderer.cs" />
     <Compile Include="Managers\TabManager.cs" />
     <Compile Include="Managers\ThemeManager.cs" />
+    <Compile Include="Services\ThemeService.cs" />
     <Compile Include="Utilities\ZipSafe.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -180,6 +181,15 @@
     <EmbeddedResource Include="Forms\FileViewerForm.resx">
       <DependentUpon>FileViewerForm.cs</DependentUpon>
     </EmbeddedResource>
+    <Content Include="Resources\Themes\blue.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Resources\Themes\orange.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Resources\Themes\red.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="Lib\libcurl.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
