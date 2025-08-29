@@ -858,22 +858,28 @@ namespace GxPT
                         int w = 0;
                         foreach (var item in list.Items)
                         {
-                            // Determine current number for this indent level (continue across blocks)
+                            // Use original number if provided; otherwise continue sequence per indent level
                             int indent = item.IndentLevel;
-                            // Remove deeper indent counters when indent decreases
-                            if (numberedCounters != null && numberedCounters.Count > 0)
+                            if (item.Number.HasValue)
                             {
-                                var toRemove = new List<int>();
-                                foreach (var k in numberedCounters.Keys)
-                                    if (k > indent) toRemove.Add(k);
-                                for (int r = 0; r < toRemove.Count; r++) numberedCounters.Remove(toRemove[r]);
+                                // When original number is provided, do not alter counters for this level
                             }
-                            int current;
-                            if (numberedCounters == null || !numberedCounters.TryGetValue(indent, out current)) current = 0;
-                            int itemNumber = current + 1;
-                            if (numberedCounters != null) numberedCounters[indent] = itemNumber;
-                            // measure number + indented paragraph
-                            string numberText = itemNumber.ToString() + ".";
+                            else
+                            {
+                                if (numberedCounters != null && numberedCounters.Count > 0)
+                                {
+                                    var toRemove = new List<int>();
+                                    foreach (var k in numberedCounters.Keys)
+                                        if (k > indent) toRemove.Add(k);
+                                    for (int r = 0; r < toRemove.Count; r++) numberedCounters.Remove(toRemove[r]);
+                                }
+                            }
+                            int prev = 0; if (numberedCounters != null) numberedCounters.TryGetValue(indent, out prev);
+                            int itemNumber = item.Number.HasValue ? item.Number.Value : (prev + 1);
+                            if (!item.Number.HasValue && numberedCounters != null) numberedCounters[indent] = itemNumber;
+                            // measure number + indented paragraph using saved delimiter (default '.')
+                            char delim = item.NumberDelimiter != '\0' ? item.NumberDelimiter : '.';
+                            string numberText = itemNumber.ToString() + delim;
                             Size numberSize = TextRenderer.MeasureText(numberText, _baseFont);
                             int numberWidth = numberSize.Width + 4 + (item.IndentLevel * BulletIndent); // 4px gap after number
                             Size sz = MeasureInlineParagraph(item.Content, _baseFont, maxWidth - numberWidth, true);
@@ -1310,22 +1316,24 @@ namespace GxPT
                     var list = (NumberedListBlock)blk;
                     foreach (var item in list.Items)
                     {
-                        // determine sequential number based on indent level, continuing across blocks
+                        // Use original number if provided; otherwise continue sequence per indent
                         int indent = item.IndentLevel;
-                        // drop deeper levels if indent decreased
-                        if (numberedCounters.Count > 0)
+                        if (!item.Number.HasValue)
                         {
-                            var toRemove = new List<int>();
-                            foreach (var k in numberedCounters.Keys) if (k > indent) toRemove.Add(k);
-                            for (int r = 0; r < toRemove.Count; r++) numberedCounters.Remove(toRemove[r]);
+                            if (numberedCounters.Count > 0)
+                            {
+                                var toRemove = new List<int>();
+                                foreach (var k in numberedCounters.Keys) if (k > indent) toRemove.Add(k);
+                                for (int r = 0; r < toRemove.Count; r++) numberedCounters.Remove(toRemove[r]);
+                            }
                         }
-                        int prev;
-                        if (!numberedCounters.TryGetValue(indent, out prev)) prev = 0;
-                        int itemNumber = prev + 1;
-                        numberedCounters[indent] = itemNumber;
+                        int prev; if (!numberedCounters.TryGetValue(indent, out prev)) prev = 0;
+                        int itemNumber = item.Number.HasValue ? item.Number.Value : (prev + 1);
+                        if (!item.Number.HasValue) numberedCounters[indent] = itemNumber;
                         int indentX = x0 + (item.IndentLevel * BulletIndent);
                         // number
-                        string numberText = itemNumber.ToString() + ".";
+                        char delim = item.NumberDelimiter != '\0' ? item.NumberDelimiter : '.';
+                        string numberText = itemNumber.ToString() + delim;
                         Size numberSize = TextRenderer.MeasureText(numberText, _baseFont);
                         using (var brush = new SolidBrush(ForeColor))
                         {
@@ -2422,19 +2430,25 @@ namespace GxPT
                         else if (blk.Type == BlockType.NumberedList)
                         {
                             var list = (NumberedListBlock)blk;
-                            // Maintain numbering counters for accurate width when numbers exceed one digit or continue across lists
+                            // Maintain numbering counters only when items lack explicit numbers
                             var counters = new Dictionary<int, int>();
                             foreach (var item in list.Items)
                             {
                                 int indent = item.IndentLevel;
-                                if (counters.Count > 0)
+                                if (!item.Number.HasValue)
                                 {
-                                    var toRemove = new List<int>();
-                                    foreach (var k in counters.Keys) if (k > indent) toRemove.Add(k);
-                                    for (int r = 0; r < toRemove.Count; r++) counters.Remove(toRemove[r]);
+                                    if (counters.Count > 0)
+                                    {
+                                        var toRemove = new List<int>();
+                                        foreach (var k in counters.Keys) if (k > indent) toRemove.Add(k);
+                                        for (int r = 0; r < toRemove.Count; r++) counters.Remove(toRemove[r]);
+                                    }
                                 }
-                                int prev; if (!counters.TryGetValue(indent, out prev)) prev = 0; int itemNumber = prev + 1; counters[indent] = itemNumber;
-                                string numberText = itemNumber.ToString() + ".";
+                                int prev; if (!counters.TryGetValue(indent, out prev)) prev = 0;
+                                int itemNumber = item.Number.HasValue ? item.Number.Value : (prev + 1);
+                                if (!item.Number.HasValue) counters[indent] = itemNumber;
+                                char delim = item.NumberDelimiter != '\0' ? item.NumberDelimiter : '.';
+                                string numberText = itemNumber.ToString() + delim;
                                 int indentX = contentX + (item.IndentLevel * BulletIndent);
                                 Size numberSize = TextRenderer.MeasureText(numberText, _baseFont);
                                 int textX = indentX + numberSize.Width + 4;

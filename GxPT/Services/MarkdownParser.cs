@@ -59,6 +59,9 @@ namespace GxPT
     {
         public List<InlineRun> Content;
         public int IndentLevel; // 0 = top level, 1 = nested once, etc.
+        // For numbered lists, preserve the original number and delimiter ('.' or ')') from markdown
+        public int? Number; // null for bullets or when not parsed
+        public char NumberDelimiter; // '.' or ')'; default '.' when Number is set and delimiter not parsed
     }
 
     public sealed class InlineRun
@@ -232,12 +235,13 @@ namespace GxPT
                 // numbered item?
                 string numberedText;
                 int numberedIndent;
-                if (IsNumberedItem(line, out numberedText, out numberedIndent))
+                int numberedValue; char numberedDelim;
+                if (IsNumberedItem(line, out numberedText, out numberedIndent, out numberedValue, out numberedDelim))
                 {
                     flushParagraph();
                     flushBullets(); // switch list types
                     if (numberedAccum == null) numberedAccum = new List<ListItem>();
-                    numberedAccum.Add(new ListItem { Content = ParseInlines(numberedText), IndentLevel = numberedIndent });
+                    numberedAccum.Add(new ListItem { Content = ParseInlines(numberedText), IndentLevel = numberedIndent, Number = numberedValue, NumberDelimiter = numberedDelim == '\0' ? '.' : numberedDelim });
                     continue;
                 }
 
@@ -509,10 +513,12 @@ namespace GxPT
             return false;
         }
 
-        private static bool IsNumberedItem(string line, out string content, out int indentLevel)
+        private static bool IsNumberedItem(string line, out string content, out int indentLevel, out int number, out char delimiter)
         {
             content = null;
             indentLevel = 0;
+            number = 0;
+            delimiter = '\0';
 
             // Count leading spaces/tabs for nesting
             int i = 0;
@@ -533,6 +539,10 @@ namespace GxPT
             if (i > start && i < line.Length && (line[i] == '.' || line[i] == ')') &&
                 i + 1 < line.Length && (line[i + 1] == ' ' || line[i + 1] == '\t'))
             {
+                // Try parse number
+                try { number = int.Parse(line.Substring(start, i - start), System.Globalization.CultureInfo.InvariantCulture); }
+                catch { number = 0; }
+                delimiter = line[i];
                 content = line.Substring(i + 2).TrimEnd();
                 return true;
             }
@@ -631,9 +641,9 @@ namespace GxPT
                 if (l == null || l.Trim().Length == 0) break;
                 // stop on lines that look like other blocks (simple heuristic): heading, bullet, numbered, code fence
                 string tmpBulletText; int tmpBulletIndent;
-                string tmpNumText; int tmpNumIndent;
+                string tmpNumText; int tmpNumIndent; int tmpNumVal; char tmpNumDelim;
                 bool isBullet = IsBullet(l, out tmpBulletText, out tmpBulletIndent);
-                bool isNumbered = IsNumberedItem(l, out tmpNumText, out tmpNumIndent);
+                bool isNumbered = IsNumberedItem(l, out tmpNumText, out tmpNumIndent, out tmpNumVal, out tmpNumDelim);
                 if (HeadingLevel(l) > 0 || isBullet || isNumbered || l.TrimStart().StartsWith("```")) break;
                 if (l.IndexOf('|') < 0) break;
 
