@@ -44,6 +44,7 @@ namespace GxPT
             InitializeComponent();
             InitializeManagers();
             HookEvents();
+            InitializeDragAndDrop();
             InitializeClient();
 
             // Setup initial tab context for the designer-created tab
@@ -136,6 +137,142 @@ namespace GxPT
                 });
             }
             catch { }
+        }
+
+        // ===== Drag & Drop Attachments =====
+        private void InitializeDragAndDrop()
+        {
+            try
+            {
+                // Enable on the form
+                this.AllowDrop = true;
+                this.DragEnter -= MainForm_DragEnter;
+                this.DragEnter += MainForm_DragEnter;
+                this.DragDrop -= MainForm_DragDrop;
+                this.DragDrop += MainForm_DragDrop;
+
+                // Also enable on key child controls so drops over them are handled too
+                EnableDropOnControl(this.tabControl1);
+                EnableDropOnControl(this.chatTranscript);
+                EnableDropOnControl(this.splitContainer1);
+                EnableDropOnControl(this.pnlBottom);
+            }
+            catch { }
+        }
+
+        private void EnableDropOnControl(Control c)
+        {
+            if (c == null) return;
+            try
+            {
+                c.AllowDrop = true;
+                c.DragEnter -= MainForm_DragEnter;
+                c.DragEnter += MainForm_DragEnter;
+                c.DragDrop -= MainForm_DragDrop;
+                c.DragDrop += MainForm_DragDrop;
+            }
+            catch { }
+        }
+
+        private void MainForm_DragEnter(object sender, DragEventArgs e)
+        {
+            try
+            {
+                if (e != null && e.Data != null && e.Data.GetDataPresent(DataFormats.FileDrop))
+                {
+                    var files = e.Data.GetData(DataFormats.FileDrop) as string[];
+                    if (files != null && files.Length > 0)
+                    {
+                        foreach (var f in files)
+                        {
+                            if (IsSupportedAttachmentFile(f)) { e.Effect = DragDropEffects.Copy; return; }
+                        }
+                    }
+                }
+            }
+            catch { }
+            e.Effect = DragDropEffects.None;
+        }
+
+        private void MainForm_DragDrop(object sender, DragEventArgs e)
+        {
+            try
+            {
+                if (e == null || e.Data == null || !e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+                var files = e.Data.GetData(DataFormats.FileDrop) as string[];
+                if (files == null || files.Length == 0) return;
+                HandleDroppedFiles(files);
+            }
+            catch { }
+        }
+
+        private bool IsSupportedAttachmentFile(string path)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(path)) return false;
+                if (Directory.Exists(path)) return false; // folders not supported
+                string ext = Path.GetExtension(path);
+                ext = string.IsNullOrEmpty(ext) ? string.Empty : ext.ToLowerInvariant();
+                if (ext == ".pdf") return true;
+                return IsValidTextFile(path);
+            }
+            catch { return false; }
+        }
+
+        private void HandleDroppedFiles(IEnumerable<string> paths)
+        {
+            var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            if (ctx == null) return;
+
+            var skipped = new List<string>();
+            foreach (var path in paths)
+            {
+                if (string.IsNullOrEmpty(path)) continue;
+                try
+                {
+                    if (Directory.Exists(path)) { skipped.Add(Path.GetFileName(path) + " (folder)"); continue; }
+                    string ext = Path.GetExtension(path);
+                    ext = string.IsNullOrEmpty(ext) ? string.Empty : ext.ToLowerInvariant();
+                    bool isPdf = ext == ".pdf";
+                    if (!isPdf && !IsValidTextFile(path)) { skipped.Add(Path.GetFileName(path)); continue; }
+
+                    string content;
+                    if (isPdf)
+                    {
+                        content = ExtractTextFromPdf(path) ?? string.Empty;
+                    }
+                    else
+                    {
+                        using (var sr = new StreamReader(path, Encoding.UTF8, true))
+                            content = sr.ReadToEnd();
+                    }
+
+                    if (ctx.PendingAttachments == null) ctx.PendingAttachments = new List<AttachedFile>();
+                    ctx.PendingAttachments.Add(new AttachedFile(Path.GetFileName(path), content));
+                }
+                catch (Exception ex)
+                {
+                    try { Logger.Log("DnD", "Failed to attach dropped file: " + ex.Message); }
+                    catch { }
+                    skipped.Add(Path.GetFileName(path));
+                }
+            }
+
+            RebuildAttachmentsBanner();
+
+            if (skipped.Count > 0)
+            {
+                try
+                {
+                    MessageBox.Show(this,
+                        "Skipped unsupported items:\n - " + string.Join("\n - ", skipped.ToArray()),
+                        "Attach Files",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                }
+                catch { }
+            }
         }
 
         // Persist and restore open tabs (conversation IDs and active tab)
