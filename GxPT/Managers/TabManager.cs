@@ -566,6 +566,35 @@ namespace GxPT
             catch { }
         }
 
+        // Keyboard navigation helpers: cycle through tabs
+        public void SelectNextTab()
+        {
+            try
+            {
+                if (_tabControl == null) return;
+                int count = _tabControl.TabPages.Count;
+                if (count <= 0) return;
+                int idx = Math.Max(0, _tabControl.SelectedIndex);
+                int next = (idx + 1) % count;
+                _tabControl.SelectedIndex = next;
+            }
+            catch { }
+        }
+
+        public void SelectPreviousTab()
+        {
+            try
+            {
+                if (_tabControl == null) return;
+                int count = _tabControl.TabPages.Count;
+                if (count <= 0) return;
+                int idx = Math.Max(0, _tabControl.SelectedIndex);
+                int prev = (idx - 1 + count) % count;
+                _tabControl.SelectedIndex = prev;
+            }
+            catch { }
+        }
+
         public void ApplyFontSetting()
         {
             try
