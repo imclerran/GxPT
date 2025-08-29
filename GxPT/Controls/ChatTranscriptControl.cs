@@ -126,6 +126,16 @@ namespace GxPT
         private Color _clrScrollThumbBorder = Color.FromArgb(160, 160, 160);
         private bool _isDarkTheme;
 
+        // ---------- Selection ----------
+        private bool _isSelecting;                    // true while dragging
+        private bool _hasSelection;                   // true when a selection exists
+        private MessageItem _selectionItem;           // selection is scoped to one message
+        private Point _selStartVirt;                  // selection anchor (virtual coords)
+        private Point _selEndVirt;                    // selection caret (virtual coords)
+        private bool _suppressLinkClick;              // avoid link activation after drag
+        private Point _mouseDownClient;               // for drag threshold
+        private Color _clrSelectionBack = Color.FromArgb(96, 51, 153, 255); // semi-transparent highlight
+
 
         // ---------- Fonts ----------
         private Font _baseFont;         // default UI font
@@ -188,6 +198,8 @@ namespace GxPT
             public List<Rectangle> AttachmentPillRects; // computed per-draw for hit testing
             // Link hit rectangles captured at draw time (virtual coordinates)
             public List<LinkHit> LinkHits;
+            // Drawn inline text segments for selection/copy (paragraphs, headings, lists, table cells)
+            public List<DrawnSeg> DrawnSegments;
         }
 
         private readonly List<MessageItem> _items = new List<MessageItem>();
@@ -219,7 +231,7 @@ namespace GxPT
             Controls.Add(_vbar);
 
             _ctx = new ContextMenuStrip();
-            _ctx.Items.Add("Copy", null, delegate { if (_ctxHit != null) SafeClipboardSetText(_ctxHit.RawMarkdown ?? string.Empty); });
+            _ctx.Items.Add("Copy Message", null, delegate { if (_ctxHit != null) SafeClipboardSetText(_ctxHit.RawMarkdown ?? string.Empty); });
 
             _baseFont = this.Font;
             BuildFonts();
@@ -1204,7 +1216,16 @@ namespace GxPT
             Rectangle content = new Rectangle(r.X + BubblePadding, r.Y + BubblePadding, r.Width - 2 * BubblePadding, r.Height - 2 * BubblePadding);
             // Reset link hit rectangles for this item before drawing
             if (it.LinkHits == null) it.LinkHits = new List<LinkHit>(); else it.LinkHits.Clear();
+            // Reset drawn text segments list (for selection)
+            if (it.DrawnSegments == null) it.DrawnSegments = new List<DrawnSeg>(); else it.DrawnSegments.Clear();
             DrawBlocks(g, content, it.Blocks, it);
+
+            // Draw selection highlight overlay for this message, if active
+            if (_hasSelection && _selectionItem == it)
+            {
+                try { DrawSelection(g, it); }
+                catch { }
+            }
 
             // Draw attachment pills at the bottom of content area
             if (it.Attachments != null && it.Attachments.Count > 0)
@@ -1660,10 +1681,16 @@ namespace GxPT
                     xCursor = x;
                     lineWidth = 0;
                     lineHeight = baseFont.Height;
+                    // Record line break in drawn segments for selection/copy ordering
+                    if (owner != null)
+                    {
+                        if (owner.DrawnSegments == null) owner.DrawnSegments = new List<DrawnSeg>();
+                        owner.DrawnSegments.Add(new DrawnSeg { IsNewLine = true, Rect = new Rectangle(xCursor, yCursor, 0, 0), Text = null, Font = baseFont });
+                    }
                     continue;
                 }
 
-                Rectangle r = new Rectangle(xCursor, yCursor, seg.Rect.Width, seg.Rect.Height);
+                Rectangle r = new Rectangle(xCursor, yCursor, seg.Rect.Width, lineHeight);
 
                 if (seg.IsLink)
                 {
@@ -1752,6 +1779,12 @@ namespace GxPT
                         }
                     }
                 }
+                // Record drawn text segment for selection/copy
+                if (owner != null && !string.IsNullOrEmpty(seg.Text))
+                {
+                    if (owner.DrawnSegments == null) owner.DrawnSegments = new List<DrawnSeg>();
+                    owner.DrawnSegments.Add(new DrawnSeg { Rect = r, Text = seg.Text, IsNewLine = false, Font = seg.Font ?? baseFont });
+                }
                 xCursor += r.Width;
                 lineWidth += r.Width;
                 lineHeight = Math.Max(lineHeight, seg.Font.Height);
@@ -1760,6 +1793,84 @@ namespace GxPT
             // last line height
             yCursor += lineHeight + 2;
             return yCursor - y;
+        }
+
+        // Paint selection highlight rectangles for the current message
+        private void DrawSelection(Graphics g, MessageItem it)
+        {
+            if (!_hasSelection || it == null || it.DrawnSegments == null || it.DrawnSegments.Count == 0) return;
+            // Selection is defined by two virtual points (anchor and caret)
+            Point anchor = _selStartVirt;
+            Point caret = _selEndVirt;
+            int yTop = Math.Min(anchor.Y, caret.Y);
+            int yBot = Math.Max(anchor.Y, caret.Y);
+            int anchorX = anchor.X;
+            int caretX = caret.X;
+
+            // Determine start and end line rectangles (by Y)
+            Rectangle startLine = GetLineBoundsAtY(it, anchor.Y);
+            Rectangle endLine = GetLineBoundsAtY(it, caret.Y);
+            bool sameLine = (!startLine.IsEmpty && !endLine.IsEmpty && startLine.Top == endLine.Top && startLine.Bottom == endLine.Bottom);
+            bool directionDown = caret.Y > anchor.Y; // true when selecting top->bottom
+
+            using (var sb = new SolidBrush(_clrSelectionBack))
+            using (var fmt = StringFormat.GenericTypographic)
+            {
+                fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+                foreach (var ds in it.DrawnSegments)
+                {
+                    if (ds.IsNewLine) continue;
+                    Rectangle r = ds.Rect;
+                    if (r.Height <= 0 || r.Width <= 0) continue;
+                    if (r.Bottom <= yTop || r.Top >= yBot) continue; // outside vertical range
+
+                    int left = int.MinValue;
+                    int right = int.MaxValue;
+                    if (sameLine)
+                    {
+                        left = Math.Min(anchorX, caretX);
+                        right = Math.Max(anchorX, caretX);
+                    }
+                    else
+                    {
+                        // On the anchor (start) line
+                        if (LinesOverlap(r, startLine))
+                        {
+                            if (directionDown) left = anchorX; else right = anchorX;
+                        }
+                        // On the caret (end) line
+                        if (LinesOverlap(r, endLine))
+                        {
+                            if (directionDown) right = caretX; else left = caretX;
+                        }
+                    }
+
+                    var snap = SnapToCharRange(g, fmt, ds.Text ?? string.Empty, ds.Font ?? this.Font, r, left, right);
+                    if (snap.EndPx > snap.StartPx)
+                    {
+                        int L = r.Left + snap.StartPx;
+                        int R = r.Left + snap.EndPx;
+                        g.FillRectangle(sb, Rectangle.FromLTRB(L, r.Top, R, r.Bottom));
+                    }
+                }
+            }
+        }
+
+        private static bool LinesOverlap(Rectangle a, Rectangle b)
+        {
+            if (a.Height <= 0 || b.Height <= 0) return false;
+            return a.Top < b.Bottom && b.Top < a.Bottom;
+        }
+
+        private Rectangle GetLineBoundsAtY(MessageItem it, int y)
+        {
+            if (it == null || it.DrawnSegments == null) return Rectangle.Empty;
+            foreach (var ds in it.DrawnSegments)
+            {
+                if (ds.IsNewLine) continue;
+                if (y >= ds.Rect.Top && y < ds.Rect.Bottom) return ds.Rect;
+            }
+            return Rectangle.Empty;
         }
 
         private int MeasureInlineParagraphHeight(Graphics g, int maxWidth, List<InlineRun> runs, Font baseFont)
@@ -1895,6 +2006,26 @@ namespace GxPT
                 _draggingHScroll = false; _dragScrollItem = null; _dragScrollCodeIndex = -1; _dragScrollIsTable = false; Capture = false; Invalidate();
                 return;
             }
+            if (e.Button == MouseButtons.Left)
+            {
+                if (_isSelecting)
+                {
+                    // Finish selection; if tiny drag, clear selection
+                    Point virt = new Point(e.X, e.Y + _scrollOffset);
+                    _selEndVirt = virt;
+                    bool tiny = Math.Abs(_selEndVirt.X - _selStartVirt.X) < 3 && Math.Abs(_selEndVirt.Y - _selStartVirt.Y) < 3;
+                    _isSelecting = false;
+                    if (tiny)
+                    {
+                        _hasSelection = false; _selectionItem = null; _suppressLinkClick = false; Invalidate();
+                    }
+                    else
+                    {
+                        _hasSelection = true; Invalidate();
+                    }
+                    return;
+                }
+            }
             if (e.Button == MouseButtons.Right)
             {
                 _ctxHit = HitTest(e.Location);
@@ -1904,7 +2035,22 @@ namespace GxPT
                     {
                         // Rebuild context menu items for this hit
                         _ctx.Items.Clear();
-                        _ctx.Items.Add("Copy", null, delegate { if (_ctxHit != null) SafeClipboardSetText(_ctxHit.RawMarkdown ?? string.Empty); });
+                        if (_hasSelection && _selectionItem == _ctxHit)
+                        {
+                            _ctx.Items.Add("Copy Selection", null, delegate
+                            {
+                                try
+                                {
+                                    string sel = ExtractSelectedTextFromItem(_selectionItem);
+                                    if (!string.IsNullOrEmpty(sel)) SafeClipboardSetText(sel);
+                                }
+                                catch { }
+                            });
+                        }
+                        else
+                        {
+                            _ctx.Items.Add("Copy Message", null, delegate { if (_ctxHit != null) SafeClipboardSetText(_ctxHit.RawMarkdown ?? string.Empty); });
+                        }
                         if (_ctxHit.Role == MessageRole.User)
                         {
                             _ctx.Items.Add("Edit...", null, delegate
@@ -1956,24 +2102,27 @@ namespace GxPT
                 if (_copyPressedItem != null)
                 { _copyPressedItem = null; _copyPressedCodeIndex = -1; Invalidate(); }
                 // Link click detection
-                string link = HitTestLink(e.Location);
-                if (!string.IsNullOrEmpty(link))
+                if (!_hasSelection && !_suppressLinkClick)
                 {
-                    try
+                    string link = HitTestLink(e.Location);
+                    if (!string.IsNullOrEmpty(link))
                     {
-                        string supermiumPath = @"C:\\Program Files\\Supermium\\chrome.exe";
-                        if (IsWindowsXP() && File.Exists(supermiumPath))
+                        try
                         {
-                            // On XP (no reliable default browser override), prefer Supermium if installed
-                            System.Diagnostics.Process.Start(supermiumPath, link);
+                            string supermiumPath = @"C:\\Program Files\\Supermium\\chrome.exe";
+                            if (IsWindowsXP() && File.Exists(supermiumPath))
+                            {
+                                // On XP (no reliable default browser override), prefer Supermium if installed
+                                System.Diagnostics.Process.Start(supermiumPath, link);
+                            }
+                            else
+                            {
+                                // On newer OS (or if Supermium absent), let shell pick the default handler
+                                System.Diagnostics.Process.Start(link);
+                            }
                         }
-                        else
-                        {
-                            // On newer OS (or if Supermium absent), let shell pick the default handler
-                            System.Diagnostics.Process.Start(link);
-                        }
+                        catch { }
                     }
-                    catch { }
                 }
             }
         }
@@ -1983,6 +2132,7 @@ namespace GxPT
             base.OnMouseDown(e);
             if (e.Button == MouseButtons.Left)
             {
+                _mouseDownClient = e.Location; _suppressLinkClick = false;
                 var pill = HitTestAttachmentPill(e.Location);
                 if (pill.Item != null && pill.Index >= 0)
                 {
@@ -2027,6 +2177,23 @@ namespace GxPT
                         return;
                     }
                 }
+
+                // Begin text selection within a message
+                var hitItem = HitTest(e.Location);
+                if (hitItem != null)
+                {
+                    _selectionItem = hitItem;
+                    Point virt = new Point(e.X, e.Y + _scrollOffset);
+                    _selStartVirt = virt; _selEndVirt = virt;
+                    _isSelecting = true; _hasSelection = false;
+                    Invalidate();
+                    return;
+                }
+                else
+                {
+                    // Clicked outside messages; clear selection
+                    _isSelecting = false; _hasSelection = false; _selectionItem = null; Invalidate();
+                }
             }
         }
 
@@ -2048,6 +2215,17 @@ namespace GxPT
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
+            if (_isSelecting)
+            {
+                Point virt = new Point(e.X, e.Y + _scrollOffset);
+                _selEndVirt = virt;
+                if (Math.Abs(e.X - _mouseDownClient.X) >= 3 || Math.Abs(e.Y - _mouseDownClient.Y) >= 3)
+                {
+                    _suppressLinkClick = true; _hasSelection = true;
+                }
+                Invalidate();
+                return;
+            }
             if (_draggingHScroll && _dragScrollItem != null)
             {
                 // update scroll based on mouse delta
@@ -2592,6 +2770,205 @@ namespace GxPT
         {
             public Rectangle Rect;
             public string Url;
+        }
+
+        // Drawn text segment for selection
+        private struct DrawnSeg
+        {
+            public Rectangle Rect;   // virtual coords
+            public string Text;      // text content
+            public bool IsNewLine;   // marks a line break
+            public Font Font;        // font used for measuring
+        }
+
+        // 50% snapping support: maps a pixel span to character-boundary indices and pixel offsets within a run
+        private struct CharRangeSnapResult
+        {
+            public int StartIndex; // inclusive
+            public int EndIndex;   // exclusive
+            public int StartPx;    // pixels from runRect.Left
+            public int EndPx;      // pixels from runRect.Left
+        }
+
+        private static CharRangeSnapResult SnapToCharRange(Graphics g, StringFormat fmt, string text, Font font, Rectangle runRect, int leftPxAbs, int rightPxAbs)
+        {
+            CharRangeSnapResult res = new CharRangeSnapResult { StartIndex = 0, EndIndex = 0, StartPx = 0, EndPx = 0 };
+            if (string.IsNullOrEmpty(text) || font == null) return res;
+
+            // Clamp absolute L/R to run bounds
+            int absL = (leftPxAbs == int.MinValue) ? runRect.Left : leftPxAbs;
+            int absR = (rightPxAbs == int.MaxValue) ? runRect.Right : rightPxAbs;
+            int pxL = Math.Max(runRect.Left, Math.Min(absL, runRect.Right));
+            int pxR = Math.Max(runRect.Left, Math.Min(absR, runRect.Right));
+            if (pxR <= pxL) return res;
+
+            int relL = pxL - runRect.Left;
+            int relR = pxR - runRect.Left;
+
+            int len = text.Length;
+            float[] cum = new float[len + 1];
+            cum[0] = 0f;
+            for (int i = 1; i <= len; i++)
+            {
+                string sub = text.Substring(0, i);
+                SizeF sz = g.MeasureString(sub.Length == 0 ? " " : sub, font, PointF.Empty, fmt);
+                cum[i] = sz.Width;
+            }
+
+            float totalW = cum[len];
+
+            int startIdx;
+            if (relL <= 0) startIdx = 0;
+            else if (relL >= totalW) startIdx = len;
+            else
+            {
+                int i = 0; while (i < len && cum[i + 1] <= relL) i++;
+                float mid = (cum[i] + cum[i + 1]) * 0.5f;
+                startIdx = (relL >= mid) ? (i + 1) : i;
+            }
+
+            int endIdx;
+            if (relR <= 0) endIdx = 0;
+            else if (relR >= totalW) endIdx = len;
+            else
+            {
+                int i = 0; while (i < len && cum[i + 1] <= relR) i++;
+                float mid = (cum[i] + cum[i + 1]) * 0.5f;
+                endIdx = (relR > mid) ? (i + 1) : i;
+            }
+
+            if (endIdx < startIdx) endIdx = startIdx;
+            int startPx = (int)Math.Round(cum[startIdx]);
+            int endPx = (int)Math.Round(cum[endIdx]);
+
+            res.StartIndex = startIdx;
+            res.EndIndex = endIdx;
+            res.StartPx = startPx;
+            res.EndPx = endPx;
+            return res;
+        }
+
+        // Extract selected text from the current message item
+        private string ExtractSelectedTextFromItem(MessageItem it)
+        {
+            if (!_hasSelection || it == null || it.DrawnSegments == null || it.DrawnSegments.Count == 0) return string.Empty;
+            Point anchor = _selStartVirt; Point caret = _selEndVirt;
+            int yTop = Math.Min(anchor.Y, caret.Y);
+            int yBot = Math.Max(anchor.Y, caret.Y);
+            int anchorX = anchor.X;
+            int caretX = caret.X;
+
+            Rectangle startLine = GetLineBoundsAtY(it, anchor.Y);
+            Rectangle endLine = GetLineBoundsAtY(it, caret.Y);
+            bool sameLine = (!startLine.IsEmpty && !endLine.IsEmpty && startLine.Top == endLine.Top && startLine.Bottom == endLine.Bottom);
+            bool directionDown = caret.Y > anchor.Y; // true when selecting top->bottom
+
+            var sb = new System.Text.StringBuilder();
+            int currentLineTop = int.MinValue;
+            bool wroteOnThisLine = false;
+
+            using (Graphics g = CreateGraphics())
+            using (var fmt = StringFormat.GenericTypographic)
+            {
+                fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+                foreach (var ds in it.DrawnSegments)
+                {
+                    if (ds.IsNewLine)
+                    {
+                        if (wroteOnThisLine)
+                        {
+                            sb.Append("\n");
+                            wroteOnThisLine = false;
+                        }
+                        continue;
+                    }
+                    Rectangle r = ds.Rect;
+                    if (r.Height <= 0 || r.Width <= 0) continue;
+                    if (r.Bottom <= yTop || r.Top >= yBot) continue;
+
+                    if (r.Top != currentLineTop)
+                    {
+                        // New line encountered
+                        if (currentLineTop != int.MinValue && wroteOnThisLine)
+                        {
+                            sb.Append("\n");
+                            wroteOnThisLine = false;
+                        }
+                        currentLineTop = r.Top;
+                    }
+
+                    int left = int.MinValue; int right = int.MaxValue;
+                    if (sameLine)
+                    {
+                        left = Math.Min(anchorX, caretX);
+                        right = Math.Max(anchorX, caretX);
+                    }
+                    else
+                    {
+                        if (LinesOverlap(r, startLine))
+                        {
+                            if (directionDown) left = anchorX; else right = anchorX;
+                        }
+                        if (LinesOverlap(r, endLine))
+                        {
+                            if (directionDown) right = caretX; else left = caretX;
+                        }
+                    }
+
+                    var snap = SnapToCharRange(g, fmt, ds.Text ?? string.Empty, ds.Font ?? this.Font, r, left, right);
+                    if (snap.EndIndex > snap.StartIndex)
+                    {
+                        string part = (ds.Text ?? string.Empty).Substring(snap.StartIndex, snap.EndIndex - snap.StartIndex);
+                        if (part.Length > 0)
+                        {
+                            sb.Append(part);
+                            wroteOnThisLine = true;
+                        }
+                    }
+                }
+            }
+
+            // Trim optional trailing newline
+            string result = sb.ToString();
+            if (result.EndsWith("\n")) result = result.TrimEnd('\n');
+            return result;
+        }
+
+        private static string SubstringByPixelRange(Graphics g, StringFormat fmt, string text, Font font, int pxStart, int pxEnd)
+        {
+            if (string.IsNullOrEmpty(text)) return string.Empty;
+            if (pxEnd <= 0) return string.Empty;
+            if (pxStart <= 0 && pxEnd == int.MaxValue) return text;
+
+            // Find start index
+            int start = 0, end = text.Length;
+            if (pxStart > 0)
+            {
+                int lo = 0, hi = text.Length;
+                while (lo < hi)
+                {
+                    int mid = (lo + hi) / 2;
+                    string sub = text.Substring(0, mid);
+                    SizeF sz = g.MeasureString(sub.Length == 0 ? " " : sub, font, PointF.Empty, fmt);
+                    if (sz.Width < pxStart) lo = mid + 1; else hi = mid;
+                }
+                start = Math.Min(lo, text.Length);
+            }
+
+            // Find end index
+            if (pxEnd != int.MaxValue)
+            {
+                int lo = start, hi = text.Length;
+                while (lo < hi)
+                {
+                    int mid = (lo + hi + 1) / 2;
+                    string sub = text.Substring(0, mid);
+                    SizeF sz = g.MeasureString(sub.Length == 0 ? " " : sub, font, PointF.Empty, fmt);
+                    if (sz.Width <= pxEnd) lo = mid; else hi = mid - 1;
+                }
+                end = Math.Max(lo, start);
+            }
+            return (end > start) ? text.Substring(start, end - start) : string.Empty;
         }
     }
 }
