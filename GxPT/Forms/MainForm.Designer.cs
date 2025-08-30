@@ -66,6 +66,10 @@
             this.tabPage1 = new System.Windows.Forms.TabPage();
             this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.splitContainer1 = new System.Windows.Forms.SplitContainer();
+            this.miNextTab = new System.Windows.Forms.ToolStripMenuItem();
+            this.miPreviousTab = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStripSeparator5 = new System.Windows.Forms.ToolStripSeparator();
+            this.toolStripSeparator6 = new System.Windows.Forms.ToolStripSeparator();
             this.msMain.SuspendLayout();
             this.pnlInput.SuspendLayout();
             this.pnlInputRight.SuspendLayout();
@@ -179,6 +183,10 @@
             // 
             this.miView.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.miConversationHistory,
+            this.toolStripSeparator5,
+            this.miNextTab,
+            this.miPreviousTab,
+            this.toolStripSeparator6,
             this.miDarkMode});
             this.miView.Name = "miView";
             this.miView.Size = new System.Drawing.Size(44, 20);
@@ -439,6 +447,33 @@
             this.splitContainer1.SplitterWidth = 1;
             this.splitContainer1.TabIndex = 1;
             // 
+            // miNextTab
+            // 
+            this.miNextTab.Name = "miNextTab";
+            this.miNextTab.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.Tab)));
+            this.miNextTab.Size = new System.Drawing.Size(228, 22);
+            this.miNextTab.Text = "&Next Tab";
+            this.miNextTab.Click += new System.EventHandler(this.miNextTab_Click);
+            // 
+            // miPreviousTab
+            // 
+            this.miPreviousTab.Name = "miPreviousTab";
+            this.miPreviousTab.ShortcutKeys = ((System.Windows.Forms.Keys)(((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.Shift)
+                        | System.Windows.Forms.Keys.Tab)));
+            this.miPreviousTab.Size = new System.Drawing.Size(228, 22);
+            this.miPreviousTab.Text = "&Previous Tab";
+            this.miPreviousTab.Click += new System.EventHandler(this.miPreviousTab_Click);
+            // 
+            // toolStripSeparator5
+            // 
+            this.toolStripSeparator5.Name = "toolStripSeparator5";
+            this.toolStripSeparator5.Size = new System.Drawing.Size(225, 6);
+            // 
+            // toolStripSeparator6
+            // 
+            this.toolStripSeparator6.Name = "toolStripSeparator6";
+            this.toolStripSeparator6.Size = new System.Drawing.Size(225, 6);
+            // 
             // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -512,6 +547,10 @@
         private System.Windows.Forms.FlowLayoutPanel pnlAttachmentsBanner;
         private System.Windows.Forms.ToolStripMenuItem miDarkMode;
         private System.Windows.Forms.ToolStripMenuItem miDeleteConversations;
+        private System.Windows.Forms.ToolStripMenuItem miNextTab;
+        private System.Windows.Forms.ToolStripMenuItem miPreviousTab;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator5;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator6;
     }
 }
 

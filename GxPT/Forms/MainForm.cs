@@ -2609,29 +2609,39 @@ namespace GxPT
             catch { }
         }
 
-        // Enable cycling tabs with Ctrl+Tab (next) and Ctrl+Shift+Tab (previous)
-        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        //// Enable cycling tabs with Ctrl+Tab (next) and Ctrl+Shift+Tab (previous)
+        //protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        //{
+        //    try
+        //    {
+        //        // Check for Ctrl modifier and Tab key
+        //        if ((keyData & Keys.Control) == Keys.Control)
+        //        {
+        //            var keyCode = keyData & Keys.KeyCode;
+        //            if (keyCode == Keys.Tab)
+        //            {
+        //                bool shift = (keyData & Keys.Shift) == Keys.Shift;
+        //                if (_tabManager != null)
+        //                {
+        //                    if (shift) _tabManager.SelectPreviousTab();
+        //                    else _tabManager.SelectNextTab();
+        //                    return true; // handled
+        //                }
+        //            }
+        //        }
+        //    }
+        //    catch { }
+        //    return base.ProcessCmdKey(ref msg, keyData);
+        //}
+
+        private void miNextTab_Click(object sender, EventArgs e)
         {
-            try
-            {
-                // Check for Ctrl modifier and Tab key
-                if ((keyData & Keys.Control) == Keys.Control)
-                {
-                    var keyCode = keyData & Keys.KeyCode;
-                    if (keyCode == Keys.Tab)
-                    {
-                        bool shift = (keyData & Keys.Shift) == Keys.Shift;
-                        if (_tabManager != null)
-                        {
-                            if (shift) _tabManager.SelectPreviousTab();
-                            else _tabManager.SelectNextTab();
-                            return true; // handled
-                        }
-                    }
-                }
-            }
-            catch { }
-            return base.ProcessCmdKey(ref msg, keyData);
+            _tabManager.SelectNextTab();
+        }
+
+        private void miPreviousTab_Click(object sender, EventArgs e)
+        {
+            _tabManager.SelectPreviousTab();
         }
     }
 }
