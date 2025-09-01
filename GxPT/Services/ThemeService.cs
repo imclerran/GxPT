@@ -126,16 +126,41 @@ namespace GxPT
     // JSON DTOs
     internal sealed class ThemeFileDto
     {
-        public string id; public string name; public ThemePaletteDto light; public ThemePaletteDto dark;
+        public string id { get; set; }
+        public string name { get; set; }
+        public ThemePaletteDto light { get; set; }
+        public ThemePaletteDto dark { get; set; }
     }
 
     internal sealed class ThemePaletteDto
     {
-        public string uiBackground; public string uiForeground; public BubbleDto userBubble; public BubbleDto assistantBubble; public BubbleDto systemBubble; public CodeDto code; public string link; public string copyHover; public string copyPressed; public string scrollTrack; public string scrollThumb; public string scrollTrackBorder; public string scrollThumbBorder;
+        public string uiBackground { get; set; }
+        public string uiForeground { get; set; }
+        public BubbleDto userBubble { get; set; }
+        public BubbleDto assistantBubble { get; set; }
+        public BubbleDto systemBubble { get; set; }
+        public CodeDto code { get; set; }
+        public string link { get; set; }
+        public string copyHover { get; set; }
+        public string copyPressed { get; set; }
+        public string scrollTrack { get; set; }
+        public string scrollThumb { get; set; }
+        public string scrollTrackBorder { get; set; }
+        public string scrollThumbBorder { get; set; }
     }
 
-    internal sealed class BubbleDto { public string background; public string border; }
-    internal sealed class CodeDto { public string background; public string border; public string inlineBackground; public string inlineBorder; }
+    internal sealed class BubbleDto
+    {
+        public string background { get; set; }
+        public string border { get; set; }
+    }
+    internal sealed class CodeDto
+    {
+        public string background { get; set; }
+        public string border { get; set; }
+        public string inlineBackground { get; set; }
+        public string inlineBorder { get; set; }
+    }
 
     internal static class ThemeService
     {
