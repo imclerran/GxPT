@@ -26,7 +26,7 @@ namespace GxPT
         private TabManager _tabManager;
         private ThemeManager _themeManager;
         private InputManager _inputManager;
-        // Attachments are tracked per-tab in TabManager.ChatTabContext.PendingAttachments
+        private AttachmentService _attachmentService;
 
         private bool _syncingModelCombo; // avoid event feedback loops when syncing combo text
 
@@ -183,9 +183,12 @@ namespace GxPT
                     var files = e.Data.GetData(DataFormats.FileDrop) as string[];
                     if (files != null && files.Length > 0)
                     {
-                        foreach (var f in files)
+                        EnsureAttachmentService();
+                        for (int i = 0; i < files.Length; i++)
                         {
-                            if (IsSupportedAttachmentFile(f)) { e.Effect = DragDropEffects.Copy; return; }
+                            var f = files[i];
+                            if (_attachmentService != null && _attachmentService.IsSupported(f))
+                            { e.Effect = DragDropEffects.Copy; return; }
                         }
                     }
                 }
@@ -206,62 +209,22 @@ namespace GxPT
             catch { }
         }
 
-        private bool IsSupportedAttachmentFile(string path)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(path)) return false;
-                if (Directory.Exists(path)) return false; // folders not supported
-                string ext = Path.GetExtension(path);
-                ext = string.IsNullOrEmpty(ext) ? string.Empty : ext.ToLowerInvariant();
-                if (ext == ".pdf") return true;
-                return IsValidTextFile(path);
-            }
-            catch { return false; }
-        }
-
         private void HandleDroppedFiles(IEnumerable<string> paths)
         {
             var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
             if (ctx == null) return;
-
-            var skipped = new List<string>();
-            foreach (var path in paths)
+            EnsureAttachmentService();
+            List<string> skipped = new List<string>();
+            var extracted = (_attachmentService != null) ? _attachmentService.ExtractMany(paths, out skipped) : new List<AttachedFile>();
+            if (extracted != null && extracted.Count > 0)
             {
-                if (string.IsNullOrEmpty(path)) continue;
-                try
-                {
-                    if (Directory.Exists(path)) { skipped.Add(Path.GetFileName(path) + " (folder)"); continue; }
-                    string ext = Path.GetExtension(path);
-                    ext = string.IsNullOrEmpty(ext) ? string.Empty : ext.ToLowerInvariant();
-                    bool isPdf = ext == ".pdf";
-                    if (!isPdf && !IsValidTextFile(path)) { skipped.Add(Path.GetFileName(path)); continue; }
-
-                    string content;
-                    if (isPdf)
-                    {
-                        content = ExtractTextFromPdf(path) ?? string.Empty;
-                    }
-                    else
-                    {
-                        using (var sr = new StreamReader(path, Encoding.UTF8, true))
-                            content = sr.ReadToEnd();
-                    }
-
-                    if (ctx.PendingAttachments == null) ctx.PendingAttachments = new List<AttachedFile>();
-                    ctx.PendingAttachments.Add(new AttachedFile(Path.GetFileName(path), content));
-                }
-                catch (Exception ex)
-                {
-                    try { Logger.Log("DnD", "Failed to attach dropped file: " + ex.Message); }
-                    catch { }
-                    skipped.Add(Path.GetFileName(path));
-                }
+                if (ctx.PendingAttachments == null) ctx.PendingAttachments = new List<AttachedFile>();
+                ctx.PendingAttachments.AddRange(extracted);
             }
 
             RebuildAttachmentsBanner();
 
-            if (skipped.Count > 0)
+            if (skipped != null && skipped.Count > 0)
             {
                 try
                 {
@@ -1500,88 +1463,34 @@ namespace GxPT
         {
             var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
             if (ctx == null) return;
+            EnsureAttachmentService();
             using (var ofd = new OpenFileDialog())
             {
-                ofd.Title = "Attach Text or PDF File(s)";
+                ofd.Title = "Attach File(s)";
                 ofd.Multiselect = true;
-                ofd.Filter = BuildAttachableFilesFilter();
+                ofd.Filter = (_attachmentService != null) ? _attachmentService.BuildOpenFileDialogFilter() : "All Files|*.*";
                 ofd.CheckFileExists = true;
                 if (ofd.ShowDialog(this) != DialogResult.OK) return;
-
-                foreach (var path in ofd.FileNames)
+                List<string> skipped = new List<string>();
+                var extracted = (_attachmentService != null) ? _attachmentService.ExtractMany(ofd.FileNames, out skipped) : new List<AttachedFile>();
+                if (extracted != null && extracted.Count > 0)
                 {
-                    string ext = null;
-                    try { ext = System.IO.Path.GetExtension(path); }
-                    catch { }
-                    ext = string.IsNullOrEmpty(ext) ? string.Empty : ext.ToLowerInvariant();
-                    bool isPdf = ext == ".pdf";
-                    if (!isPdf && !IsValidTextFile(path))
-                    {
-                        MessageBox.Show(this, "Skipped non-text file: " + System.IO.Path.GetFileName(path), "Attach File", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        continue;
-                    }
+                    if (ctx.PendingAttachments == null) ctx.PendingAttachments = new List<AttachedFile>();
+                    ctx.PendingAttachments.AddRange(extracted);
+                }
+                if (skipped != null && skipped.Count > 0)
+                {
                     try
                     {
-                        string content;
-                        if (isPdf)
-                        {
-                            content = ExtractTextFromPdf(path);
-                            if (string.IsNullOrEmpty(content))
-                                content = ""; // still allow empty to attach as placeholder
-                        }
-                        else
-                        {
-                            using (var sr = new StreamReader(path, Encoding.UTF8, true))
-                                content = sr.ReadToEnd();
-                        }
-                        ctx.PendingAttachments.Add(new AttachedFile(System.IO.Path.GetFileName(path), content));
+                        MessageBox.Show(this,
+                            "Skipped unsupported items:\n - " + string.Join("\n - ", skipped.ToArray()),
+                            "Attach Files",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Information);
                     }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show(this, "Failed to read file: " + ex.Message, "Attach File", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    }
+                    catch { }
                 }
                 RebuildAttachmentsBanner();
-            }
-        }
-
-        // Include PDF in the filter as well as text-based files
-        private string BuildAttachableFilesFilter()
-        {
-            var textFilter = BuildTextFilesFilter();
-            // BuildTextFilesFilter returns like: "Text Files|<patterns>|All Files|*.*"
-            // Prepend a PDF option for convenience
-            return "Supported Files|" + textFilter + ";*.pdf" + "|Text Files|" + textFilter + "|PDF Files|*.pdf" + "|All Files|*.*";
-        }
-
-        // Extract text from PDF using iTextSharp 5.x LocationTextExtractionStrategy
-        private string ExtractTextFromPdf(string filePath)
-        {
-            try
-            {
-                var sb = new StringBuilder(4096);
-                using (var reader = new PdfReader(filePath))
-                {
-                    int n = reader.NumberOfPages;
-                    for (int page = 1; page <= n; page++)
-                    {
-                        Parser.ITextExtractionStrategy strategy = new Parser.LocationTextExtractionStrategy();
-                        string pageText = Parser.PdfTextExtractor.GetTextFromPage(reader, page, strategy);
-                        pageText = SanitizeDisplayText(pageText);
-                        if (!string.IsNullOrEmpty(pageText))
-                        {
-                            sb.AppendLine(pageText);
-                            sb.AppendLine();
-                        }
-                    }
-                }
-                return sb.ToString();
-            }
-            catch (Exception ex)
-            {
-                try { Logger.Log("PDF", "Failed to extract PDF: " + ex.Message); }
-                catch { }
-                throw;
             }
         }
 
@@ -1639,92 +1548,19 @@ namespace GxPT
             return cleaned;
         }
 
-        private string BuildTextFilesFilter()
+        private void EnsureAttachmentService()
         {
-            // Cover common text files + all highlighter-related types
-            var exts = new List<string>();
-
-            // General text
-            exts.AddRange(new[] { "*.txt", "*.md", "*.markdown", "*.log", "*.toml", "*.gitignore", "*.dockerfile", "*.makefile", "*.cmake", "*.diff", "*.patch", "*.csv", "*.sln" });
-
-            // Dockerfiles & Makefiles (support common no-extension names and variants)
-            exts.AddRange(new[] { "Dockerfile", "Dockerfile.*" });
-            exts.AddRange(new[] { "Makefile", "makefile", "GNUmakefile", "Makefile.*", "makefile.*" });
-
-            // From highlighters
-            exts.AddRange(AssemblyHighlighter.FileTypes);
-            exts.AddRange(BashHighlighter.FileTypes);
-            exts.AddRange(BasicHighlighter.FileTypes);
-            exts.AddRange(BatchHighlighter.FileTypes);
-            exts.AddRange(CHighlighter.FileTypes);
-            exts.AddRange(CppHighlighter.FileTypes);
-            exts.AddRange(CSharpHighlighter.FileTypes);
-            exts.AddRange(CssHighlighter.FileTypes);
-            exts.AddRange(CsvHighlighter.FileTypes);
-            exts.AddRange(EbnfHighlighter.FileTypes);
-            exts.AddRange(FortranHighlighter.FileTypes);
-            exts.AddRange(FSharpHighlighter.FileTypes);
-            exts.AddRange(GoHighlighter.FileTypes);
-            exts.AddRange(HtmlHighlighter.FileTypes);
-            exts.AddRange(JavaHighlighter.FileTypes);
-            exts.AddRange(JavaScriptHighlighter.FileTypes);
-            exts.AddRange(JsonHighlighter.FileTypes);
-            exts.AddRange(LuaHighlighter.FileTypes);
-            exts.AddRange(PascalHighlighter.FileTypes);
-            exts.AddRange(PerlHighlighter.FileTypes);
-            exts.AddRange(PowerShellHighlighter.FileTypes);
-            exts.AddRange(PropertiesHighlighter.FileTypes);
-            exts.AddRange(PythonHighlighter.FileTypes);
-            exts.AddRange(RubyHighlighter.FileTypes);
-            exts.AddRange(RegexHighlighter.FileTypes);
-            exts.AddRange(RustHighlighter.FileTypes);
-            exts.AddRange(SqlHighlighter.FileTypes);
-            exts.AddRange(TypeScriptHighlighter.FileTypes);
-            exts.AddRange(VisualBasicHighlighter.FileTypes);
-            exts.AddRange(XmlHighlighter.FileTypes);
-            exts.AddRange(YamlHighlighter.FileTypes);
-            exts.AddRange(ZigHighlighter.FileTypes);
-
-            // Deduplicate
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var sb = new StringBuilder();
-            for (int i = 0; i < exts.Count; i++)
+            if (_attachmentService == null)
             {
-                string e = exts[i];
-                if (string.IsNullOrEmpty(e)) continue;
-                if (seen.Contains(e)) continue;
-                if (sb.Length > 0) sb.Append(';');
-                sb.Append(e);
-                seen.Add(e);
+                // Inject syntax-highlighter file extensions into the attachment service
+                string[] patterns = null;
+                try { patterns = SyntaxHighlighter.GetAllHighlighterFilePatterns(); }
+                catch { patterns = null; }
+                if (patterns != null && patterns.Length > 0)
+                    _attachmentService = new AttachmentService(patterns);
+                else
+                    _attachmentService = new AttachmentService();
             }
-            return sb.ToString();
-        }
-
-        private bool IsValidTextFile(string filePath)
-        {
-            try
-            {
-                var fi = new FileInfo(filePath);
-                if (fi.Length > 10 * 1024 * 1024) return false; // 10 MB guard
-                int sampleSize = (int)Math.Min(8192, fi.Length);
-                byte[] buffer = new byte[sampleSize];
-                using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
-                {
-                    int read = fs.Read(buffer, 0, buffer.Length);
-                    if (read <= 0) return true; // empty is fine
-                }
-                int nulls = 0, ctrls = 0;
-                for (int i = 0; i < buffer.Length; i++)
-                {
-                    byte b = buffer[i];
-                    if (b == 0) nulls++;
-                    else if (b < 32 && b != 9 && b != 10 && b != 13) ctrls++;
-                }
-                double nratio = (double)nulls / buffer.Length;
-                double cratio = (double)ctrls / buffer.Length;
-                return nratio < 0.01 && cratio < 0.02;
-            }
-            catch { return false; }
         }
 
         private void RebuildAttachmentsBanner()

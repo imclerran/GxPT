@@ -47,6 +47,10 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="DocumentFormat.OpenXml, Version=3.3.0.0, Culture=neutral, PublicKeyToken=8fb06cb64d019a17, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>Lib\DocumentFormat.OpenXml.dll</HintPath>
+    </Reference>
     <Reference Include="DotNetZip, Version=1.12.0.0, Culture=neutral, PublicKeyToken=6583c7c814667745, processorArchitecture=MSIL">
       <HintPath>lib\DotNetZip.dll</HintPath>
     </Reference>
@@ -96,6 +100,8 @@
     <Compile Include="Forms\FileViewerForm.Designer.cs">
       <DependentUpon>FileViewerForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="Services\AttachmentService.cs" />
+    <Compile Include="Services\DocxAttachmentExtractor.cs" />
     <Compile Include="Services\HoverWheelRouter.cs" />
     <Compile Include="Managers\InputManager.cs" />
     <Compile Include="Services\Logger.cs" />
@@ -143,6 +149,7 @@
       <DependentUpon>Settings.settings</DependentUpon>
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
     </Compile>
+    <Compile Include="Services\PdfAttachmentExtractor.cs" />
     <Compile Include="Services\ResourceHelper.cs" />
     <Compile Include="Highlighting\RichTextBoxSyntaxHighlighter.cs" />
     <Compile Include="Forms\SettingsForm.cs">
@@ -158,6 +165,7 @@
     <Compile Include="Services\SyntaxHighlightingRenderer.cs" />
     <Compile Include="Managers\TabManager.cs" />
     <Compile Include="Managers\ThemeManager.cs" />
+    <Compile Include="Services\TextFileAttachmentExtractor.cs" />
     <Compile Include="Services\ThemeService.cs" />
     <Compile Include="Utilities\ZipSafe.cs" />
   </ItemGroup>
