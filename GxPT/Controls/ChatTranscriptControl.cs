@@ -2304,15 +2304,15 @@ namespace GxPT
                         return;
                     }
                 }
-
-                // Begin text selection within a message
+                // Prepare for a potential selection within a message, but don't start until drag threshold crossed
                 var hitItem = HitTest(e.Location);
                 if (hitItem != null)
                 {
                     _selectionItem = hitItem;
                     Point virt = new Point(e.X, e.Y + _scrollOffset);
                     _selStartVirt = virt; _selEndVirt = virt;
-                    _isSelecting = true; _hasSelection = false;
+                    // Do NOT set _isSelecting yet; wait for drag threshold in OnMouseMove
+                    _hasSelection = false;
                     Invalidate();
                     return;
                 }
@@ -2342,6 +2342,22 @@ namespace GxPT
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
+            // If mouse is down over a message but we haven't entered selection yet, start selection on threshold
+            if (!_isSelecting && _selectionItem != null && (Control.MouseButtons & MouseButtons.Left) == MouseButtons.Left)
+            {
+                if (Math.Abs(e.X - _mouseDownClient.X) >= 3 || Math.Abs(e.Y - _mouseDownClient.Y) >= 3)
+                {
+                    // Crossed drag threshold: begin selection
+                    _isSelecting = true;
+                    _hasSelection = true;
+                    _suppressLinkClick = true;
+                    Point virtStart = _selStartVirt; // already set on mouse down
+                    Point virtNow = new Point(e.X, e.Y + _scrollOffset);
+                    _selEndVirt = virtNow;
+                    Invalidate();
+                    return;
+                }
+            }
             if (_isSelecting)
             {
                 Point virt = new Point(e.X, e.Y + _scrollOffset);
