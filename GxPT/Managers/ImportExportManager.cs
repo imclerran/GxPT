@@ -96,7 +96,7 @@ namespace GxPT
             string displayName = string.IsNullOrEmpty(info.Name) ? (info.Id ?? "Conversation") : info.Name;
             string safeName = ImportExportService.SanitizeFileName(displayName);
             if (string.IsNullOrEmpty(safeName)) safeName = info.Id ?? "Conversation";
-            string defaultFile = string.Format("GxPT-{0}-{1}.gxcv", safeName, DateTime.Now.ToString("yyyyMMdd-HHmm"));
+            string defaultFile = string.Format("GxPT_{0}_{1}.gxcv", safeName, DateTime.Now.ToString("yyyy-MM-dd-HHmm"));
 
             using (var sfd = new SaveFileDialog
             {
