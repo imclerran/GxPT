@@ -200,6 +200,9 @@ namespace GxPT
             public List<LinkHit> LinkHits;
             // Drawn inline text segments for selection/copy (paragraphs, headings, lists, table cells)
             public List<DrawnSeg> DrawnSegments;
+            // Unique link run id counter per message (increments when a new link run starts)
+            public int LinkRunSeq;
+
         }
 
         private readonly List<MessageItem> _items = new List<MessageItem>();
@@ -1005,6 +1008,8 @@ namespace GxPT
             public bool IsInlineCode;
             public bool IsLink;
             public string LinkUrl;
+            // True when this newline is a hard break from markdown ("\n"), false when it's from word wrapping
+            public bool IsHardBreak;
         }
 
         private Font GetRunFont(RunStyle st, Font baseFont)
@@ -1066,8 +1071,8 @@ namespace GxPT
                             string text = part;
                             if (text == "\n")
                             {
-                                // Hard line break
-                                yield return new LayoutSeg { IsNewLine = true, LineWidth = lineWidth };
+                                // Hard line break from markdown
+                                yield return new LayoutSeg { IsNewLine = true, LineWidth = lineWidth, IsHardBreak = true };
                                 x = 0; lineWidth = 0; lineHeight = baseFont.Height;
                                 continue;
                             }
@@ -1079,8 +1084,8 @@ namespace GxPT
                             bool needsBreak = (x > 0 && x + partWidth > maxWidth);
                             if (needsBreak)
                             {
-                                // break line
-                                yield return new LayoutSeg { IsNewLine = true, LineWidth = lineWidth };
+                                // Line wrap break (not a hard markdown break)
+                                yield return new LayoutSeg { IsNewLine = true, LineWidth = lineWidth, IsHardBreak = false };
                                 x = 0; lineWidth = 0; lineHeight = baseFont.Height;
                             }
 
@@ -1218,6 +1223,8 @@ namespace GxPT
             if (it.LinkHits == null) it.LinkHits = new List<LinkHit>(); else it.LinkHits.Clear();
             // Reset drawn text segments list (for selection)
             if (it.DrawnSegments == null) it.DrawnSegments = new List<DrawnSeg>(); else it.DrawnSegments.Clear();
+            // Reset link run sequence
+            it.LinkRunSeq = 0;
             DrawBlocks(g, content, it.Blocks, it);
 
             // Draw selection highlight overlay for this message, if active
@@ -1294,16 +1301,21 @@ namespace GxPT
                 {
                     var h = (HeadingBlock)blk;
                     Font f = GetHeadingFont(h.Level);
-                    y += DrawInlineParagraph(g, x0, y, maxWidth, h.Inlines, f, owner);
+                    // Heading lines are logical starts
+                    y += DrawInlineParagraph(g, x0, y, maxWidth, h.Inlines, f, owner, new InlineCopyContext { IsHeadingLine = true, HeadingLevel = h.Level });
                     y += 4;
+                    // Block boundary (hard break) for markdown-aware copy
+                    if (owner != null) { if (owner.DrawnSegments == null) owner.DrawnSegments = new List<DrawnSeg>(); owner.DrawnSegments.Add(new DrawnSeg { IsNewLine = true, IsHardBreak = true, Rect = new Rectangle(x0, y, 0, 0), Text = null, Font = _baseFont }); }
                     // Reset numbering when leaving list context
                     numberedCounters.Clear();
                 }
                 else if (blk.Type == BlockType.Paragraph)
                 {
                     var p = (ParagraphBlock)blk;
-                    y += DrawInlineParagraph(g, x0, y, maxWidth, p.Inlines, _baseFont, owner);
+                    // Paragraph lines are logical starts
+                    y += DrawInlineParagraph(g, x0, y, maxWidth, p.Inlines, _baseFont, owner, new InlineCopyContext());
                     y += 2;
+                    if (owner != null) { if (owner.DrawnSegments == null) owner.DrawnSegments = new List<DrawnSeg>(); owner.DrawnSegments.Add(new DrawnSeg { IsNewLine = true, IsHardBreak = true, Rect = new Rectangle(x0, y, 0, 0), Text = null, Font = _baseFont }); }
                     // Reset numbering when leaving list context
                     numberedCounters.Clear();
                 }
@@ -1328,9 +1340,15 @@ namespace GxPT
                                 g.FillRectangle(b, indentX, y + _baseFont.Height / 2 - 1, 3, 3);
                         }
                         int textX = indentX + BulletIndent;
-                        int used = DrawInlineParagraph(g, textX, y, maxWidth - (textX - x0), item.Content, _baseFont, owner);
+                        string indentSpaces = new string(' ', item.IndentLevel * 2);
+                        string bulletPrefix = indentSpaces + "- ";
+                        // List item lines are logical starts
+                        int used = DrawInlineParagraph(g, textX, y, maxWidth - (textX - x0), item.Content, _baseFont, owner, new InlineCopyContext { LinePrefix = bulletPrefix });
                         y += Math.Max(used, _baseFont.Height) + 2;
+                        // Hard break after each bullet item to keep items on separate lines when copying
+                        if (owner != null) { if (owner.DrawnSegments == null) owner.DrawnSegments = new List<DrawnSeg>(); owner.DrawnSegments.Add(new DrawnSeg { IsNewLine = true, IsHardBreak = true, Rect = new Rectangle(x0, y, 0, 0), Text = null, Font = _baseFont }); }
                     }
+                    // No extra block-level newline here to avoid double-blank line after the list
                 }
                 else if (blk.Type == BlockType.NumberedList)
                 {
@@ -1362,9 +1380,15 @@ namespace GxPT
                         }
 
                         int textX = indentX + numberSize.Width + 4; // 4px gap after number
-                        int used = DrawInlineParagraph(g, textX, y, maxWidth - (textX - x0), item.Content, _baseFont, owner);
+                        string indentSpaces = new string(' ', item.IndentLevel * 2);
+                        string numberPrefix = indentSpaces + numberText + " ";
+                        // Numbered list item lines are logical starts
+                        int used = DrawInlineParagraph(g, textX, y, maxWidth - (textX - x0), item.Content, _baseFont, owner, new InlineCopyContext { LinePrefix = numberPrefix });
                         y += Math.Max(used, _baseFont.Height) + 2;
+                        // Hard break after each numbered item
+                        if (owner != null) { if (owner.DrawnSegments == null) owner.DrawnSegments = new List<DrawnSeg>(); owner.DrawnSegments.Add(new DrawnSeg { IsNewLine = true, IsHardBreak = true, Rect = new Rectangle(x0, y, 0, 0), Text = null, Font = _baseFont }); }
                     }
+                    // Avoid extra block-level newline to prevent double spacing
                 }
                 else if (blk.Type == BlockType.CodeBlock)
                 {
@@ -1462,6 +1486,32 @@ namespace GxPT
                     // Draw text without wrapping with horizontal scroll
                     SyntaxHighlightingRenderer.DrawColoredSegmentsNoWrap(g, coloredSegments, textRect, scrollX);
 
+                    // Record code lines for selection/copy
+                    try
+                    {
+                        using (var fmt = StringFormat.GenericTypographic)
+                        {
+                            fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+                            int lineH = _monoFont.Height;
+                            string[] lines = (c.Text ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+                            for (int li = 0; li < lines.Length; li++)
+                            {
+                                string line = lines[li];
+                                SizeF sz = g.MeasureString(line.Length == 0 ? " " : line, _monoFont, PointF.Empty, fmt);
+                                int w = (int)Math.Ceiling(sz.Width);
+                                Rectangle lr = new Rectangle(textRect.X - scrollX, textRect.Y + li * lineH, Math.Max(1, w), lineH);
+                                if (owner != null)
+                                {
+                                    if (owner.DrawnSegments == null) owner.DrawnSegments = new List<DrawnSeg>();
+                                    owner.DrawnSegments.Add(new DrawnSeg { Rect = lr, Text = line, IsNewLine = false, IsHardBreak = false, Font = _monoFont, LineFirstTextLeft = lr.Left, IsCodeLine = true, CodeBlockIndex = codeIndex, CodeLineIndex = li, CodeLineCount = lines.Length, CodeLanguage = c.Language });
+                                    // Insert a hard-break newline after each code line to preserve actual newlines when copying
+                                    owner.DrawnSegments.Add(new DrawnSeg { IsNewLine = true, IsHardBreak = true, Rect = new Rectangle(lr.Left, lr.Bottom, 0, 0), Text = null, Font = _monoFont });
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+
                     // Draw horizontal scrollbar if needed
                     if (needH && textRect.Width > 0)
                     {
@@ -1489,6 +1539,7 @@ namespace GxPT
                     }
 
                     y += box.Height + 4;
+                    if (owner != null) { if (owner.DrawnSegments == null) owner.DrawnSegments = new List<DrawnSeg>(); owner.DrawnSegments.Add(new DrawnSeg { IsNewLine = true, IsHardBreak = true, Rect = new Rectangle(x0, y, 0, 0), Text = null, Font = _baseFont }); }
                     codeIndex++;
                     // Reset numbering when leaving list context
                     numberedCounters.Clear();
@@ -1569,7 +1620,15 @@ namespace GxPT
                                 int textX = cellRect.X + cellPad;
                                 int avail = colWidths[c];
                                 var inl = (c < t.Header.Count) ? t.Header[c] : new List<InlineRun>();
-                                DrawInlineParagraph(g, textX, cellRect.Y + (cellRect.Height - _baseFont.Height) / 2, avail, inl, _baseFont, owner);
+                                DrawInlineParagraph(
+                                    g,
+                                    textX,
+                                    cellRect.Y + (cellRect.Height - _baseFont.Height) / 2,
+                                    avail,
+                                    inl,
+                                    _baseFont,
+                                    owner,
+                    new InlineCopyContext { IsTableCell = true, TableIndex = tableIndex, TableIsHeader = true, TableRowIndex = -1, TableColIndex = c, TableColumnCount = cols, TableAlignment = (c < t.Alignments.Count ? t.Alignments[c] : TableAlign.Left) });
                                 g.DrawRectangle(pen, new Rectangle(cellRect.X - 1, cellRect.Y - 1, cellRect.Width + 1, cellRect.Height + 1));
                                 x += cellRect.Width + 1;
                             }
@@ -1586,7 +1645,15 @@ namespace GxPT
                                     int textX = cellRect.X + cellPad;
                                     int avail = colWidths[c];
                                     var inl = (c < t.Rows[r].Count) ? t.Rows[r][c] : new List<InlineRun>();
-                                    DrawInlineParagraph(g, textX, cellRect.Y + cellPad, avail, inl, _baseFont, owner);
+                                    DrawInlineParagraph(
+                                        g,
+                                        textX,
+                                        cellRect.Y + cellPad,
+                                        avail,
+                                        inl,
+                                        _baseFont,
+                                        owner,
+                    new InlineCopyContext { IsTableCell = true, TableIndex = tableIndex, TableIsHeader = false, TableRowIndex = r, TableColIndex = c, TableColumnCount = cols, TableAlignment = (c < t.Alignments.Count ? t.Alignments[c] : TableAlign.Left) });
                                     g.DrawRectangle(pen, new Rectangle(cellRect.X - 1, cellRect.Y - 1, cellRect.Width + 1, cellRect.Height + 1));
                                     x += cellRect.Width + 1;
                                 }
@@ -1621,13 +1688,30 @@ namespace GxPT
                             }
                         }
                         y += tableH + (needH ? CodeHScrollHeight : 0);
+                        if (owner != null) { if (owner.DrawnSegments == null) owner.DrawnSegments = new List<DrawnSeg>(); owner.DrawnSegments.Add(new DrawnSeg { IsNewLine = true, IsHardBreak = true, Rect = new Rectangle(x0, y, 0, 0), Text = null, Font = _baseFont }); }
                     }
                     y += 2; // small gap after table
                 }
             }
         }
 
-        private int DrawInlineParagraph(Graphics g, int x, int y, int maxWidth, List<InlineRun> runs, Font baseFont, MessageItem owner)
+        // Carries context for markdown-aware copy behavior per visual line
+        private struct InlineCopyContext
+        {
+            public bool IsHeadingLine;
+            public int HeadingLevel;
+            public string LinePrefix; // e.g., "- ", "1. ", includes indent spaces
+            // Table cell context (when copying from tables)
+            public bool IsTableCell;
+            public int TableIndex;        // index of table within this message
+            public bool TableIsHeader;    // true for header row cells
+            public int TableRowIndex;     // 0-based for body rows; undefined for header
+            public int TableColIndex;     // 0-based column index
+            public int TableColumnCount;  // total columns in the table
+            public TableAlign TableAlignment; // alignment for this column
+        }
+
+        private int DrawInlineParagraph(Graphics g, int x, int y, int maxWidth, List<InlineRun> runs, Font baseFont, MessageItem owner, InlineCopyContext ctx)
         {
             int xCursor = x;
             int yCursor = y;
@@ -1673,6 +1757,10 @@ namespace GxPT
             yCursor = y;
             lineHeight = baseFont.Height;
 
+            bool atVisualLineStart = true;   // first run after any newline (wrap or hard)
+            bool atLogicalStart = true;      // first run after block start or hard markdown break
+            // Track link run grouping across wraps
+            bool prevIsLink = false; string prevLinkUrl = null; int currentLinkRunId = -1;
             foreach (var seg in segments)
             {
                 if (seg.IsNewLine)
@@ -1685,8 +1773,11 @@ namespace GxPT
                     if (owner != null)
                     {
                         if (owner.DrawnSegments == null) owner.DrawnSegments = new List<DrawnSeg>();
-                        owner.DrawnSegments.Add(new DrawnSeg { IsNewLine = true, Rect = new Rectangle(xCursor, yCursor, 0, 0), Text = null, Font = baseFont });
+                        owner.DrawnSegments.Add(new DrawnSeg { IsNewLine = true, IsHardBreak = seg.IsHardBreak, Rect = new Rectangle(xCursor, yCursor, 0, 0), Text = null, Font = baseFont });
                     }
+                    atVisualLineStart = true;
+                    // Only treat hard markdown breaks as logical starts; soft wraps should not reset logical start
+                    if (seg.IsHardBreak) atLogicalStart = true;
                     continue;
                 }
 
@@ -1783,11 +1874,47 @@ namespace GxPT
                 if (owner != null && !string.IsNullOrEmpty(seg.Text))
                 {
                     if (owner.DrawnSegments == null) owner.DrawnSegments = new List<DrawnSeg>();
-                    owner.DrawnSegments.Add(new DrawnSeg { Rect = r, Text = seg.Text, IsNewLine = false, Font = seg.Font ?? baseFont });
+                    bool isLink = seg.IsLink;
+                    string linkUrl = seg.LinkUrl;
+                    if (isLink)
+                    {
+                        if (!prevIsLink || !string.Equals(prevLinkUrl, linkUrl, StringComparison.Ordinal))
+                        {
+                            // Start a new link run id unique within this message
+                            if (owner != null) currentLinkRunId = owner.LinkRunSeq++;
+                        }
+                    }
+                    owner.DrawnSegments.Add(new DrawnSeg
+                    {
+                        Rect = r,
+                        Text = seg.Text,
+                        IsNewLine = false,
+                        IsHardBreak = false,
+                        Font = seg.Font ?? baseFont,
+                        IsHeadingLine = ctx.IsHeadingLine,
+                        HeadingLevel = ctx.HeadingLevel,
+                        LinePrefix = ctx.LinePrefix,
+                        LineFirstTextLeft = atVisualLineStart ? r.Left : 0,
+                        IsLogicalLineStart = atLogicalStart,
+                        IsTableCell = ctx.IsTableCell,
+                        TableIndex = ctx.TableIndex,
+                        TableIsHeader = ctx.TableIsHeader,
+                        TableRowIndex = ctx.TableRowIndex,
+                        TableColIndex = ctx.TableColIndex,
+                        TableColumnCount = ctx.TableColumnCount,
+                        TableAlignment = ctx.TableAlignment,
+                        IsLink = isLink,
+                        LinkUrl = isLink ? linkUrl : null,
+                        LinkRunId = isLink ? currentLinkRunId : -1
+                    });
                 }
                 xCursor += r.Width;
                 lineWidth += r.Width;
                 lineHeight = Math.Max(lineHeight, seg.Font.Height);
+                atVisualLineStart = false;
+                // After emitting first run of a logical line, clear the logical-start flag until a hard break or new block
+                atLogicalStart = false;
+                prevIsLink = seg.IsLink; prevLinkUrl = seg.LinkUrl;
             }
 
             // last line height
@@ -2778,7 +2905,32 @@ namespace GxPT
             public Rectangle Rect;   // virtual coords
             public string Text;      // text content
             public bool IsNewLine;   // marks a line break
+            public bool IsHardBreak; // true for markdown breaks; false for wrap
             public Font Font;        // font used for measuring
+            // Markdown-aware line context
+            public bool IsHeadingLine;
+            public int HeadingLevel;
+            public string LinePrefix;
+            public int LineFirstTextLeft;
+            public bool IsLogicalLineStart; // true for first run on a logical line (not wrap continuation)
+            // Table cell metadata
+            public bool IsTableCell;
+            public int TableIndex;
+            public bool TableIsHeader;
+            public int TableRowIndex;
+            public int TableColIndex;
+            public int TableColumnCount;
+            public TableAlign TableAlignment; // alignment for this column (from parser)
+            // Code block metadata (when IsCodeLine=true)
+            public bool IsCodeLine;
+            public int CodeBlockIndex;
+            public int CodeLineIndex;
+            public int CodeLineCount;
+            public string CodeLanguage;
+            // Link metadata
+            public bool IsLink;
+            public string LinkUrl;
+            public int LinkRunId;
         }
 
         // 50% snapping support: maps a pixel span to character-boundary indices and pixel offsets within a run
@@ -2866,35 +3018,246 @@ namespace GxPT
             var sb = new System.Text.StringBuilder();
             int currentLineTop = int.MinValue;
             bool wroteOnThisLine = false;
+            bool emittedPrefixForLine = false;
+            int currentLineFirstLeft = int.MaxValue;
+            bool currentLineIsHeading = false;
+            int currentLineHeadingLevel = 0;
+            string currentLinePrefix = null;
+
+            // First pass: determine selection coverage across code blocks and whether non-code is included
+            // Also detect selected table cells grouped by table index/row/col
+            bool containsNonCode = false;
+            var codeInfo = new Dictionary<int, CodeSel>();
+            var tableTouched = new Dictionary<int, TableSel>();
+            foreach (var ds0 in it.DrawnSegments)
+            {
+                if (ds0.IsNewLine) continue;
+                Rectangle r0 = ds0.Rect;
+                if (r0.Height <= 0 || r0.Width <= 0) continue;
+                if (r0.Bottom <= yTop || r0.Top >= yBot) continue;
+                int left0 = int.MinValue; int right0 = int.MaxValue;
+                bool isStartLineRun = LinesOverlap(r0, GetLineBoundsAtY(it, anchor.Y));
+                bool isEndLineRun = LinesOverlap(r0, GetLineBoundsAtY(it, caret.Y));
+                if (isStartLineRun)
+                {
+                    if (caret.Y > anchor.Y) left0 = anchorX; else right0 = anchorX;
+                }
+                if (isEndLineRun)
+                {
+                    if (caret.Y > anchor.Y) right0 = caretX; else left0 = caretX;
+                }
+                using (Graphics g0 = CreateGraphics())
+                using (var fmt0 = StringFormat.GenericTypographic)
+                {
+                    fmt0.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+                    var snap0 = SnapToCharRange(g0, fmt0, ds0.Text ?? string.Empty, ds0.Font ?? this.Font, r0, left0, right0);
+                    int len0 = ds0.Text != null ? ds0.Text.Length : 0;
+                    bool anyHit = (snap0.EndIndex > snap0.StartIndex) || (len0 == 0);
+                    if (anyHit)
+                    {
+                        if (ds0.IsCodeLine)
+                        {
+                            CodeSel ci;
+                            if (!codeInfo.TryGetValue(ds0.CodeBlockIndex, out ci))
+                            {
+                                ci = new CodeSel(ds0.CodeLineCount, ds0.CodeLanguage);
+                                codeInfo[ds0.CodeBlockIndex] = ci;
+                            }
+                            // Mark coverage for this line
+                            ci.Any[ds0.CodeLineIndex] = true;
+                            bool full;
+                            if (len0 == 0)
+                            {
+                                full = true; // empty lines count as fully selected when intersected
+                            }
+                            else if (isStartLineRun && isEndLineRun)
+                            {
+                                full = (snap0.StartIndex == 0) && (snap0.EndIndex >= len0);
+                            }
+                            else if (isStartLineRun)
+                            {
+                                full = (snap0.StartIndex == 0);
+                            }
+                            else if (isEndLineRun)
+                            {
+                                full = (snap0.EndIndex >= len0);
+                            }
+                            else
+                            {
+                                full = true; // interior lines are fully selected
+                            }
+                            ci.Full[ds0.CodeLineIndex] = ci.Full[ds0.CodeLineIndex] || full;
+                        }
+                        else if (ds0.IsTableCell)
+                        {
+                            TableSel ts;
+                            if (!tableTouched.TryGetValue(ds0.TableIndex, out ts)) { ts = new TableSel(ds0.TableColumnCount); tableTouched[ds0.TableIndex] = ts; }
+                            if (ds0.TableIsHeader)
+                            {
+                                ts.HeaderCols[ds0.TableColIndex] = true;
+                            }
+                            else
+                            {
+                                HashSet<int> cols;
+                                if (!ts.Rows.TryGetValue(ds0.TableRowIndex, out cols)) { cols = new HashSet<int>(); ts.Rows[ds0.TableRowIndex] = cols; }
+                                cols.Add(ds0.TableColIndex);
+                            }
+                        }
+                        else
+                        {
+                            containsNonCode = true;
+                        }
+                    }
+                }
+            }
+
+            bool hasCode = codeInfo.Count > 0;
+            bool multiCodeBlocks = codeInfo.Count > 1;
+            bool includeFences = hasCode && (containsNonCode || multiCodeBlocks);
+            var fenceOpened = new System.Collections.Generic.HashSet<int>();
+            var fenceCanClose = new System.Collections.Generic.HashSet<int>();
+            foreach (var kv in codeInfo)
+            {
+                int idx = kv.Key; var ci = kv.Value;
+                bool allLinesSelected = true;
+                for (int li = 0; li < ci.LineCount; li++)
+                {
+                    if (!ci.Any[li] || !ci.Full[li]) { allLinesSelected = false; break; }
+                }
+                if (allLinesSelected) fenceCanClose.Add(idx);
+            }
 
             using (Graphics g = CreateGraphics())
             using (var fmt = StringFormat.GenericTypographic)
             {
                 fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+                var emittedLinkRuns = new System.Collections.Generic.HashSet<int>();
+                var emittedTables = new System.Collections.Generic.HashSet<int>();
                 foreach (var ds in it.DrawnSegments)
                 {
                     if (ds.IsNewLine)
                     {
-                        if (wroteOnThisLine)
+                        if (wroteOnThisLine && ds.IsHardBreak)
                         {
                             sb.Append("\n");
-                            wroteOnThisLine = false;
                         }
+                        wroteOnThisLine = false;
+                        emittedPrefixForLine = false;
                         continue;
                     }
                     Rectangle r = ds.Rect;
                     if (r.Height <= 0 || r.Width <= 0) continue;
                     if (r.Bottom <= yTop || r.Top >= yBot) continue;
 
+                    // If we intersect a table and haven't emitted it yet, output the table markdown now.
+                    if (ds.IsTableCell && tableTouched.ContainsKey(ds.TableIndex) && !emittedTables.Contains(ds.TableIndex))
+                    {
+                        // Build table markdown: header | header cells; separator; then rows that have any selected columns
+                        // We don't have direct access to parsed TableBlock here, so reconstruct from DrawnSegments text per cell.
+                        // Gather header row text per column
+                        var ts = tableTouched[ds.TableIndex];
+                        string[] header = new string[Math.Max(1, ds.TableColumnCount)];
+                        for (int col = 0; col < header.Length; col++) header[col] = string.Empty;
+                        // Accumulate cell text by scanning all drawn segments for this table header col
+                        foreach (var d2 in it.DrawnSegments)
+                        {
+                            if (!d2.IsNewLine && d2.IsTableCell && d2.TableIndex == ds.TableIndex && d2.TableIsHeader && !string.IsNullOrEmpty(d2.Text))
+                            {
+                                int cix = d2.TableColIndex;
+                                header[cix] += d2.Text;
+                            }
+                        }
+                        // Emit a newline before a table if current builder has non-newline tail
+                        if (sb.Length > 0 && sb[sb.Length - 1] != '\n') sb.Append('\n');
+                        sb.Append("|");
+                        for (int c = 0; c < header.Length; c++)
+                        {
+                            if (c > 0) sb.Append("|");
+                            sb.Append(" ");
+                            sb.Append(header[c].Trim());
+                            sb.Append(" ");
+                        }
+                        sb.Append("|");
+                        sb.Append('\n');
+                        // Separator row: use alignment markers per column from segments (Left: --- , Center: :---:, Right: ---:)
+                        // First, collect an alignment per column by scanning any segment in that column (alignment is consistent per column)
+                        TableAlign[] aligns = new TableAlign[header.Length];
+                        for (int c = 0; c < aligns.Length; c++) aligns[c] = TableAlign.Left;
+                        foreach (var d2 in it.DrawnSegments)
+                        {
+                            if (d2.IsNewLine) continue;
+                            if (!d2.IsTableCell || d2.TableIndex != ds.TableIndex) continue;
+                            if (d2.TableColIndex < 0 || d2.TableColIndex >= aligns.Length) continue;
+                            aligns[d2.TableColIndex] = d2.TableAlignment;
+                        }
+                        sb.Append("|");
+                        for (int c = 0; c < header.Length; c++)
+                        {
+                            if (c > 0) sb.Append("|");
+                            switch (aligns[c])
+                            {
+                                case TableAlign.Center:
+                                    sb.Append(" :---: ");
+                                    break;
+                                case TableAlign.Right:
+                                    sb.Append(" ---: ");
+                                    break;
+                                default:
+                                    sb.Append(" --- ");
+                                    break;
+                            }
+                        }
+                        sb.Append("|");
+                        sb.Append('\n');
+                        // Body rows: determine min and max row index from touched rows; emit only rows that intersect selection
+                        var rowIndices = new List<int>(ts.Rows.Keys);
+                        rowIndices.Sort();
+                        for (int irow = 0; irow < rowIndices.Count; irow++)
+                        {
+                            int row = rowIndices[irow];
+                            sb.Append("|");
+                            for (int c = 0; c < header.Length; c++)
+                            {
+                                if (c > 0) sb.Append("|");
+                                // Append text for this cell by concatenating all DrawnSegments in that cell
+                                var cellSb = new System.Text.StringBuilder();
+                                foreach (var d2 in it.DrawnSegments)
+                                {
+                                    if (!d2.IsNewLine && d2.IsTableCell && d2.TableIndex == ds.TableIndex && !d2.TableIsHeader && d2.TableRowIndex == row && d2.TableColIndex == c && !string.IsNullOrEmpty(d2.Text))
+                                    {
+                                        cellSb.Append(d2.Text);
+                                    }
+                                }
+                                sb.Append(" ");
+                                sb.Append(cellSb.ToString().Trim());
+                                sb.Append(" ");
+                            }
+                            sb.Append("|");
+                            sb.Append('\n');
+                        }
+                        emittedTables.Add(ds.TableIndex);
+                        wroteOnThisLine = false;
+                        emittedPrefixForLine = false;
+                        // Skip normal emission for this ds (we already output table); continue to next segment
+                        continue;
+                    }
+
+                    // If we've already emitted this table, skip its individual cell segments
+                    if (ds.IsTableCell && emittedTables.Contains(ds.TableIndex))
+                    {
+                        continue;
+                    }
+
                     if (r.Top != currentLineTop)
                     {
-                        // New line encountered
-                        if (currentLineTop != int.MinValue && wroteOnThisLine)
-                        {
-                            sb.Append("\n");
-                            wroteOnThisLine = false;
-                        }
+                        // New visual line encountered; don't emit newline here to avoid wrap breaks
                         currentLineTop = r.Top;
+                        wroteOnThisLine = false;
+                        emittedPrefixForLine = false;
+                        currentLineFirstLeft = (ds.LineFirstTextLeft > 0) ? ds.LineFirstTextLeft : r.Left;
+                        currentLineIsHeading = ds.IsHeadingLine;
+                        currentLineHeadingLevel = ds.HeadingLevel;
+                        currentLinePrefix = ds.LinePrefix;
                     }
 
                     int left = int.MinValue; int right = int.MaxValue;
@@ -2918,12 +3281,119 @@ namespace GxPT
                     var snap = SnapToCharRange(g, fmt, ds.Text ?? string.Empty, ds.Font ?? this.Font, r, left, right);
                     if (snap.EndIndex > snap.StartIndex)
                     {
+                        // If a link is selected, emit full markdown once and skip its fragments thereafter
+                        if (ds.IsLink && ds.LinkRunId >= 0 && !emittedLinkRuns.Contains(ds.LinkRunId))
+                        {
+                            // Build full label for this link run
+                            var labelSb = new System.Text.StringBuilder();
+                            for (int i = 0; i < it.DrawnSegments.Count; i++)
+                            {
+                                var d2 = it.DrawnSegments[i];
+                                if (d2.IsNewLine) continue;
+                                if (d2.IsLink && d2.LinkRunId == ds.LinkRunId && !string.IsNullOrEmpty(d2.Text))
+                                    labelSb.Append(d2.Text);
+                            }
+                            string label = labelSb.ToString();
+                            string url = ds.LinkUrl ?? string.Empty;
+                            if (!string.IsNullOrEmpty(label))
+                            {
+                                if (!emittedPrefixForLine)
+                                {
+                                    int effectiveLeftPx;
+                                    if (left == int.MinValue) effectiveLeftPx = r.Left; else effectiveLeftPx = Math.Max(r.Left, Math.Min(left, r.Right));
+                                    if (ds.IsLogicalLineStart && effectiveLeftPx <= currentLineFirstLeft)
+                                    {
+                                        if (currentLineIsHeading && currentLineHeadingLevel > 0)
+                                        { sb.Append(new string('#', Math.Min(6, Math.Max(1, currentLineHeadingLevel)))); sb.Append(' '); }
+                                        if (!string.IsNullOrEmpty(currentLinePrefix)) sb.Append(currentLinePrefix);
+                                        emittedPrefixForLine = true;
+                                    }
+                                }
+                                string trimmedLabel = label.Trim();
+                                string trimmedUrl = (url ?? string.Empty).Trim();
+                                if (string.Equals(trimmedLabel, trimmedUrl, StringComparison.Ordinal))
+                                {
+                                    // Autolink: label equals URL, emit URL only
+                                    sb.Append(trimmedUrl);
+                                }
+                                else
+                                {
+                                    // Markdown link with label
+                                    sb.Append('[').Append(label).Append(']').Append('(').Append(url).Append(')');
+                                }
+                                wroteOnThisLine = true;
+                                emittedLinkRuns.Add(ds.LinkRunId);
+                                continue; // skip normal fragment emit
+                            }
+                        }
+                        // Code fences open/close handling
+                        if (ds.IsCodeLine && includeFences && !fenceOpened.Contains(ds.CodeBlockIndex))
+                        {
+                            // Start a fence for this code block
+                            if (sb.Length > 0 && sb[sb.Length - 1] != '\n') sb.Append('\n');
+                            sb.Append("```");
+                            if (!string.IsNullOrEmpty(ds.CodeLanguage)) { sb.Append(ds.CodeLanguage); }
+                            sb.Append('\n');
+                            fenceOpened.Add(ds.CodeBlockIndex);
+                        }
+                        else if (!ds.IsCodeLine)
+                        {
+                            // If leaving a fenced code block that was fully selected, close it before non-code text
+                            // Find any opened block that can close; close the last opened one to maintain order.
+                            int toClose = -1;
+                            foreach (int bidx in fenceOpened) { if (fenceCanClose.Contains(bidx)) toClose = bidx; }
+                            if (toClose >= 0)
+                            {
+                                if (sb.Length > 0 && sb[sb.Length - 1] != '\n') sb.Append('\n');
+                                sb.Append("```");
+                                sb.Append('\n');
+                                fenceOpened.Remove(toClose);
+                            }
+                        }
+
+                        if (!emittedPrefixForLine)
+                        {
+                            int effectiveLeftPx;
+                            if (left == int.MinValue)
+                                effectiveLeftPx = r.Left; // middle lines => treat as from line start
+                            else
+                                effectiveLeftPx = Math.Max(r.Left, Math.Min(left, r.Right));
+                            if (ds.IsLogicalLineStart && effectiveLeftPx <= currentLineFirstLeft)
+                            {
+                                if (currentLineIsHeading && currentLineHeadingLevel > 0)
+                                {
+                                    sb.Append(new string('#', Math.Min(6, Math.Max(1, currentLineHeadingLevel))));
+                                    sb.Append(' ');
+                                }
+                                if (!string.IsNullOrEmpty(currentLinePrefix)) sb.Append(currentLinePrefix);
+                                emittedPrefixForLine = true;
+                            }
+                        }
                         string part = (ds.Text ?? string.Empty).Substring(snap.StartIndex, snap.EndIndex - snap.StartIndex);
                         if (part.Length > 0)
                         {
                             sb.Append(part);
                             wroteOnThisLine = true;
                         }
+                    }
+                    else
+                    {
+                        // If this is a link run already emitted, skip its other fragments entirely
+                        if (ds.IsLink && ds.LinkRunId >= 0 && emittedLinkRuns.Contains(ds.LinkRunId))
+                        {
+                            continue;
+                        }
+                    }
+                }
+
+                // Close any remaining opened fences that represent fully selected blocks
+                // Close all remaining opened fences that are eligible to close
+                foreach (int bidx in fenceOpened)
+                {
+                    if (fenceCanClose.Contains(bidx))
+                    {
+                        if (sb.Length > 0 && sb[sb.Length - 1] != '\n') sb.Append('\n');
+                        sb.Append("```");
                     }
                 }
             }
@@ -2932,6 +3402,34 @@ namespace GxPT
             string result = sb.ToString();
             if (result.EndsWith("\n")) result = result.TrimEnd('\n');
             return result;
+        }
+
+        private struct TableSel
+        {
+            public readonly int Cols;
+            public readonly bool[] HeaderCols;
+            public readonly Dictionary<int, HashSet<int>> Rows; // row -> selected columns
+            public TableSel(int cols)
+            {
+                Cols = Math.Max(1, cols);
+                HeaderCols = new bool[Cols];
+                Rows = new Dictionary<int, HashSet<int>>();
+            }
+        }
+
+        private struct CodeSel
+        {
+            public readonly int LineCount;
+            public readonly string Lang;
+            public readonly bool[] Any;
+            public readonly bool[] Full;
+            public CodeSel(int lineCount, string lang)
+            {
+                LineCount = Math.Max(0, lineCount);
+                Lang = lang;
+                Any = new bool[Math.Max(1, lineCount)];
+                Full = new bool[Math.Max(1, lineCount)];
+            }
         }
 
         private static string SubstringByPixelRange(Graphics g, StringFormat fmt, string text, Font font, int pxStart, int pxEnd)
