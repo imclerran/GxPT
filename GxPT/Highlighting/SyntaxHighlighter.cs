@@ -310,5 +310,87 @@ namespace GxPT
             _highlighters.Keys.CopyTo(languages, 0);
             return languages;
         }
+
+        /// <summary>
+        /// Returns a deduplicated set of file dialog patterns (e.g., "*.cs") contributed by
+        /// built-in highlighters. This avoids reflection by referencing the known types.
+        /// </summary>
+        public static string[] GetAllHighlighterFilePatterns()
+        {
+            var list = new List<string>(256);
+            try
+            {
+                // Add each highlighter's public static FileTypes if available
+                AddPatterns(list, AdaHighlighter.FileTypes);
+                AddPatterns(list, AssemblyHighlighter.FileTypes);
+                AddPatterns(list, BashHighlighter.FileTypes);
+                AddPatterns(list, BasicHighlighter.FileTypes);
+                AddPatterns(list, BatchHighlighter.FileTypes);
+                AddPatterns(list, CHighlighter.FileTypes);
+                AddPatterns(list, CppHighlighter.FileTypes);
+                AddPatterns(list, CSharpHighlighter.FileTypes);
+                AddPatterns(list, CssHighlighter.FileTypes);
+                AddPatterns(list, CsvHighlighter.FileTypes);
+                AddPatterns(list, DartHighlighter.FileTypes);
+                AddPatterns(list, EbnfHighlighter.FileTypes);
+                AddPatterns(list, ElixirHighlighter.FileTypes);
+                AddPatterns(list, ErlangHighlighter.FileTypes);
+                AddPatterns(list, FortranHighlighter.FileTypes);
+                AddPatterns(list, FSharpHighlighter.FileTypes);
+                AddPatterns(list, GoHighlighter.FileTypes);
+                AddPatterns(list, HaskellHighlighter.FileTypes);
+                AddPatterns(list, HtmlHighlighter.FileTypes);
+                AddPatterns(list, JavaHighlighter.FileTypes);
+                AddPatterns(list, JavaScriptHighlighter.FileTypes);
+                AddPatterns(list, JsonHighlighter.FileTypes);
+                AddPatterns(list, KotlinHighlighter.FileTypes);
+                AddPatterns(list, LispHighlighter.FileTypes);
+                AddPatterns(list, LuaHighlighter.FileTypes);
+                AddPatterns(list, OcamlHighlighter.FileTypes);
+                AddPatterns(list, PascalHighlighter.FileTypes);
+                AddPatterns(list, PerlHighlighter.FileTypes);
+                AddPatterns(list, PhpHighlighter.FileTypes);
+                AddPatterns(list, PowerShellHighlighter.FileTypes);
+                AddPatterns(list, PropertiesHighlighter.FileTypes);
+                AddPatterns(list, PythonHighlighter.FileTypes);
+                AddPatterns(list, RegexHighlighter.FileTypes);
+                AddPatterns(list, RubyHighlighter.FileTypes);
+                AddPatterns(list, RustHighlighter.FileTypes);
+                AddPatterns(list, ScalaHighlighter.FileTypes);
+                AddPatterns(list, SqlHighlighter.FileTypes);
+                AddPatterns(list, SwiftHighlighter.FileTypes);
+                AddPatterns(list, TypeScriptHighlighter.FileTypes);
+                AddPatterns(list, VisualBasicHighlighter.FileTypes);
+                AddPatterns(list, XmlHighlighter.FileTypes);
+                AddPatterns(list, YamlHighlighter.FileTypes);
+                AddPatterns(list, ZigHighlighter.FileTypes);
+            }
+            catch { }
+
+            // Dedup case-insensitively
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var dedup = new List<string>(list.Count);
+            for (int i = 0; i < list.Count; i++)
+            {
+                string p = list[i];
+                if (string.IsNullOrEmpty(p)) continue;
+                if (seen.Contains(p)) continue;
+                seen.Add(p); dedup.Add(p);
+            }
+            return dedup.ToArray();
+        }
+
+        // Helper for GetAllHighlighterFilePatterns to append patterns safely
+        private static void AddPatterns(List<string> dst, string[] arr)
+        {
+            if (dst == null || arr == null || arr.Length == 0)
+                return;
+            for (int i = 0; i < arr.Length; i++)
+            {
+                string s = arr[i];
+                if (!string.IsNullOrEmpty(s))
+                    dst.Add(s);
+            }
+        }
     }
 }
