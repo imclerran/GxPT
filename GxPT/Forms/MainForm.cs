@@ -805,117 +805,22 @@ namespace GxPT
         }
 
         // ===== Export/Import conversations (DotNetZip) =====
-        private string ResolveConversationsFolderPath()
-        {
-            // Try to infer from existing items; fallback to %AppData%\GxPT\Conversations
-            try
-            {
-                var items = ConversationStore.ListAll();
-                var first = items.FirstOrDefault();
-                if (first != null && !string.IsNullOrEmpty(first.Path))
-                {
-                    var dir = Path.GetDirectoryName(first.Path);
-                    if (!string.IsNullOrEmpty(dir))
-                    {
-                        try { Directory.CreateDirectory(dir); }
-                        catch { }
-                        return dir;
-                    }
-                }
-            }
-            catch { }
-
-            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            string dirFallback = Path.Combine(Path.Combine(appData, "GxPT"), "Conversations");
-            try { Directory.CreateDirectory(dirFallback); }
-            catch { }
-            return dirFallback;
-        }
+        // Legacy path resolver no longer needed; logic consolidated in ImportExportService
 
         // Designer wires this
         private void miExport_Click(object sender, EventArgs e)
         {
-            string sourceDir = ResolveConversationsFolderPath();
-            using (var sfd = new SaveFileDialog
-            {
-                Title = "Export Conversations",
-                Filter = "GxPT Conversation Archive (*.gxcv)|*.gxcv|Zip Archive (*.zip)|*.zip",
-                DefaultExt = "gxcv",
-                FileName = "GxPT-Conversations-" + DateTime.Now.ToString("yyyyMMdd-HHmm") + ".gxcv",
-                OverwritePrompt = true
-            })
-            {
-                if (sfd.ShowDialog(this) != DialogResult.OK) return;
-
-                try
-                {
-                    // Do NOT auto-save open tabs; export only conversations already saved on disk
-                    if (!Directory.Exists(sourceDir))
-                        throw new InvalidOperationException("No conversations folder found to export.");
-                    // Optionally, skip export if folder has no conversation files
-                    var hasAny = false;
-                    try { hasAny = Directory.GetFiles(sourceDir, "*.json").Length > 0; }
-                    catch { }
-                    if (!hasAny)
-                        throw new InvalidOperationException("There are no saved conversations to export.");
-
-                    using (var zip = new ZipFile())
-                    {
-                        // Use UTF-8 for entry names when needed (replaces obsolete UseUnicodeAsNecessary)
-                        zip.AlternateEncoding = Encoding.UTF8;
-                        zip.AlternateEncodingUsage = ZipOption.AsNecessary;
-                        zip.CompressionLevel = Ionic.Zlib.CompressionLevel.BestCompression;
-                        // Add the conversations folder contents at the archive root
-                        zip.AddDirectory(sourceDir, "");
-                        zip.Save(sfd.FileName);
-                    }
-
-                    MessageBox.Show(this, "Export completed.", "Export Conversations", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(this, "Export failed: " + ex.Message, "Export Conversations", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
-            }
+            ImportExportManager.ExportAll(this);
         }
 
         // Designer wires this
         private void miImport_Click(object sender, EventArgs e)
         {
-            using (var ofd = new OpenFileDialog
+            var ok = ImportExportManager.ImportAll(this);
+            if (ok)
             {
-                Title = "Import Conversations",
-                Filter = "GxPT Conversation Archive (*.gxcv)|*.gxcv|Zip Archive (*.zip)|*.zip",
-                CheckFileExists = true,
-                Multiselect = false
-            })
-            {
-                if (ofd.ShowDialog(this) != DialogResult.OK) return;
-
-                if (ConversationStore.ListAll().Count > 0)
-                {
-                    if (MessageBox.Show(this,
-                        "Importing will overwrite existing files with the same names. Continue?",
-                        "Import Conversations", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
-                    {
-                        return;
-                    }
-                }
-
-                string targetDir = ResolveConversationsFolderPath();
-                try
-                {
-                    Directory.CreateDirectory(targetDir);
-                    // Use safe extraction wrapper (guards against zip-slip)
-                    ZipSafe.SafeExtract(ofd.FileName, targetDir, true);
-
-                    if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
-                    MessageBox.Show(this, "Import completed.", "Import Conversations", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(this, "Import failed: " + ex.Message, "Import Conversations", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
+                try { if (_sidebarManager != null) _sidebarManager.RefreshSidebarList(); }
+                catch { }
             }
         }
 
