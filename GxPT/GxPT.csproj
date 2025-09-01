@@ -26,7 +26,7 @@
     <UpdateRequired>false</UpdateRequired>
     <MapFileExtensions>true</MapFileExtensions>
     <ApplicationRevision>0</ApplicationRevision>
-    <ApplicationVersion>0.13.0.%2a</ApplicationVersion>
+    <ApplicationVersion>0.13.1.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
   </PropertyGroup>
@@ -91,6 +91,7 @@
     <Compile Include="Controls\ChatTranscriptControl.Designer.cs">
       <DependentUpon>ChatTranscriptControl.cs</DependentUpon>
     </Compile>
+    <Compile Include="Managers\ImportExportManager.cs" />
     <Compile Include="Services\AppSettings.cs" />
     <Compile Include="Models\ChatModels.cs" />
     <Compile Include="Models\Conversation.cs" />
@@ -105,6 +106,7 @@
     <Compile Include="Services\DocxAttachmentExtractor.cs" />
     <Compile Include="Services\HoverWheelRouter.cs" />
     <Compile Include="Managers\InputManager.cs" />
+    <Compile Include="Services\ImportExportService.cs" />
     <Compile Include="Services\Logger.cs" />
     <Compile Include="Services\OpenRouterClient.cs">
     </Compile>

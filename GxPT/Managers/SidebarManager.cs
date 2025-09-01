@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
+using System.IO;
 using System.Windows.Forms;
 
 namespace GxPT
@@ -353,14 +354,17 @@ namespace GxPT
                 // Create context menu but don't assign it directly
                 _conversationContextMenu = new ContextMenuStrip();
                 var miOpen = new ToolStripMenuItem("Open");
+                var miExport = new ToolStripMenuItem("Export");
                 var miRename = new ToolStripMenuItem("Rename");
                 var miDelete = new ToolStripMenuItem("Delete");
                 var deleteImage = ResourceManager.TryGetAssemblyImage("ExplorerDelete.png");
                 miOpen.Click += (s, e) => TryOpenSelectedConversation();
+                miExport.Click += (s, e) => ExportSelectedConversation();
                 miRename.Click += (s, e) => StartRenameSelectedConversation();
                 miDelete.Click += (s, e) => DeleteSelectedConversation();
                 miDelete.Image = deleteImage;
                 _conversationContextMenu.Items.Add(miOpen);
+                _conversationContextMenu.Items.Add(miExport);
                 _conversationContextMenu.Items.Add(miRename);
                 _conversationContextMenu.Items.Add(new ToolStripSeparator());
                 _conversationContextMenu.Items.Add(miDelete);
@@ -520,6 +524,20 @@ namespace GxPT
 
                 ConversationStore.DeletePath(info.Path);
                 RefreshSidebarList();
+            }
+            catch { }
+        }
+
+        private void ExportSelectedConversation()
+        {
+            try
+            {
+                if (_lvConversations == null || _lvConversations.SelectedItems.Count == 0) return;
+                var lvi = _lvConversations.SelectedItems[0];
+                var info = lvi.Tag as ConversationStore.ConversationListItem;
+                if (info == null) return;
+
+                ImportExportManager.ExportSingle(_mainForm, info);
             }
             catch { }
         }
