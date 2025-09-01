@@ -2162,6 +2162,8 @@ namespace GxPT
                     {
                         // Rebuild context menu items for this hit
                         _ctx.Items.Clear();
+                        // Detect if the cursor is over a hyperlink
+                        string linkUnderCursor = HitTestLink(e.Location);
                         if (_hasSelection && _selectionItem == _ctxHit)
                         {
                             _ctx.Items.Add("Copy Selection", null, delegate
@@ -2177,6 +2179,11 @@ namespace GxPT
                         else
                         {
                             _ctx.Items.Add("Copy Message", null, delegate { if (_ctxHit != null) SafeClipboardSetText(_ctxHit.RawMarkdown ?? string.Empty); });
+                        }
+                        // Offer to copy the link address when right-clicking a hyperlink
+                        if (!string.IsNullOrEmpty(linkUnderCursor))
+                        {
+                            _ctx.Items.Add("Copy Link Address", null, delegate { SafeClipboardSetText(linkUnderCursor); });
                         }
                         if (_ctxHit.Role == MessageRole.User)
                         {
