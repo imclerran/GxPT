@@ -798,16 +798,18 @@ namespace GxPT
 
             h += BubblePadding; // bottom padding
 
-            // Space for attachments pills (below content, within bubble padding)
-            int attachH = MeasureAttachmentsHeight(it, textMax);
+            // Compute bubble width based on measured text content
+            // Ensure minimum content width for visual consistency
+            int wContent = Math.Max(wUsed, 100);
+            int bubbleW = Math.Min(maxBubbleWidth, wContent + 2 * BubblePadding);
+
+            // Measure attachment pills using the actual content width the bubble will have
+            int contentWidthForAttach = Math.Min(textMax, wContent);
+            int attachH = MeasureAttachmentsHeight(it, contentWidthForAttach);
             if (attachH > 0)
             {
                 h += attachH + 4; // small gap above pills
             }
-
-            // Ensure minimum width and don't exceed maximum
-            wUsed = Math.Max(wUsed, 100); // minimum content width
-            int bubbleW = Math.Min(maxBubbleWidth, wUsed + 2 * BubblePadding);
 
             return new Size(bubbleW, Math.Max(24, h));
         }
