@@ -54,20 +54,45 @@ namespace GxPT
                 int sampleSize = (int)Math.Min(8192, fi.Length);
                 if (sampleSize <= 0) return true; // empty OK
                 byte[] buffer = new byte[sampleSize];
+                int read = 0;
                 using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
                 {
-                    int read = fs.Read(buffer, 0, buffer.Length);
+                    read = fs.Read(buffer, 0, buffer.Length);
                     if (read <= 0) return true;
                 }
+
+                // Fast-path: recognize common Unicode BOMs as definitely text
+                // UTF-32 LE: FF FE 00 00, UTF-32 BE: 00 00 FE FF
+                if (read >= 4)
+                {
+                    if ((buffer[0] == 0xFF && buffer[1] == 0xFE && buffer[2] == 0x00 && buffer[3] == 0x00) ||
+                        (buffer[0] == 0x00 && buffer[1] == 0x00 && buffer[2] == 0xFE && buffer[3] == 0xFF))
+                    {
+                        return true;
+                    }
+                }
+                // UTF-8 BOM: EF BB BF
+                if (read >= 3)
+                {
+                    if (buffer[0] == 0xEF && buffer[1] == 0xBB && buffer[2] == 0xBF)
+                        return true;
+                }
+                // UTF-16 LE: FF FE, UTF-16 BE: FE FF
+                if (read >= 2)
+                {
+                    if ((buffer[0] == 0xFF && buffer[1] == 0xFE) || (buffer[0] == 0xFE && buffer[1] == 0xFF))
+                        return true;
+                }
+
                 int nulls = 0, ctrls = 0;
-                for (int i = 0; i < buffer.Length; i++)
+                for (int i = 0; i < read; i++)
                 {
                     byte b = buffer[i];
                     if (b == 0) nulls++;
                     else if (b < 32 && b != 9 && b != 10 && b != 13) ctrls++;
                 }
-                double nratio = (double)nulls / buffer.Length;
-                double cratio = (double)ctrls / buffer.Length;
+                double nratio = (double)nulls / read;
+                double cratio = (double)ctrls / read;
                 return nratio < 0.01 && cratio < 0.02;
             }
             catch { return false; }
