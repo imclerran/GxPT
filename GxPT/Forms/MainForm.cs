@@ -824,6 +824,48 @@ namespace GxPT
             }
         }
 
+        // Called by Program.cs after the form is shown when the app is launched by double-clicking a .gxpt/.gxcv file
+        public void ImportArchiveFromShell(string archivePath)
+        {
+            if (string.IsNullOrEmpty(archivePath)) return;
+            try
+            {
+                if (!System.IO.File.Exists(archivePath)) return;
+
+                // Warn about overwrite if there are existing conversations
+                try
+                {
+                    if (ConversationStore.ListAll().Count > 0)
+                    {
+                        var dr = MessageBox.Show(this,
+                            "Importing will overwrite existing files with the same names. Continue?",
+                            "Import Conversations", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                        if (dr != DialogResult.Yes) return;
+                    }
+                }
+                catch { }
+
+                string targetDir = ImportExportService.GetConversationsFolderPath();
+                try { System.IO.Directory.CreateDirectory(targetDir); }
+                catch { }
+
+                try
+                {
+                    ImportExportService.ImportAll(archivePath, targetDir, true);
+                    try { MessageBox.Show(this, "Import completed.", "Import Conversations", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+                    catch { }
+                    try { if (_sidebarManager != null) _sidebarManager.RefreshSidebarList(); }
+                    catch { }
+                }
+                catch (Exception ex)
+                {
+                    try { MessageBox.Show(this, "Import failed: " + ex.Message, "Import Conversations", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+
         private void miExit_Click(object sender, EventArgs e)
         {
             this.Close();
