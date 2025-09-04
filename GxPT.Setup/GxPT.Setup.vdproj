@@ -15,12 +15,6 @@
     {
         "Entry"
         {
-        "MsmKey" = "8:_1F55C0B1C88A4AEAA0B86BE50DEF2387"
-        "OwnerKey" = "8:_UNDEFINED"
-        "MsmSig" = "8:_UNDEFINED"
-        }
-        "Entry"
-        {
         "MsmKey" = "8:_2D972FE10E1340BAB6027F5E00AF44D2"
         "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
@@ -29,6 +23,12 @@
         {
         "MsmKey" = "8:_46C9009FB327A860DBB673EBDF6032B5"
         "OwnerKey" = "8:_E0499EB368C445EBB017CB750C98F6FD"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_7FAF1DBC59F6409BAA36708961A22C49"
+        "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -196,32 +196,12 @@
         }
         "File"
         {
-            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_1F55C0B1C88A4AEAA0B86BE50DEF2387"
-            {
-            "SourcePath" = "8:..\\GxPT\\Resources\\Icons\\gxpt-document.ico"
-            "TargetName" = "8:gxpt-document.ico"
-            "Tag" = "8:"
-            "Folder" = "8:_24C4BCC179A740BFBC5D45DDB8D16A6D"
-            "Condition" = "8:"
-            "Transitive" = "11:FALSE"
-            "Vital" = "11:TRUE"
-            "ReadOnly" = "11:FALSE"
-            "Hidden" = "11:FALSE"
-            "System" = "11:FALSE"
-            "Permanent" = "11:FALSE"
-            "SharedLegacy" = "11:FALSE"
-            "PackageAs" = "3:1"
-            "Register" = "3:1"
-            "Exclude" = "11:FALSE"
-            "IsDependency" = "11:FALSE"
-            "IsolateTo" = "8:"
-            }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_2D972FE10E1340BAB6027F5E00AF44D2"
             {
             "SourcePath" = "8:..\\GxPT\\Resources\\Icons\\icon.ico"
             "TargetName" = "8:icon.ico"
             "Tag" = "8:"
-            "Folder" = "8:_24C4BCC179A740BFBC5D45DDB8D16A6D"
+            "Folder" = "8:_DF13B4C475D44F26AB5A285F0E29B7C7"
             "Condition" = "8:"
             "Transitive" = "11:FALSE"
             "Vital" = "11:TRUE"
@@ -265,6 +245,26 @@
             "Register" = "3:1"
             "Exclude" = "11:FALSE"
             "IsDependency" = "11:TRUE"
+            "IsolateTo" = "8:"
+            }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_7FAF1DBC59F6409BAA36708961A22C49"
+            {
+            "SourcePath" = "8:..\\GxPT\\Resources\\Icons\\gxpt-document.ico"
+            "TargetName" = "8:gxpt-document.ico"
+            "Tag" = "8:"
+            "Folder" = "8:_DF13B4C475D44F26AB5A285F0E29B7C7"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
             "IsolateTo" = "8:"
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_A180D69227FE4B7083CE9AD87CFDF823"
@@ -375,10 +375,10 @@
             "{5EB83D71-FA18-4901-BE56-DE22E13CC478}:_422F926DD57347ADB28C325A5899E1FC"
             {
             "Name" = "8:GxPT Archive"
-            "Description" = "8:Exported GxPT conversation archive."
-            "Extensions" = "8:gxpt"
+            "Description" = "8:GxPT conversation archive."
+            "Extensions" = "8:gxcv"
             "MIME" = "8:"
-            "Icon" = "8:_1F55C0B1C88A4AEAA0B86BE50DEF2387"
+            "Icon" = "8:_7FAF1DBC59F6409BAA36708961A22C49"
             "IconIndex" = "3:0"
                 "Command"
                 {
@@ -461,6 +461,17 @@
                                 {
                                 }
                             }
+                            "{9EF0B969-E518-4E46-987F-47570745A589}:_DF13B4C475D44F26AB5A285F0E29B7C7"
+                            {
+                            "Name" = "8:Icons"
+                            "AlwaysCreate" = "11:FALSE"
+                            "Condition" = "8:"
+                            "Transitive" = "11:FALSE"
+                            "Property" = "8:_FFE0724ECE6D430A8AFEF5A9B3E017F3"
+                                "Folders"
+                                {
+                                }
+                            }
                         }
                     }
                 }
@@ -481,14 +492,14 @@
         {
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:GxPT"
-        "ProductCode" = "8:{399AF72E-0061-4D33-B3BA-22A6A95948F8}"
-        "PackageCode" = "8:{592E04F3-4CA3-475F-AA94-C49BA1182FB8}"
+        "ProductCode" = "8:{C96024FD-1647-409C-978D-9EEB216D04E1}"
+        "PackageCode" = "8:{9161B1BA-C69F-4974-98B2-5C9B00591DDD}"
         "UpgradeCode" = "8:{18C05863-8BD9-4273-B9E8-061F771066DF}"
         "RestartWWWService" = "11:FALSE"
         "RemovePreviousVersions" = "11:TRUE"
         "DetectNewerInstalledVersion" = "11:TRUE"
         "InstallAllUsers" = "11:TRUE"
-        "ProductVersion" = "8:0.13.4"
+        "ProductVersion" = "8:0.13.5"
         "Manufacturer" = "8:IFM Innovations"
         "ARPHELPTELEPHONE" = "8:"
         "ARPHELPLINK" = "8:"
@@ -581,6 +592,42 @@
             {
                 "Keys"
                 {
+                    "{60EA8692-D2D5-43EB-80DC-7906BF13D6EF}:_C8F3673929CB408CB17B01685CCCFBC1"
+                    {
+                    "Name" = "8:GxPT Archive"
+                    "Condition" = "8:"
+                    "AlwaysCreate" = "11:FALSE"
+                    "DeleteAtUninstall" = "11:FALSE"
+                    "Transitive" = "11:FALSE"
+                        "Keys"
+                        {
+                            "{60EA8692-D2D5-43EB-80DC-7906BF13D6EF}:_7D1691CE7AFB45F39153FDA79BA66EA1"
+                            {
+                            "Name" = "8:DefaultIcon"
+                            "Condition" = "8:"
+                            "AlwaysCreate" = "11:FALSE"
+                            "DeleteAtUninstall" = "11:FALSE"
+                            "Transitive" = "11:FALSE"
+                                "Keys"
+                                {
+                                }
+                                "Values"
+                                {
+                                    "{ADCFDA98-8FDD-45E4-90BC-E3D20B029870}:_666FD256DCAE4842992849729B2EC0C3"
+                                    {
+                                    "Name" = "8:"
+                                    "Condition" = "8:"
+                                    "Transitive" = "11:FALSE"
+                                    "ValueTypes" = "3:1"
+                                    "Value" = "8:[#gxpt-document.ico]"
+                                    }
+                                }
+                            }
+                        }
+                        "Values"
+                        {
+                        }
+                    }
                 }
             }
             "HKU"
