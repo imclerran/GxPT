@@ -102,6 +102,7 @@ namespace GxPT
             RegisterHighlighter(new FortranHighlighter());
             RegisterHighlighter(new FSharpHighlighter());
             RegisterHighlighter(new GoHighlighter());
+            RegisterHighlighter(new GqlHighlighter());
             RegisterHighlighter(new HaskellHighlighter());
             RegisterHighlighter(new HtmlHighlighter());
             RegisterHighlighter(new JavaHighlighter());
@@ -338,6 +339,7 @@ namespace GxPT
                 AddPatterns(list, FortranHighlighter.FileTypes);
                 AddPatterns(list, FSharpHighlighter.FileTypes);
                 AddPatterns(list, GoHighlighter.FileTypes);
+                AddPatterns(list, GqlHighlighter.FileTypes);
                 AddPatterns(list, HaskellHighlighter.FileTypes);
                 AddPatterns(list, HtmlHighlighter.FileTypes);
                 AddPatterns(list, JavaHighlighter.FileTypes);

@@ -1371,6 +1371,69 @@ namespace GxPT
     }
 
     /// <summary>
+    /// GQL-family graph query languages (Cypher/openCypher, PGQL, nGQL, ISO GQL) highlighter
+    /// </summary>
+    public class GqlHighlighter : RegexHighlighterBase
+    {
+        public static readonly string[] FileTypes = new string[] { "*.gql", "*.cql", "*.cypher", "*.pgql", "*.ngql" };
+
+        public override string Language
+        {
+            get { return "gql"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "gql", "cypher", "opencypher", "neo4j", "pgql", "ngql", "age", "memgraph", "redisgraph" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Comments: //, --, and /* ... */
+                new TokenPattern(@"//.*$", TokenType.Comment, 1),
+                new TokenPattern(@"--.*$", TokenType.Comment, 2),
+                new TokenPattern(@"/\*[\s\S]*?\*/", TokenType.Comment, 3),
+
+                // String literals (single or double quotes with escapes)
+                new TokenPattern(@"'(?:[^'\\]|\\.)*'|""(?:[^""\\]|\\.)*""", TokenType.String, 4),
+
+                // Backtick-escaped identifiers (labels, rel types, properties)
+                new TokenPattern(@"`(?:[^`\\]|\\.)*`", TokenType.Type, 5),
+
+                // Parameters: $name, $`escaped`, legacy {name}
+                new TokenPattern(@"\$(?:[A-Za-z_][A-Za-z0-9_]*|`(?:[^`\\]|\\.)*`)|\{\s*[A-Za-z_][A-Za-z0-9_]*\s*\}", TokenType.Type, 6),
+
+                // Numbers (integers and floats)
+                new TokenPattern(@"\b(?:\d+\.\d+|\d+)(?:[eE][+-]?\d+)?\b", TokenType.Number, 7),
+
+                // Node labels and relationship types prefixed by ':' (includes the colon)
+                new TokenPattern(@":(?:`(?:[^`\\]|\\.)*`|[A-Za-z_][A-Za-z0-9_]*)", TokenType.Type, 8),
+
+                // Relationship pattern arrows and repetition (e.g., -[:T*1..3]->, <-[:T]-)
+                new TokenPattern(@"<-|->|--|\*\d*(?:\.\.\d*)?", TokenType.Operator, 9),
+
+                // Keywords (Cypher/PGQL/GQL common set)
+                new TokenPattern(@"(?i)\b(?:match|optional|where|return|distinct|order|by|skip|limit|asc|desc|create|merge|on|set|delete|detach|remove|foreach|unwind|with|call|yield|using|index|join|load|csv|headers|from|as|fieldterminator|start|case|when|then|else|end|exists|all|any|none|single|in|and|or|not|xor|is|null|true|false|union|graph|path|shortest|walks|select|group|having)
+                \b", TokenType.Keyword, 10),
+
+                // Function/procedure calls (optionally namespaced, e.g., apoc.text.clean())
+                new TokenPattern(@"\b[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*(?=\s*\()", TokenType.Method, 11),
+
+                // Property names after dot (n.name)
+                new TokenPattern(@"(?<=\.)[A-Za-z_][A-Za-z0-9_]*", TokenType.Type, 12),
+
+                // Comparison, regex, containment, arithmetic operators
+                new TokenPattern(@"=~|<>|!=|<=|>=|=|<|>|\+|-|\*|/|%", TokenType.Operator, 13),
+
+                // Punctuation and delimiters
+                new TokenPattern(@"[{}()\[\],.;]", TokenType.Punctuation, 14)
+            };
+        }
+    }
+
+    /// <summary>
     /// Haskell syntax highlighter
     /// </summary>
     public class HaskellHighlighter : RegexHighlighterBase
