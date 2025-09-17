@@ -111,6 +111,7 @@ namespace GxPT
             RegisterHighlighter(new KotlinHighlighter());
             RegisterHighlighter(new LispHighlighter());
             RegisterHighlighter(new LuaHighlighter());
+            RegisterHighlighter(new McfunctionHighlighter());
             RegisterHighlighter(new OcamlHighlighter());
             RegisterHighlighter(new PascalHighlighter());
             RegisterHighlighter(new PerlHighlighter());
@@ -348,6 +349,7 @@ namespace GxPT
                 AddPatterns(list, KotlinHighlighter.FileTypes);
                 AddPatterns(list, LispHighlighter.FileTypes);
                 AddPatterns(list, LuaHighlighter.FileTypes);
+                AddPatterns(list, McfunctionHighlighter.FileTypes);
                 AddPatterns(list, OcamlHighlighter.FileTypes);
                 AddPatterns(list, PascalHighlighter.FileTypes);
                 AddPatterns(list, PerlHighlighter.FileTypes);

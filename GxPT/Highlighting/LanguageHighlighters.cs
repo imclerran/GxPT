@@ -1917,6 +1917,87 @@ namespace GxPT
     }
 
     /// <summary>
+    /// MCFunction (Minecraft commands) syntax highlighter - supports Minecraft Java Edition commands
+    /// </summary>
+    public class McfunctionHighlighter : RegexHighlighterBase
+    {
+        public static readonly string[] FileTypes = new string[] { "*.mcfunction", "*.mcmeta" };
+        public override string Language
+        {
+            get { return "mcfunction"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "minecraft", "mcfunction", "datapack", "mc" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Comments (# at start of line or after whitespace)
+                new TokenPattern(@"^\s*#.*$", TokenType.Comment, 1),
+                new TokenPattern(@"(?<=\s)#.*$", TokenType.Comment, 2),
+
+                // JSON data (common in commands like /give, /summon)
+                new TokenPattern(@"\{(?:[^{}]|{[^{}]*})*\}", TokenType.String, 3),
+
+                // NBT compound tags and arrays
+                new TokenPattern(@"\[(?:[^\[\]]|\[[^\[\]]*\])*\]", TokenType.String, 4),
+
+                // Quoted strings (single and double quotes for text components, file paths, etc.)
+                new TokenPattern(@"'(?:[^'\\]|\\.)*'|""(?:[^""\\]|\\.)*""", TokenType.String, 5),
+
+                // Coordinates (~ ~1 ~-5, ^ ^1 ^-2, absolute coordinates)
+                new TokenPattern(@"[~^](?:[+-]?\d+(?:\.\d+)?)?", TokenType.Number, 6),
+
+                // Numbers (integers and floats, including scientific notation)
+                new TokenPattern(@"\b[+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?[bBsSfFdDlL]?\b", TokenType.Number, 7),
+
+                // Time units (numbers with time suffixes)
+                new TokenPattern(@"\b\d+[tsd]\b", TokenType.Number, 8),
+
+                // Command names (at start of line, case-insensitive)
+                new TokenPattern(@"(?i)^\s*(?:advancement|attribute|ban|ban-ip|banlist|bossbar|clear|clone|data|datapack|debug|defaultgamemode|deop|difficulty|effect|enchant|execute|experience|xp|fill|forceload|function|gamemode|gamerule|give|help|item|jfr|kick|kill|list|locate|loot|me|msg|tell|w|op|pardon|pardon-ip|particle|place|playsound|publish|recipe|reload|replaceitem|save-all|save-off|save-on|say|schedule|scoreboard|seed|setblock|setidletimeout|setworldspawn|spectate|spawnpoint|spreadplayers|stop|stopsound|summon|tag|team|teammsg|tm|teleport|tp|tellraw|time|title|trigger|weather|whitelist|worldborder)\b", TokenType.Keyword, 9),
+
+                // Execute subcommands (as, at, positioned, facing, etc.)
+                new TokenPattern(@"(?i)\b(?:as|at|positioned|align|anchored|facing|rotated|in|if|unless|store|run)\b", TokenType.Keyword, 10),
+
+                // Selectors with arguments (@p[distance=5,gamemode=survival])
+                new TokenPattern(@"@[parse]\[(?:[^\[\]]|\[[^\[\]]*\])*\]", TokenType.Type, 11),
+
+                // Simple selectors (@p, @a, @r, @e, @s)
+                new TokenPattern(@"@[parse]\b", TokenType.Type, 12),
+
+                // Resource locations (namespace:path format) - before general identifiers
+                new TokenPattern(@"\b[a-z0-9_.-]+:[a-z0-9_./+-]+\b", TokenType.Method, 13),
+
+                // Block states and properties {waterlogged=true, facing=north}
+                new TokenPattern(@"\{[a-z_]+=(?:true|false|[a-z_]+|[0-9]+)(?:,[a-z_]+=(?:true|false|[a-z_]+|[0-9]+))*\}", TokenType.String, 14),
+
+                // Boolean values (common in commands)
+                new TokenPattern(@"\b(?i)(?:true|false)\b", TokenType.Keyword, 15),
+
+                // Game modes and difficulties
+                new TokenPattern(@"\b(?i)(?:survival|creative|adventure|spectator|peaceful|easy|normal|hard)\b", TokenType.Keyword, 16),
+
+                // Common command keywords and modifiers
+                new TokenPattern(@"\b(?i)(?:replace|destroy|keep|force|move|normal|masked|filtered|outline|hollow|limit|sort|from|to|success|result|score|block|blocks|entity|storage|nearest|furthest|random|arbitrary|air|base|overlay|actionbar|title|subtitle|times|sound|master|music|record|weather|ambient|block|hostile|neutral|player|voice|all|clear|rain|thunder|add|remove|set|query|enable|disable|list|reset|test|modify|operation|get|merge|append|prepend|insert|scale|max|min|objectives|players|teams|triggers|tags)\b", TokenType.Keyword, 17),
+
+                // Minecraft identifiers (general pattern for blocks, items, entities without namespace)
+                new TokenPattern(@"\b[a-z_][a-z0-9_]*\b", TokenType.Normal, 18),
+
+                // Comparison operators
+                new TokenPattern(@"(?:<=|>=|<|>|=|\.\.)", TokenType.Operator, 19),
+
+                // Operators and punctuation
+                new TokenPattern(@"[(){}\[\];,.]", TokenType.Punctuation, 20)
+            };
+        }
+    }
+
+    /// <summary>
     /// OCaml syntax highlighter
     /// </summary>
     public class OcamlHighlighter : RegexHighlighterBase
