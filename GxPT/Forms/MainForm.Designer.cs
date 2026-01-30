@@ -43,6 +43,10 @@
             this.miExit = new System.Windows.Forms.ToolStripMenuItem();
             this.miView = new System.Windows.Forms.ToolStripMenuItem();
             this.miConversationHistory = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStripSeparator5 = new System.Windows.Forms.ToolStripSeparator();
+            this.miNextTab = new System.Windows.Forms.ToolStripMenuItem();
+            this.miPreviousTab = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStripSeparator6 = new System.Windows.Forms.ToolStripSeparator();
             this.miDarkMode = new System.Windows.Forms.ToolStripMenuItem();
             this.miHelp = new System.Windows.Forms.ToolStripMenuItem();
             this.miApiKeysHelp = new System.Windows.Forms.ToolStripMenuItem();
@@ -66,10 +70,6 @@
             this.tabPage1 = new System.Windows.Forms.TabPage();
             this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.splitContainer1 = new System.Windows.Forms.SplitContainer();
-            this.miNextTab = new System.Windows.Forms.ToolStripMenuItem();
-            this.miPreviousTab = new System.Windows.Forms.ToolStripMenuItem();
-            this.toolStripSeparator5 = new System.Windows.Forms.ToolStripSeparator();
-            this.toolStripSeparator6 = new System.Windows.Forms.ToolStripSeparator();
             this.msMain.SuspendLayout();
             this.pnlInput.SuspendLayout();
             this.pnlInputRight.SuspendLayout();
@@ -200,9 +200,38 @@
             this.miConversationHistory.Text = "Conversation &History";
             this.miConversationHistory.Click += new System.EventHandler(this.miConversationHistory_Click);
             // 
+            // toolStripSeparator5
+            // 
+            this.toolStripSeparator5.Name = "toolStripSeparator5";
+            this.toolStripSeparator5.Size = new System.Drawing.Size(225, 6);
+            // 
+            // miNextTab
+            // 
+            this.miNextTab.Name = "miNextTab";
+            this.miNextTab.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.Tab)));
+            this.miNextTab.Size = new System.Drawing.Size(228, 22);
+            this.miNextTab.Text = "&Next Tab";
+            this.miNextTab.Click += new System.EventHandler(this.miNextTab_Click);
+            // 
+            // miPreviousTab
+            // 
+            this.miPreviousTab.Name = "miPreviousTab";
+            this.miPreviousTab.ShortcutKeys = ((System.Windows.Forms.Keys)(((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.Shift)
+                        | System.Windows.Forms.Keys.Tab)));
+            this.miPreviousTab.Size = new System.Drawing.Size(228, 22);
+            this.miPreviousTab.Text = "&Previous Tab";
+            this.miPreviousTab.Click += new System.EventHandler(this.miPreviousTab_Click);
+            // 
+            // toolStripSeparator6
+            // 
+            this.toolStripSeparator6.Name = "toolStripSeparator6";
+            this.toolStripSeparator6.Size = new System.Drawing.Size(225, 6);
+            // 
             // miDarkMode
             // 
             this.miDarkMode.Name = "miDarkMode";
+            this.miDarkMode.ShortcutKeys = ((System.Windows.Forms.Keys)(((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.Shift)
+                        | System.Windows.Forms.Keys.D)));
             this.miDarkMode.Size = new System.Drawing.Size(228, 22);
             this.miDarkMode.Text = "&Dark Mode";
             this.miDarkMode.Click += new System.EventHandler(this.miDarkMode_Click);
@@ -446,33 +475,6 @@
             this.splitContainer1.SplitterDistance = 6;
             this.splitContainer1.SplitterWidth = 1;
             this.splitContainer1.TabIndex = 1;
-            // 
-            // miNextTab
-            // 
-            this.miNextTab.Name = "miNextTab";
-            this.miNextTab.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.Tab)));
-            this.miNextTab.Size = new System.Drawing.Size(228, 22);
-            this.miNextTab.Text = "&Next Tab";
-            this.miNextTab.Click += new System.EventHandler(this.miNextTab_Click);
-            // 
-            // miPreviousTab
-            // 
-            this.miPreviousTab.Name = "miPreviousTab";
-            this.miPreviousTab.ShortcutKeys = ((System.Windows.Forms.Keys)(((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.Shift)
-                        | System.Windows.Forms.Keys.Tab)));
-            this.miPreviousTab.Size = new System.Drawing.Size(228, 22);
-            this.miPreviousTab.Text = "&Previous Tab";
-            this.miPreviousTab.Click += new System.EventHandler(this.miPreviousTab_Click);
-            // 
-            // toolStripSeparator5
-            // 
-            this.toolStripSeparator5.Name = "toolStripSeparator5";
-            this.toolStripSeparator5.Size = new System.Drawing.Size(225, 6);
-            // 
-            // toolStripSeparator6
-            // 
-            this.toolStripSeparator6.Name = "toolStripSeparator6";
-            this.toolStripSeparator6.Size = new System.Drawing.Size(225, 6);
             // 
             // MainForm
             // 
