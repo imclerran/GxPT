@@ -50,6 +50,8 @@ decision-oriented rather than code.
 | D11 | **Multi-server aggregation, collision-naming, ranking & reveal all live in the GxPT host registry**; `Mcp35.Client` stays strictly single-connection | Keeps Client minimal; host owns all multi-server policy |
 | D12 | **net48 test projects resolve Newtonsoft via version-pinned `PackageReference`** | Consistent with `GxPT.Tests`; pin matches the vendored net35 dll to avoid drift |
 | D13 | **Concrete servers get neutral names** (`SerperMcpServer`, `FilesMcpServer`, `GitMcpServer`, `CommandMcpServer`) — *not* `Mcp35.Servers.*` | They're independent consumers (D10), not a collection inside the `Mcp35.Server` SDK |
+| D14 | **MCP servers are configured only in a dedicated MCP settings tab**; custom servers live in `%AppData%/GxPT/mcp.json` (Cursor-style schema, **snake_case** `mcp_servers`, transport inferred from `url`/`command`) | One clear home for MCP config, separate from `settings.json`; familiar Cursor-like format |
+| D15 | **Included servers are obscured** — the first-party stdio servers *and* the hosted GitHub server are hardcoded, kept out of `mcp.json`, and managed via per-server **toggles** + **secret fields** (Serper key, GitHub PAT) in `settings.json` | Users can't misconfigure internal wiring; secrets never land in the shareable `mcp.json` |
 
 ---
 
@@ -127,7 +129,9 @@ Server — servers are independent executables.
 Everything here is GxPT-specific orchestration, deliberately kept *out* of the
 library:
 - `McpHost` — owns the **collection** of `Mcp35.Client.McpServerConnection`
-  instances (one per configured server) and their lifecycle.
+  instances and their lifecycle, assembled from **enabled built-in servers**
+  (Tier 1, with injected secrets) plus every **custom server in `mcp.json`**
+  (Tier 2) — see §8.
 - `McpToolRegistry` — **catalog aggregation** across connections,
   **server-qualified collision naming**, **manifest assembly** (qualified names
   only), the **internal full-def cache**, and the **`reveal_tools`
@@ -334,15 +338,72 @@ qualified names are a tiny fraction of full schemas).
 
 ---
 
-## 8. Configuration (settings.json)
+## 8. Configuration
 
-Extend `AppSettings` with an `mcpServers` collection; per entry:
-- `name`
-- `transport`: `stdio` | `http`
-- stdio fields: `command`, `args`, `env` (e.g. Serper API key via `env`)
-- http fields: `url`, `auth` (PAT stored like the existing API key, passed to
-  curl via `-K`, never on the command line)
-- enabled-tools + remembered-approval state (§9)
+MCP configuration is split into two tiers and is editable **only** in a
+dedicated **MCP tab** in `SettingsForm` — never via the Visual or JSON
+(settings.json) tabs (D14).
+
+### Tier 1 — included servers (obscured)
+The bundled first-party servers (`SerperMcpServer`, `FilesMcpServer`,
+`GitMcpServer`, `CommandMcpServer`) **and** the hosted **GitHub** server are
+*built in*: their wiring (the first-party stdio launch commands; the GitHub
+`url`) is **hardcoded in GxPT and never appears in `mcp.json`** (D15). Users
+manage them with:
+- a per-server **enable toggle**, persisted in `settings.json` via `AppSettings`
+  (e.g. `AppSettings.SetBool("mcp.builtin.github.enabled", …)`);
+- **secret fields** — **Serper API Key** and **GitHub PAT** — stored like the
+  existing OpenRouter key (`AppSettings.SetString`, in `settings.json`).
+
+Secrets are injected at runtime — PAT → the GitHub transport's `Authorization`
+header (passed to curl via `-K`, never on the command line); Serper key →
+`SerperMcpServer`'s `env` — and are **never written to `mcp.json`**, so the file
+stays shareable.
+
+### Tier 2 — custom servers (`mcp.json`)
+User-defined servers live in **`%AppData%/GxPT/mcp.json`** (beside
+`settings.json`, in `AppSettings.SettingsDirectory`), in a Cursor-style schema
+but **snake_case**:
+
+```json
+{
+  "mcp_servers": {
+    "my_http_server": {
+      "url": "https://example.com/mcp/",
+      "headers": { "Authorization": "Bearer ..." }
+    },
+    "my_stdio_server": {
+      "command": "C:\\path\\to\\server.exe",
+      "args": ["--flag"],
+      "env": { "SOME_KEY": "..." }
+    }
+  }
+}
+```
+
+Transport is **inferred**: `url` present → HTTP (with `headers`); `command`
+present → stdio (with `args` / `env`). (A `github` block mirrors this format,
+but in GxPT GitHub is a built-in toggle — Tier 1 — so it isn't normally added
+here.)
+
+### Assembly
+`McpHost` builds its connection collection (D11) from **enabled Tier-1 servers**
+(with injected secrets) **plus every Tier-2 entry** in `mcp.json`. The host
+parses `mcp.json` with the same `JavaScriptSerializer` approach as `AppSettings`
+(small host config; snake_case maps cleanly to `Dictionary<string,object>`) —
+Newtonsoft stays reserved for the protocol layer inside `Mcp35.*`.
+
+### MCP settings tab (UI)
+A new `TabPage` in `SettingsForm`, modeled on the existing JSON tab (`tabJson` /
+the Consolas `rtbJson` RichTextBox):
+- **Top:** per-server **enable toggles** (`CheckBox` per included server) and the
+  **Serper API Key** / **GitHub PAT** `TextBox` fields (plaintext, matching the
+  existing `txtApiKey`; masking is a possible later enhancement).
+- **Below:** a Consolas RichTextBox editing **`mcp.json`** (custom servers only).
+- Shares the form's **Save**: validates the editor JSON, writes `mcp.json`
+  crash-safe (as `AppSettings` does for `settings.json`), and persists the
+  toggles + secrets to `settings.json`. Invalid JSON blocks the save with an
+  error.
 
 ---
 
@@ -353,6 +414,9 @@ Extend `AppSettings` with an `mcpServers` collection; per entry:
   destructive tools: command execution, git writes (commit/push), GitHub writes.
 - `CommandMcpServer` is the sharpest edge: always-confirm + process isolation;
   treat all server/tool output as untrusted input at the parse boundary.
+- **Secrets** (Serper key, GitHub PAT) live in `settings.json` like the existing
+  OpenRouter key — **never** in the shareable `mcp.json`; the PAT reaches curl
+  via `-K`, never the command line (§8, D15).
 
 ---
 
@@ -361,11 +425,13 @@ Extend `AppSettings` with an `mcpServers` collection; per entry:
 - **Stdio**: child process; newline-framed JSON-RPC on stdin/stdout; stderr
   surfaced via an injected log delegate.
 - **HTTP (GitHub)**: Streamable HTTP, curl-per-POST through Core's curl-exec
-  helper. Reuses the OpenRouter-proven approach: temp-file request body, `-K`
-  auth config, `-N`, UTF-8 decode, temp cleanup. Adds `Accept: application/json,
-  text/event-stream`, `MCP-Protocol-Version`, captures `Mcp-Session-Id`
-  (`-D <tempfile>`), `DELETE`s the session on teardown. SSE responses parsed by
-  Core's SSE parser.
+  helper. The GitHub `url` comes from the obscured built-in definition and the
+  `Authorization: Bearer <PAT>` header from the injected PAT secret (Tier 1,
+  §8) — not from `mcp.json`. Reuses the OpenRouter-proven approach: temp-file
+  request body, `-K` auth config, `-N`, UTF-8 decode, temp cleanup. Adds
+  `Accept: application/json, text/event-stream`, `MCP-Protocol-Version`,
+  captures `Mcp-Session-Id` (`-D <tempfile>`), `DELETE`s the session on
+  teardown. SSE responses parsed by Core's SSE parser.
 
 ---
 
@@ -406,7 +472,8 @@ Extend `AppSettings` with an `mcpServers` collection; per entry:
    payloads).
 2. **Mcp35.Server** + one trivial server (validate the stdio loop).
 3. **Mcp35.Client** `StdioTransport` + `McpServerConnection`; GxPT host consumes
-   it and lists tools.
+   it and lists tools. Also lands the **MCP settings tab** + `mcp.json` loader +
+   built-in enable toggles (the config plumbing both transports build on).
 4. **Tool-call loop** + OpenRouter `tools`/`tool_calls` — first real
    end-to-end invocation.
 5. **Tool discovery**: names manifest + `reveal_tools` (define-on-demand + LRU
