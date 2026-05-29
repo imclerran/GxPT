@@ -63,7 +63,9 @@ namespace GxPT
 
             string path = GetPathForId(convo.Id);
             if (string.IsNullOrEmpty(path)) return;
-            File.WriteAllText(path, json);
+            // Crash-safe write so a failure mid-save can't corrupt the conversation file.
+            // UTF-8 without BOM matches the default File.WriteAllText behavior used previously.
+            FileSafe.WriteAllTextAtomic(path, json, new UTF8Encoding(false));
         }
 
         public static Conversation Load(OpenRouterClient client, string path)
