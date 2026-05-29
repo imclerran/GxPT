@@ -106,8 +106,8 @@ namespace GxPT
             if (props == null) props = new ClientProperties();
             if (!props.Stream.HasValue) props.Stream = false;
             string body = BuildRequestBody(model, messages, props);
-            string dataFile;
-            string args = BuildCurlArgs(body, out dataFile);
+            List<string> tempFiles;
+            string args = BuildCurlArgs(body, out tempFiles);
 
             var psi = new ProcessStartInfo
             {
@@ -133,9 +133,8 @@ namespace GxPT
                     err = errReader.ReadToEnd();
                 }
                 p.WaitForExit();
-                // Clean up temp file
-                try { if (!string.IsNullOrEmpty(dataFile) && File.Exists(dataFile)) File.Delete(dataFile); }
-                catch { }
+                // Clean up temp files (request body and auth config)
+                CleanupTempFiles(tempFiles);
                 // If curl signaled an HTTP error but kept the body (with --fail-with-body), log the body and any extracted message for debugging
                 try
                 {
@@ -174,8 +173,8 @@ namespace GxPT
             // Ensure stream flag defaults to true for stream API
             if (!props.Stream.HasValue) props.Stream = true;
             string body = BuildRequestBody(model, messages, props);
-            string dataFile;
-            string args = BuildCurlArgs(body, out dataFile);
+            List<string> tempFiles;
+            string args = BuildCurlArgs(body, out tempFiles);
 
             var psi = new ProcessStartInfo
             {
@@ -291,82 +290,112 @@ namespace GxPT
                             var msg = !string.IsNullOrEmpty(extractedMsg) ? extractedMsg : (!string.IsNullOrEmpty(err) ? err : "Request failed");
                             onError(msg.Trim());
                         }
-                        // Clean up temp file
-                        try { if (!string.IsNullOrEmpty(dataFile) && File.Exists(dataFile)) File.Delete(dataFile); }
-                        catch { }
+                        // Clean up temp files
+                        CleanupTempFiles(tempFiles);
                         return;
                     }
                 }
                 catch { }
 
                 if (onDone != null) onDone();
-                // Clean up temp file
-                try { if (!string.IsNullOrEmpty(dataFile) && File.Exists(dataFile)) File.Delete(dataFile); }
-                catch { }
+                // Clean up temp files
+                CleanupTempFiles(tempFiles);
             }
             catch (Exception ex)
             {
                 Logger.Log("Stream", "Exception: " + ex.Message);
+                CleanupTempFiles(tempFiles);
                 if (onError != null) onError(ex.Message);
             }
         }
 
-        private string BuildCurlArgs(string jsonBody, out string dataFilePath)
+        private string BuildCurlArgs(string jsonBody, out List<string> tempFiles)
         {
-            // Escape quotes for curl -d "..." on Windows
+            tempFiles = new List<string>();
+
             try { Logger.Log("Stream", "Request JSON: " + jsonBody); }
             catch { }
             try { Logger.Log("Stream", "Request JSON length=" + (jsonBody != null ? jsonBody.Length : 0)); }
             catch { }
 
-            // Write body to a temp file to avoid command-line length/quoting issues
             string tempDir = Path.GetTempPath();
-            string fileName = "gxpt_body_" + Guid.NewGuid().ToString("N") + ".json";
-            string filePath = Path.Combine(tempDir, fileName);
+            var utf8NoBom = new UTF8Encoding(false);
+
+            // Write the request body to a temp file to avoid command-line length/quoting issues.
+            string bodyPath = Path.Combine(tempDir, "gxpt_body_" + Guid.NewGuid().ToString("N") + ".json");
+            bool bodyWritten = false;
             try
             {
-                var utf8NoBom = new UTF8Encoding(false);
-                File.WriteAllText(filePath, jsonBody ?? string.Empty, utf8NoBom);
+                File.WriteAllText(bodyPath, jsonBody ?? string.Empty, utf8NoBom);
+                bodyWritten = true;
+                tempFiles.Add(bodyPath);
             }
             catch (Exception ex)
             {
-                // Fallback: if writing fails, we still try inline (last resort)
+                // Fallback: if writing fails, pass the body inline as a last resort.
                 try { Logger.Log("Stream", "Temp body write failed: " + ex.Message); }
                 catch { }
-                dataFilePath = null;
-                return BuildCurlArgsInline(jsonBody);
             }
-            dataFilePath = filePath;
+
+            // Write the Authorization header to a curl config file so the API key never appears
+            // on the process command line (where any local process could read it).
+            string configPath = Path.Combine(tempDir, "gxpt_cfg_" + Guid.NewGuid().ToString("N") + ".txt");
+            bool configWritten = false;
+            try
+            {
+                // curl config file directive: header = "Authorization: Bearer <key>"
+                string cfg = "header = \"Authorization: Bearer " + EscapeForCurlConfig(_apiKey) + "\"\n";
+                File.WriteAllText(configPath, cfg, utf8NoBom);
+                configWritten = true;
+                tempFiles.Add(configPath);
+            }
+            catch (Exception ex)
+            {
+                try { Logger.Log("Stream", "Auth config write failed: " + ex.Message); }
+                catch { }
+            }
 
             var sb = new StringBuilder();
             // -sS: silent but still show errors; --fail-with-body: fail on HTTP errors but keep body on stdout
             sb.Append("-sS --fail-with-body https://openrouter.ai/api/v1/chat/completions ");
             sb.Append("-H \"Content-Type: application/json\" ");
-            string apiKeyForCurl = _apiKey;
-            sb.Append("-H \"Authorization: Bearer ").Append(apiKeyForCurl).Append("\" ");
+            if (configWritten)
+            {
+                // -K/--config reads the Authorization header from the temp file (off the command line).
+                sb.Append("-K \"").Append(configPath).Append("\" ");
+            }
+            else
+            {
+                // Last-resort fallback so requests still work if the temp dir is unwritable.
+                sb.Append("-H \"Authorization: Bearer ").Append(_apiKey).Append("\" ");
+            }
             sb.Append("-N "); // important for streaming to disable buffering
-            // Use @file to pass the body
-            sb.Append("-d @\"").Append(filePath).Append("\"");
+            if (bodyWritten)
+                sb.Append("-d @\"").Append(bodyPath).Append("\"");
+            else
+                sb.Append("-d \"").Append((jsonBody ?? string.Empty).Replace("\"", "\\\"")).Append("\"");
             try { Logger.Log("Stream", "curl args prepared for request."); }
             catch { }
             return sb.ToString();
         }
 
-        // Last-resort inline args builder, used only if temp-file write fails
-        private string BuildCurlArgsInline(string jsonBody)
+        // Escape a value for inclusion inside double quotes in a curl config file.
+        // Within double quotes, curl processes the escape sequences \\, \", \t, \n, \r and \v.
+        private static string EscapeForCurlConfig(string value)
         {
-            string bodyEscaped = (jsonBody ?? string.Empty).Replace("\"", "\\\"");
-            var sb = new StringBuilder();
-            // -sS: silent but still show errors; --fail-with-body: fail on HTTP errors but keep body on stdout
-            sb.Append("-sS --fail-with-body https://openrouter.ai/api/v1/chat/completions ");
-            sb.Append("-H \"Content-Type: application/json\" ");
-            string apiKeyForCurl = _apiKey;
-            sb.Append("-H \"Authorization: Bearer ").Append(apiKeyForCurl).Append("\" ");
-            sb.Append("-N ");
-            sb.Append("-d \"").Append(bodyEscaped).Append("\"");
-            try { Logger.Log("Stream", "curl args prepared for request (inline fallback)."); }
-            catch { }
-            return sb.ToString();
+            if (string.IsNullOrEmpty(value)) return string.Empty;
+            return value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+        }
+
+        // Best-effort deletion of temp files created for a request (body and auth config).
+        private static void CleanupTempFiles(IEnumerable<string> paths)
+        {
+            if (paths == null) return;
+            foreach (var p in paths)
+            {
+                try { if (!string.IsNullOrEmpty(p) && File.Exists(p)) File.Delete(p); }
+                catch { }
+            }
         }
 
         // Extracts a human-readable error message from common JSON error shapes (C# 3.0 compatible)
