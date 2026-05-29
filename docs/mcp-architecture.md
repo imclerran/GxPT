@@ -140,7 +140,8 @@ library:
 - The **OpenRouter** tool-call loop (`tools`/`tool_calls` wiring) — OpenRouter-
   specific, not even MCP.
 - Approval tiers + confirmation UI.
-- Settings binding (`mcpServers`).
+- MCP config: the MCP settings tab, the `mcp.json` loader, and built-in toggles
+  + secret fields (§8).
 
 ### MCP server executables (independent consumers, net35 console exes)
 Each is its own project/repo (D10) consuming the `Mcp35.Server` SDK; neutrally
@@ -160,7 +161,7 @@ named because they are *not* part of the library (D13).
 | Names manifest + internal def cache + `reveal_tools` (LRU cap) | **GxPT host** |
 | OpenRouter `tools`/`tool_calls` loop | **GxPT host** |
 | Approval tiers + confirmation UI | **GxPT host** |
-| `mcpServers` settings binding | **GxPT host** |
+| MCP config: settings tab, `mcp.json` loader, built-in toggles + secrets | **GxPT host** |
 
 ---
 
