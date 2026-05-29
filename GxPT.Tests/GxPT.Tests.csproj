@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Unit tests for the pure-logic parts of GxPT.
+
+    The main app targets .NET Framework 3.5 (VS2008-era, classic csproj) and can't be
+    built by a modern SDK on a stock CI runner. Rather than build that project, this test
+    project links the specific source files under test and compiles them into the test
+    assembly. That also makes the 'internal' ZipSafe accessible without InternalsVisibleTo.
+
+    Targets net48 so it can reference the vendored .NET Framework DotNetZip.dll directly
+    (the real dependency the app ships). Runs via 'dotnet test' on a Windows runner.
+
+    NOTE: intentionally NOT added to GxPT.sln, which VS2008 must still be able to open
+    (it cannot load SDK-style projects).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>GxPT.Tests</AssemblyName>
+    <RootNamespace>GxPT.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <!-- Production source under test, compiled directly into the test assembly -->
+  <ItemGroup>
+    <Compile Include="..\GxPT\Services\MarkdownParser.cs" Link="Linked\MarkdownParser.cs" />
+    <Compile Include="..\GxPT\Utilities\ZipSafe.cs" Link="Linked\ZipSafe.cs" />
+  </ItemGroup>
+
+  <!-- The same vendored DotNetZip the app ships with -->
+  <ItemGroup>
+    <Reference Include="DotNetZip">
+      <HintPath>..\GxPT\lib\DotNetZip.dll</HintPath>
+      <SpecificVersion>False</SpecificVersion>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <!-- Provides net48 reference assemblies so the build doesn't depend on an installed targeting pack -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,27 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # Only the test project is built. It links the production source files under test
+      # (MarkdownParser, ZipSafe), so the .NET Framework 3.5 app itself is not built here.
+      - name: Restore
+        run: dotnet restore GxPT.Tests/GxPT.Tests.csproj
+
+      - name: Test
+        run: dotnet test GxPT.Tests/GxPT.Tests.csproj --configuration Release --no-restore --verbosity normal
