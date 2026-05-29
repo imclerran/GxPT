@@ -12,6 +12,30 @@ namespace GxPT
         private const string FolderName = "Conversations";
         private const string FileExt = ".json";
 
+        // Per-file metadata cache for ListAll, so repeated sidebar refreshes don't re-read and
+        // re-parse every conversation file. Entries are keyed by path and validated against the
+        // file's last-write timestamp, so a stale entry is refreshed automatically when the file
+        // changes, and entries for deleted files are pruned.
+        private static readonly object _listCacheGate = new object();
+        private static readonly Dictionary<string, CachedListMeta> _listCache =
+            new Dictionary<string, CachedListMeta>(StringComparer.OrdinalIgnoreCase);
+
+        private sealed class CachedListMeta
+        {
+            public DateTime StampUtc;
+            public ConversationListItem Item;
+        }
+
+        // Lightweight DTO for listing: only the fields the sidebar needs, so we avoid
+        // allocating the (potentially large) message list when reading metadata.
+        private sealed class ConversationMetaDto
+        {
+            public string Id { get; set; }
+            public string Name { get; set; }
+            public string SelectedModel { get; set; }
+            public DateTime LastUpdated { get; set; }
+        }
+
         private static string GetRoot()
         {
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
@@ -132,28 +156,77 @@ namespace GxPT
         {
             var list = new List<ConversationListItem>();
             string root = GetRoot();
-            if (!Directory.Exists(root)) return list;
-            foreach (var path in Directory.GetFiles(root, "*" + FileExt))
+            if (!Directory.Exists(root))
             {
-                try
-                {
-                    string json = File.ReadAllText(path);
-                    var dto = new JavaScriptSerializer().Deserialize<ConversationDto>(json);
-                    if (dto == null) continue;
-                    list.Add(new ConversationListItem
-                    {
-                        Id = dto.Id,
-                        Name = string.IsNullOrEmpty(dto.Name) ? "New Conversation" : dto.Name,
-                        SelectedModel = dto.SelectedModel,
-                        LastUpdated = dto.LastUpdated,
-                        Path = path
-                    });
-                }
-                catch { }
+                lock (_listCacheGate) { _listCache.Clear(); }
+                return list;
             }
+
+            string[] files;
+            try { files = Directory.GetFiles(root, "*" + FileExt); }
+            catch { files = new string[0]; }
+
+            lock (_listCacheGate)
+            {
+                var present = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var path in files)
+                {
+                    present.Add(path);
+                    try
+                    {
+                        DateTime stamp;
+                        try { stamp = File.GetLastWriteTimeUtc(path); }
+                        catch { stamp = DateTime.MinValue; }
+
+                        CachedListMeta cached;
+                        if (_listCache.TryGetValue(path, out cached) && cached != null
+                            && cached.Item != null && cached.StampUtc == stamp)
+                        {
+                            // Unchanged since last read: reuse cached metadata, no file I/O.
+                            list.Add(cached.Item);
+                            continue;
+                        }
+
+                        var item = ReadListItem(path);
+                        if (item == null) continue;
+                        _listCache[path] = new CachedListMeta { StampUtc = stamp, Item = item };
+                        list.Add(item);
+                    }
+                    catch { }
+                }
+
+                // Prune cache entries for files that no longer exist.
+                if (_listCache.Count > present.Count)
+                {
+                    var stale = new List<string>();
+                    foreach (var kv in _listCache)
+                        if (!present.Contains(kv.Key)) stale.Add(kv.Key);
+                    for (int i = 0; i < stale.Count; i++) _listCache.Remove(stale[i]);
+                }
+            }
+
             // Order by LastUpdated descending
             list = list.OrderByDescending(i => i.LastUpdated).ToList();
             return list;
+        }
+
+        private static ConversationListItem ReadListItem(string path)
+        {
+            try
+            {
+                string json = File.ReadAllText(path);
+                var dto = new JavaScriptSerializer().Deserialize<ConversationMetaDto>(json);
+                if (dto == null) return null;
+                return new ConversationListItem
+                {
+                    Id = dto.Id,
+                    Name = string.IsNullOrEmpty(dto.Name) ? "New Conversation" : dto.Name,
+                    SelectedModel = dto.SelectedModel,
+                    LastUpdated = dto.LastUpdated,
+                    Path = path
+                };
+            }
+            catch { return null; }
         }
 
         public static void DeleteById(string id)
