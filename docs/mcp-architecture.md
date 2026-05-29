@@ -40,7 +40,7 @@ decision-oriented rather than code.
 | D1 | Library name is **Mcp35**; projects `Mcp35.Core`, `Mcp35.Client`, `Mcp35.Server` (the server-building SDK, **singular**) | Neutral, descriptive (nods to net35); chosen now to avoid a later rename |
 | D2 | **Mono-repo first**, split Mcp35 into its own repo later | API churns hard through early phases; ProjectReference beats DLL-republish during churn |
 | D3 | JSON via **Newtonsoft.Json** (vendored, net35 build) | Declarative JSON-RPC field-presence control; no `MaxJsonLength` cap; GxPT has no Newtonsoft to conflict with |
-| D4 | **Host-side discovery: a names-only manifest up front, full schemas revealed on demand by exact name** (`reveal_tools`, batch); free-text `search_tools` is only a fallback for very large catalogs | Deterministic discovery (no hallucinated tools, no empty-result retries) at minimal token cost; multi-reveal handles ambiguity without summaries |
+| D4 | **Host-side discovery: a names-only manifest up front, full schemas revealed on demand by exact name** (`reveal_tools`, batch). No free-text search tool for now (deferred until/if the catalog grows huge) | Deterministic discovery (no hallucinated tools, no empty-result retries) at minimal token cost; multi-reveal handles ambiguity without summaries |
 | D5 | HTTP target = **GitHub MCP only**, Streamable HTTP, **PAT via curl `-K`** | No OAuth scope; reuse existing curl plumbing |
 | D6 | Approval = **allowlist/remember**, but **execution/destructive tools always confirm** | cmd / git-writes / GitHub-writes are never silently auto-run |
 | D7 | **Dependencies are injected, never embedded** in the library | Keeps Core binary-pure and the future split cheap |
@@ -325,11 +325,12 @@ qualified names are a tiny fraction of full schemas).
   `tools` (so uncallable) but still in the manifest, so the model just
   re-reveals it — no error path. A single reveal batch may momentarily exceed
   the cap; LRU trims back on later turns.
-- **`search_tools` is a scaling fallback only.** If a catalog ever reaches
-  hundreds of tools (so even the names manifest is heavy), an optional
-  `search_tools(query)` can rank against the host's **internal** cache (names
-  *and* the privately-held descriptions) and return candidate qualified names to
-  reveal. Not needed for the initial server set.
+
+> **Deferred:** no free-text search tool for now — `reveal_tools` over a
+> names manifest is adequate for GxPT's initial catalog. If the catalog ever
+> grows large enough that the names manifest itself becomes heavy, a
+> `search_tools(query)` ranking over the host's internal cache can be added
+> then.
 
 ---
 
@@ -441,14 +442,15 @@ Extend `AppSettings` with an `mcpServers` collection; per entry:
 - ~~Server project naming~~ → `Mcp35.Server` is the singular SDK; concrete
   servers get neutral names (`SerperMcpServer`, …), not `Mcp35.Servers.*` (D13).
 - ~~Tool discovery mechanism~~ → names-only manifest with define-on-demand via
-  batch `reveal_tools` (multi-reveal for ambiguity); free-text `search_tools`
-  demoted to a fallback (D4).
+  batch `reveal_tools` (multi-reveal for ambiguity); no free-text search tool —
+  deferred until/if the catalog grows huge (D4).
 
 **Still open:**
 - **Reveal cap value**: how many tool defs may ride in `tools` at once before
   LRU eviction kicks in — tune empirically.
-- **`search_tools` fallback ranking** (only if a catalog grows huge): would
-  start as simple lexical match over the internal cache; revisit if recall is
-  poor.
 - **Manifest refresh cadence**: rebuilt per request vs cached until a server's
   `tools/list` changes.
+
+**Deferred (revisit only if the catalog grows huge):**
+- A `search_tools(query)` fallback ranking over the host's internal cache, to
+  narrow the names manifest before revealing.
