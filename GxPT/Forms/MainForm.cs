@@ -759,6 +759,8 @@ namespace GxPT
             using (var dlg = new SettingsForm())
             {
                 dlg.ShowDialog(this);
+                // The dialog writes settings.json directly; drop the cached copy so reads are fresh.
+                AppSettings.Reload();
                 // Re-init client in case API key changed
                 InitializeClient();
                 UpdateApiKeyBanner();
@@ -1390,7 +1392,10 @@ namespace GxPT
         {
             using (var dlg = new SettingsForm())
             {
-                if (dlg.ShowDialog(this) == DialogResult.OK)
+                DialogResult dr = dlg.ShowDialog(this);
+                // The dialog writes settings.json directly; drop the cached copy so reads are fresh.
+                AppSettings.Reload();
+                if (dr == DialogResult.OK)
                 {
                     InitializeClient();
                 }

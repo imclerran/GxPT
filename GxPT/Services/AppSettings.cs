@@ -22,13 +22,63 @@ namespace GxPT
             get { return Path.Combine(SettingsDirectory, "settings.json"); }
         }
 
-        private static Dictionary<string, object> LoadJson()
+        // In-memory cache of the settings file, guarded by _gate. The cache is reloaded
+        // automatically whenever the file's last-write timestamp changes on disk, so edits
+        // made outside AppSettings (e.g. the Settings dialog's JSON editor writes the file
+        // directly) are picked up without stale reads. Writes hold the lock across the whole
+        // read-modify-write, eliminating the clobber race between the UI and naming threads.
+        private static readonly object _gate = new object();
+        private static Dictionary<string, object> _cache;
+        private static DateTime _cacheStampUtc;
+        private static bool _loaded;
+
+        // Force the next access to reload from disk. Cheap, explicit invalidation hook
+        // (e.g. after the Settings dialog closes) in addition to the timestamp check.
+        public static void Reload()
+        {
+            lock (_gate)
+            {
+                _loaded = false;
+                _cache = null;
+                _cacheStampUtc = DateTime.MinValue;
+            }
+        }
+
+        // Ensure _cache reflects the current on-disk file. Must be called while holding _gate.
+        private static void EnsureLoadedLocked()
+        {
+            try
+            {
+                string path = SettingsPath;
+                if (!File.Exists(path))
+                {
+                    if (!_loaded || _cache == null)
+                    {
+                        _cache = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                        _cacheStampUtc = DateTime.MinValue;
+                        _loaded = true;
+                    }
+                    return;
+                }
+                DateTime stamp = File.GetLastWriteTimeUtc(path);
+                if (_loaded && _cache != null && stamp == _cacheStampUtc) return; // cache is current
+                _cache = ReadFromDisk(path);
+                _cacheStampUtc = stamp;
+                _loaded = true;
+            }
+            catch
+            {
+                if (_cache == null) _cache = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                _loaded = true;
+            }
+        }
+
+        private static Dictionary<string, object> ReadFromDisk(string path)
         {
             var json = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
             try
             {
-                if (!File.Exists(SettingsPath)) return json;
-                string text = File.ReadAllText(SettingsPath, Encoding.UTF8);
+                string text = File.ReadAllText(path, Encoding.UTF8);
                 if (string.IsNullOrEmpty(text)) return json;
                 var ser = new JavaScriptSerializer();
                 var obj = ser.DeserializeObject(text) as Dictionary<string, object>;
@@ -41,65 +91,81 @@ namespace GxPT
             return json;
         }
 
-        private static void SaveJson(Dictionary<string, object> data)
+        // Serialize the cache to disk. Must be called while holding _gate.
+        private static void PersistLocked()
         {
             try
             {
-                if (data == null) data = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-                string dir = SettingsDirectory;
-                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                if (_cache == null) _cache = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
                 var ser = new JavaScriptSerializer();
-                string text = ser.Serialize(data);
+                string text = ser.Serialize(_cache);
                 // Crash-safe write so a failure mid-save can't corrupt settings.json.
                 FileSafe.WriteAllTextAtomic(SettingsPath, text, Encoding.UTF8);
+                // Refresh the stamp so our own write doesn't trigger a needless reload next read.
+                try { _cacheStampUtc = File.GetLastWriteTimeUtc(SettingsPath); }
+                catch { }
             }
             catch { }
         }
 
         public static string GetString(string key)
         {
-            var all = LoadJson();
-            object val;
-            if (all.TryGetValue(key, out val) && val != null)
-                return Convert.ToString(val);
-            return null;
+            lock (_gate)
+            {
+                EnsureLoadedLocked();
+                object val;
+                if (_cache.TryGetValue(key, out val) && val != null)
+                    return Convert.ToString(val);
+                return null;
+            }
         }
 
         public static void SetString(string key, string value)
         {
             if (string.IsNullOrEmpty(key)) return;
-            var all = LoadJson();
-            all[key] = value ?? string.Empty;
-            SaveJson(all);
+            lock (_gate)
+            {
+                EnsureLoadedLocked();
+                _cache[key] = value ?? string.Empty;
+                PersistLocked();
+            }
         }
 
         // Store a numeric (double) value, preserving numeric type in JSON
         public static void SetDouble(string key, double value)
         {
             if (string.IsNullOrEmpty(key)) return;
-            var all = LoadJson();
-            all[key] = value;
-            SaveJson(all);
+            lock (_gate)
+            {
+                EnsureLoadedLocked();
+                _cache[key] = value;
+                PersistLocked();
+            }
         }
 
         // Store an integer value (convenience)
         public static void SetInt(string key, int value)
         {
             if (string.IsNullOrEmpty(key)) return;
-            var all = LoadJson();
-            all[key] = value;
-            SaveJson(all);
+            lock (_gate)
+            {
+                EnsureLoadedLocked();
+                _cache[key] = value;
+                PersistLocked();
+            }
         }
 
         public static List<string> GetList(string key)
         {
             var result = new List<string>();
-            var all = LoadJson();
-            object val;
-            if (all.TryGetValue(key, out val) && val != null)
+            lock (_gate)
             {
-                try
+                EnsureLoadedLocked();
+                object val;
+                if (_cache.TryGetValue(key, out val) && val != null)
                 {
+                    try
+                    {
                     var arr = val as object[];
                     if (arr != null)
                     {
@@ -119,33 +185,37 @@ namespace GxPT
                             }
                         }
                     }
+                    }
+                    catch { }
                 }
-                catch { }
             }
             return result;
         }
 
         public static double GetDouble(string key, double defaultValue)
         {
-            var all = LoadJson();
-            object val;
-            if (!all.TryGetValue(key, out val) || val == null) return defaultValue;
-            try
+            lock (_gate)
             {
-                if (val is double) return (double)val;
-                if (val is float) return (double)(float)val;
-                if (val is decimal) return (double)(decimal)val;
-                if (val is int) return (int)val;
-                if (val is long) return (long)val;
-                string s = Convert.ToString(val);
-                if (string.IsNullOrEmpty(s)) return defaultValue;
-                double d;
-                if (double.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out d))
-                    return d;
-                if (double.TryParse(s, out d)) return d;
+                EnsureLoadedLocked();
+                object val;
+                if (!_cache.TryGetValue(key, out val) || val == null) return defaultValue;
+                try
+                {
+                    if (val is double) return (double)val;
+                    if (val is float) return (double)(float)val;
+                    if (val is decimal) return (double)(decimal)val;
+                    if (val is int) return (int)val;
+                    if (val is long) return (long)val;
+                    string s = Convert.ToString(val);
+                    if (string.IsNullOrEmpty(s)) return defaultValue;
+                    double d;
+                    if (double.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out d))
+                        return d;
+                    if (double.TryParse(s, out d)) return d;
+                }
+                catch { }
+                return defaultValue;
             }
-            catch { }
-            return defaultValue;
         }
 
         // Overload without explicit default for C# 3.0 compatibility
@@ -157,34 +227,37 @@ namespace GxPT
         // Read boolean values (accepts true/false, 1/0, yes/no, on/off, strings or numbers)
         public static bool GetBool(string key, bool defaultValue)
         {
-            var all = LoadJson();
-            object val;
-            if (!all.TryGetValue(key, out val) || val == null) return defaultValue;
-            try
+            lock (_gate)
             {
-                if (val is bool) return (bool)val;
-                if (val is string)
+                EnsureLoadedLocked();
+                object val;
+                if (!_cache.TryGetValue(key, out val) || val == null) return defaultValue;
+                try
                 {
-                    string s = Convert.ToString(val);
-                    if (string.IsNullOrEmpty(s)) return defaultValue;
-                    s = s.Trim();
-                    if (string.Equals(s, "true", StringComparison.OrdinalIgnoreCase)) return true;
-                    if (string.Equals(s, "false", StringComparison.OrdinalIgnoreCase)) return false;
-                    if (string.Equals(s, "yes", StringComparison.OrdinalIgnoreCase)) return true;
-                    if (string.Equals(s, "no", StringComparison.OrdinalIgnoreCase)) return false;
-                    if (string.Equals(s, "on", StringComparison.OrdinalIgnoreCase)) return true;
-                    if (string.Equals(s, "off", StringComparison.OrdinalIgnoreCase)) return false;
-                    int i;
-                    if (int.TryParse(s, out i)) return i != 0;
+                    if (val is bool) return (bool)val;
+                    if (val is string)
+                    {
+                        string s = Convert.ToString(val);
+                        if (string.IsNullOrEmpty(s)) return defaultValue;
+                        s = s.Trim();
+                        if (string.Equals(s, "true", StringComparison.OrdinalIgnoreCase)) return true;
+                        if (string.Equals(s, "false", StringComparison.OrdinalIgnoreCase)) return false;
+                        if (string.Equals(s, "yes", StringComparison.OrdinalIgnoreCase)) return true;
+                        if (string.Equals(s, "no", StringComparison.OrdinalIgnoreCase)) return false;
+                        if (string.Equals(s, "on", StringComparison.OrdinalIgnoreCase)) return true;
+                        if (string.Equals(s, "off", StringComparison.OrdinalIgnoreCase)) return false;
+                        int i;
+                        if (int.TryParse(s, out i)) return i != 0;
+                    }
+                    if (val is int) return ((int)val) != 0;
+                    if (val is long) return ((long)val) != 0L;
+                    if (val is double) return ((double)val) != 0.0;
+                    if (val is float) return ((float)val) != 0f;
+                    if (val is decimal) return ((decimal)val) != 0m;
                 }
-                if (val is int) return ((int)val) != 0;
-                if (val is long) return ((long)val) != 0L;
-                if (val is double) return ((double)val) != 0.0;
-                if (val is float) return ((float)val) != 0f;
-                if (val is decimal) return ((decimal)val) != 0m;
+                catch { }
+                return defaultValue;
             }
-            catch { }
-            return defaultValue;
         }
     }
 }
