@@ -139,5 +139,98 @@ namespace GxPT.Tests
             var runs = MarkdownParser.ParseInlines("see https://example.com now");
             Assert.Contains(runs, r => r.LinkUrl == "https://example.com" && (r.Style & RunStyle.Link) != 0);
         }
+
+        [Fact]
+        public void Inline_UnderscoresInsideWord_AreNotItalic()
+        {
+            // snake_case identifiers must not be treated as emphasis
+            var runs = MarkdownParser.ParseInlines("call snake_case_name here");
+            foreach (var r in runs)
+                Assert.True((r.Style & RunStyle.Italic) == 0, "underscores within a word should not be italic");
+        }
+
+        [Fact]
+        public void Inline_UnderscoreEmphasis_IsItalic()
+        {
+            // A proper _word_ delimited by boundaries should be italic
+            var runs = MarkdownParser.ParseInlines("an _emphasized_ word");
+            Assert.Contains(runs, r => r.Text == "emphasized" && (r.Style & RunStyle.Italic) != 0);
+        }
+
+        [Fact]
+        public void Inline_BareUrl_TrailingPeriodExcludedFromUrl()
+        {
+            var runs = MarkdownParser.ParseInlines("visit https://example.com.");
+            // The trailing sentence period must not be part of the captured URL.
+            Assert.Contains(runs, r => r.LinkUrl == "https://example.com");
+            Assert.DoesNotContain(runs, r => r.LinkUrl != null && r.LinkUrl.EndsWith("."));
+        }
+
+        [Fact]
+        public void Table_ParsesColumnAlignments()
+        {
+            var blocks = MarkdownParser.ParseMarkdown("| L | C | R |\n| :-- | :-: | --: |\n| a | b | c |");
+            var table = FirstBlock<TableBlock>(blocks);
+            Assert.NotNull(table);
+            Assert.Equal(3, table.Alignments.Count);
+            Assert.Equal(TableAlign.Left, table.Alignments[0]);
+            Assert.Equal(TableAlign.Center, table.Alignments[1]);
+            Assert.Equal(TableAlign.Right, table.Alignments[2]);
+        }
+
+        [Fact]
+        public void Table_RaggedRow_IsPaddedToColumnCount()
+        {
+            var blocks = MarkdownParser.ParseMarkdown("| A | B |\n| --- | --- |\n| 1 |");
+            var table = FirstBlock<TableBlock>(blocks);
+            Assert.NotNull(table);
+            Assert.Single(table.Rows);
+            Assert.Equal(2, table.Rows[0].Count);
+            Assert.Equal("1", InlineText(table.Rows[0][0]));
+            Assert.Equal("", InlineText(table.Rows[0][1]));
+        }
+
+        [Fact]
+        public void CodeBlock_WithoutLanguage_HasNullLanguage()
+        {
+            var blocks = MarkdownParser.ParseMarkdown("```\nplain text\n```");
+            var code = FirstBlock<CodeBlock>(blocks);
+            Assert.NotNull(code);
+            Assert.Null(code.Language);
+            Assert.Equal("plain text", code.Text);
+        }
+
+        [Fact]
+        public void CodeBlock_UnclosedFenceAtEof_StillCaptured()
+        {
+            var blocks = MarkdownParser.ParseMarkdown("```python\nx = 1");
+            var code = FirstBlock<CodeBlock>(blocks);
+            Assert.NotNull(code);
+            Assert.Equal("python", code.Language);
+            Assert.Equal("x = 1", code.Text);
+        }
+
+        [Fact]
+        public void NumberedList_ParenDelimiter_IsPreserved()
+        {
+            var blocks = MarkdownParser.ParseMarkdown("1) first\n2) second");
+            var list = FirstBlock<NumberedListBlock>(blocks);
+            Assert.NotNull(list);
+            Assert.Equal(2, list.Items.Count);
+            Assert.Equal(1, list.Items[0].Number);
+            Assert.Equal(')', list.Items[0].NumberDelimiter);
+        }
+
+        [Fact]
+        public void Crlf_IsNormalized()
+        {
+            var blocks = MarkdownParser.ParseMarkdown("# Heading\r\n\r\nA paragraph");
+            var h = FirstBlock<HeadingBlock>(blocks);
+            var p = FirstBlock<ParagraphBlock>(blocks);
+            Assert.NotNull(h);
+            Assert.Equal("Heading", InlineText(h.Inlines));
+            Assert.NotNull(p);
+            Assert.Equal("A paragraph", InlineText(p.Inlines));
+        }
     }
 }

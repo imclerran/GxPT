@@ -98,5 +98,55 @@ namespace GxPT.Tests
             Assert.True(Directory.Exists(dest));
             Assert.Equal("hello", File.ReadAllText(Path.Combine(dest, "only.txt")));
         }
+
+        [Fact]
+        public void SafeExtract_RejectsPercentEncodedTraversal()
+        {
+            string zipPath = Path2("enc.zip");
+            using (var zip = new ZipFile())
+            {
+                var e = zip.AddEntry("placeholder.txt", Encoding.UTF8.GetBytes("x"));
+                e.FileName = "%2e%2e/evil.txt";
+                zip.Save(zipPath);
+            }
+
+            string dest = Path2("out_enc");
+            Assert.Throws<InvalidDataException>(() => ZipSafe.SafeExtract(zipPath, dest, true));
+        }
+
+        [Fact]
+        public void SafeExtract_CreatesDirectoryEntries()
+        {
+            string zipPath = Path2("dir.zip");
+            using (var zip = new ZipFile())
+            {
+                zip.AddDirectoryByName("emptydir");
+                zip.Save(zipPath);
+            }
+
+            string dest = Path2("out_dir");
+            ZipSafe.SafeExtract(zipPath, dest, true);
+
+            Assert.True(Directory.Exists(Path.Combine(dest, "emptydir")));
+        }
+
+        [Fact]
+        public void SafeExtract_WithoutOverwrite_ThrowsWhenFileExists()
+        {
+            string zipPath = Path2("dup.zip");
+            using (var zip = new ZipFile())
+            {
+                zip.AddEntry("dup.txt", Encoding.UTF8.GetBytes("v1"));
+                zip.Save(zipPath);
+            }
+
+            string dest = Path2("out_dup");
+            ZipSafe.SafeExtract(zipPath, dest, true);
+            Assert.Equal("v1", File.ReadAllText(Path.Combine(dest, "dup.txt")));
+
+            // Re-extracting without overwrite must not clobber the existing file.
+            Assert.ThrowsAny<IOException>(() => ZipSafe.SafeExtract(zipPath, dest, false));
+            Assert.Equal("v1", File.ReadAllText(Path.Combine(dest, "dup.txt")));
+        }
     }
 }

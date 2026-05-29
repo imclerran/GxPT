@@ -23,18 +23,32 @@
     <RootNamespace>GxPT.Tests</RootNamespace>
   </PropertyGroup>
 
-  <!-- Production source under test, compiled directly into the test assembly -->
+  <!--
+    Production source under test, compiled directly into the test assembly.
+    ConversationStore.LoadFromJson pulls in its dependency chain (Conversation ->
+    OpenRouterClient -> Logger -> AppSettings -> FileSafe, plus the model types), so those
+    files are linked too. None of them reference WinForms, so they compile on net48.
+  -->
   <ItemGroup>
     <Compile Include="..\GxPT\Services\MarkdownParser.cs" Link="Linked\MarkdownParser.cs" />
     <Compile Include="..\GxPT\Utilities\ZipSafe.cs" Link="Linked\ZipSafe.cs" />
+    <Compile Include="..\GxPT\Utilities\FileSafe.cs" Link="Linked\FileSafe.cs" />
+    <Compile Include="..\GxPT\Data\ConversationStore.cs" Link="Linked\ConversationStore.cs" />
+    <Compile Include="..\GxPT\Models\Conversation.cs" Link="Linked\Conversation.cs" />
+    <Compile Include="..\GxPT\Models\ChatModels.cs" Link="Linked\ChatModels.cs" />
+    <Compile Include="..\GxPT\Services\OpenRouterClient.cs" Link="Linked\OpenRouterClient.cs" />
+    <Compile Include="..\GxPT\Services\Logger.cs" Link="Linked\Logger.cs" />
+    <Compile Include="..\GxPT\Services\AppSettings.cs" Link="Linked\AppSettings.cs" />
   </ItemGroup>
 
-  <!-- The same vendored DotNetZip the app ships with -->
+  <!-- The vendored DotNetZip the app ships with, plus the framework assembly that
+       provides System.Web.Script.Serialization.JavaScriptSerializer. -->
   <ItemGroup>
     <Reference Include="DotNetZip">
       <HintPath>..\GxPT\lib\DotNetZip.dll</HintPath>
       <SpecificVersion>False</SpecificVersion>
     </Reference>
+    <Reference Include="System.Web.Extensions" />
   </ItemGroup>
 
   <ItemGroup>
