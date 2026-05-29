@@ -23,7 +23,7 @@ decision-oriented rather than code.
 - Provide a handful of useful **stdio servers** (serper, file ops, git,
   command-line) and connect to **GitHub's hosted MCP** over HTTP.
 - Keep token cost bounded as the tool catalog grows (progressive disclosure /
-  tool-search).
+  progressive disclosure via a name manifest + define-on-demand).
 
 ### Non-goals (initially)
 - OAuth for HTTP MCP (GitHub uses a PAT via curl `-K`).
@@ -37,10 +37,10 @@ decision-oriented rather than code.
 
 | # | Decision | Rationale |
 |---|----------|-----------|
-| D1 | Library name is **Mcp35**; projects `Mcp35.Core`, `Mcp35.Client`, `Mcp35.Server`; servers `Mcp35.Servers.*` | Neutral, descriptive (nods to net35); chosen now to avoid a later rename |
+| D1 | Library name is **Mcp35**; projects `Mcp35.Core`, `Mcp35.Client`, `Mcp35.Server` (the server-building SDK, **singular**) | Neutral, descriptive (nods to net35); chosen now to avoid a later rename |
 | D2 | **Mono-repo first**, split Mcp35 into its own repo later | API churns hard through early phases; ProjectReference beats DLL-republish during churn |
 | D3 | JSON via **Newtonsoft.Json** (vendored, net35 build) | Declarative JSON-RPC field-presence control; no `MaxJsonLength` cap; GxPT has no Newtonsoft to conflict with |
-| D4 | **Tool-search is a host feature**, not a server | Only the host aggregates every server's tools; ranking lives where the catalog lives |
+| D4 | **Host-side discovery: a name+summary manifest up front, full schemas revealed on demand by name** (`reveal_tool`); free-text `tool_search` is only a fallback for very large catalogs | Deterministic discovery (no hallucinated tools, no empty-result retries) at low token cost |
 | D5 | HTTP target = **GitHub MCP only**, Streamable HTTP, **PAT via curl `-K`** | No OAuth scope; reuse existing curl plumbing |
 | D6 | Approval = **allowlist/remember**, but **execution/destructive tools always confirm** | cmd / git-writes / GitHub-writes are never silently auto-run |
 | D7 | **Dependencies are injected, never embedded** in the library | Keeps Core binary-pure and the future split cheap |
@@ -49,6 +49,7 @@ decision-oriented rather than code.
 | D10 | **Each server is its own independent `.csproj`** depending on mcp35; extractable to its own repo. Not part of the mcp35 library package | Maximum modularity — servers can each peel off as standalone projects/repos |
 | D11 | **Multi-server aggregation, collision-naming, ranking & reveal all live in the GxPT host registry**; `Mcp35.Client` stays strictly single-connection | Keeps Client minimal; host owns all multi-server policy |
 | D12 | **net48 test projects resolve Newtonsoft via version-pinned `PackageReference`** | Consistent with `GxPT.Tests`; pin matches the vendored net35 dll to avoid drift |
+| D13 | **Concrete servers get neutral names** (`SerperMcpServer`, `FilesMcpServer`, `GitMcpServer`, `CommandMcpServer`) — *not* `Mcp35.Servers.*` | They're independent consumers (D10), not a collection inside the `Mcp35.Server` SDK |
 
 ---
 
@@ -57,7 +58,7 @@ decision-oriented rather than code.
 ```
             GxPT host (net35 WinForms) — Services/Mcp/
             McpHost (owns N connections) · McpToolRegistry (aggregation +
-            collision-naming + tool-search/reveal) · OpenRouter tool-call loop ·
+            collision-naming + manifest/reveal_tool) · OpenRouter tool-call loop ·
             approval tiers · settings binding
                           │  ProjectReference  (one-way: GxPT → Client)
                           ▼
@@ -72,8 +73,9 @@ decision-oriented rather than code.
    SSE parser · shared curl-exec helper                  process-exec helper
    deps: Newtonsoft.Json only · NO GxPT refs                      ▲
                                                                   │ builds on
-                                                       Mcp35.Servers.* (net35 exes)
-                                                       Serper · Files · Git · Command
+                                                       MCP server exes (independent consumers)
+                                                       SerperMcpServer · FilesMcpServer ·
+                                                       GitMcpServer · CommandMcpServer
 ```
 
 Dependency arrows only ever point **down/inward**. GxPT references **only**
@@ -117,7 +119,7 @@ Server — servers are independent executables.
 - The stdio dispatch loop (read framed requests on stdin, write responses on
   stdout).
 - A **process-exec** helper (for git/cmd-style servers). curl-exec is *not*
-  here — it lives in Core (D9), since the Serper server and the client's
+  here — it lives in Core (D9), since `SerperMcpServer` and the client's
   `HttpTransport` both need it.
 - The four servers are its first consumers and its dogfooding.
 
@@ -127,20 +129,22 @@ library:
 - `McpHost` — owns the **collection** of `Mcp35.Client.McpServerConnection`
   instances (one per configured server) and their lifecycle.
 - `McpToolRegistry` — **catalog aggregation** across connections,
-  **server-qualified collision naming**, tool-search **ranking**, and
-  progressive-disclosure **reveal policy** (D11). Resolves a tool name back to
-  its owning connection.
+  **server-qualified collision naming**, **manifest assembly** (name +
+  one-line summary), and the **`reveal_tool` define-on-demand policy** (D11,
+  §7). Resolves a tool name back to its owning connection.
 - The **OpenRouter** tool-call loop (`tools`/`tool_calls` wiring) — OpenRouter-
   specific, not even MCP.
 - Approval tiers + confirmation UI.
 - Settings binding (`mcpServers`).
 
-### Mcp35.Servers.* (reference servers, net35 console exes)
-- `Mcp35.Servers.Serper` — web search (Serper API; needs curl for TLS 1.2).
-- `Mcp35.Servers.Files` — file read/list/write.
-- `Mcp35.Servers.Git` — git status/diff/commit (uses `git.exe`).
-- `Mcp35.Servers.Command` — arbitrary command execution (sharpest security
-  edge; always-confirm).
+### MCP server executables (independent consumers, net35 console exes)
+Each is its own project/repo (D10) consuming the `Mcp35.Server` SDK; neutrally
+named because they are *not* part of the library (D13).
+- `SerperMcpServer` — web search (Serper API; needs curl for TLS 1.2).
+- `FilesMcpServer` — file read/list/write.
+- `GitMcpServer` — git status/diff/commit (uses `git.exe`).
+- `CommandMcpServer` — arbitrary command execution (sharpest security edge;
+  always-confirm).
 
 ### Mechanics vs. policy — the boundary that must hold
 | Concern | Home |
@@ -148,7 +152,7 @@ library:
 | Transports (stdio / http), framing, SSE | `Mcp35.Client` (Core for parsers/curl-exec) |
 | Connection lifecycle, handshake, caps, tools cache, call correlation | `Mcp35.Client` |
 | Catalog aggregation + server-qualified collision naming | **GxPT host** (`McpToolRegistry`) |
-| Tool-search **ranking** + which tools to **reveal** | **GxPT host** |
+| Manifest assembly + `reveal_tool` define-on-demand policy | **GxPT host** |
 | OpenRouter `tools`/`tool_calls` loop | **GxPT host** |
 | Approval tiers + confirmation UI | **GxPT host** |
 | `mcpServers` settings binding | **GxPT host** |
@@ -207,11 +211,12 @@ GxPT.sln                         (VS2008 format)
 ├─ GxPT.Setup/                   installer (vdproj)
 ├─ src/Mcp35.Core/              net35 lib   (+ lib/Newtonsoft.Json.dll)
 ├─ src/Mcp35.Client/            net35 lib   (ProjectRef → Mcp35.Core)
-├─ src/Mcp35.Server/            net35 lib   (ProjectRef → Mcp35.Core)
-├─ src/Mcp35.Servers.Serper/    net35 Exe
-├─ src/Mcp35.Servers.Files/     net35 Exe
-├─ src/Mcp35.Servers.Git/       net35 Exe
-└─ src/Mcp35.Servers.Command/   net35 Exe
+├─ src/Mcp35.Server/            net35 lib   (ProjectRef → Mcp35.Core)  ← server SDK
+└─ servers/                     independent consumer exes (own projects/repos)
+   ├─ SerperMcpServer/          net35 Exe   (ProjectRef → Mcp35.Server)
+   ├─ FilesMcpServer/           net35 Exe
+   ├─ GitMcpServer/             net35 Exe
+   └─ CommandMcpServer/         net35 Exe
 
 (outside the .sln, run via dotnet test)
 ├─ GxPT.Tests/                  net48, linked-source  (existing)
@@ -224,11 +229,11 @@ GxPT.sln                         (VS2008 format)
   `.../2003`, `<TargetFrameworkVersion>v3.5`), matching `GxPT.csproj`.
 - GxPT references **`Mcp35.Client`** via `<ProjectReference>` during the mono
   phase (and `Mcp35.Core` transitively). GxPT does **not** reference Server.
-- Each `Mcp35.Servers.*` is an **independent project** (own `.csproj`,
-  `ProjectRef → Mcp35.Server`) that merely *consumes* the library, so each can
-  later split into its own repo depending on vendored mcp35 DLLs (D10). Their
-  `Mcp35.` prefix is provisional — being consumers rather than library members,
-  a neutral name may fit better (see §15).
+- Each server is an **independent project** (own `.csproj`, `ProjectRef →
+  Mcp35.Server`) that merely *consumes* the library, so each can later split
+  into its own repo depending on vendored mcp35 DLLs (D10). They're neutrally
+  named (D13), not under `Mcp35.`. The `servers/` folder is organizational, not
+  a namespace.
 
 ---
 
@@ -247,9 +252,9 @@ always supplied by whoever runs the process:
 | Artifact | Native need | Source of the binary |
 |----------|-------------|----------------------|
 | GxPT host (Client `HttpTransport` → GitHub) | curl | **already vendored** in `GxPT/lib/`; host injects the path into the transport |
-| `Mcp35.Servers.Serper` | curl (TLS 1.2 to Serper API) | own `lib/curl.exe` next to the exe |
-| `Mcp35.Servers.Git` | `git.exe` | injected path → PATH |
-| `Mcp35.Servers.Files` / `.Command` | none | BCL only |
+| `SerperMcpServer` | curl (TLS 1.2 to Serper API) | own `lib/curl.exe` next to the exe |
+| `GitMcpServer` | `git.exe` | injected path → PATH |
+| `FilesMcpServer` / `CommandMcpServer` | none | BCL only |
 | `Mcp35.Core` / `.Client` / `.Server` (DLLs) | none | pure managed |
 
 Path resolution everywhere: injected explicit path → app-relative
@@ -277,18 +282,41 @@ Path resolution everywhere: injected explicit path → app-relative
 
 ---
 
-## 7. Tool-call loop + tool-search (host)
+## 7. Tool discovery & invocation (host)
 
-- `BuildRequestBody` gains a `tools` array; the chunk DTO/parser gains
-  `tool_calls`.
-- Loop: model emits a call → `McpToolRegistry` resolves the owning
-  `McpServerConnection` → approval check (§9) → route via that connection's
-  `CallTool` → append a `tool`-role result → re-invoke (bounded iterations).
-- **Progressive disclosure**: only `tool_search` is exposed initially.
-  `tool_search(query)` ranks against the full aggregated catalog (simple
-  lexical match to start — net35-friendly); matches are revealed into `tools`
-  on subsequent turns. This keeps token cost to a few tools across *all*
-  servers, GitHub included.
+`BuildRequestBody` gains a `tools` array; the chunk DTO/parser gains
+`tool_calls`.
+
+**Discovery = name manifest + define-on-demand** (chosen over free-text search,
+D4):
+
+1. The host injects a lightweight **catalog manifest** into context each
+   request — every tool's server-qualified **name + one-line summary**, with
+   **no input schemas**. The model thus always knows exactly what exists.
+2. The only real tool exposed initially is a meta-tool **`reveal_tool(name[])`**.
+   Calling it injects those tools' **full definitions** (schemas) into the
+   callable `tools` array on the next turn.
+3. The model emits a normal `tool_call`; `McpToolRegistry` resolves the owning
+   `McpServerConnection` (D11) → approval check (§9) → route via that
+   connection's `CallTool` → append a `tool`-role result → re-invoke (bounded
+   iterations).
+
+**Why names-first beats free-text search:** discovery is *deterministic* — the
+model selects from ground-truth names, so it can't hallucinate a capability or
+burn turns on empty-result searches — while token cost stays low (names +
+1-liners are a fraction of full schemas).
+
+**Design notes:**
+- **Terse summaries, not bare names.** A one-line summary per tool is included
+  (negligible cost) because pure names are ambiguous to choose between (e.g.
+  `update_pull_request` vs `update_pull_request_branch`). This is *not* "usage
+  data" — full parameter schemas stay withheld until `reveal_tool`.
+- **Bounded reveal set.** Revealed definitions accumulate in `tools`; evict
+  least-recently-used to cap token growth.
+- **`tool_search` is a scaling fallback only.** If a catalog ever reaches
+  hundreds of tools (so even the manifest is heavy), an optional
+  `tool_search(query)` can narrow the manifest first. Not needed for the
+  initial server set.
 
 ---
 
@@ -308,10 +336,9 @@ Extend `AppSettings` with an `mcpServers` collection; per entry:
 
 - **Allowlist / remember** for read-only / low-risk tools.
 - **Always confirm**, regardless of remembered state, for execution &
-  destructive tools: `Command`, git writes (commit/push), GitHub writes.
-- `Mcp35.Servers.Command` is the sharpest edge: always-confirm + process
-  isolation; treat all server/tool output as untrusted input at the parse
-  boundary.
+  destructive tools: command execution, git writes (commit/push), GitHub writes.
+- `CommandMcpServer` is the sharpest edge: always-confirm + process isolation;
+  treat all server/tool output as untrusted input at the parse boundary.
 
 ---
 
@@ -351,9 +378,9 @@ Extend `AppSettings` with an `mcpServers` collection; per entry:
 - `Mcp35.Client.Tests`: `McpServerConnection` handshake/lifecycle and
   `tools/call` correlation against a loopback transport; transport framing.
 - `Mcp35.Server.Tests`: registration + dispatch loop against a fake transport.
-- Host tests in `GxPT.Tests`: catalog aggregation + collision naming,
-  tool-search ranking, reveal policy, and the OpenRouter tool-call loop driving
-  fake `McpServerConnection`s.
+- Host tests in `GxPT.Tests`: catalog aggregation + collision naming, manifest
+  assembly, `reveal_tool` define-on-demand, and the OpenRouter tool-call loop
+  driving fake `McpServerConnection`s.
 
 ---
 
@@ -367,12 +394,12 @@ Extend `AppSettings` with an `mcpServers` collection; per entry:
    it and lists tools.
 4. **Tool-call loop** + OpenRouter `tools`/`tool_calls` — first real
    end-to-end invocation.
-5. **Tool-search / progressive disclosure** (revealed subset).
+5. **Tool discovery**: catalog manifest + `reveal_tool` (define-on-demand).
    → *Split `Mcp35.*` into its own repo here once the API is stable.*
 6. **Approval tiers** (gate Command / git writes).
 7. **Four servers**, riskiest last: Files → Serper → Git → Command.
-8. **`Mcp35.Client` HttpTransport + GitHub MCP** (tool-search now tames its tool
-   count).
+8. **`Mcp35.Client` HttpTransport + GitHub MCP** (the manifest + `reveal_tool`
+   now tame its large tool count).
 
 ---
 
@@ -381,7 +408,7 @@ Extend `AppSettings` with an `mcpServers` collection; per entry:
 - OpenRouter function-calling fidelity across models.
 - Newtonsoft `MaxDepth` on deeply nested schemas (config, de-risk in phase 1).
 - curl process-per-call latency.
-- `Mcp35.Servers.Command` security surface.
+- `CommandMcpServer` security surface.
 - Mono-repo coupling creep defeating the future split — mitigated by the §4
   seam rules and the now-enforced `Mcp35.Client` project boundary (D8).
 
@@ -396,8 +423,13 @@ Extend `AppSettings` with an `mcpServers` collection; per entry:
   naming + ranking + reveal; Client stays single-connection (D11).
 - ~~Newtonsoft net48 build in tests~~ → version-pinned PackageReference (D12).
 
+- ~~Server project naming~~ → `Mcp35.Server` is the singular SDK; concrete
+  servers get neutral names (`SerperMcpServer`, …), not `Mcp35.Servers.*` (D13).
+- ~~Tool discovery mechanism~~ → name+summary manifest with define-on-demand
+  via `reveal_tool`; free-text search demoted to a fallback (D4).
+
 **Still open:**
-- **Server project naming**: keep the `Mcp35.Servers.*` prefix, or give the
-  independent servers neutral names (they're consumers, not library members)?
-- **Tool-search ranking**: starts as simple lexical match; revisit if recall is
-  poor.
+- **`tool_search` fallback ranking** (only if a catalog grows huge): would start
+  as simple lexical match; revisit if recall is poor.
+- **Manifest refresh cadence**: rebuilt per request vs cached until a server's
+  `tools/list` changes.
