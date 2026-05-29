@@ -5,20 +5,21 @@
 **Last updated:** 2026-05-29
 
 This document captures the agreed architecture for adding Model Context Protocol
-(MCP) support to GxPT: a reusable .NET 3.5 MCP library (**Mcp35**), an MCP
-**host/client** embedded in GxPT, and a set of MCP **servers**. It is the
-reference for implementation; it is deliberately decision-oriented rather than
-code.
+(MCP) support to GxPT: a reusable .NET 3.5 MCP library (**Mcp35**) split into
+**Core / Client / Server**, plus an MCP **host** embedded in GxPT and a set of
+MCP **servers**. It is the reference for implementation; it is deliberately
+decision-oriented rather than code.
 
 ---
 
 ## 1. Goals & non-goals
 
 ### Goals
-- Let GxPT act as an MCP **host/client**, calling tools exposed by MCP servers
-  during a chat (via OpenRouter function-calling).
-- Ship a small, reusable, role-neutral MCP library (**Mcp35**) that targets
-  **.NET Framework 3.5**, usable outside GxPT later.
+- Let GxPT act as an MCP **host**, calling tools exposed by MCP servers during a
+  chat (via OpenRouter function-calling).
+- Ship a small, reusable, role-neutral MCP library (**Mcp35**) targeting **.NET
+  Framework 3.5**, usable outside GxPT later — for *both* writing clients/hosts
+  and writing servers.
 - Provide a handful of useful **stdio servers** (serper, file ops, git,
   command-line) and connect to **GitHub's hosted MCP** over HTTP.
 - Keep token cost bounded as the tool catalog grows (progressive disclosure /
@@ -36,42 +37,45 @@ code.
 
 | # | Decision | Rationale |
 |---|----------|-----------|
-| D1 | Library name is **Mcp35**; projects `Mcp35.Core`, `Mcp35.Server`; servers `Mcp35.Servers.*` | Neutral, descriptive (nods to net35); chosen now to avoid a later rename |
+| D1 | Library name is **Mcp35**; projects `Mcp35.Core`, `Mcp35.Client`, `Mcp35.Server`; servers `Mcp35.Servers.*` | Neutral, descriptive (nods to net35); chosen now to avoid a later rename |
 | D2 | **Mono-repo first**, split Mcp35 into its own repo later | API churns hard through early phases; ProjectReference beats DLL-republish during churn |
 | D3 | JSON via **Newtonsoft.Json** (vendored, net35 build) | Declarative JSON-RPC field-presence control; no `MaxJsonLength` cap; GxPT has no Newtonsoft to conflict with |
 | D4 | **Tool-search is a host feature**, not a server | Only the host aggregates every server's tools; ranking lives where the catalog lives |
 | D5 | HTTP target = **GitHub MCP only**, Streamable HTTP, **PAT via curl `-K`** | No OAuth scope; reuse existing curl plumbing |
 | D6 | Approval = **allowlist/remember**, but **execution/destructive tools always confirm** | cmd / git-writes / GitHub-writes are never silently auto-run |
 | D7 | **Dependencies are injected, never embedded** in the library | Keeps Core binary-pure and the future split cheap |
+| D8 | **`Mcp35.Client` is a real, separate project now** (transports + connection lifecycle); GxPT depends on it **one-way** | A compile-time project boundary prevents client logic from intertwining with GxPT — stronger than "extract later" |
+| D9 | **curl-exec helper lives in `Mcp35.Core`** | Shared by Client `HttpTransport` and the Serper server; avoids duplication |
 
 ---
 
 ## 3. Layered architecture
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│ GxPT (host repo, net35 WinForms)                               │
-│   Services/Mcp/  →  McpHost, McpServerConnection,              │
-│                     StdioTransport, HttpTransport,             │
-│                     McpToolRegistry (catalog + tool-search)    │
-│   reuses existing curl plumbing for HTTP                       │
-└───────────────▲───────────────────────────▲──────────────────┘
-                │ ProjectReference (mono)     │ uses
-                │ → vendored DLL (post-split) │
-┌───────────────┴──────────────┐   ┌──────────┴───────────────────┐
-│ Mcp35.Server (net35 lib)     │   │ Mcp35.Servers.* (net35 exes) │
-│   tool registration API,     │   │   Serper, Files, Git, Command│
-│   stdio dispatch loop,        │   │   (reference consumers of    │
-│   process/curl exec helpers   │   │    Mcp35.Server)             │
-└───────────────▲──────────────┘   └──────────────────────────────┘
-                │ builds on
-┌───────────────┴──────────────────────────────────────────────┐
-│ Mcp35.Core (net35 lib)                                         │
-│   JSON-RPC 2.0 envelopes, MCP DTOs, transport seam            │
-│   (IRpcTransport), stdio framing, SSE parser                  │
-│   deps: Newtonsoft.Json only. NO native, NO GxPT refs.        │
-└──────────────────────────────────────────────────────────────┘
+            GxPT host (net35 WinForms) — Services/Mcp/
+            McpHost · McpToolRegistry (tool-search / reveal policy) ·
+            OpenRouter tool-call loop · approval tiers · settings binding
+                          │  ProjectReference  (one-way: GxPT → Client)
+                          ▼
+            Mcp35.Client (net35 lib)
+            StdioTransport · HttpTransport          (IRpcTransport impls)
+            McpServerConnection (handshake / caps / tools-cache / correlation)
+            McpClient facade (manage N connections)
+                          │ builds on
+                          ▼
+   Mcp35.Core (net35 lib)  ◄──────── builds on ────────  Mcp35.Server (net35 lib)
+   JSON-RPC envelopes · MCP DTOs ·                       tool registration API ·
+   IRpcTransport seam · stdio framing ·                  stdio dispatch loop ·
+   SSE parser · shared curl-exec helper                  process-exec helper
+   deps: Newtonsoft.Json only · NO GxPT refs                      ▲
+                                                                  │ builds on
+                                                       Mcp35.Servers.* (net35 exes)
+                                                       Serper · Files · Git · Command
 ```
+
+Dependency arrows only ever point **down/inward**. GxPT references **only**
+`Mcp35.Client` (which transitively pulls Core). GxPT does **not** reference
+Server — servers are independent executables.
 
 ### Mcp35.Core (role-neutral, binary-pure)
 - JSON-RPC 2.0 envelopes (request / response / notification / error).
@@ -80,34 +84,49 @@ code.
 - The **transport seam**: `IRpcTransport` (`SendRequest` + notifications +
   lifecycle). Core never knows whether it's talking over stdio or HTTP.
 - Stdio newline framing + SSE event parser (operate on streams/strings handed
-  in — no process or curl knowledge).
+  in).
+- **Shared curl-exec helper** (`CurlRunner` — pure BCL process spawn + temp
+  files, curl path **injected**). Used by both Client's `HttpTransport` and the
+  Serper server, so it lives here rather than being duplicated.
 - JSON strategy: **typed DTOs** for stable envelopes; **`JObject`/`JToken`** at
   the open-ended boundaries (tool input-schemas, tool results).
-- **Only** dependency is `Newtonsoft.Json`. No native tools, no reference to
-  `GxPT.*` — not even logging (logging is injected as a delegate/interface).
+- **Only** managed dependency is `Newtonsoft.Json`. No reference to `GxPT.*`.
+
+### Mcp35.Client (the client-side protocol mechanics)
+- `IRpcTransport` implementations:
+  - `StdioTransport` — child process + std pipes.
+  - `HttpTransport` — curl-per-POST via Core's curl-exec helper; `-K` auth,
+    `-N`, UTF-8 decode, temp cleanup; adds `Accept` + `MCP-Protocol-Version`
+    headers, captures `Mcp-Session-Id` (`-D <tempfile>`), `DELETE` on teardown.
+- `McpServerConnection` — one server: `initialize` handshake, capability
+  negotiation, `tools/list` caching, `tools/call` request/response correlation,
+  lifecycle state machine, notifications.
+- `McpClient` facade — connect/manage N connections, expose
+  `Connect`/`ListTools`/`CallTool`, optionally aggregate the raw catalog.
+- Depends on Core + an injected curl path. **No OpenRouter, no approval UI, no
+  settings types, no `GxPT.*`.**
 
 ### Mcp35.Server (builds on Core)
 - Ergonomic tool registration: `name + description + input-schema + handler
   delegate`.
 - The stdio dispatch loop (read framed requests on stdin, write responses on
   stdout).
-- Shared **process-exec** and **curl-exec** helpers (curl path injected, never
-  vendored here) so individual servers stay tiny.
-- This is the high-value reusable deliverable; the four servers are its first
-  consumers and its dogfooding.
+- A **process-exec** helper (for git/cmd-style servers). curl-exec is *not*
+  here — it lives in Core (D9), since the Serper server and the client's
+  `HttpTransport` both need it.
+- The four servers are its first consumers and its dogfooding.
 
-### Host (GxPT `Services/Mcp/`)
-- `McpHost` — owns the configured servers.
-- `McpServerConnection` — one server: transport + negotiated capabilities +
-  cached tools + lifecycle state machine.
-- Transports:
-  - `StdioTransport` — child process + std pipes.
-  - `HttpTransport` — curl-per-POST, reusing OpenRouter's temp-file body, `-K`
-    auth, `-N`, UTF-8 decode, cleanup; adds `Accept` +
-    `MCP-Protocol-Version` headers, captures `Mcp-Session-Id` (via `-D
-    <tempfile>`), and issues `DELETE` on teardown.
-- `McpToolRegistry` — aggregates the full catalog across all servers and tracks
-  the **revealed subset** exposed to the model.
+### GxPT host (`Services/Mcp/`) — application policy only
+Everything here is GxPT-specific orchestration, deliberately kept *out* of the
+library:
+- `McpHost` — owns the configured connections (via `McpClient`).
+- `McpToolRegistry` — tool-search **ranking** + progressive-disclosure
+  **policy** (which tools to reveal). (Raw catalog *aggregation* may live in the
+  `McpClient` facade; ranking/reveal is host policy — see §15.)
+- The **OpenRouter** tool-call loop (`tools`/`tool_calls` wiring) — OpenRouter-
+  specific, not even MCP.
+- Approval tiers + confirmation UI.
+- Settings binding (`mcpServers`).
 
 ### Mcp35.Servers.* (reference servers, net35 console exes)
 - `Mcp35.Servers.Serper` — web search (Serper API; needs curl for TLS 1.2).
@@ -116,37 +135,51 @@ code.
 - `Mcp35.Servers.Command` — arbitrary command execution (sharpest security
   edge; always-confirm).
 
+### Mechanics vs. policy — the boundary that must hold
+| Concern | Home |
+|---------|------|
+| Transports (stdio / http), framing, SSE | `Mcp35.Client` (Core for parsers/curl-exec) |
+| Connection lifecycle, handshake, caps, tools cache, call correlation | `Mcp35.Client` |
+| Raw catalog aggregation across connections | `Mcp35.Client` (`McpClient` facade) |
+| Tool-search **ranking** + which tools to **reveal** | **GxPT host** |
+| OpenRouter `tools`/`tool_calls` loop | **GxPT host** |
+| Approval tiers + confirmation UI | **GxPT host** |
+| `mcpServers` settings binding | **GxPT host** |
+
 ---
 
 ## 4. Repo strategy: mono-repo first → split later
 
 We develop Mcp35 **inside this repo** while its API churns (phases 1–5), then
-split it into its own `mcp35` repo once stable (~after phase 5). During the
-mono phase the host uses a **`ProjectReference`** to `Mcp35.Core`/`.Server`;
-post-split it swaps to the **vendored-DLL `HintPath`** pattern (identical to
-curl / DotNetZip / itextsharp today).
+split `Mcp35.*` into its own `mcp35` repo once stable (~after phase 5). During
+the mono phase GxPT uses a **`ProjectReference`** to `Mcp35.Client`; post-split
+it swaps to the **vendored-DLL `HintPath`** pattern (identical to curl /
+DotNetZip / itextsharp today).
+
+> Making `Mcp35.Client` a real project *now* (D8) is itself the strongest form
+> of seam rule #4: the compiler rejects an accidental `Client → GxPT` reference,
+> so client logic physically cannot intertwine with the host. This is why we
+> build it now rather than carving it out of GxPT later.
 
 ### The four seam rules (what keeps the split cheap)
-The split stays a one-day job **only** if we develop as-if-separate from day one:
-
-1. **One-way dependency, enforced.** `Mcp35.Core`/`.Server` must never
-   reference `GxPT.*` — not Logger, not settings. Anything host-specific is
-   injected (delegate/interface), the same pattern as `curlPath`.
+1. **One-way dependency, enforced.** `Mcp35.Core` / `.Client` / `.Server` must
+   never reference `GxPT.*` — not Logger, not settings, not UI. Anything
+   host-specific is injected (delegate/interface), the same pattern as
+   `curlPath`.
 2. **Neutral namespace from commit one** — `Mcp35.*` (no later rename).
 3. **Library binary-pure / deps injected** (see §6) — this *is* the seam
    enforcement, not just distribution hygiene.
 4. **Separate projects + separate test projects.** Project boundaries make the
-   compiler *reject* an accidental reverse-reference.
+   compiler *reject* a reverse-reference. (Client included — D8.)
 
 ### Split mechanics (later)
-- `git subtree split` peels `Mcp35.*` into the new repo **with history
-  preserved**.
-- GxPT swaps `ProjectReference` → vendored `Mcp35.Core.dll` / `Mcp35.Server.dll`
-  in `GxPT/lib/` via `HintPath`.
+- `git subtree split` peels `Mcp35.*` (Core + Client + Server + Servers) into
+  the new repo **with history preserved**.
+- GxPT swaps `ProjectReference` → vendored `Mcp35.Client.dll` /
+  `Mcp35.Core.dll` in `GxPT/lib/` via `HintPath`.
 - Because the dependency was already one-way, that swap is the *only* code
   change.
-- Newtonsoft travels **with Core** (vendored under `Mcp35.Core/lib/`), so it
-  leaves with the library at split time.
+- Newtonsoft travels **with Core** (vendored under `Mcp35.Core/lib/`).
 
 ---
 
@@ -164,6 +197,7 @@ GxPT.sln                         (VS2008 format)
 ├─ GxPT/                         net35 WinExe (host code under Services/Mcp/)
 ├─ GxPT.Setup/                   installer (vdproj)
 ├─ src/Mcp35.Core/              net35 lib   (+ lib/Newtonsoft.Json.dll)
+├─ src/Mcp35.Client/            net35 lib   (ProjectRef → Mcp35.Core)
 ├─ src/Mcp35.Server/            net35 lib   (ProjectRef → Mcp35.Core)
 ├─ src/Mcp35.Servers.Serper/    net35 Exe
 ├─ src/Mcp35.Servers.Files/     net35 Exe
@@ -173,12 +207,14 @@ GxPT.sln                         (VS2008 format)
 (outside the .sln, run via dotnet test)
 ├─ GxPT.Tests/                  net48, linked-source  (existing)
 ├─ tests/Mcp35.Core.Tests/      net48, links Core sources, PackageRef Newtonsoft
+├─ tests/Mcp35.Client.Tests/    net48, links Client sources + loopback transport
 └─ tests/Mcp35.Server.Tests/    net48, links Server sources + fake transport
 ```
 
 - New net35 projects use **old-format MSBuild** (`ToolsVersion 3.5`, xmlns
   `.../2003`, `<TargetFrameworkVersion>v3.5`), matching `GxPT.csproj`.
-- Host references the library via `<ProjectReference>` during the mono phase.
+- GxPT references **`Mcp35.Client`** via `<ProjectReference>` during the mono
+  phase (and `Mcp35.Core` transitively). GxPT does **not** reference Server.
 - `Mcp35.Servers.*` are reference consumers; at split they move to the `mcp35`
   repo. (Soft decision — see §15.)
 
@@ -187,20 +223,22 @@ GxPT.sln                         (VS2008 format)
 ## 6. Dependency policy
 
 **Managed deps of the library: exactly one — `Newtonsoft.Json`** (net35 build,
-vendored under `Mcp35.Core/lib/`). Core/Server reference only Newtonsoft + BCL.
-No `System.Web.Extensions` (we're not using JavaScriptSerializer).
+vendored under `Mcp35.Core/lib/`). Core / Client / Server reference only
+Newtonsoft + BCL. No `System.Web.Extensions`.
 
 **Native tools are injected, never embedded.** curl is a *runtime external
 process*, not a managed reference, and it does not flow transitively in the
-HintPath world — so each deployable artifact vendors what **it** runs:
+HintPath world — so each deployable artifact vendors what **it** runs. The
+**curl-exec helper code** lives in `Mcp35.Core` (D9), but the **curl binary** is
+always supplied by whoever runs the process:
 
-| Artifact | Native need | Source |
-|----------|-------------|--------|
-| GxPT host (HTTP → GitHub) | curl | **already vendored** in `GxPT/lib/`; reuse path injection (`OpenRouterClient(apiKey, curlPath)` pattern) |
+| Artifact | Native need | Source of the binary |
+|----------|-------------|----------------------|
+| GxPT host (Client `HttpTransport` → GitHub) | curl | **already vendored** in `GxPT/lib/`; host injects the path into the transport |
 | `Mcp35.Servers.Serper` | curl (TLS 1.2 to Serper API) | own `lib/curl.exe` next to the exe |
 | `Mcp35.Servers.Git` | `git.exe` | injected path → PATH |
 | `Mcp35.Servers.Files` / `.Command` | none | BCL only |
-| `Mcp35.Core` / `.Server` (DLLs) | none | pure managed |
+| `Mcp35.Core` / `.Client` / `.Server` (DLLs) | none | pure managed |
 
 Path resolution everywhere: injected explicit path → app-relative
 `./lib/<tool>` → PATH (same fallback the host already uses).
@@ -221,8 +259,7 @@ Path resolution everywhere: injected explicit path → app-relative
   result boundary.
 - SimpleJson was considered (single-file, no DLL) but on net35 (no `dynamic`)
   its DOM degrades to dictionary-casting ≈ JavaScriptSerializer, it's dormant
-  since ~2015, and its only unique wins (no `System.Web.Extensions`, runs on
-  Client Profile) don't apply here. Dropped.
+  since ~2015, and its only unique wins don't apply here. Dropped.
 - Config note: set Newtonsoft `MaxDepth` explicitly if MCP/JSON-Schema payloads
   nest beyond the default (64).
 
@@ -232,9 +269,9 @@ Path resolution everywhere: injected explicit path → app-relative
 
 - `BuildRequestBody` gains a `tools` array; the chunk DTO/parser gains
   `tool_calls`.
-- Loop: model emits a call → registry resolves the owning server → approval
-  check (§9) → route via that connection's transport → append a `tool`-role
-  result → re-invoke (bounded iterations).
+- Loop: model emits a call → registry resolves the owning connection → approval
+  check (§9) → route via `McpClient.CallTool` → append a `tool`-role result →
+  re-invoke (bounded iterations).
 - **Progressive disclosure**: only `tool_search` is exposed initially.
   `tool_search(query)` ranks against the full aggregated catalog (simple
   lexical match to start — net35-friendly); matches are revealed into `tools`
@@ -266,16 +303,16 @@ Extend `AppSettings` with an `mcpServers` collection; per entry:
 
 ---
 
-## 10. Transports
+## 10. Transports (in `Mcp35.Client`)
 
 - **Stdio**: child process; newline-framed JSON-RPC on stdin/stdout; stderr
-  surfaced to the host log.
-- **HTTP (GitHub)**: Streamable HTTP, curl-per-POST. Reuses OpenRouter's
-  temp-file request body, `-K` auth config, `-N`, UTF-8 decode, temp cleanup.
-  Adds `Accept: application/json, text/event-stream`, `MCP-Protocol-Version`,
-  captures `Mcp-Session-Id` from response headers (`-D <tempfile>`), and
-  `DELETE`s the session on teardown. SSE responses are parsed by Core's SSE
-  parser.
+  surfaced via an injected log delegate.
+- **HTTP (GitHub)**: Streamable HTTP, curl-per-POST through Core's curl-exec
+  helper. Reuses the OpenRouter-proven approach: temp-file request body, `-K`
+  auth config, `-N`, UTF-8 decode, temp cleanup. Adds `Accept: application/json,
+  text/event-stream`, `MCP-Protocol-Version`, captures `Mcp-Session-Id`
+  (`-D <tempfile>`), `DELETE`s the session on teardown. SSE responses parsed by
+  Core's SSE parser.
 
 ---
 
@@ -284,13 +321,13 @@ Extend `AppSettings` with an `mcpServers` collection; per entry:
 - The shipping **net35** assemblies need **VS2008 or msbuild + the v3.5
   targeting pack** to build — a stock modern SDK cannot (same constraint as the
   GxPT app today).
-- But Core/Server are **pure logic (no WinForms)**, so CI coverage comes via
-  the **net48 linked-source test projects** run with `dotnet test` — the proven
-  `GxPT.Tests` trick. Those projects link the library `.cs` files and reference
-  Newtonsoft (PackageReference resolves a net4x build).
-- Extend `.github/workflows/tests.yml` to also run `Mcp35.Core.Tests` and
-  `Mcp35.Server.Tests`.
-- Transports get a fake/loopback `IRpcTransport` for host-side tests.
+- But Core / Client / Server are **pure logic (no WinForms)**, so CI coverage
+  comes via the **net48 linked-source test projects** run with `dotnet test` —
+  the proven `GxPT.Tests` trick. Those projects link the library `.cs` files and
+  reference Newtonsoft (PackageReference resolves a net4x build).
+- Extend `.github/workflows/tests.yml` to also run `Mcp35.Core.Tests`,
+  `Mcp35.Client.Tests`, and `Mcp35.Server.Tests`.
+- A fake/loopback `IRpcTransport` backs Client and host tests.
 
 ---
 
@@ -299,9 +336,11 @@ Extend `AppSettings` with an `mcpServers` collection; per entry:
 - `Mcp35.Core.Tests` (net48, xunit, linked-source): JSON-RPC
   serialization/round-trips, field-presence (notification vs request, omitted
   `params`), SSE parsing, stdio framing, large-payload handling.
+- `Mcp35.Client.Tests`: `McpServerConnection` handshake/lifecycle and
+  `tools/call` correlation against a loopback transport; transport framing.
 - `Mcp35.Server.Tests`: registration + dispatch loop against a fake transport.
-- Host tests in `GxPT.Tests`: registry aggregation, tool-search ranking,
-  tool-call loop with a loopback transport.
+- Host tests in `GxPT.Tests`: tool-search ranking, reveal policy, and the
+  OpenRouter tool-call loop driving a fake `McpClient`.
 
 ---
 
@@ -311,14 +350,16 @@ Extend `AppSettings` with an `mcpServers` collection; per entry:
    `tools/list` and a large tool result (validate field-presence + big
    payloads).
 2. **Mcp35.Server** + one trivial server (validate the stdio loop).
-3. **Host `StdioTransport`** + consume that server.
+3. **Mcp35.Client** `StdioTransport` + `McpServerConnection`; GxPT host consumes
+   it and lists tools.
 4. **Tool-call loop** + OpenRouter `tools`/`tool_calls` — first real
    end-to-end invocation.
 5. **Tool-search / progressive disclosure** (revealed subset).
-   → *Split Mcp35 into its own repo here once the API is stable.*
+   → *Split `Mcp35.*` into its own repo here once the API is stable.*
 6. **Approval tiers** (gate Command / git writes).
 7. **Four servers**, riskiest last: Files → Serper → Git → Command.
-8. **HTTP transport + GitHub MCP** (tool-search now tames its tool count).
+8. **`Mcp35.Client` HttpTransport + GitHub MCP** (tool-search now tames its tool
+   count).
 
 ---
 
@@ -329,7 +370,7 @@ Extend `AppSettings` with an `mcpServers` collection; per entry:
 - curl process-per-call latency.
 - `Mcp35.Servers.Command` security surface.
 - Mono-repo coupling creep defeating the future split — mitigated by the §4
-  seam rules and project boundaries.
+  seam rules and the now-enforced `Mcp35.Client` project boundary (D8).
 
 ---
 
@@ -338,7 +379,10 @@ Extend `AppSettings` with an `mcpServers` collection; per entry:
 - **Server home at split**: do all four `Mcp35.Servers.*` go to the `mcp35`
   repo, or do any GxPT-specific ones stay? Currently all four are generic →
   planned to move with the library.
+- **Catalog aggregation boundary**: raw aggregation in the `McpClient` facade
+  vs. the host registry. Leaning facade for aggregation, host for
+  ranking/reveal policy.
 - **Tool-search ranking**: starts as simple lexical match; revisit if recall is
   poor.
-- **Where Newtonsoft net48 build comes from in tests**: PackageReference
-  (assumed) vs HintPath to a vendored net48 dll.
+- **Newtonsoft net48 build in tests**: PackageReference (assumed) vs HintPath to
+  a vendored net48 dll.
