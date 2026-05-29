@@ -50,7 +50,8 @@ namespace GxPT
                 if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
                 var ser = new JavaScriptSerializer();
                 string text = ser.Serialize(data);
-                File.WriteAllText(SettingsPath, text, Encoding.UTF8);
+                // Crash-safe write so a failure mid-save can't corrupt settings.json.
+                FileSafe.WriteAllTextAtomic(SettingsPath, text, Encoding.UTF8);
             }
             catch { }
         }

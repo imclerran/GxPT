@@ -170,6 +170,7 @@
     <Compile Include="Managers\ThemeManager.cs" />
     <Compile Include="Services\TextFileAttachmentExtractor.cs" />
     <Compile Include="Services\ThemeService.cs" />
+    <Compile Include="Utilities\FileSafe.cs" />
     <Compile Include="Utilities\ZipSafe.cs" />
   </ItemGroup>
   <ItemGroup>
