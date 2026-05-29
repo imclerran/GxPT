@@ -44,8 +44,11 @@ decision-oriented rather than code.
 | D5 | HTTP target = **GitHub MCP only**, Streamable HTTP, **PAT via curl `-K`** | No OAuth scope; reuse existing curl plumbing |
 | D6 | Approval = **allowlist/remember**, but **execution/destructive tools always confirm** | cmd / git-writes / GitHub-writes are never silently auto-run |
 | D7 | **Dependencies are injected, never embedded** in the library | Keeps Core binary-pure and the future split cheap |
-| D8 | **`Mcp35.Client` is a real, separate project now** (transports + connection lifecycle); GxPT depends on it **one-way** | A compile-time project boundary prevents client logic from intertwining with GxPT — stronger than "extract later" |
+| D8 | **`Mcp35.Client` is a real, separate project now** (transports + **single-connection** lifecycle); GxPT depends on it **one-way** | A compile-time project boundary prevents client logic from intertwining with GxPT — stronger than "extract later" |
 | D9 | **curl-exec helper lives in `Mcp35.Core`** | Shared by Client `HttpTransport` and the Serper server; avoids duplication |
+| D10 | **Each server is its own independent `.csproj`** depending on mcp35; extractable to its own repo. Not part of the mcp35 library package | Maximum modularity — servers can each peel off as standalone projects/repos |
+| D11 | **Multi-server aggregation, collision-naming, ranking & reveal all live in the GxPT host registry**; `Mcp35.Client` stays strictly single-connection | Keeps Client minimal; host owns all multi-server policy |
+| D12 | **net48 test projects resolve Newtonsoft via version-pinned `PackageReference`** | Consistent with `GxPT.Tests`; pin matches the vendored net35 dll to avoid drift |
 
 ---
 
@@ -53,14 +56,14 @@ decision-oriented rather than code.
 
 ```
             GxPT host (net35 WinForms) — Services/Mcp/
-            McpHost · McpToolRegistry (tool-search / reveal policy) ·
-            OpenRouter tool-call loop · approval tiers · settings binding
+            McpHost (owns N connections) · McpToolRegistry (aggregation +
+            collision-naming + tool-search/reveal) · OpenRouter tool-call loop ·
+            approval tiers · settings binding
                           │  ProjectReference  (one-way: GxPT → Client)
                           ▼
-            Mcp35.Client (net35 lib)
+            Mcp35.Client (net35 lib) — single-connection
             StdioTransport · HttpTransport          (IRpcTransport impls)
             McpServerConnection (handshake / caps / tools-cache / correlation)
-            McpClient facade (manage N connections)
                           │ builds on
                           ▼
    Mcp35.Core (net35 lib)  ◄──────── builds on ────────  Mcp35.Server (net35 lib)
@@ -101,8 +104,10 @@ Server — servers are independent executables.
 - `McpServerConnection` — one server: `initialize` handshake, capability
   negotiation, `tools/list` caching, `tools/call` request/response correlation,
   lifecycle state machine, notifications.
-- `McpClient` facade — connect/manage N connections, expose
-  `Connect`/`ListTools`/`CallTool`, optionally aggregate the raw catalog.
+- **Single-connection by design** — no multi-connection facade. Managing the
+  *collection* of connections and aggregating their catalogs is host policy
+  (D11); `Mcp35.Client` exposes one `McpServerConnection` per server and nothing
+  more.
 - Depends on Core + an injected curl path. **No OpenRouter, no approval UI, no
   settings types, no `GxPT.*`.**
 
@@ -119,10 +124,12 @@ Server — servers are independent executables.
 ### GxPT host (`Services/Mcp/`) — application policy only
 Everything here is GxPT-specific orchestration, deliberately kept *out* of the
 library:
-- `McpHost` — owns the configured connections (via `McpClient`).
-- `McpToolRegistry` — tool-search **ranking** + progressive-disclosure
-  **policy** (which tools to reveal). (Raw catalog *aggregation* may live in the
-  `McpClient` facade; ranking/reveal is host policy — see §15.)
+- `McpHost` — owns the **collection** of `Mcp35.Client.McpServerConnection`
+  instances (one per configured server) and their lifecycle.
+- `McpToolRegistry` — **catalog aggregation** across connections,
+  **server-qualified collision naming**, tool-search **ranking**, and
+  progressive-disclosure **reveal policy** (D11). Resolves a tool name back to
+  its owning connection.
 - The **OpenRouter** tool-call loop (`tools`/`tool_calls` wiring) — OpenRouter-
   specific, not even MCP.
 - Approval tiers + confirmation UI.
@@ -140,7 +147,7 @@ library:
 |---------|------|
 | Transports (stdio / http), framing, SSE | `Mcp35.Client` (Core for parsers/curl-exec) |
 | Connection lifecycle, handshake, caps, tools cache, call correlation | `Mcp35.Client` |
-| Raw catalog aggregation across connections | `Mcp35.Client` (`McpClient` facade) |
+| Catalog aggregation + server-qualified collision naming | **GxPT host** (`McpToolRegistry`) |
 | Tool-search **ranking** + which tools to **reveal** | **GxPT host** |
 | OpenRouter `tools`/`tool_calls` loop | **GxPT host** |
 | Approval tiers + confirmation UI | **GxPT host** |
@@ -173,8 +180,10 @@ DotNetZip / itextsharp today).
    compiler *reject* a reverse-reference. (Client included — D8.)
 
 ### Split mechanics (later)
-- `git subtree split` peels `Mcp35.*` (Core + Client + Server + Servers) into
-  the new repo **with history preserved**.
+- `git subtree split` peels the **library** (`Mcp35.Core` + `.Client` +
+  `.Server`) into the new `mcp35` repo **with history preserved**. Each server
+  is independent (D10) and can be subtree-split into its *own* repo separately,
+  depending on the vendored mcp35 DLLs.
 - GxPT swaps `ProjectReference` → vendored `Mcp35.Client.dll` /
   `Mcp35.Core.dll` in `GxPT/lib/` via `HintPath`.
 - Because the dependency was already one-way, that swap is the *only* code
@@ -215,8 +224,11 @@ GxPT.sln                         (VS2008 format)
   `.../2003`, `<TargetFrameworkVersion>v3.5`), matching `GxPT.csproj`.
 - GxPT references **`Mcp35.Client`** via `<ProjectReference>` during the mono
   phase (and `Mcp35.Core` transitively). GxPT does **not** reference Server.
-- `Mcp35.Servers.*` are reference consumers; at split they move to the `mcp35`
-  repo. (Soft decision — see §15.)
+- Each `Mcp35.Servers.*` is an **independent project** (own `.csproj`,
+  `ProjectRef → Mcp35.Server`) that merely *consumes* the library, so each can
+  later split into its own repo depending on vendored mcp35 DLLs (D10). Their
+  `Mcp35.` prefix is provisional — being consumers rather than library members,
+  a neutral name may fit better (see §15).
 
 ---
 
@@ -269,9 +281,9 @@ Path resolution everywhere: injected explicit path → app-relative
 
 - `BuildRequestBody` gains a `tools` array; the chunk DTO/parser gains
   `tool_calls`.
-- Loop: model emits a call → registry resolves the owning connection → approval
-  check (§9) → route via `McpClient.CallTool` → append a `tool`-role result →
-  re-invoke (bounded iterations).
+- Loop: model emits a call → `McpToolRegistry` resolves the owning
+  `McpServerConnection` → approval check (§9) → route via that connection's
+  `CallTool` → append a `tool`-role result → re-invoke (bounded iterations).
 - **Progressive disclosure**: only `tool_search` is exposed initially.
   `tool_search(query)` ranks against the full aggregated catalog (simple
   lexical match to start — net35-friendly); matches are revealed into `tools`
@@ -339,8 +351,9 @@ Extend `AppSettings` with an `mcpServers` collection; per entry:
 - `Mcp35.Client.Tests`: `McpServerConnection` handshake/lifecycle and
   `tools/call` correlation against a loopback transport; transport framing.
 - `Mcp35.Server.Tests`: registration + dispatch loop against a fake transport.
-- Host tests in `GxPT.Tests`: tool-search ranking, reveal policy, and the
-  OpenRouter tool-call loop driving a fake `McpClient`.
+- Host tests in `GxPT.Tests`: catalog aggregation + collision naming,
+  tool-search ranking, reveal policy, and the OpenRouter tool-call loop driving
+  fake `McpServerConnection`s.
 
 ---
 
@@ -376,13 +389,15 @@ Extend `AppSettings` with an `mcpServers` collection; per entry:
 
 ## 15. Open / soft decisions
 
-- **Server home at split**: do all four `Mcp35.Servers.*` go to the `mcp35`
-  repo, or do any GxPT-specific ones stay? Currently all four are generic →
-  planned to move with the library.
-- **Catalog aggregation boundary**: raw aggregation in the `McpClient` facade
-  vs. the host registry. Leaning facade for aggregation, host for
-  ranking/reveal policy.
+**Resolved (2026-05-29):**
+- ~~Server home at split~~ → each server is its own independent project/repo
+  consuming mcp35; the library repo holds only Core/Client/Server (D10).
+- ~~Catalog aggregation boundary~~ → host registry owns aggregation + collision
+  naming + ranking + reveal; Client stays single-connection (D11).
+- ~~Newtonsoft net48 build in tests~~ → version-pinned PackageReference (D12).
+
+**Still open:**
+- **Server project naming**: keep the `Mcp35.Servers.*` prefix, or give the
+  independent servers neutral names (they're consumers, not library members)?
 - **Tool-search ranking**: starts as simple lexical match; revisit if recall is
   poor.
-- **Newtonsoft net48 build in tests**: PackageReference (assumed) vs HintPath to
-  a vendored net48 dll.
