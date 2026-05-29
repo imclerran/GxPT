@@ -40,7 +40,7 @@ decision-oriented rather than code.
 | D1 | Library name is **Mcp35**; projects `Mcp35.Core`, `Mcp35.Client`, `Mcp35.Server` (the server-building SDK, **singular**) | Neutral, descriptive (nods to net35); chosen now to avoid a later rename |
 | D2 | **Mono-repo first**, split Mcp35 into its own repo later | API churns hard through early phases; ProjectReference beats DLL-republish during churn |
 | D3 | JSON via **Newtonsoft.Json** (vendored, net35 build) | Declarative JSON-RPC field-presence control; no `MaxJsonLength` cap; GxPT has no Newtonsoft to conflict with |
-| D4 | **Host-side discovery: a name+summary manifest up front, full schemas revealed on demand by name** (`reveal_tool`); free-text `tool_search` is only a fallback for very large catalogs | Deterministic discovery (no hallucinated tools, no empty-result retries) at low token cost |
+| D4 | **Host-side discovery: a names-only manifest up front, full schemas revealed on demand by exact name** (`reveal_tools`, batch); free-text `search_tools` is only a fallback for very large catalogs | Deterministic discovery (no hallucinated tools, no empty-result retries) at minimal token cost; multi-reveal handles ambiguity without summaries |
 | D5 | HTTP target = **GitHub MCP only**, Streamable HTTP, **PAT via curl `-K`** | No OAuth scope; reuse existing curl plumbing |
 | D6 | Approval = **allowlist/remember**, but **execution/destructive tools always confirm** | cmd / git-writes / GitHub-writes are never silently auto-run |
 | D7 | **Dependencies are injected, never embedded** in the library | Keeps Core binary-pure and the future split cheap |
@@ -58,7 +58,7 @@ decision-oriented rather than code.
 ```
             GxPT host (net35 WinForms) — Services/Mcp/
             McpHost (owns N connections) · McpToolRegistry (aggregation +
-            collision-naming + manifest/reveal_tool) · OpenRouter tool-call loop ·
+            collision-naming + names-manifest/reveal_tools) · OpenRouter loop ·
             approval tiers · settings binding
                           │  ProjectReference  (one-way: GxPT → Client)
                           ▼
@@ -129,9 +129,10 @@ library:
 - `McpHost` — owns the **collection** of `Mcp35.Client.McpServerConnection`
   instances (one per configured server) and their lifecycle.
 - `McpToolRegistry` — **catalog aggregation** across connections,
-  **server-qualified collision naming**, **manifest assembly** (name +
-  one-line summary), and the **`reveal_tool` define-on-demand policy** (D11,
-  §7). Resolves a tool name back to its owning connection.
+  **server-qualified collision naming**, **manifest assembly** (qualified names
+  only), the **internal full-def cache**, and the **`reveal_tools`
+  define-on-demand policy** incl. the LRU reveal cap (D11, §7). Resolves a tool
+  name back to its owning connection.
 - The **OpenRouter** tool-call loop (`tools`/`tool_calls` wiring) — OpenRouter-
   specific, not even MCP.
 - Approval tiers + confirmation UI.
@@ -152,7 +153,7 @@ named because they are *not* part of the library (D13).
 | Transports (stdio / http), framing, SSE | `Mcp35.Client` (Core for parsers/curl-exec) |
 | Connection lifecycle, handshake, caps, tools cache, call correlation | `Mcp35.Client` |
 | Catalog aggregation + server-qualified collision naming | **GxPT host** (`McpToolRegistry`) |
-| Manifest assembly + `reveal_tool` define-on-demand policy | **GxPT host** |
+| Names manifest + internal def cache + `reveal_tools` (LRU cap) | **GxPT host** |
 | OpenRouter `tools`/`tool_calls` loop | **GxPT host** |
 | Approval tiers + confirmation UI | **GxPT host** |
 | `mcpServers` settings binding | **GxPT host** |
@@ -291,11 +292,16 @@ Path resolution everywhere: injected explicit path → app-relative
 D4):
 
 1. The host injects a lightweight **catalog manifest** into context each
-   request — every tool's server-qualified **name + one-line summary**, with
-   **no input schemas**. The model thus always knows exactly what exists.
-2. The only real tool exposed initially is a meta-tool **`reveal_tool(name[])`**.
-   Calling it injects those tools' **full definitions** (schemas) into the
-   callable `tools` array on the next turn.
+   request — every tool's server-qualified **name only**, with no descriptions
+   and no input schemas. The model thus always knows exactly what exists. (The
+   host keeps the full defs from `tools/list` **cached internally**; it just
+   doesn't push them to the model yet.)
+2. The only real tool exposed initially is a meta-tool
+   **`reveal_tools(names: string[])`** — an exact-name **lookup**, not a search.
+   It returns the requested tools' **full definitions** and injects them into
+   the callable `tools` array on the next turn. Being batch (plural), the model
+   can resolve an ambiguous name by revealing **several** candidates at once and
+   comparing their schemas.
 3. The model emits a normal `tool_call`; `McpToolRegistry` resolves the owning
    `McpServerConnection` (D11) → approval check (§9) → route via that
    connection's `CallTool` → append a `tool`-role result → re-invoke (bounded
@@ -303,20 +309,27 @@ D4):
 
 **Why names-first beats free-text search:** discovery is *deterministic* — the
 model selects from ground-truth names, so it can't hallucinate a capability or
-burn turns on empty-result searches — while token cost stays low (names +
-1-liners are a fraction of full schemas).
+burn turns on empty-result searches — while token cost stays minimal (bare
+qualified names are a tiny fraction of full schemas).
 
 **Design notes:**
-- **Terse summaries, not bare names.** A one-line summary per tool is included
-  (negligible cost) because pure names are ambiguous to choose between (e.g.
-  `update_pull_request` vs `update_pull_request_branch`). This is *not* "usage
-  data" — full parameter schemas stay withheld until `reveal_tool`.
-- **Bounded reveal set.** Revealed definitions accumulate in `tools`; evict
-  least-recently-used to cap token growth.
-- **`tool_search` is a scaling fallback only.** If a catalog ever reaches
-  hundreds of tools (so even the manifest is heavy), an optional
-  `tool_search(query)` can narrow the manifest first. Not needed for the
-  initial server set.
+- **Names only — no summaries.** Server-supplied descriptions aren't guaranteed
+  to be concise or well-authored, and summarizing them would mean a lossy
+  truncation or an extra LLM call. Disambiguation is handled instead by
+  **multi-reveal** (step 2).
+- **Bounded reveal set.** A cap limits how many revealed **definitions** ride in
+  the `tools` array (the names manifest is always fully present — it's cheap).
+  When a reveal would exceed the cap, evict the **least-recently-used** def;
+  recency is touched on both reveal *and* call, and `reveal_tools` itself is
+  **never evicted**. Eviction is graceful: an evicted tool is simply absent from
+  `tools` (so uncallable) but still in the manifest, so the model just
+  re-reveals it — no error path. A single reveal batch may momentarily exceed
+  the cap; LRU trims back on later turns.
+- **`search_tools` is a scaling fallback only.** If a catalog ever reaches
+  hundreds of tools (so even the names manifest is heavy), an optional
+  `search_tools(query)` can rank against the host's **internal** cache (names
+  *and* the privately-held descriptions) and return candidate qualified names to
+  reveal. Not needed for the initial server set.
 
 ---
 
@@ -378,9 +391,10 @@ Extend `AppSettings` with an `mcpServers` collection; per entry:
 - `Mcp35.Client.Tests`: `McpServerConnection` handshake/lifecycle and
   `tools/call` correlation against a loopback transport; transport framing.
 - `Mcp35.Server.Tests`: registration + dispatch loop against a fake transport.
-- Host tests in `GxPT.Tests`: catalog aggregation + collision naming, manifest
-  assembly, `reveal_tool` define-on-demand, and the OpenRouter tool-call loop
-  driving fake `McpServerConnection`s.
+- Host tests in `GxPT.Tests`: catalog aggregation + collision naming, names
+  manifest, `reveal_tools` define-on-demand + LRU eviction (incl. re-reveal of
+  an evicted tool), and the OpenRouter tool-call loop driving fake
+  `McpServerConnection`s.
 
 ---
 
@@ -394,12 +408,13 @@ Extend `AppSettings` with an `mcpServers` collection; per entry:
    it and lists tools.
 4. **Tool-call loop** + OpenRouter `tools`/`tool_calls` — first real
    end-to-end invocation.
-5. **Tool discovery**: catalog manifest + `reveal_tool` (define-on-demand).
+5. **Tool discovery**: names manifest + `reveal_tools` (define-on-demand + LRU
+   cap).
    → *Split `Mcp35.*` into its own repo here once the API is stable.*
 6. **Approval tiers** (gate Command / git writes).
 7. **Four servers**, riskiest last: Files → Serper → Git → Command.
-8. **`Mcp35.Client` HttpTransport + GitHub MCP** (the manifest + `reveal_tool`
-   now tame its large tool count).
+8. **`Mcp35.Client` HttpTransport + GitHub MCP** (the names manifest +
+   `reveal_tools` now tame its large tool count).
 
 ---
 
@@ -425,11 +440,15 @@ Extend `AppSettings` with an `mcpServers` collection; per entry:
 
 - ~~Server project naming~~ → `Mcp35.Server` is the singular SDK; concrete
   servers get neutral names (`SerperMcpServer`, …), not `Mcp35.Servers.*` (D13).
-- ~~Tool discovery mechanism~~ → name+summary manifest with define-on-demand
-  via `reveal_tool`; free-text search demoted to a fallback (D4).
+- ~~Tool discovery mechanism~~ → names-only manifest with define-on-demand via
+  batch `reveal_tools` (multi-reveal for ambiguity); free-text `search_tools`
+  demoted to a fallback (D4).
 
 **Still open:**
-- **`tool_search` fallback ranking** (only if a catalog grows huge): would start
-  as simple lexical match; revisit if recall is poor.
+- **Reveal cap value**: how many tool defs may ride in `tools` at once before
+  LRU eviction kicks in — tune empirically.
+- **`search_tools` fallback ranking** (only if a catalog grows huge): would
+  start as simple lexical match over the internal cache; revisit if recall is
+  poor.
 - **Manifest refresh cadence**: rebuilt per request vs cached until a server's
   `tools/list` changes.
