@@ -166,6 +166,7 @@
     </Compile>
     <Compile Include="Services\SessionState.cs" />
     <Compile Include="Services\SyntaxHighlightingRenderer.cs" />
+    <Compile Include="Services\TranscriptWidthSettings.cs" />
     <Compile Include="Managers\TabManager.cs" />
     <Compile Include="Managers\ThemeManager.cs" />
     <Compile Include="Services\TextFileAttachmentExtractor.cs" />

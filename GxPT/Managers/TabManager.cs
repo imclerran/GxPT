@@ -146,96 +146,15 @@ namespace GxPT
                 };
                 ctx.Conversation.SelectedModel = ctx.SelectedModel;
                 _mainForm.EnsureConversationId(ctx.Conversation);
-                // Wire edit request from transcript to input box
-                try
-                {
-                    if (ctx.Transcript != null)
-                    {
-                        ctx.Transcript.UserMessageEditRequested += delegate(int index, string text)
-                        {
-                            try
-                            {
-                                // Map transcript index (user+assistant only) to conversation history index (skipping system)
-                                int histIndex = MapTranscriptToHistoryIndex(ctx.Conversation, index);
-                                if (histIndex < 0 || histIndex >= ctx.Conversation.History.Count)
-                                    return;
-                                var msg = ctx.Conversation.History[histIndex];
-                                if (msg == null || !string.Equals(msg.Role, "user", StringComparison.OrdinalIgnoreCase))
-                                    return; // only allow editing user messages
-
-                                var im = _mainForm.GetInputManager();
-                                if (im != null) im.SetInputText(msg.Content ?? string.Empty, true);
-                                ctx.PendingEditActive = true;
-                                ctx.PendingEditIndex = histIndex;
-                                // Capture the model at time of entering edit mode
-                                ctx.PendingEditOriginalModel = ctx.SelectedModel;
-                                // Seed pending attachments from the original message being edited
-                                try
-                                {
-                                    var list = new List<AttachedFile>();
-                                    if (msg.Attachments != null)
-                                    {
-                                        for (int i = 0; i < msg.Attachments.Count; i++)
-                                        {
-                                            var af = msg.Attachments[i];
-                                            if (af == null) continue;
-                                            list.Add(new AttachedFile(af.FileName, af.Content));
-                                        }
-                                    }
-                                    ctx.PendingAttachments = list;
-                                    // Refresh attachments banner UI
-                                    try { _mainForm.RefreshAttachmentsBannerUi(); }
-                                    catch { }
-                                }
-                                catch { }
-                                _mainForm.SelectTab(ctx.Page);
-                            }
-                            catch { }
-                        };
-                    }
-                }
-                catch { }
-
-                ctx.Conversation.NameGenerated += delegate(string name)
-                {
-                    try
-                    {
-                        if (_mainForm.IsHandleCreated)
-                        {
-                            _mainForm.BeginInvoke((MethodInvoker)delegate
-                            {
-                                ctx.Page.Text = string.IsNullOrEmpty(name) ? "Conversation" : name;
-                                _mainForm.UpdateWindowTitle();
-                            });
-                        }
-                    }
-                    catch { }
-                };
+                // Wire edit-request and name-generated handlers for this tab
+                HookEditRequest(ctx);
+                HookNameGenerated(ctx);
 
                 try { ctx.Page.Text = "New Conversation"; }
                 catch { }
 
                 // Apply transcript/message width from settings to the initial transcript
-                try
-                {
-                    int tw = (int)AppSettings.GetDouble("transcript_max_width", 1000);
-                    if (tw <= 0) tw = 1000; if (tw < 300) tw = 300; if (tw > 1900) tw = 1900;
-                    int rawMp = (int)AppSettings.GetDouble("message_max_width", 90);
-                    int mp = rawMp;
-                    if (mp < 50 || mp > 100)
-                    {
-                        int computed = (rawMp <= 0) ? 90 : (int)Math.Round(100.0 * rawMp / Math.Max(1, tw));
-                        if (computed < 50) computed = 50; if (computed > 100) computed = 100;
-                        mp = computed;
-                    }
-                    if (mp < 50) mp = 50; if (mp > 100) mp = 100;
-                    if (ctx.Transcript != null)
-                    {
-                        ctx.Transcript.MaxContentWidth = tw;
-                        try { ctx.Transcript.BubbleWidthPercent = mp; }
-                        catch { }
-                    }
-                }
+                try { TranscriptWidthSettings.Resolve().ApplyTo(ctx.Transcript); }
                 catch { }
 
                 _tabContexts[initialTab] = ctx;
@@ -268,70 +187,9 @@ namespace GxPT
             ctx.Conversation.SelectedModel = ctx.SelectedModel;
             _mainForm.EnsureConversationId(ctx.Conversation);
 
-            // Wire edit request from transcript to input box
-            try
-            {
-                if (ctx.Transcript != null)
-                {
-                    ctx.Transcript.UserMessageEditRequested += delegate(int index, string text)
-                    {
-                        try
-                        {
-                            // Map transcript index (user+assistant only) to conversation history index (skipping system)
-                            int histIndex = MapTranscriptToHistoryIndex(ctx.Conversation, index);
-                            if (histIndex < 0 || histIndex >= ctx.Conversation.History.Count)
-                                return;
-                            var msg = ctx.Conversation.History[histIndex];
-                            if (msg == null || !string.Equals(msg.Role, "user", StringComparison.OrdinalIgnoreCase))
-                                return; // only allow editing user messages
-
-                            var im = _mainForm.GetInputManager();
-                            if (im != null) im.SetInputText(msg.Content ?? string.Empty, true);
-                            ctx.PendingEditActive = true;
-                            ctx.PendingEditIndex = histIndex;
-                            // Capture the model at time of entering edit mode
-                            ctx.PendingEditOriginalModel = ctx.SelectedModel;
-                            // Seed pending attachments from the original message being edited
-                            try
-                            {
-                                var list = new List<AttachedFile>();
-                                if (msg.Attachments != null)
-                                {
-                                    for (int i = 0; i < msg.Attachments.Count; i++)
-                                    {
-                                        var af = msg.Attachments[i];
-                                        if (af == null) continue;
-                                        list.Add(new AttachedFile(af.FileName, af.Content));
-                                    }
-                                }
-                                ctx.PendingAttachments = list;
-                                try { _mainForm.RefreshAttachmentsBannerUi(); }
-                                catch { }
-                            }
-                            catch { }
-                            _mainForm.SelectTab(ctx.Page);
-                        }
-                        catch { }
-                    };
-                }
-            }
-            catch { }
-
-            ctx.Conversation.NameGenerated += delegate(string name)
-            {
-                try
-                {
-                    if (_mainForm.IsHandleCreated)
-                    {
-                        _mainForm.BeginInvoke((MethodInvoker)delegate
-                        {
-                            ctx.Page.Text = string.IsNullOrEmpty(name) ? "Conversation" : name;
-                            _mainForm.UpdateWindowTitle();
-                        });
-                    }
-                }
-                catch { }
-            };
+            // Wire edit-request and name-generated handlers for this tab
+            HookEditRequest(ctx);
+            HookNameGenerated(ctx);
 
             _tabContexts[page] = ctx;
 
@@ -340,25 +198,7 @@ namespace GxPT
             catch { }
 
             // Apply transcript/message width from settings for newly created transcript
-            try
-            {
-                int tw = (int)AppSettings.GetDouble("transcript_max_width", 1000);
-                if (tw <= 0) tw = 1000; if (tw < 300) tw = 300; if (tw > 1900) tw = 1900;
-                int rawMp = (int)AppSettings.GetDouble("message_max_width", 90);
-                int mp = rawMp;
-                if (mp < 50 || mp > 100)
-                {
-                    int computed = (rawMp <= 0) ? 90 : (int)Math.Round(100.0 * rawMp / Math.Max(1, tw));
-                    if (computed < 50) computed = 50; if (computed > 100) computed = 100;
-                    mp = computed;
-                }
-                if (mp < 50) mp = 50; if (mp > 100) mp = 100;
-                try { transcript.MaxContentWidth = tw; }
-                catch { }
-                try { transcript.BubbleWidthPercent = mp; }
-                catch { }
-
-            }
+            try { TranscriptWidthSettings.Resolve().ApplyTo(transcript); }
             catch { }
 
             if (TabsChanged != null) TabsChanged();
@@ -417,22 +257,8 @@ namespace GxPT
                             _mainForm.SyncComboModelFromActiveTab();
                         }
                         catch { }
-                        // re-hook name event
-                        ctx.Conversation.NameGenerated += delegate(string name)
-                        {
-                            try
-                            {
-                                if (_mainForm.IsHandleCreated)
-                                {
-                                    _mainForm.BeginInvoke((MethodInvoker)delegate
-                                    {
-                                        ctx.Page.Text = string.IsNullOrEmpty(name) ? "Conversation" : name;
-                                        _mainForm.UpdateWindowTitle();
-                                    });
-                                }
-                            }
-                            catch { }
-                        };
+                        // re-hook name event for the fresh conversation on this reused tab
+                        HookNameGenerated(ctx);
                         page.Text = "New Conversation";
                         _mainForm.UpdateWindowTitle();
                     }
@@ -645,27 +471,9 @@ namespace GxPT
         {
             try
             {
-                int tw = (int)AppSettings.GetDouble("transcript_max_width", 1000);
-                if (tw <= 0) tw = 1000; if (tw < 300) tw = 300; if (tw > 1900) tw = 1900;
-                int rawMp = (int)AppSettings.GetDouble("message_max_width", 90);
-                int mp = rawMp;
-                if (mp < 50 || mp > 100)
-                {
-                    int computed = (rawMp <= 0) ? 90 : (int)Math.Round(100.0 * rawMp / Math.Max(1, tw));
-                    if (computed < 50) computed = 50; if (computed > 100) computed = 100;
-                    mp = computed;
-                }
-                if (mp < 50) mp = 50; if (mp > 100) mp = 100;
-
+                var widths = TranscriptWidthSettings.Resolve();
                 foreach (var kv in _tabContexts)
-                {
-                    var t = kv.Value != null ? kv.Value.Transcript : null;
-                    if (t == null) continue;
-                    try { t.MaxContentWidth = tw; }
-                    catch { }
-                    try { t.BubbleWidthPercent = mp; }
-                    catch { }
-                }
+                    widths.ApplyTo(kv.Value != null ? kv.Value.Transcript : null);
             }
             catch { }
         }
@@ -701,6 +509,76 @@ namespace GxPT
                 }
             }
             catch { }
+        }
+
+        // Wire a tab's transcript edit-request to populate the input box and enter edit mode.
+        // Editing is only permitted for prior user messages.
+        private void HookEditRequest(ChatTabContext ctx)
+        {
+            if (ctx == null || ctx.Transcript == null) return;
+            ctx.Transcript.UserMessageEditRequested += delegate(int index, string text)
+            {
+                try
+                {
+                    // Map transcript index (user+assistant only) to conversation history index (skipping system)
+                    int histIndex = MapTranscriptToHistoryIndex(ctx.Conversation, index);
+                    if (histIndex < 0 || histIndex >= ctx.Conversation.History.Count)
+                        return;
+                    var msg = ctx.Conversation.History[histIndex];
+                    if (msg == null || !string.Equals(msg.Role, "user", StringComparison.OrdinalIgnoreCase))
+                        return; // only allow editing user messages
+
+                    var im = _mainForm.GetInputManager();
+                    if (im != null) im.SetInputText(msg.Content ?? string.Empty, true);
+                    ctx.PendingEditActive = true;
+                    ctx.PendingEditIndex = histIndex;
+                    // Capture the model at time of entering edit mode
+                    ctx.PendingEditOriginalModel = ctx.SelectedModel;
+                    // Seed pending attachments from the original message being edited
+                    try
+                    {
+                        var list = new List<AttachedFile>();
+                        if (msg.Attachments != null)
+                        {
+                            for (int i = 0; i < msg.Attachments.Count; i++)
+                            {
+                                var af = msg.Attachments[i];
+                                if (af == null) continue;
+                                list.Add(new AttachedFile(af.FileName, af.Content));
+                            }
+                        }
+                        ctx.PendingAttachments = list;
+                        // Refresh attachments banner UI
+                        try { _mainForm.RefreshAttachmentsBannerUi(); }
+                        catch { }
+                    }
+                    catch { }
+                    _mainForm.SelectTab(ctx.Page);
+                }
+                catch { }
+            };
+        }
+
+        // Update the tab title (and window title) on the UI thread when a conversation's
+        // name is generated in the background.
+        private void HookNameGenerated(ChatTabContext ctx)
+        {
+            if (ctx == null || ctx.Conversation == null) return;
+            ctx.Conversation.NameGenerated += delegate(string name)
+            {
+                try
+                {
+                    if (_mainForm.IsHandleCreated)
+                    {
+                        _mainForm.BeginInvoke((MethodInvoker)delegate
+                        {
+                            ctx.Page.Text = string.IsNullOrEmpty(name) ? "Conversation" : name;
+                            _mainForm.UpdateWindowTitle();
+                        });
+                    }
+                }
+                catch { }
+            };
         }
 
         // Map a transcript message index (which excludes system messages) to the corresponding
