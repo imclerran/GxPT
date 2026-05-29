@@ -669,52 +669,15 @@ namespace GxPT
             // Apply transcript/message width settings to existing transcripts
             try
             {
-                int tw = (int)AppSettings.GetDouble("transcript_max_width", 1000);
-                if (tw <= 0) tw = 1000; if (tw < 300) tw = 300; if (tw > 1900) tw = 1900;
-
-                // Read message_max_width which now stores a percent (50-100). If outside that range,
-                // interpret it as legacy pixels, convert to percent of transcript width, clamp, and persist.
-                int rawMp = (int)AppSettings.GetDouble("message_max_width", 90);
-                int mp = rawMp;
-                if (mp < 50 || mp > 100)
-                {
-                    int computed = (rawMp <= 0) ? 90 : (int)Math.Round(100.0 * rawMp / Math.Max(1, tw));
-                    if (computed < 50) computed = 50; if (computed > 100) computed = 100;
-                    mp = computed;
-                    try { AppSettings.SetInt("message_max_width", mp); }
-                    catch { }
-                }
-                // Final safety clamp
-                if (mp < 50) mp = 50; if (mp > 100) mp = 100;
+                var widths = TranscriptWidthSettings.Resolve();
                 // Primary designer transcript
-                try
-                {
-                    if (this.chatTranscript != null)
-                    {
-                        this.chatTranscript.MaxContentWidth = tw;
-                        // Set percent-based bubble width
-                        try { this.chatTranscript.BubbleWidthPercent = mp; }
-                        catch { }
-                    }
-                }
-                catch { }
+                widths.ApplyTo(this.chatTranscript);
                 // All tab transcripts
-                try
+                if (_tabManager != null)
                 {
-                    if (_tabManager != null)
-                    {
-                        foreach (var kv in _tabManager.TabContexts)
-                        {
-                            var t = kv.Value != null ? kv.Value.Transcript : null;
-                            if (t == null) continue;
-                            try { t.MaxContentWidth = tw; }
-                            catch { }
-                            try { t.BubbleWidthPercent = mp; }
-                            catch { }
-                        }
-                    }
+                    foreach (var kv in _tabManager.TabContexts)
+                        widths.ApplyTo(kv.Value != null ? kv.Value.Transcript : null);
                 }
-                catch { }
             }
             catch { }
         }
@@ -770,36 +733,12 @@ namespace GxPT
                 // Re-apply transcript/message widths in case they changed
                 try
                 {
-                    int tw = (int)AppSettings.GetDouble("transcript_max_width", 1000);
-                    if (tw <= 0) tw = 1000; if (tw < 300) tw = 300; if (tw > 1900) tw = 1900;
-                    int rawMp = (int)AppSettings.GetDouble("message_max_width", 90);
-                    int mp = rawMp;
-                    if (mp < 50 || mp > 100)
-                    {
-                        int computed = (rawMp <= 0) ? 90 : (int)Math.Round(100.0 * rawMp / Math.Max(1, tw));
-                        if (computed < 50) computed = 50; if (computed > 100) computed = 100;
-                        mp = computed;
-                        try { AppSettings.SetInt("message_max_width", mp); }
-                        catch { }
-                    }
-                    if (mp < 50) mp = 50; if (mp > 100) mp = 100;
-                    if (this.chatTranscript != null)
-                    {
-                        this.chatTranscript.MaxContentWidth = tw;
-                        try { this.chatTranscript.BubbleWidthPercent = mp; }
-                        catch { }
-                    }
+                    var widths = TranscriptWidthSettings.Resolve();
+                    widths.ApplyTo(this.chatTranscript);
                     if (_tabManager != null)
                     {
                         foreach (var kv in _tabManager.TabContexts)
-                        {
-                            var t = kv.Value != null ? kv.Value.Transcript : null;
-                            if (t == null) continue;
-                            try { t.MaxContentWidth = tw; }
-                            catch { }
-                            try { t.BubbleWidthPercent = mp; }
-                            catch { }
-                        }
+                            widths.ApplyTo(kv.Value != null ? kv.Value.Transcript : null);
                     }
                 }
                 catch { }
@@ -1804,22 +1743,13 @@ namespace GxPT
             catch { }
         }
 
-        private void OpenConversationInNewTab(Conversation convo)
+        // Rebuild a tab's transcript from a conversation's history without blocking the UI:
+        // Markdown is parsed on a background thread and the resulting blocks are appended to the
+        // transcript in small batches on a UI timer. System messages are skipped; help templates
+        // (NoSaveUntilUserSend) are scrolled to the top, otherwise the view sticks to the bottom.
+        private void RebuildTranscriptAsync(TabManager.ChatTabContext ctx, Conversation convo)
         {
-            if (this.tabControl1 == null || convo == null) return;
-            var ctx = _tabManager != null ? _tabManager.CreateConversationTab() : null;
-            if (ctx == null) return;
-
-            // Replace the conversation and refresh transcript UI
-            ctx.Conversation = convo;
-            ctx.SelectedModel = string.IsNullOrEmpty(convo.SelectedModel) ? GetSelectedModel() : convo.SelectedModel;
-            try { this.cmbModel.Text = ctx.SelectedModel; }
-            catch { }
-            ConversationStore.EnsureConversationId(ctx.Conversation);
-            if (_sidebarManager != null && ctx.Conversation != null)
-                _sidebarManager.TrackOpenConversation(ctx.Conversation.Id, ctx.Page);
-
-            // Rebuild transcript UI using background parsing and chunked appends to avoid UI freezes
+            if (ctx == null || ctx.Transcript == null || convo == null) return;
             try
             {
                 ctx.Transcript.ClearMessages();
@@ -1838,12 +1768,11 @@ namespace GxPT
 
                 // Producer-consumer: parse off-UI, consume on UI timer in small chunks
                 var parsed = new List<ParsedMessage>(Math.Max(4, items.Count));
-                int produced = 0; // number of parsed items ready in 'parsed'
-                int consumed = 0; // number consumed/appended to transcript
+                int produced = 0; // parsed items ready in 'parsed'
+                int consumed = 0; // items appended to transcript
                 bool parsingDone = false;
                 object gate = new object();
 
-                // Start background parsing
                 System.Threading.ThreadPool.QueueUserWorkItem(delegate
                 {
                     try
@@ -1872,10 +1801,7 @@ namespace GxPT
                         }
                     }
                     catch { }
-                    finally
-                    {
-                        parsingDone = true;
-                    }
+                    finally { parsingDone = true; }
                 });
 
                 // UI timer consumes progressively
@@ -1887,41 +1813,32 @@ namespace GxPT
                     lock (gate) { avail = produced - consumed; }
                     if (avail <= 0)
                     {
-                        if (parsingDone)
-                        {
-                            // Nothing left and parsing finished
-                            timer.Stop();
-                            timer.Dispose();
-                        }
+                        if (parsingDone) { timer.Stop(); timer.Dispose(); }
                         return;
                     }
 
-                    // Consume a small batch to keep UI fluid
+                    // Consume a small batch to keep the UI fluid
                     int take = Math.Min(20, avail);
                     ctx.Transcript.BeginBatchUpdates();
                     try
                     {
                         for (int k = 0; k < take; k++)
                         {
-                            ParsedMessage msg;
-                            lock (gate)
-                            {
-                                msg = parsed[consumed];
-                                consumed++;
-                            }
-                            if (msg != null)
-                                ctx.Transcript.AddParsedMessage(msg.Role, msg.Text, msg.Blocks, msg.Attachments);
+                            ParsedMessage pm;
+                            lock (gate) { pm = parsed[consumed]; consumed++; }
+                            if (pm != null)
+                                ctx.Transcript.AddParsedMessage(pm.Role, pm.Text, pm.Blocks, pm.Attachments);
                         }
                     }
                     finally
                     {
                         bool last = parsingDone && consumed >= items.Count;
-                        bool scrollToBottom = last && !(ctx != null && ctx.NoSaveUntilUserSend);
+                        bool scrollToBottom = last && !ctx.NoSaveUntilUserSend;
                         ctx.Transcript.EndBatchUpdates(scrollToBottom);
                         if (last)
                         {
-                            // For help templates (no-save until user sends), ensure we land at the top
-                            try { if (ctx != null && ctx.NoSaveUntilUserSend && ctx.Transcript != null) ctx.Transcript.ScrollToTop(); }
+                            // Help templates (no-save until user sends) should land at the top
+                            try { if (ctx.NoSaveUntilUserSend && ctx.Transcript != null) ctx.Transcript.ScrollToTop(); }
                             catch { }
                             timer.Stop();
                             timer.Dispose();
@@ -1931,6 +1848,25 @@ namespace GxPT
                 timer.Start();
             }
             catch { }
+        }
+
+        private void OpenConversationInNewTab(Conversation convo)
+        {
+            if (this.tabControl1 == null || convo == null) return;
+            var ctx = _tabManager != null ? _tabManager.CreateConversationTab() : null;
+            if (ctx == null) return;
+
+            // Replace the conversation and refresh transcript UI
+            ctx.Conversation = convo;
+            ctx.SelectedModel = string.IsNullOrEmpty(convo.SelectedModel) ? GetSelectedModel() : convo.SelectedModel;
+            try { this.cmbModel.Text = ctx.SelectedModel; }
+            catch { }
+            ConversationStore.EnsureConversationId(ctx.Conversation);
+            if (_sidebarManager != null && ctx.Conversation != null)
+                _sidebarManager.TrackOpenConversation(ctx.Conversation.Id, ctx.Page);
+
+            // Rebuild transcript UI off the UI thread to avoid freezes on large histories
+            RebuildTranscriptAsync(ctx, convo);
 
             // Update tab title and window
             try
@@ -1968,93 +1904,8 @@ namespace GxPT
                 if (_sidebarManager != null && ctx.Conversation != null)
                     _sidebarManager.TrackOpenConversation(ctx.Conversation.Id, ctx.Page);
 
-                // Rebuild transcript UI using background parsing and chunked appends
-                try
-                {
-                    ctx.Transcript.ClearMessages();
-                    if (_themeManager != null) _themeManager.ApplyFontSetting(ctx.Transcript);
-                    try { ctx.Transcript.RefreshTheme(); }
-                    catch { }
-
-                    var items = new List<ChatMessage>();
-                    foreach (var m in convo.History)
-                    {
-                        if (m == null) continue;
-                        if (string.Equals(m.Role, "system", StringComparison.OrdinalIgnoreCase)) continue;
-                        items.Add(m);
-                    }
-
-                    var parsed = new List<ParsedMessage>(Math.Max(4, items.Count));
-                    int produced = 0, consumed = 0; bool parsingDone = false; object gate = new object();
-
-                    System.Threading.ThreadPool.QueueUserWorkItem(delegate
-                    {
-                        try
-                        {
-                            const int parseChunk = 40;
-                            int i = 0;
-                            while (i < items.Count)
-                            {
-                                int count = Math.Min(parseChunk, items.Count - i);
-                                var local = new ParsedMessage[count];
-                                for (int k = 0; k < count; k++)
-                                {
-                                    var m2 = items[i + k];
-                                    var role = string.Equals(m2.Role, "assistant", StringComparison.OrdinalIgnoreCase) ? MessageRole.Assistant : MessageRole.User;
-                                    var text = m2.Content ?? string.Empty;
-                                    var blocks = MarkdownParser.ParseMarkdown(text);
-                                    var att = (m2.Attachments != null && m2.Attachments.Count > 0) ? new List<AttachedFile>(m2.Attachments) : null;
-                                    local[k] = new ParsedMessage { Role = role, Text = text, Blocks = blocks, Attachments = att };
-                                }
-                                lock (gate) { parsed.AddRange(local); produced += count; }
-                                i += count;
-                            }
-                        }
-                        catch { }
-                        finally { parsingDone = true; }
-                    });
-
-                    var timer = new System.Windows.Forms.Timer();
-                    timer.Interval = 15;
-                    timer.Tick += (s2, e2) =>
-                    {
-                        int avail; lock (gate) { avail = produced - consumed; }
-                        if (avail <= 0)
-                        {
-                            if (parsingDone)
-                            {
-                                timer.Stop(); timer.Dispose();
-                            }
-                            return;
-                        }
-                        int take = Math.Min(20, avail);
-                        ctx.Transcript.BeginBatchUpdates();
-                        try
-                        {
-                            for (int k = 0; k < take; k++)
-                            {
-                                ParsedMessage pm; lock (gate) { pm = parsed[consumed]; consumed++; }
-                                if (pm != null) ctx.Transcript.AddParsedMessage(pm.Role, pm.Text, pm.Blocks, pm.Attachments);
-                            }
-                        }
-                        finally
-                        {
-                            bool last = parsingDone && consumed >= items.Count;
-                            bool scrollToBottom = last && !(ctx != null && ctx.NoSaveUntilUserSend);
-                            ctx.Transcript.EndBatchUpdates(scrollToBottom);
-                            if (last)
-                            {
-                                // For help templates (no-save until user sends), ensure we land at the top
-                                try { if (ctx != null && ctx.NoSaveUntilUserSend && ctx.Transcript != null) ctx.Transcript.ScrollToTop(); }
-                                catch { }
-                                timer.Stop();
-                                timer.Dispose();
-                            }
-                        }
-                    };
-                    timer.Start();
-                }
-                catch { }
+                // Rebuild transcript UI off the UI thread to avoid freezes on large histories
+                RebuildTranscriptAsync(ctx, convo);
 
                 // Hook name updates for this conversation
                 try
