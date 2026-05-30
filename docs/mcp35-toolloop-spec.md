@@ -20,8 +20,9 @@ small extensions to `OpenRouterClient`/`ChatModels`), not part of `Mcp35.*`.
 - **Out of scope / stubbed:** real approval tiers (phase 6 — phase 4 uses an
   allow/confirm stub behind a clean hook); `HttpTransport`/GitHub (phase 8);
   rich transcript UI (medium item — phase 4 ships a minimal representation).
-- Constraints: **net35**, no `async`/`Task`, `JavaScriptSerializer` stays the
-  host's JSON tool (matches `OpenRouterClient`), streaming via curl + worker
+- Constraints: **net35**, no `async`/`Task`. **The host adopts Newtonsoft.Json**
+  for the OpenRouter/MCP path (D16) — the wire code below uses `JObject`/typed
+  DTOs, not JavaScriptSerializer — streaming via curl + worker
   threads as today.
 
 ---
@@ -31,10 +32,16 @@ small extensions to `OpenRouterClient`/`ChatModels`), not part of `Mcp35.*`.
 | Area | Change |
 |------|--------|
 | `ChatModels.cs` | `ChatMessage` gains optional `ToolCalls` + `ToolCallId`; `ChatCompletionChunk` gains `Delta.tool_calls` + `Choice.finish_reason` |
-| `OpenRouterClient.cs` | `BuildRequestBody` emits `tools`, assistant `tool_calls`, and `tool`-role messages; a lower-level `StreamRawChunks` surfaces parsed chunks |
+| `OpenRouterClient.cs` | **migrated to Newtonsoft** (D16): `BuildRequestBody` (now `JObject`-based) emits `tools`, assistant `tool_calls`, and `tool`-role messages; chunk parsing + error extraction use Newtonsoft; a lower-level `StreamRawChunks` surfaces parsed chunks |
+| `ConversationStore.cs` | **migrated to Newtonsoft** (D16) to round-trip the new tool-call/`tool` messages; backward-compat golden-file tests on existing conversations |
 | `Services/Mcp/ToolCallAssembler.cs` | reassembles fragmented streamed `tool_calls` |
 | `Services/Mcp/McpChatOrchestrator.cs` | the loop: call model → run tools → re-call until final |
 | `Services/Mcp/McpToolRegistry.cs` | name munging/bijection, manifest, revealed set + `reveal_tools` |
+
+> JSON-library note (D16): the host uses **Newtonsoft** for the OpenRouter/MCP
+> path and `ConversationStore`; `AppSettings` stays on JavaScriptSerializer for
+> now. This unifies tool-argument handling (`JObject` end-to-end) and removes
+> the `MaxJsonLength` cap from request serialization.
 
 ---
 
@@ -260,10 +267,11 @@ model. The loop already calls it at the right point (`ExecuteCall`).
 
 ## 9. Persistence & transcript (minimal in phase 4)
 
-- **Persistence:** assistant `tool_calls` and `tool`-role results are part of the
-  conversation context, so `ConversationStore` must round-trip them (extend its
-  serialized schema). Without this, reloading a conversation drops tool context.
-  *(Sub-task; flagged in §12.)*
+- **Persistence (resolved):** assistant `tool_calls` and `tool`-role results are
+  part of the conversation context, so `ConversationStore` **persists** them
+  (round-trips the extended schema) — without this, reloading a conversation
+  drops tool context. This is the trigger for migrating `ConversationStore` to
+  Newtonsoft (§1, D16), done with backward-compat tests on existing files.
 - **Transcript UI:** phase 4 renders a **minimal** marker per tool call/result
   in `MainForm` (e.g. a "called `name`(…) → result" line, plain text). Rich,
   collapsible rendering is the separate transcript-UI item.
@@ -301,9 +309,11 @@ phase 8 adds GitHub over HTTP.
 
 ## 12. Open questions / decisions
 
-- **Conversation persistence of tool messages** — persist (extend
-  `ConversationStore` schema) vs keep tool exchanges in-memory only. *Leaning
-  persist* (correct context on reload); confirm scope.
+- ~~Conversation persistence of tool messages~~ — *resolved*: **persist** (extend
+  `ConversationStore` schema; migrate it to Newtonsoft, D16) for correct context
+  on reload.
+- ~~Host JSON library~~ — *resolved*: **Newtonsoft** for the OpenRouter/MCP path
+  + `ConversationStore`; `AppSettings` deferred (D16).
 - **Serial vs parallel tool execution within a turn** — serial in phase 4;
   parallel later if latency warrants.
 - **`MaxIterations` default** — 8? tune.

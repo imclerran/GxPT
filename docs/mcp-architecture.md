@@ -52,6 +52,7 @@ decision-oriented rather than code.
 | D13 | **Concrete servers get neutral names** (`SerperMcpServer`, `FilesMcpServer`, `GitMcpServer`, `CommandMcpServer`) — *not* `Mcp35.Servers.*` | They're independent consumers (D10), not a collection inside the `Mcp35.Server` SDK |
 | D14 | **MCP servers are configured only in a dedicated MCP settings tab**; custom servers live in `%AppData%/GxPT/mcp.json` (Cursor-style schema, **snake_case** `mcp_servers`, transport inferred from `url`/`command`) | One clear home for MCP config, separate from `settings.json`; familiar Cursor-like format |
 | D15 | **Only first-party servers are obscured** (hardcoded, out of `mcp.json`, managed via toggles + a Serper key field in `settings.json`). **GitHub lives in `mcp.json`** like any HTTP server, PAT in its `Authorization` header; a malformed PAT disables that server | Keeps internal wiring safe while giving GitHub the standard, Cursor-familiar config path |
+| D16 | **Host adopts Newtonsoft.Json**, migrated **scoped + incrementally** from JavaScriptSerializer: OpenRouter wire path + MCP/host glue + `mcp.json` now; `ConversationStore` with tool-message persistence; **`AppSettings` deferred** | One JSON library across host+library removes the `JObject`/`Dictionary` seam in the tool loop, kills the `MaxJsonLength` cap, and reuses the already-shipping Newtonsoft DLL (one HintPath, no new vendored binary) |
 
 ---
 
@@ -395,9 +396,11 @@ error spam.
 `McpHost` builds its connection collection (D11) from **enabled Tier-1
 first-party servers** (Serper key injected) **plus every valid Tier-2 entry** in
 `mcp.json` (the GitHub entry only if its PAT passes the shape gate). The host
-parses `mcp.json` with the same `JavaScriptSerializer` approach as `AppSettings`
-(small host config; snake_case maps cleanly to `Dictionary<string,object>`) —
-Newtonsoft stays reserved for the protocol layer inside `Mcp35.*`.
+parses `mcp.json` with **Newtonsoft** (`JObject`), consistent with the host's
+adoption of Newtonsoft for the OpenRouter/MCP path (D16); snake_case maps
+cleanly to a `JObject`. The host references the **already-shipping**
+`Newtonsoft.Json.dll` (it travels with `Mcp35.Core`) via one `HintPath` — no new
+vendored binary.
 
 ### MCP settings tab (UI)
 A new `TabPage` in `SettingsForm`, modeled on the existing JSON tab (`tabJson` /
@@ -531,6 +534,9 @@ the Consolas `rtbJson` RichTextBox):
 - **Manifest refresh cadence**: rebuilt per request vs cached until a server's
   `tools/list` changes.
 
-**Deferred (revisit only if the catalog grows huge):**
+**Deferred:**
 - A `search_tools(query)` fallback ranking over the host's internal cache, to
-  narrow the names manifest before revealing.
+  narrow the names manifest before revealing — only if the catalog grows huge.
+- **`AppSettings` migration** from JavaScriptSerializer to Newtonsoft (D16) —
+  stable persisted config with no MCP need; migrate later with backward-compat
+  (golden-file) tests if desired.

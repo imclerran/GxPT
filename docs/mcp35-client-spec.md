@@ -209,8 +209,8 @@ public sealed class McpServerConnection : IDisposable
 This is the GxPT side that consumes the Client and lands the config plumbing
 (architecture §8). Not part of the `Mcp35.*` library.
 
-- **`McpConfig`** — loads `%AppData%/GxPT/mcp.json` (JavaScriptSerializer, like
-  `AppSettings`) → a list of server defs; infers transport (`url`→HTTP,
+- **`McpConfig`** — loads `%AppData%/GxPT/mcp.json` (Newtonsoft `JObject`, per
+  D16) → a list of server defs; infers transport (`url`→HTTP,
   `command`→stdio); applies the **GitHub PAT shape gate** (disable on malformed).
 - **`BuiltInServers`** — hardcoded first-party launch defs (resolve
   `SerperMcpServer`/etc. under an app-relative `servers/` dir; inject the Serper
