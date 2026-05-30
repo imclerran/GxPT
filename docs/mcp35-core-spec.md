@@ -326,11 +326,34 @@ public static class StdioFraming {
 ### Versions & methods
 ```csharp
 public static class ProtocolVersions {
-    public const string V2024_11_05 = "2024-11-05";
-    public const string V2025_03_26 = "2025-03-26";   // Streamable HTTP introduced
-    public const string V2025_06_18 = "2025-06-18";   // target (verify vs current spec)
-    public const string Default     = V2025_06_18;
+    public const string V2024_11_05 = "2024-11-05";   // old dual-endpoint HTTP+SSE (HTTP unsupported)
+    public const string V2025_03_26 = "2025-03-26";   // Streamable HTTP — HTTP floor
+    public const string V2025_06_18 = "2025-06-18";   // structured output; MCP-Protocol-Version header
+    public const string V2025_11_25 = "2025-11-25";   // latest stable at time of writing
+
+    public const string Default    = V2025_11_25;     // advertised in initialize (single knob)
+    public const string HttpFloor  = V2025_03_26;     // min acceptable for HTTP servers
 }
+```
+
+**Version policy — negotiation-tolerant, single advertised version + transport
+floor** (not N codepaths):
+- Advertise `Default` (latest validated stable) in `initialize`; **accept
+  whatever version the server returns**.
+- For **HTTP**, reject/disable a server below `HttpFloor` (`2025-03-26`) — older
+  HTTP used a dual-endpoint transport we don't implement (non-goal). **Stdio**
+  accepts down to `2024-11-05` (framing is identical across all revisions).
+- Differences between revisions are **additive JSON**; tolerant parsing
+  (`MissingMemberHandling.Ignore` + `JToken` passthrough) absorbs them, so there
+  is **no per-version parsing code** — only the HTTP floor + the
+  `MCP-Protocol-Version` header (post-init, HTTP) are version-aware.
+- Functionally GxPT needs nothing beyond `2025-03-26` (tools over
+  stdio/Streamable HTTP); advertising newer is for currency/optional features,
+  and downgrades are always accepted.
+- Conservative fallback if a strict server mishandles an unknown-newer version:
+  set `Default = V2025_06_18`.
+
+```csharp
 public static class McpMethods {
     public const string Initialize        = "initialize";
     public const string Initialized       = "notifications/initialized";
@@ -341,7 +364,9 @@ public static class McpMethods {
 }
 ```
 HTTP (GitHub) requires ≥ `2025-03-26` (Streamable HTTP). Advertise `Default`,
-**negotiate down** to the server's returned `protocolVersion`.
+**negotiate down** to the server's returned `protocolVersion`, and echo the
+negotiated value in the `MCP-Protocol-Version` header on subsequent HTTP
+requests.
 
 ### Handshake DTOs
 ```csharp
@@ -448,9 +473,10 @@ build on `Rpc`.
 
 ## 13. Open questions (Core)
 
-- **Protocol version to advertise** — confirm the newest revision we implement
-  against the current MCP spec; `ProtocolVersions.Default` is the single place to
-  change it.
+- **Protocol version** — *resolved*: negotiation-tolerant, advertise the latest
+  validated stable (`ProtocolVersions.Default`, currently `2025-11-25`) with an
+  HTTP floor of `2025-03-26`; tolerant parsing absorbs additive revision diffs.
+  `Default` is the single knob; bump it when a newer revision is validated.
 - **Server→client requests in phase 1** — surface-only via `Inbound`, or also
   ship a default `-32601` responder in `JsonRpcPeer`? (Leaning surface-only.)
 - **`RequestId`** — value-type struct (spec'd above) vs plain `object`; struct
