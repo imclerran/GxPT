@@ -228,8 +228,11 @@ public sealed class JsonRpcPeer : IDisposable   // implements the IRpcTransport 
                 else { unregister(id); throw McpTimeoutException; }
   inbound msg:  has id & (result|error)?  → complete that PendingCall, Set() its mre
                 has method, no id?         → raise Inbound (notification)
-                has method & id?           → raise Inbound (server→client request)
+                has method & id == ping    → auto-reply {} (keep-alive)
+                has method & id (other)    → reply -32601, also raise Inbound
+                top-level JSON array        → process each element (legacy batch)
   ```
+  We **never emit** batches; the array case is inbound-tolerance only.
 - **Full-duplex (stdio)** runs a **dedicated reader thread** pumping
   `MessageReceived`; responses Set pending events, notifications raise `Inbound`
   — all on the reader thread.
@@ -387,6 +390,12 @@ public sealed class InitializeResult {
 Capabilities are kept as `JObject` in phase 1 (we only need to detect
 `capabilities.tools`); promote to typed sub-DTOs later if needed.
 
+Phase 1 **advertises empty client capabilities** (no `roots`/`sampling`/
+`elicitation`), so a compliant server issues no server→client requests beyond
+`ping` (auto-answered, §5). Core ships these DTOs plus the `McpMethods` /
+`ProtocolVersions` constants; **`Mcp35.Client` drives the handshake** (send
+`initialize` → await `InitializeResult` → send `notifications/initialized`).
+
 ### Tools
 ```csharp
 public sealed class Tool {
@@ -477,9 +486,11 @@ build on `Rpc`.
   validated stable (`ProtocolVersions.Default`, currently `2025-11-25`) with an
   HTTP floor of `2025-03-26`; tolerant parsing absorbs additive revision diffs.
   `Default` is the single knob; bump it when a newer revision is validated.
-- **Server→client requests in phase 1** — surface-only via `Inbound`, or also
-  ship a default `-32601` responder in `JsonRpcPeer`? (Leaning surface-only.)
-- **`RequestId`** — value-type struct (spec'd above) vs plain `object`; struct
-  preferred for typed correlation keys.
+- **Server→client requests** — *resolved*: `JsonRpcPeer` auto-answers `ping`
+  with `{}`, replies `-32601` to any other server→client request, and raises
+  `Inbound` for observability; empty client capabilities mean none beyond `ping`
+  are expected.
+- **`RequestId`** — *resolved*: value-type struct (§2) for typed correlation
+  keys.
 - **SSE robustness** — line-oriented (matches curl `ReadLine`) is enough for
   phase 1; revisit byte-chunk reassembly only if a server splits lines oddly.
