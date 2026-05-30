@@ -487,7 +487,7 @@ the Consolas `rtbJson` RichTextBox):
    first-party enable toggles (the config plumbing both transports build on). →
    **Detailed in [`mcp35-client-spec.md`](mcp35-client-spec.md).**
 4. **Tool-call loop** + OpenRouter `tools`/`tool_calls` — first real
-   end-to-end invocation.
+   end-to-end invocation. → **Detailed in [`mcp35-toolloop-spec.md`](mcp35-toolloop-spec.md).**
 5. **Tool discovery**: names manifest + `reveal_tools` (define-on-demand + LRU
    cap).
    → *Split `Mcp35.*` into its own repo here once the API is stable.*
