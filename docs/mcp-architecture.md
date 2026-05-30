@@ -484,7 +484,8 @@ the Consolas `rtbJson` RichTextBox):
    in [`mcp35-server-spec.md`](mcp35-server-spec.md).**
 3. **Mcp35.Client** `StdioTransport` + `McpServerConnection`; GxPT host consumes
    it and lists tools. Also lands the **MCP settings tab** + `mcp.json` loader +
-   first-party enable toggles (the config plumbing both transports build on).
+   first-party enable toggles (the config plumbing both transports build on). →
+   **Detailed in [`mcp35-client-spec.md`](mcp35-client-spec.md).**
 4. **Tool-call loop** + OpenRouter `tools`/`tool_calls` — first real
    end-to-end invocation.
 5. **Tool discovery**: names manifest + `reveal_tools` (define-on-demand + LRU
