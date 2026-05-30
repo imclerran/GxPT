@@ -54,7 +54,7 @@ public sealed class McpServer
     public void AddTool(string name, string description, JObject inputSchema,
                         ToolHandler handler);
 
-    // Register cleanup to run during graceful shutdown (EOF or shutdown signal).
+    // Register cleanup to run during graceful shutdown (on stdin EOF).
     public void OnShutdown(Action cleanup);
 
     // Blocks, running the stdin→stdout dispatch loop until graceful shutdown.
@@ -123,7 +123,6 @@ loop:
   if it's a notification (no id):
       "notifications/initialized" → mark ready
       "notifications/cancelled"   → ignore (serial: request already handled)
-      "notifications/shutdown"    → break loop (GxPT-private; see Shutdown below)
       other                       → ignore
   else (request, has id):
       dispatch by method → write JsonRpcResponse via StdioFraming.WriteMessage
@@ -150,15 +149,14 @@ Error mapping discipline:
 ### Graceful shutdown
 MCP's stdio lifecycle defines **no standard `shutdown` RPC** — the canonical
 graceful path is the client closing stdin (EOF), after which the server cleans
-up and exits (the host SIGKILLs only after a grace period). So:
-- **`stdin` EOF is the authoritative trigger.** On EOF the loop ends, **`OnShutdown`
-  hooks run** (resource cleanup for Git/Command servers), stdout/stderr flush,
-  and the process exits 0.
-- Because GxPT controls both ends, the runtime *also* accepts an optional
-  **GxPT-private `notifications/shutdown`** as an in-band "begin shutdown now"
-  courtesy that runs the same sequence. It is **non-standard** — third-party
-  servers built on the SDK simply never receive it and rely on EOF, and
-  third-party servers GxPT connects to are shut down via EOF only.
+up and exits (the host SIGKILLs only after a grace period). We follow the
+standard exactly, with no extra signal:
+- **`stdin` EOF is the sole trigger.** On EOF the loop ends and the runtime runs
+  a **clean shutdown sequence**: invoke all registered **`OnShutdown`** hooks
+  (resource cleanup for Git/Command servers), flush stdout/stderr, then exit 0.
+- The same sequence runs if the loop exits via an unrecoverable transport fault,
+  so cleanup hooks fire on every normal termination path — never an abrupt
+  death.
 
 ---
 
@@ -257,8 +255,6 @@ real server) and phase 7 (the four concrete servers).
   time, §4). Revisit only if a future server has long-running tools that must
   not block others (none of the four do today). `notifications/cancelled` stays
   a no-op while serial.
-- **Graceful shutdown** — *resolved*: **stdin EOF** is the authoritative,
-  standard trigger and runs **`OnShutdown` cleanup hooks** + clean exit; the
-  runtime *additionally* honors a **GxPT-private `notifications/shutdown`**
-  courtesy signal (non-standard; third parties rely on EOF) (§4 → Graceful
-  shutdown).
+- **Graceful shutdown** — *resolved*: stick to the standard — **stdin EOF** is
+  the sole trigger and runs a clean sequence (**`OnShutdown` hooks** → flush →
+  exit 0). No non-standard shutdown signal (§4 → Graceful shutdown).
