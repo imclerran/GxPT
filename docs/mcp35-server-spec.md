@@ -54,7 +54,10 @@ public sealed class McpServer
     public void AddTool(string name, string description, JObject inputSchema,
                         ToolHandler handler);
 
-    // Blocks, running the stdin→stdout dispatch loop until stdin EOF.
+    // Register cleanup to run during graceful shutdown (EOF or shutdown signal).
+    public void OnShutdown(Action cleanup);
+
+    // Blocks, running the stdin→stdout dispatch loop until graceful shutdown.
     public void Run();
     public void Run(Stream stdin, Stream stdout);   // overload for tests
 }
@@ -115,12 +118,16 @@ concurrency.
 ```
 loop:
   line = StdioFraming.ReadMessage(stdin)   // Core
-  if line == null: break                   // EOF → graceful exit
+  if line == null: break                   // stdin EOF → graceful shutdown
   msg = McpJson.Parse(line)
   if it's a notification (no id):
-      "notifications/initialized" → mark ready; others (e.g. cancelled) → ignore
+      "notifications/initialized" → mark ready
+      "notifications/cancelled"   → ignore (serial: request already handled)
+      "notifications/shutdown"    → break loop (GxPT-private; see Shutdown below)
+      other                       → ignore
   else (request, has id):
       dispatch by method → write JsonRpcResponse via StdioFraming.WriteMessage
+on exit: run OnShutdown hooks → flush → return (process exits 0)
 ```
 
 Method handling:
@@ -139,6 +146,19 @@ Error mapping discipline:
   malformed params) → **JSON-RPC error responses** (`-32700`/`-32601`/`-32602`).
 - **Tool execution problems** → **`isError` results**, never JSON-RPC errors.
 - A handler exception is always contained → `isError`, and logged to stderr.
+
+### Graceful shutdown
+MCP's stdio lifecycle defines **no standard `shutdown` RPC** — the canonical
+graceful path is the client closing stdin (EOF), after which the server cleans
+up and exits (the host SIGKILLs only after a grace period). So:
+- **`stdin` EOF is the authoritative trigger.** On EOF the loop ends, **`OnShutdown`
+  hooks run** (resource cleanup for Git/Command servers), stdout/stderr flush,
+  and the process exits 0.
+- Because GxPT controls both ends, the runtime *also* accepts an optional
+  **GxPT-private `notifications/shutdown`** as an in-band "begin shutdown now"
+  courtesy that runs the same sequence. It is **non-standard** — third-party
+  servers built on the SDK simply never receive it and rely on EOF, and
+  third-party servers GxPT connects to are shut down via EOF only.
 
 ---
 
@@ -228,13 +248,17 @@ real server) and phase 7 (the four concrete servers).
 
 ---
 
-## 9. Open questions (Server)
+## 9. Resolved decisions
 
-- **`SchemaBuilder` scope** — a tiny fluent helper for common object schemas vs.
-  just accepting raw `JObject`/JSON strings. (Leaning: ship a minimal builder for
-  the common cases, always allow raw.)
-- **Serial vs. concurrent dispatch** — serial for phase 2; revisit only if a
-  server has long-running tools that must not block others (none of the four do
-  today).
-- **Graceful shutdown signal** — beyond stdin EOF, do we honor a shutdown
-  request/notification? Phase 2 relies on EOF + process kill from the host.
+- **`SchemaBuilder` scope** — *resolved*: ship a **minimal fluent builder** for
+  common object schemas, and **always allow raw** `JObject`/JSON strings for
+  anything complex (§2–3).
+- **Serial vs. concurrent dispatch** — *resolved*: **serial** (one request at a
+  time, §4). Revisit only if a future server has long-running tools that must
+  not block others (none of the four do today). `notifications/cancelled` stays
+  a no-op while serial.
+- **Graceful shutdown** — *resolved*: **stdin EOF** is the authoritative,
+  standard trigger and runs **`OnShutdown` cleanup hooks** + clean exit; the
+  runtime *additionally* honors a **GxPT-private `notifications/shutdown`**
+  courtesy signal (non-standard; third parties rely on EOF) (§4 → Graceful
+  shutdown).
