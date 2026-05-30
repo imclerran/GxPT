@@ -479,7 +479,7 @@ the Consolas `rtbJson` RichTextBox):
 
 1. **Mcp35.Core** + Newtonsoft wiring + a depth spike on a real GitHub MCP
    `tools/list` and a large tool result (validate field-presence + big
-   payloads).
+   payloads). → **Detailed in [`mcp35-core-spec.md`](mcp35-core-spec.md).**
 2. **Mcp35.Server** + one trivial server (validate the stdio loop).
 3. **Mcp35.Client** `StdioTransport` + `McpServerConnection`; GxPT host consumes
    it and lists tools. Also lands the **MCP settings tab** + `mcp.json` loader +
