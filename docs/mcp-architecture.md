@@ -42,7 +42,7 @@ decision-oriented rather than code.
 | D3 | JSON via **Newtonsoft.Json** (vendored, net35 build) | Declarative JSON-RPC field-presence control; no `MaxJsonLength` cap; GxPT has no Newtonsoft to conflict with |
 | D4 | **Host-side discovery: a names-only manifest up front, full schemas revealed on demand by exact name** (`reveal_tools`, batch). No free-text search tool for now (deferred until/if the catalog grows huge) | Deterministic discovery (no hallucinated tools, no empty-result retries) at minimal token cost; multi-reveal handles ambiguity without summaries |
 | D5 | HTTP target = **GitHub MCP only**, Streamable HTTP, **PAT via curl `-K`** | No OAuth scope; reuse existing curl plumbing |
-| D6 | Approval = **allowlist/remember**, but **execution/destructive tools always confirm** | cmd / git-writes / GitHub-writes are never silently auto-run |
+| D6 | Approval = **three tiers** (ReadOnly/Write remember-eligible per-tool; **Destructive always confirms**), with **argument-scoped rules** (base+subcommand / path / regex) for arbitrary-exec & file tools | Read/write stay low-friction; cmd/code/file tools get *granular* allowlisting, never a blanket "allow this tool" → §9, `mcp35-approval-spec.md` |
 | D7 | **Dependencies are injected, never embedded** in the library | Keeps Core binary-pure and the future split cheap |
 | D8 | **`Mcp35.Client` is a real, separate project now** (transports + **single-connection** lifecycle); GxPT depends on it **one-way** | A compile-time project boundary prevents client logic from intertwining with GxPT — stronger than "extract later" |
 | D9 | **curl-exec helper lives in `Mcp35.Core`** | Shared by Client `HttpTransport` and the Serper server; avoids duplication |
@@ -420,11 +420,18 @@ the Consolas `rtbJson` RichTextBox):
 
 ## 9. Approval & security model
 
-- **Allowlist / remember** for read-only / low-risk tools.
-- **Always confirm**, regardless of remembered state, for execution &
-  destructive tools: command execution, git writes (commit/push), GitHub writes.
-- `CommandMcpServer` is the sharpest edge: always-confirm + process isolation;
-  treat all server/tool output as untrusted input at the parse boundary.
+- **Three tiers** (D6, detailed in `mcp35-approval-spec.md`): **ReadOnly** and
+  **Write** prompt on first use and are **remember-eligible per-tool**;
+  **Destructive** (delete / arbitrary exec / `push`) **always confirms**.
+- **Argument-scoped allowlisting** for arbitrary-exec & file tools: `command__run`
+  remembers by *base + subcommand* (token-aware), `files__*` by *path / directory*
+  (boundary-aware), with optional user-authored **regex** rules — so a remembered
+  approval is always narrow, never "allow this tool for anything."
+- Classification: first-party **hardcoded**; third-party from **MCP annotations**
+  (advisory — `readOnlyHint`/`destructiveHint`); unknown → Write.
+- `CommandMcpServer` is the sharpest edge: always-confirm (no blanket remember) +
+  process isolation; treat all server/tool output as untrusted input at the parse
+  boundary (the gate is also the prompt-injection backstop).
 - **Secrets**: the Serper key lives in `settings.json` (like the OpenRouter
   key); the **GitHub PAT lives in `mcp.json`** (in the `Authorization` header,
   Cursor-style), so **`mcp.json` is sensitive** — not freely shareable. All HTTP
