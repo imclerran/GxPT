@@ -504,7 +504,8 @@ the Consolas `rtbJson` RichTextBox):
    → *Split `Mcp35.*` into its own repo here once the API is stable.*
 6. **Approval tiers** (gate Command / git writes). → **Detailed in
    [`mcp35-approval-spec.md`](mcp35-approval-spec.md).**
-7. **Four servers**, riskiest last: Files → Serper → Git → Command.
+7. **Four servers**, riskiest last: Files → Serper → Git → Command. → **Detailed
+   in [`mcp35-servers-spec.md`](mcp35-servers-spec.md).**
 8. **`Mcp35.Client` HttpTransport + GitHub MCP** via its `mcp.json` entry + PAT
    shape gate (the names manifest + `reveal_tools` now tame its large tool
    count).
