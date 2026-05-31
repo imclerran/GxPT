@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A minimal Mcp35.Server-based echo server used by Mcp35.Client.Tests for the end-to-end
+    StdioTransport integration test (phase-3 criterion 5). It links the Core + Server sources
+    (same pattern as the test projects) and produces a console exe the test launches as a child
+    process. Targets net48 so it runs on the CI runner via the .NET SDK.
+
+    NOTE: intentionally NOT in GxPT.sln. The shipping first-party servers (phase 7) are separate
+    net35 projects; this is a test fixture only.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>EchoMcpServer</AssemblyName>
+    <RootNamespace>EchoMcpServer</RootNamespace>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <!-- Keep the exe self-contained next to the test assembly for easy launch. -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\src\Mcp35.Core\**\*.cs"
+             Exclude="..\..\src\Mcp35.Core\Properties\**\*.cs;..\..\src\Mcp35.Core\obj\**\*.cs;..\..\src\Mcp35.Core\bin\**\*.cs"
+             Link="Linked\Core\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Mcp35.Server\**\*.cs"
+             Exclude="..\..\src\Mcp35.Server\Properties\**\*.cs;..\..\src\Mcp35.Server\obj\**\*.cs;..\..\src\Mcp35.Server\bin\**\*.cs"
+             Link="Linked\Server\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+</Project>
