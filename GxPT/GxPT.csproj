@@ -115,6 +115,15 @@
     <Compile Include="Services\OpenRouterClient.cs">
     </Compile>
     <Compile Include="Services\Mcp\IChatStreamer.cs" />
+    <Compile Include="Services\Mcp\IToolApprovalPolicy.cs" />
+    <Compile Include="Services\Mcp\ToolCallAssembler.cs" />
+    <Compile Include="Services\Mcp\McpToolRegistry.cs" />
+    <Compile Include="Services\Mcp\McpChatOrchestrator.cs" />
+    <Compile Include="Services\Mcp\McpServerSpec.cs" />
+    <Compile Include="Services\Mcp\McpConfig.cs" />
+    <Compile Include="Services\Mcp\IServerConnector.cs" />
+    <Compile Include="Services\Mcp\McpHost.cs" />
+    <Compile Include="Services\Mcp\DefaultServerConnector.cs" />
     <Compile Include="Forms\MainForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -282,6 +291,12 @@
       <ProductName>Windows Installer 3.1</ProductName>
       <Install>true</Install>
     </BootstrapperPackage>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\src\Mcp35.Client\Mcp35.Client.csproj">
+      <Project>{A043F034-FFF5-44CE-9605-B40FF0016262}</Project>
+      <Name>Mcp35.Client</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

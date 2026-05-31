@@ -44,6 +44,9 @@
     <Compile Include="..\GxPT\Services\Mcp\McpChatOrchestrator.cs" Link="Linked\Mcp\McpChatOrchestrator.cs" />
     <Compile Include="..\GxPT\Services\Mcp\McpServerSpec.cs" Link="Linked\Mcp\McpServerSpec.cs" />
     <Compile Include="..\GxPT\Services\Mcp\McpConfig.cs" Link="Linked\Mcp\McpConfig.cs" />
+    <Compile Include="..\GxPT\Services\Mcp\IServerConnector.cs" Link="Linked\Mcp\IServerConnector.cs" />
+    <Compile Include="..\GxPT\Services\Mcp\McpHost.cs" Link="Linked\Mcp\McpHost.cs" />
+    <Compile Include="..\GxPT\Services\Mcp\DefaultServerConnector.cs" Link="Linked\Mcp\DefaultServerConnector.cs" />
     <Compile Include="..\GxPT\Services\Logger.cs" Link="Linked\Logger.cs" />
     <Compile Include="..\GxPT\Services\AppSettings.cs" Link="Linked\AppSettings.cs" />
   </ItemGroup>
