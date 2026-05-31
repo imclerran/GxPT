@@ -125,6 +125,18 @@ namespace GxPT
             }
         }
 
+        // ListTools may hit the transport; call it outside the lock and never let a fault propagate
+        // into the registry (a faulted server just contributes no tools).
+        private IList<Tool> SafeListTools(McpServerConnection conn, bool refresh)
+        {
+            try { return conn.ListTools(refresh); }
+            catch (Exception ex)
+            {
+                _log.Log("mcp", "ListTools failed for '" + conn.Name + "': " + ex.Message);
+                return new List<Tool>();
+            }
+        }
+
         private void RemoveConnectionLocked(McpServerConnection conn)
         {
             List<string> fns;
