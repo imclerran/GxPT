@@ -18,10 +18,16 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      # Only the test project is built. It links the production source files under test
-      # (MarkdownParser, ZipSafe), so the .NET Framework 3.5 app itself is not built here.
+      # Only the test projects are built. They link the production source files under test
+      # (MarkdownParser, ZipSafe; and the Mcp35.Core sources), so the .NET Framework 3.5
+      # projects themselves are not built here.
       - name: Restore
-        run: dotnet restore GxPT.Tests/GxPT.Tests.csproj
+        run: |
+          dotnet restore GxPT.Tests/GxPT.Tests.csproj
+          dotnet restore tests/Mcp35.Core.Tests/Mcp35.Core.Tests.csproj
 
-      - name: Test
+      - name: Test (GxPT)
         run: dotnet test GxPT.Tests/GxPT.Tests.csproj --configuration Release --no-restore --verbosity normal
+
+      - name: Test (Mcp35.Core)
+        run: dotnet test tests/Mcp35.Core.Tests/Mcp35.Core.Tests.csproj --configuration Release --no-restore --verbosity normal

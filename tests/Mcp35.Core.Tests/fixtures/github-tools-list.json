@@ -1,0 +1,54 @@
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "tools": [
+      {
+        "name": "create_pull_request",
+        "description": "Create a new pull request in a GitHub repository.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "owner": { "type": "string", "description": "Repository owner" },
+            "repo": { "type": "string", "description": "Repository name" },
+            "title": { "type": "string", "description": "PR title" },
+            "head": { "type": "string", "description": "Branch containing changes" },
+            "base": { "type": "string", "description": "Branch to merge into" },
+            "draft": { "type": "boolean", "description": "Create as draft PR" },
+            "labels": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "required": ["owner", "repo", "title", "head", "base"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "list_commits",
+        "description": "Get a list of commits of a branch in a repository.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "owner": { "type": "string" },
+            "repo": { "type": "string" },
+            "since": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Only commits after this ISO 8601 timestamp, e.g. 2025-01-15T09:30:00Z",
+              "default": "2025-01-15T09:30:00Z"
+            },
+            "perPage": { "type": "integer", "minimum": 1, "maximum": 100, "default": 30 }
+          },
+          "required": ["owner", "repo"],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "readOnlyHint": true,
+          "title": "List commits"
+        }
+      }
+    ],
+    "nextCursor": "eyJwYWdlIjoyfQ=="
+  }
+}
