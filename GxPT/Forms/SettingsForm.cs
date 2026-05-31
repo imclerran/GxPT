@@ -8,6 +8,7 @@ using System.Text;
 using System.IO;
 using System.Windows.Forms;
 using System.Web.Script.Serialization; // .NET 3.5 JSON serializer
+using Newtonsoft.Json.Linq;            // mcp.json validation
 
 namespace GxPT
 {
@@ -15,6 +16,16 @@ namespace GxPT
     {
         private readonly string _settingsDir;
         private readonly string _settingsFile;
+        private readonly string _mcpFile;
+
+        // MCP tab (built programmatically in BuildMcpTab so the Designer stays untouched).
+        private TabPage tabMcp;
+        private CheckBox chkMcpWeb;
+        private CheckBox chkMcpFiles;
+        private CheckBox chkMcpGit;
+        private CheckBox chkMcpCommand;
+        private TextBox txtWebSearchKey;
+        private RichTextBox rtbMcpJson;
 
         // In-memory working copy (unsaved until Save/CTRL+S)
         private SettingsData _working = new SettingsData();
@@ -39,6 +50,7 @@ namespace GxPT
             // Compute settings paths under %AppData%\GxPT
             _settingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GxPT");
             _settingsFile = Path.Combine(_settingsDir, "settings.json");
+            _mcpFile = Path.Combine(_settingsDir, "mcp.json");
 
             // Configure new font size controls
             try
@@ -101,6 +113,10 @@ namespace GxPT
                 }
             }
             catch { }
+
+            // Build the MCP settings tab programmatically (keeps the Designer file untouched).
+            try { BuildMcpTab(); }
+            catch { }
         }
 
         private void SettingsForm_Load(object sender, EventArgs e)
@@ -120,8 +136,12 @@ namespace GxPT
                 {
                     ApplySettingsToVisualControls(_working);
                     UpdateJsonEditorFromSettings(_working);
+                    ApplyMcpToControls(_working);
                 }
                 finally { _isSyncing = false; }
+
+                // mcp.json lives in its own file beside settings.json.
+                LoadMcpJsonEditor();
             }
             catch (Exception ex)
             {
@@ -232,8 +252,15 @@ namespace GxPT
                     return false;
                 }
 
+                // Validate the mcp.json editor before writing anything; fold MCP toggles + web key
+                // into the working settings so they persist to settings.json.
+                string mcpJsonText;
+                if (!TryValidateMcpJson(out mcpJsonText)) return false;
+                CaptureMcpControlsToWorking(_working);
+
                 var json = Serialize(_working);
                 File.WriteAllText(_settingsFile, json, Encoding.UTF8);
+                WriteMcpJson(mcpJsonText);
 
                 // Refresh JSON editor with normalized JSON
                 _isSyncing = true;
@@ -278,6 +305,10 @@ namespace GxPT
         private void TabControl1_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (_isSyncing) return;
+
+            // The MCP tab edits mcp.json + its own settings; it is independent of the settings.json
+            // visual/JSON sync, so don't run that sync when entering it.
+            if (this.tabControl1.SelectedTab == this.tabMcp) return;
 
             bool toJson = this.tabControl1.SelectedTab == this.tabJson;
 
@@ -1123,6 +1154,146 @@ namespace GxPT
             }
         }
 
+        // --- MCP settings tab (built in code; Designer untouched) ---
+
+        private void BuildMcpTab()
+        {
+            if (this.tabControl1 == null) return;
+
+            tabMcp = new TabPage();
+            tabMcp.Text = "MCP";
+            tabMcp.UseVisualStyleBackColor = true;
+            tabMcp.Padding = new Padding(6);
+
+            // mcp.json editor fills the remaining space. Added FIRST so the docked Top panel above
+            // reserves its space and the editor fills what's left.
+            rtbMcpJson = new RichTextBox();
+            rtbMcpJson.Dock = DockStyle.Fill;
+            rtbMcpJson.BorderStyle = BorderStyle.FixedSingle;
+            rtbMcpJson.Font = new Font("Consolas", 9F);
+            rtbMcpJson.AcceptsTab = true;
+            rtbMcpJson.DetectUrls = false;
+            rtbMcpJson.HideSelection = false;
+            rtbMcpJson.WordWrap = false;
+            rtbMcpJson.ScrollBars = RichTextBoxScrollBars.Both;
+
+            Panel top = new Panel();
+            top.Dock = DockStyle.Top;
+            top.Height = 116;
+
+            Label lblTools = new Label();
+            lblTools.Text = "Built-in tool servers:";
+            lblTools.AutoSize = true;
+            lblTools.Location = new Point(3, 8);
+
+            chkMcpWeb = MakeMcpCheck("Web search", 6, 30);
+            chkMcpFiles = MakeMcpCheck("Files", 120, 30);
+            chkMcpGit = MakeMcpCheck("Git", 200, 30);
+            chkMcpCommand = MakeMcpCheck("Command", 260, 30);
+
+            Label lblKey = new Label();
+            lblKey.Text = "Web Search API Key:";
+            lblKey.AutoSize = true;
+            lblKey.Location = new Point(3, 60);
+
+            txtWebSearchKey = new TextBox();
+            txtWebSearchKey.Location = new Point(140, 57);
+            txtWebSearchKey.Width = 420;
+            txtWebSearchKey.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+            Label lblJsonHint = new Label();
+            lblJsonHint.Text = "Custom servers and GitHub (mcp.json):";
+            lblJsonHint.AutoSize = true;
+            lblJsonHint.Location = new Point(3, 92);
+
+            top.Controls.Add(lblTools);
+            top.Controls.Add(chkMcpWeb);
+            top.Controls.Add(chkMcpFiles);
+            top.Controls.Add(chkMcpGit);
+            top.Controls.Add(chkMcpCommand);
+            top.Controls.Add(lblKey);
+            top.Controls.Add(txtWebSearchKey);
+            top.Controls.Add(lblJsonHint);
+
+            tabMcp.Controls.Add(rtbMcpJson);
+            tabMcp.Controls.Add(top);
+
+            this.tabControl1.Controls.Add(tabMcp);
+        }
+
+        private static CheckBox MakeMcpCheck(string text, int x, int y)
+        {
+            CheckBox c = new CheckBox();
+            c.Text = text;
+            c.AutoSize = true;
+            c.Location = new Point(x, y);
+            c.UseVisualStyleBackColor = true;
+            return c;
+        }
+
+        private void ApplyMcpToControls(SettingsData s)
+        {
+            if (s == null) return;
+            if (chkMcpWeb != null) chkMcpWeb.Checked = s.mcp_web_enabled;
+            if (chkMcpFiles != null) chkMcpFiles.Checked = s.mcp_files_enabled;
+            if (chkMcpGit != null) chkMcpGit.Checked = s.mcp_git_enabled;
+            if (chkMcpCommand != null) chkMcpCommand.Checked = s.mcp_command_enabled;
+            if (txtWebSearchKey != null) txtWebSearchKey.Text = s.mcp_websearch_key != null ? s.mcp_websearch_key : string.Empty;
+        }
+
+        private void CaptureMcpControlsToWorking(SettingsData target)
+        {
+            if (target == null) return;
+            if (chkMcpWeb != null) target.mcp_web_enabled = chkMcpWeb.Checked;
+            if (chkMcpFiles != null) target.mcp_files_enabled = chkMcpFiles.Checked;
+            if (chkMcpGit != null) target.mcp_git_enabled = chkMcpGit.Checked;
+            if (chkMcpCommand != null) target.mcp_command_enabled = chkMcpCommand.Checked;
+            if (txtWebSearchKey != null)
+                target.mcp_websearch_key = txtWebSearchKey.Text != null ? txtWebSearchKey.Text.Trim() : string.Empty;
+        }
+
+        private void LoadMcpJsonEditor()
+        {
+            string text = null;
+            try { if (File.Exists(_mcpFile)) text = File.ReadAllText(_mcpFile, Encoding.UTF8); }
+            catch { }
+            if (string.IsNullOrEmpty(text)) text = McpConfig.SeedJson;
+            if (rtbMcpJson != null) rtbMcpJson.Text = text;
+        }
+
+        // Validate the mcp.json editor. Empty -> seed the default (GitHub placeholder). Invalid JSON
+        // blocks the save and switches to the MCP tab.
+        private bool TryValidateMcpJson(out string text)
+        {
+            text = rtbMcpJson != null ? rtbMcpJson.Text : string.Empty;
+            string trimmed = text != null ? text.Trim() : string.Empty;
+            if (trimmed.Length == 0) { text = McpConfig.SeedJson; return true; }
+            try
+            {
+                JObject.Parse(trimmed);
+                text = trimmed;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                try { if (tabMcp != null) this.tabControl1.SelectedTab = tabMcp; }
+                catch { }
+                MessageBox.Show(this, "mcp.json is not valid JSON:\r\n\r\n" + ex.Message,
+                    "Invalid mcp.json", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
+        }
+
+        private void WriteMcpJson(string text)
+        {
+            try { FileSafe.WriteAllTextAtomic(_mcpFile, text != null ? text : string.Empty, new UTF8Encoding(false)); }
+            catch (Exception ex)
+            {
+                try { Logger.Log("mcp", "Failed to write mcp.json: " + ex.Message); }
+                catch { }
+            }
+        }
+
         // Settings schema
         private sealed class SettingsData
         {
@@ -1137,6 +1308,13 @@ namespace GxPT
             // Store percent (50-100) using legacy key name
             public int message_max_width { get; set; }
             public bool provider_data_collection { get; set; }
+
+            // MCP built-in server toggles + web-search key (read by the host via AppSettings).
+            public bool mcp_web_enabled { get; set; }
+            public bool mcp_files_enabled { get; set; }
+            public bool mcp_git_enabled { get; set; }
+            public bool mcp_command_enabled { get; set; }
+            public string mcp_websearch_key { get; set; }
         }
     }
 }
