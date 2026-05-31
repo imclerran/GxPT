@@ -38,8 +38,22 @@
     <Compile Include="..\GxPT\Models\ChatModels.cs" Link="Linked\ChatModels.cs" />
     <Compile Include="..\GxPT\Services\OpenRouterClient.cs" Link="Linked\OpenRouterClient.cs" />
     <Compile Include="..\GxPT\Services\Mcp\ToolCallAssembler.cs" Link="Linked\Mcp\ToolCallAssembler.cs" />
+    <Compile Include="..\GxPT\Services\Mcp\IToolApprovalPolicy.cs" Link="Linked\Mcp\IToolApprovalPolicy.cs" />
+    <Compile Include="..\GxPT\Services\Mcp\McpToolRegistry.cs" Link="Linked\Mcp\McpToolRegistry.cs" />
     <Compile Include="..\GxPT\Services\Logger.cs" Link="Linked\Logger.cs" />
     <Compile Include="..\GxPT\Services\AppSettings.cs" Link="Linked\AppSettings.cs" />
+  </ItemGroup>
+
+  <!-- MCP library sources (Core + Client) linked in so the host's Services/Mcp/ code (registry,
+       host, orchestrator) compiles and is testable against real McpServerConnections over a fake
+       transport — same linked-source pattern as tests/Mcp35.Client.Tests. -->
+  <ItemGroup>
+    <Compile Include="..\src\Mcp35.Core\**\*.cs"
+             Exclude="..\src\Mcp35.Core\Properties\**\*.cs;..\src\Mcp35.Core\obj\**\*.cs;..\src\Mcp35.Core\bin\**\*.cs"
+             Link="Linked\Mcp35.Core\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\src\Mcp35.Client\**\*.cs"
+             Exclude="..\src\Mcp35.Client\Properties\**\*.cs;..\src\Mcp35.Client\obj\**\*.cs;..\src\Mcp35.Client\bin\**\*.cs"
+             Link="Linked\Mcp35.Client\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!-- The vendored DotNetZip the app ships with, plus the framework assembly that
@@ -53,6 +67,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Matches the vendored net35 Newtonsoft.Json.dll the host/library ship with. -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
