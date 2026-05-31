@@ -47,6 +47,10 @@
     <Compile Include="Rpc\JsonRpcResponse.cs" />
     <Compile Include="Rpc\JsonRpcError.cs" />
     <Compile Include="Rpc\JsonRpcErrorCodes.cs" />
+    <Compile Include="Rpc\IRpcTransport.cs" />
+    <Compile Include="Rpc\JsonRpcPeer.cs" />
+    <Compile Include="Transport\StdioFraming.cs" />
+    <Compile Include="Transport\SseParser.cs" />
     <Compile Include="Protocol\McpMethods.cs" />
     <Compile Include="Protocol\ProtocolVersions.cs" />
     <Compile Include="Protocol\Initialize.cs" />
