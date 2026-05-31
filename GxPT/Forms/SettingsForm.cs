@@ -34,6 +34,10 @@ namespace GxPT
         private int _pendingHighlightStart = -1;
         private int _pendingHighlightEnd = -1;
 
+        // Debounce + guard for the mcp.json editor's syntax highlighting (mirrors the JSON tab).
+        private Timer _mcpHighlightTimer;
+        private bool _isMcpHighlighting = false;
+
         public SettingsForm()
         {
             InitializeComponent();
@@ -90,6 +94,12 @@ namespace GxPT
             _jsonHighlightTimer.Interval = 200; // ms
             _jsonHighlightTimer.Tick += JsonHighlightTimer_Tick;
             this.rtbJson.TextChanged += RtbJson_TextChanged;
+
+            // mcp.json editor: same JSON highlighting, debounced.
+            _mcpHighlightTimer = new Timer();
+            _mcpHighlightTimer.Interval = 200; // ms
+            _mcpHighlightTimer.Tick += McpHighlightTimer_Tick;
+            this.rtbMcpJson.TextChanged += RtbMcpJson_TextChanged;
 
             // Configure message max width as percentage UI (50-100)
             try
@@ -309,8 +319,13 @@ namespace GxPT
             if (_isSyncing) return;
 
             // The MCP tab edits mcp.json + its own settings; it is independent of the settings.json
-            // visual/JSON sync, so don't run that sync when entering it.
-            if (this.tabControl1.SelectedTab == this.tabMcp) return;
+            // visual/JSON sync. Just (re)highlight its editor on entry.
+            if (this.tabControl1.SelectedTab == this.tabMcp)
+            {
+                try { BeginInvoke(new Action(HighlightMcpJsonNow)); }
+                catch { /* ignore */ }
+                return;
+            }
 
             bool toJson = this.tabControl1.SelectedTab == this.tabJson;
 
@@ -506,20 +521,24 @@ namespace GxPT
 
         private void HighlightJsonNow()
         {
+            try { _isHighlighting = true; ApplyJsonHighlightFull(this.rtbJson); }
+            catch { /* ignore */ }
+            finally { _isHighlighting = false; }
+        }
+
+        // Full-document JSON highlight for any RichTextBox (shared by the settings JSON tab and the
+        // mcp.json editor) so both render identically.
+        private static void ApplyJsonHighlightFull(RichTextBox rtb)
+        {
+            if (rtb == null || rtb.IsDisposed) return;
+
+            string text = rtb.Text ?? string.Empty;
+            int savedStart = rtb.SelectionStart;
+            int savedLength = rtb.SelectionLength;
+
+            rtb.SuspendLayout();
             try
             {
-                _isHighlighting = true;
-                var rtb = this.rtbJson;
-                if (rtb == null || rtb.IsDisposed) return;
-
-                string text = rtb.Text ?? string.Empty;
-                // Save caret
-                int savedStart = rtb.SelectionStart;
-                int savedLength = rtb.SelectionLength;
-
-                // Disable redraw
-                rtb.SuspendLayout();
-
                 // Reset to default color
                 rtb.SelectionStart = 0;
                 rtb.SelectionLength = rtb.TextLength;
@@ -552,16 +571,31 @@ namespace GxPT
                 rtb.SelectionStart = Math.Max(0, Math.Min(savedStart, rtb.TextLength));
                 rtb.SelectionLength = Math.Max(0, Math.Min(savedLength, rtb.TextLength - rtb.SelectionStart));
             }
-            catch
-            {
-                // ignore
-            }
             finally
             {
-                this.rtbJson.ResumeLayout();
-                this.rtbJson.Invalidate();
-                _isHighlighting = false;
+                rtb.ResumeLayout();
+                rtb.Invalidate();
             }
+        }
+
+        // --- mcp.json editor highlighting (debounced; reuses the JSON tab's tokenizer/colors) ---
+        private void RtbMcpJson_TextChanged(object sender, EventArgs e)
+        {
+            if (_isSyncing || _isMcpHighlighting) return;
+            if (_mcpHighlightTimer != null) { _mcpHighlightTimer.Stop(); _mcpHighlightTimer.Start(); }
+        }
+
+        private void McpHighlightTimer_Tick(object sender, EventArgs e)
+        {
+            _mcpHighlightTimer.Stop();
+            HighlightMcpJsonNow();
+        }
+
+        private void HighlightMcpJsonNow()
+        {
+            try { _isMcpHighlighting = true; ApplyJsonHighlightFull(this.rtbMcpJson); }
+            catch { /* ignore */ }
+            finally { _isMcpHighlighting = false; }
         }
 
         private void HighlightJsonRange(int start, int length)
