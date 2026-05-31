@@ -18,15 +18,6 @@ namespace GxPT
         private readonly string _settingsFile;
         private readonly string _mcpFile;
 
-        // MCP tab (built programmatically in BuildMcpTab so the Designer stays untouched).
-        private TabPage tabMcp;
-        private CheckBox chkMcpWeb;
-        private CheckBox chkMcpFiles;
-        private CheckBox chkMcpGit;
-        private CheckBox chkMcpCommand;
-        private TextBox txtWebSearchKey;
-        private RichTextBox rtbMcpJson;
-
         // In-memory working copy (unsaved until Save/CTRL+S)
         private SettingsData _working = new SettingsData();
 
@@ -114,9 +105,20 @@ namespace GxPT
             }
             catch { }
 
-            // Build the MCP settings tab programmatically (keeps the Designer file untouched).
-            try { BuildMcpTab(); }
+            // MCP tab: gate the web-search / GitHub toggles on a plausibly-valid key/PAT.
+            try
+            {
+                this.txtWebSearchKey.TextChanged += McpCredential_TextChanged;
+                this.txtGithubPat.TextChanged += McpCredential_TextChanged;
+            }
             catch { }
+        }
+
+        private void McpCredential_TextChanged(object sender, EventArgs e)
+        {
+            // Suppressed during programmatic population (ApplyMcpToControls runs it once at the end).
+            if (_isSyncing) return;
+            UpdateMcpEnableStates();
         }
 
         private void SettingsForm_Load(object sender, EventArgs e)
@@ -1154,102 +1156,56 @@ namespace GxPT
             }
         }
 
-        // --- MCP settings tab (built in code; Designer untouched) ---
+        // --- MCP settings tab (controls live in the Designer) ---
 
-        private void BuildMcpTab()
-        {
-            if (this.tabControl1 == null) return;
-
-            tabMcp = new TabPage();
-            tabMcp.Text = "MCP";
-            tabMcp.UseVisualStyleBackColor = true;
-            tabMcp.Padding = new Padding(6);
-
-            // mcp.json editor fills the remaining space. Added FIRST so the docked Top panel above
-            // reserves its space and the editor fills what's left.
-            rtbMcpJson = new RichTextBox();
-            rtbMcpJson.Dock = DockStyle.Fill;
-            rtbMcpJson.BorderStyle = BorderStyle.FixedSingle;
-            rtbMcpJson.Font = new Font("Consolas", 9F);
-            rtbMcpJson.AcceptsTab = true;
-            rtbMcpJson.DetectUrls = false;
-            rtbMcpJson.HideSelection = false;
-            rtbMcpJson.WordWrap = false;
-            rtbMcpJson.ScrollBars = RichTextBoxScrollBars.Both;
-
-            Panel top = new Panel();
-            top.Dock = DockStyle.Top;
-            top.Height = 116;
-
-            Label lblTools = new Label();
-            lblTools.Text = "Built-in tool servers:";
-            lblTools.AutoSize = true;
-            lblTools.Location = new Point(3, 8);
-
-            chkMcpWeb = MakeMcpCheck("Web search", 6, 30);
-            chkMcpFiles = MakeMcpCheck("Files", 120, 30);
-            chkMcpGit = MakeMcpCheck("Git", 200, 30);
-            chkMcpCommand = MakeMcpCheck("Command", 260, 30);
-
-            Label lblKey = new Label();
-            lblKey.Text = "Web Search API Key:";
-            lblKey.AutoSize = true;
-            lblKey.Location = new Point(3, 60);
-
-            txtWebSearchKey = new TextBox();
-            txtWebSearchKey.Location = new Point(140, 57);
-            txtWebSearchKey.Width = 420;
-            txtWebSearchKey.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-
-            Label lblJsonHint = new Label();
-            lblJsonHint.Text = "Custom servers and GitHub (mcp.json):";
-            lblJsonHint.AutoSize = true;
-            lblJsonHint.Location = new Point(3, 92);
-
-            top.Controls.Add(lblTools);
-            top.Controls.Add(chkMcpWeb);
-            top.Controls.Add(chkMcpFiles);
-            top.Controls.Add(chkMcpGit);
-            top.Controls.Add(chkMcpCommand);
-            top.Controls.Add(lblKey);
-            top.Controls.Add(txtWebSearchKey);
-            top.Controls.Add(lblJsonHint);
-
-            tabMcp.Controls.Add(rtbMcpJson);
-            tabMcp.Controls.Add(top);
-
-            this.tabControl1.Controls.Add(tabMcp);
-        }
-
-        private static CheckBox MakeMcpCheck(string text, int x, int y)
-        {
-            CheckBox c = new CheckBox();
-            c.Text = text;
-            c.AutoSize = true;
-            c.Location = new Point(x, y);
-            c.UseVisualStyleBackColor = true;
-            return c;
-        }
+        // Empty custom-servers template shown when mcp.json doesn't exist yet. GitHub is configured
+        // via its own toggle + PAT field (settings.json), not here.
+        private const string McpJsonTemplate = "{\r\n  \"mcp_servers\": {\r\n  }\r\n}\r\n";
 
         private void ApplyMcpToControls(SettingsData s)
         {
             if (s == null) return;
-            if (chkMcpWeb != null) chkMcpWeb.Checked = s.mcp_web_enabled;
-            if (chkMcpFiles != null) chkMcpFiles.Checked = s.mcp_files_enabled;
-            if (chkMcpGit != null) chkMcpGit.Checked = s.mcp_git_enabled;
-            if (chkMcpCommand != null) chkMcpCommand.Checked = s.mcp_command_enabled;
-            if (txtWebSearchKey != null) txtWebSearchKey.Text = s.mcp_websearch_key != null ? s.mcp_websearch_key : string.Empty;
+            this.chkMcpWeb.Checked = s.mcp_web_enabled;
+            this.chkMcpFiles.Checked = s.mcp_files_enabled;
+            this.chkMcpGit.Checked = s.mcp_git_enabled;
+            this.chkMcpCommand.Checked = s.mcp_command_enabled;
+            this.chkMcpGithub.Checked = s.mcp_github_enabled;
+            this.txtWebSearchKey.Text = s.mcp_websearch_key != null ? s.mcp_websearch_key : string.Empty;
+            this.txtGithubPat.Text = s.mcp_github_pat != null ? s.mcp_github_pat : string.Empty;
+            UpdateMcpEnableStates();
         }
 
         private void CaptureMcpControlsToWorking(SettingsData target)
         {
             if (target == null) return;
-            if (chkMcpWeb != null) target.mcp_web_enabled = chkMcpWeb.Checked;
-            if (chkMcpFiles != null) target.mcp_files_enabled = chkMcpFiles.Checked;
-            if (chkMcpGit != null) target.mcp_git_enabled = chkMcpGit.Checked;
-            if (chkMcpCommand != null) target.mcp_command_enabled = chkMcpCommand.Checked;
-            if (txtWebSearchKey != null)
-                target.mcp_websearch_key = txtWebSearchKey.Text != null ? txtWebSearchKey.Text.Trim() : string.Empty;
+            target.mcp_web_enabled = this.chkMcpWeb.Checked;
+            target.mcp_files_enabled = this.chkMcpFiles.Checked;
+            target.mcp_git_enabled = this.chkMcpGit.Checked;
+            target.mcp_command_enabled = this.chkMcpCommand.Checked;
+            target.mcp_github_enabled = this.chkMcpGithub.Checked;
+            target.mcp_websearch_key = this.txtWebSearchKey.Text != null ? this.txtWebSearchKey.Text.Trim() : string.Empty;
+            target.mcp_github_pat = this.txtGithubPat.Text != null ? this.txtGithubPat.Text.Trim() : string.Empty;
+        }
+
+        // A web-search / GitHub toggle is only enableable when its key/PAT looks plausibly valid;
+        // an empty or malformed field disables (and clears) the toggle so it can't be saved on.
+        private void UpdateMcpEnableStates()
+        {
+            bool webOk = LooksLikeTavilyKey(this.txtWebSearchKey.Text);
+            this.chkMcpWeb.Enabled = webOk;
+            if (!webOk) this.chkMcpWeb.Checked = false;
+
+            bool patOk = McpConfig.IsValidGitHubPat(this.txtGithubPat.Text != null ? this.txtGithubPat.Text.Trim() : null);
+            this.chkMcpGithub.Enabled = patOk;
+            if (!patOk) this.chkMcpGithub.Checked = false;
+        }
+
+        // Tavily keys look like "tvly-dev-XXXXXXXX" (or "tvly-XXXXXXXX"). Lenient prefix + length check.
+        private static bool LooksLikeTavilyKey(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return false;
+            key = key.Trim();
+            return key.StartsWith("tvly-", StringComparison.OrdinalIgnoreCase) && key.Length >= 12;
         }
 
         private void LoadMcpJsonEditor()
@@ -1257,17 +1213,17 @@ namespace GxPT
             string text = null;
             try { if (File.Exists(_mcpFile)) text = File.ReadAllText(_mcpFile, Encoding.UTF8); }
             catch { }
-            if (string.IsNullOrEmpty(text)) text = McpConfig.SeedJson;
-            if (rtbMcpJson != null) rtbMcpJson.Text = text;
+            if (string.IsNullOrEmpty(text)) text = McpJsonTemplate;
+            this.rtbMcpJson.Text = text;
         }
 
         // Validate the mcp.json editor. Empty -> seed the default (GitHub placeholder). Invalid JSON
         // blocks the save and switches to the MCP tab.
         private bool TryValidateMcpJson(out string text)
         {
-            text = rtbMcpJson != null ? rtbMcpJson.Text : string.Empty;
+            text = this.rtbMcpJson.Text;
             string trimmed = text != null ? text.Trim() : string.Empty;
-            if (trimmed.Length == 0) { text = McpConfig.SeedJson; return true; }
+            if (trimmed.Length == 0) { text = McpJsonTemplate; return true; }
             try
             {
                 JObject.Parse(trimmed);
@@ -1309,12 +1265,14 @@ namespace GxPT
             public int message_max_width { get; set; }
             public bool provider_data_collection { get; set; }
 
-            // MCP built-in server toggles + web-search key (read by the host via AppSettings).
+            // MCP built-in server toggles + credentials (read by the host via AppSettings).
             public bool mcp_web_enabled { get; set; }
             public bool mcp_files_enabled { get; set; }
             public bool mcp_git_enabled { get; set; }
             public bool mcp_command_enabled { get; set; }
+            public bool mcp_github_enabled { get; set; }
             public string mcp_websearch_key { get; set; }
+            public string mcp_github_pat { get; set; }
         }
     }
 }
