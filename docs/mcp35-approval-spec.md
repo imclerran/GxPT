@@ -109,12 +109,12 @@ State (persisted, §5): `_approvedTools` (function-name set, Tool scope) +
 `_rules` (argument-scope rules).
 
 ```csharp
-public enum  RuleKind { ExactArgs, Prefix, Regex }
+public enum  RuleKind { ExactArgs, Prefix }
 public sealed class ApprovalRule {
     public string   FunctionName;
     public RuleKind Kind;
     public string   ArgPath;     // which argument (e.g. "command", "path")
-    public string   Pattern;     // exact value | prefix | regex source
+    public string   Pattern;     // exact value | prefix
 }
 
 public enum ApprovalOutcome { Allow, Deny }
@@ -134,7 +134,6 @@ MatchesAnyRule(req):
   foreach r in _rules where r.FunctionName == req.FunctionName:
      ExactArgs → val == r.Pattern
      Prefix    → val starts with r.Pattern at a token/dir boundary
-     Regex     → Regex.IsMatch(val, r.Pattern)    // compiled, with a timeout
 ```
 
 - **ReadOnly / Write** (Scope=Tool): first-use prompt; once remembered, pass
@@ -145,8 +144,9 @@ MatchesAnyRule(req):
 - **Boundary-aware matching** (security): command `Prefix` is **token-aware**
   (`git status` matches `git status -s`, not `git status-hack`); path `Prefix`
   is **directory-boundary aware** (`/a/b` matches `/a/b/c`, not `/a/bc`).
-- **Regex** rules run with a **match timeout** (ReDoS guard) and are an
-  *advanced* option, created explicitly by the user (§4).
+- Rules are built **only** from the offered scope buttons (§4) — there is **no
+  free-form / regex pattern entry** (out of scope: matching is restricted to
+  exact value or a structured prefix, which keeps every rule auditable).
 
 ---
 
@@ -166,12 +166,12 @@ surface.
   | Scope | Buttons |
   |-------|---------|
   | Tool (ReadOnly/Write) | `Allow once` · `Always allow this tool` · `Deny` |
-  | Argument · command (`command__run`) | `Allow once` · `Always allow this exact command` · `` Always allow `<base> <sub>` `` · `Custom pattern…` · `Deny` |
-  | Argument · path (`files__*`) | `Allow once` · `Always allow this path` · `Always allow this directory and below` · `Custom pattern…` · `Deny` |
+  | Argument · command (`command__run`) | `Allow once` · `Always allow this exact command` · `` Always allow `<base> <sub>` `` · `Deny` |
+  | Argument · path (`files__*`) | `Allow once` · `Always allow this path` · `Always allow this directory and below` · `Deny` |
   | None (`git__push`, …) | `Allow once` · `Deny` |
-- "base+subcommand" / "directory" pre-fill a **`Prefix`** rule; "custom pattern"
-  opens a small editor that creates a **`Regex`** rule, with a visible warning
-  that a broad pattern is dangerous.
+- "this exact command/path" creates an **`ExactArgs`** rule; "base+subcommand" /
+  "directory and below" create a **`Prefix`** rule. These fixed buttons are the
+  **only** way a rule is made — no free-form pattern editor.
 - **Destructive** dialogs default focus to `Deny` and style the preview red.
 - Truncate huge argument blobs with "show more" so the dialog can't be
   off-screened.
@@ -183,8 +183,8 @@ surface.
 Two lists in `settings.json` via `AppSettings` (a string list + a list of
 JSON-serialized rules — `AppSettings` stays on JavaScriptSerializer, D16):
 - **`mcp.approvedTools`** — function names with **Tool** scope (ReadOnly/Write).
-- **`mcp.approvalRules`** — `ApprovalRule`s with **Argument** scope
-  (`command__run`, `files__*`), each stored as JSON.
+- **`mcp.approvalRules`** — `ApprovalRule`s (`ExactArgs`/`Prefix`) with
+  **Argument** scope (`command__run`, `files__*`), each stored as JSON.
 
 Rules:
 - **Destructive `Scope=None` is never stored** (always prompts).
@@ -251,9 +251,9 @@ picture is complete in one place.
 2. **Decision model** — Tool-scope remembered → no prompt; first use → prompt;
    Destructive `Scope=None` prompts every time; persists only ReadOnly/Write
    (Tool) and argument rules.
-3. **Rule matching** — `ExactArgs`/`Prefix`/`Regex`; **token-aware** command
-   prefix (`git status` ≠ `git status-hack`); **dir-boundary** path prefix
-   (`/a/b` ≠ `/a/bc`); regex honors the match timeout.
+3. **Rule matching** — `ExactArgs`/`Prefix` only; **token-aware** command prefix
+   (`git status` ≠ `git status-hack`); **dir-boundary** path prefix
+   (`/a/b` ≠ `/a/bc`); no free-form pattern entry exists.
 4. **Dialog** — remember buttons match scope (tool vs command vs path vs none);
    command/path preview shown; Destructive defaults to Deny.
 5. **Persistence** — both `mcp.approvedTools` and `mcp.approvalRules` round-trip;
@@ -275,11 +275,10 @@ picture is complete in one place.
    data-egress aware).
 4. **Remember granularity** — **per-tool** generally (Tool scope), but
    **argument-scoped rules** for arbitrary-exec / path tools (`command__run` by
-   base+subcommand, `files__*` by path/dir), with optional user-authored regex.
+   exact command or base+subcommand, `files__*` by exact path or directory).
+   **No free-form / regex patterns** — rules come only from fixed scope buttons.
 
 ### Still open
 - **Default first-party scope details** — confirm `git__commit` is Tool-scope
   (vs argument-scoped by repo) and whether `files__write` should be
   directory-scoped by default.
-- **Custom-regex UX** — how prominent/guarded the advanced pattern editor is
-  (footgun risk); could hide behind an "advanced" toggle.

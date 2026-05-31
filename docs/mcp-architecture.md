@@ -424,9 +424,10 @@ the Consolas `rtbJson` RichTextBox):
   **Write** prompt on first use and are **remember-eligible per-tool**;
   **Destructive** (delete / arbitrary exec / `push`) **always confirms**.
 - **Argument-scoped allowlisting** for arbitrary-exec & file tools: `command__run`
-  remembers by *base + subcommand* (token-aware), `files__*` by *path / directory*
-  (boundary-aware), with optional user-authored **regex** rules — so a remembered
-  approval is always narrow, never "allow this tool for anything."
+  remembers by *exact command* or *base + subcommand* (token-aware), `files__*` by
+  *exact path* or *directory* (boundary-aware) — chosen from fixed scope buttons,
+  **no free-form/regex patterns** — so a remembered approval is always narrow,
+  never "allow this tool for anything."
 - Classification: first-party **hardcoded**; third-party from **MCP annotations**
   (advisory — `readOnlyHint`/`destructiveHint`); unknown → Write.
 - `CommandMcpServer` is the sharpest edge: always-confirm (no blanket remember) +
