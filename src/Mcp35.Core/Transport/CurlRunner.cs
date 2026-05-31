@@ -12,9 +12,9 @@ namespace Mcp35.Core.Transport
     /// <summary>
     /// A reusable curl wrapper distilled from GxPT's OpenRouterClient (D9). HTTP plumbing for
     /// .NET 3.5, which can't reliably negotiate TLS 1.2 natively — so anything hitting a modern
-    /// HTTPS endpoint (GitHub, Serper) shells out to curl. Pure BCL + injected paths, so it lives
+    /// HTTPS endpoint (GitHub, Tavily) shells out to curl. Pure BCL + injected paths, so it lives
     /// in Core without a native build dependency. Shared by the client's HttpTransport (phase 8)
-    /// and SerperMcpServer (phase 7). See mcp35-core-spec.md §6.
+    /// and WebSearchMcpServer (phase 7). See mcp35-core-spec.md §6.
     /// </summary>
     public sealed class CurlRunner
     {

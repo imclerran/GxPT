@@ -247,7 +247,7 @@ public sealed class JsonRpcPeer : IDisposable   // implements the IRpcTransport 
 ## 6. `CurlRunner` (`Mcp35.Core.Transport`)
 
 A reusable curl wrapper distilled from `OpenRouterClient` (D9 — used by both
-`HttpTransport` and `SerperMcpServer`). HTTP plumbing, but pure BCL + injected
+`HttpTransport` and `WebSearchMcpServer`). HTTP plumbing, but pure BCL + injected
 paths, so it stays in Core without a native build dependency.
 
 ```csharp

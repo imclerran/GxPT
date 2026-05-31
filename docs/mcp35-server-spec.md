@@ -6,7 +6,7 @@ and `mcp35-core-spec.md`; realizes **phase 2** of the roadmap.
 
 `Mcp35.Server` is the ergonomic SDK for **building** MCP servers over stdio. It
 turns "register some tools + `Run()`" into a working server, so each concrete
-server (`SerperMcpServer`, `FilesMcpServer`, …) stays tiny. It builds on
+server (`WebSearchMcpServer`, `FilesMcpServer`, …) stays tiny. It builds on
 `Mcp35.Core` and adds no new managed dependencies.
 
 ---
@@ -78,7 +78,7 @@ A concrete server is then just:
 ```csharp
 static void Main()
 {
-    var s = new McpServer(new Implementation { name = "serper", version = "1.0" },
+    var s = new McpServer(new Implementation { name = "web", version = "1.0" },
                           new StdErrLogSink());
     s.AddTool("web_search", "Search the web.",
               SchemaBuilder.Object().Str("query", required: true).Build(),

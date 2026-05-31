@@ -91,7 +91,8 @@ public interface IToolClassifier {
    | `git__commit` | Write | Tool |
    | `git__push` | Destructive | None |
    | `command__run` | Destructive | **Argument(`command`)** |
-   | `serper__search` | ReadOnly | Tool |
+   | `web__search` | ReadOnly | Tool |
+   | `web__extract` | Write | Tool |
 3. **Third-party → annotations** (advisory): `destructiveHint:true` →
    Destructive/None; `readOnlyHint:true` → ReadOnly/Tool; otherwise → Write/Tool.
    We can't infer a third-party server's argument semantics, so third-party
@@ -236,7 +237,7 @@ cap does).
 
 ## 9. Secrets (recap, already decided)
 
-Serper key in `settings.json`; GitHub PAT in `mcp.json`'s `Authorization` header;
+web search key in `settings.json`; GitHub PAT in `mcp.json`'s `Authorization` header;
 both reach curl via `-K`, never the command line; a malformed PAT disables the
 GitHub server (architecture §8/§9, D15). No change here — listed so the security
 picture is complete in one place.
