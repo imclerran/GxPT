@@ -68,18 +68,11 @@ namespace Mcp35.Client
                     McpMethods.Initialize, JObject.FromObject(ip, Serializer()), initializeTimeoutMs);
 
                 if (resp.IsError)
-                {
-                    Fault("initialize failed: " + (resp.Error == null ? "unknown error" : resp.Error.Message));
                     throw new McpException(resp.Error);
-                }
 
                 InitializeResult result = ((JObject)resp.Result).ToObject<InitializeResult>(Serializer());
                 if (!IsAcceptableVersion(result.ProtocolVersion))
-                {
-                    string msg = "unacceptable protocol version: " + result.ProtocolVersion;
-                    Fault(msg);
-                    throw new McpException(msg);
-                }
+                    throw new McpException("unacceptable protocol version: " + result.ProtocolVersion);
 
                 _serverInfo = result;
                 _supportsTools = result.Capabilities != null && result.Capabilities["tools"] != null;
@@ -91,14 +84,14 @@ namespace Mcp35.Client
 
                 SetState(ConnectionState.Ready, null);
             }
-            catch (McpException)
-            {
-                throw; // already faulted above
-            }
             catch (Exception ex)
             {
+                // Any failure during the handshake faults the connection. Re-throw the original
+                // exception so callers can distinguish timeout / protocol error / transport fault
+                // (McpTimeoutException and McpTransportException both extend McpException, so a
+                // type-based catch here would otherwise mask them).
                 Fault("open failed: " + ex.Message);
-                throw new McpTransportException("Failed to open connection '" + _name + "': " + ex.Message, ex);
+                throw;
             }
         }
 

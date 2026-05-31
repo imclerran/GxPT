@@ -203,7 +203,8 @@ namespace Mcp35.Client.Tests
 
             using (var conn = NewConnection(t))
             {
-                Assert.Throws<McpTransportException>(delegate { conn.Open(500); });
+                // The timeout surfaces as its own type (not masked), and the connection faults.
+                Assert.Throws<McpTimeoutException>(delegate { conn.Open(500); });
                 Assert.Equal(ConnectionState.Faulted, conn.State);
             }
         }
