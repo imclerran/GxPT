@@ -3,11 +3,12 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
-using System.Web.Script.Serialization;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace GxPT
 {
-    internal sealed class OpenRouterClient
+    internal sealed class OpenRouterClient : IChatStreamer
     {
         private readonly string _apiKey;
         private readonly string _curlPath;
@@ -23,74 +24,105 @@ namespace GxPT
             get { return !string.IsNullOrEmpty(_apiKey) && File.Exists(_curlPath); }
         }
 
-        // Build request body using provided client properties (including stream and provider options)
-        private static string BuildRequestBody(string model, IList<ChatMessage> messages, ClientProperties props)
+        // Build the request body (Newtonsoft, D16). Emits the messages (with assistant tool_calls and
+        // tool-role tool_call_id where present), the optional tools array, and provider options.
+        // The emoji-suppression system message is always prepended.
+        internal static string BuildRequestBody(string model, IList<ChatMessage> messages, IList<JObject> tools, ClientProperties props)
         {
             var payload = new Dictionary<string, object>();
             payload["model"] = string.IsNullOrEmpty(model) ? "openai/gpt-4o" : model;
             bool streamFlag = (props != null && props.Stream.HasValue) ? props.Stream.Value : false;
             payload["stream"] = streamFlag;
-            var msgs = new List<Dictionary<string, string>>();
-            // Prepend a system instruction to avoid emoji in all responses
-            msgs.Add(new Dictionary<string, string> {
-                { "role", "system" },
-                { "content", "Do not use emojis or emoticons in any response. Use plain text only." }
-            });
+
+            var msgs = new List<object>();
+            // Prepend a system instruction to avoid emoji in all responses.
+            var sys = new Dictionary<string, object>();
+            sys["role"] = "system";
+            sys["content"] = "Do not use emojis or emoticons in any response. Use plain text only.";
+            msgs.Add(sys);
+
             if (messages != null)
             {
                 foreach (var m in messages)
                 {
-                    msgs.Add(new Dictionary<string, string> { { "role", m.Role }, { "content", m.Content } });
+                    var mm = new Dictionary<string, object>();
+                    mm["role"] = m.Role;
+
+                    if (m.Role == "tool")
+                    {
+                        // Tool result, keyed back to the assistant's call id.
+                        mm["content"] = m.Content != null ? m.Content : string.Empty;
+                        mm["tool_call_id"] = m.ToolCallId;
+                    }
+                    else if (m.ToolCalls != null && m.ToolCalls.Count > 0)
+                    {
+                        // Assistant turn requesting tool calls (content may be null alongside calls).
+                        mm["content"] = string.IsNullOrEmpty(m.Content) ? null : (object)m.Content;
+                        var calls = new List<object>();
+                        foreach (var c in m.ToolCalls)
+                        {
+                            var fn = new Dictionary<string, object>();
+                            fn["name"] = c.Name;
+                            fn["arguments"] = string.IsNullOrEmpty(c.ArgumentsJson) ? "{}" : c.ArgumentsJson;
+                            var call = new Dictionary<string, object>();
+                            call["id"] = c.Id;
+                            call["type"] = "function";
+                            call["function"] = fn;
+                            calls.Add(call);
+                        }
+                        mm["tool_calls"] = calls;
+                    }
+                    else
+                    {
+                        mm["content"] = m.Content != null ? m.Content : string.Empty;
+                    }
+                    msgs.Add(mm);
                 }
             }
             payload["messages"] = msgs;
 
-            // Optionally add provider object if any of the provider properties are set
+            // Expose tools (tool_choice left at the provider default of "auto").
+            if (tools != null && tools.Count > 0)
+            {
+                var toolList = new List<object>();
+                foreach (var t in tools) toolList.Add(t);
+                payload["tools"] = toolList;
+            }
+
+            // Optionally add provider object if any of the provider properties are set.
             try
             {
-                if (props == null)
+                if (props != null)
                 {
-                    var ser0 = new JavaScriptSerializer();
-                    return ser0.Serialize(payload);
-                }
-                var provider = new Dictionary<string, object>();
+                    var provider = new Dictionary<string, object>();
 
-                // data_collection: include if set (true => allow, false => deny)
-                if (props.ProviderDataCollectionAllowed.HasValue)
-                {
-                    provider["data_collection"] = props.ProviderDataCollectionAllowed.Value ? "allow" : "deny";
-                }
+                    // data_collection: include if set (true => allow, false => deny)
+                    if (props.ProviderDataCollectionAllowed.HasValue)
+                        provider["data_collection"] = props.ProviderDataCollectionAllowed.Value ? "allow" : "deny";
 
-                // only: include non-empty list
-                if (props.ProviderOnly != null && props.ProviderOnly.Count > 0)
-                {
-                    // copy to a new list to avoid serializing non-generic types
-                    var onlyList = new List<string>();
-                    foreach (var s in props.ProviderOnly)
+                    // only: include non-empty list
+                    if (props.ProviderOnly != null && props.ProviderOnly.Count > 0)
                     {
-                        if (!string.IsNullOrEmpty(s)) onlyList.Add(s);
+                        var onlyList = new List<string>();
+                        foreach (var s in props.ProviderOnly)
+                            if (!string.IsNullOrEmpty(s)) onlyList.Add(s);
+                        if (onlyList.Count > 0) provider["only"] = onlyList;
                     }
-                    if (onlyList.Count > 0)
-                        provider["only"] = onlyList;
-                }
 
-                // max_price: include any provided fields
-                var maxPrice = new Dictionary<string, object>();
-                if (props.ProviderMaxPricePrompt.HasValue)
-                    maxPrice["prompt"] = props.ProviderMaxPricePrompt.Value;
-                if (props.ProviderMaxPriceCompletion.HasValue)
-                    maxPrice["completion"] = props.ProviderMaxPriceCompletion.Value;
-                if (maxPrice.Count > 0)
-                    provider["max_price"] = maxPrice;
+                    // max_price: include any provided fields
+                    var maxPrice = new Dictionary<string, object>();
+                    if (props.ProviderMaxPricePrompt.HasValue)
+                        maxPrice["prompt"] = props.ProviderMaxPricePrompt.Value;
+                    if (props.ProviderMaxPriceCompletion.HasValue)
+                        maxPrice["completion"] = props.ProviderMaxPriceCompletion.Value;
+                    if (maxPrice.Count > 0) provider["max_price"] = maxPrice;
 
-                if (provider.Count > 0)
-                {
-                    payload["provider"] = provider;
+                    if (provider.Count > 0) payload["provider"] = provider;
                 }
             }
             catch { }
-            var ser = new JavaScriptSerializer();
-            return ser.Serialize(payload);
+
+            return JsonConvert.SerializeObject(payload);
         }
 
         public string CreateCompletion(string model, IList<ChatMessage> messages)
@@ -105,7 +137,7 @@ namespace GxPT
             // Ensure stream flag defaults to false for non-stream API
             if (props == null) props = new ClientProperties();
             if (!props.Stream.HasValue) props.Stream = false;
-            string body = BuildRequestBody(model, messages, props);
+            string body = BuildRequestBody(model, messages, null, props);
             List<string> tempFiles;
             string args = BuildCurlArgs(body, out tempFiles);
 
@@ -143,9 +175,7 @@ namespace GxPT
                         Logger.Log("HTTP", "curl error body: " + output);
                         try
                         {
-                            var ser2 = new JavaScriptSerializer();
-                            var dict2 = ser2.Deserialize<Dictionary<string, object>>(output);
-                            var msg2 = ExtractErrorMessage(dict2);
+                            var msg2 = ExtractErrorMessage(SafeParse(output));
                             if (!string.IsNullOrEmpty(msg2))
                                 Logger.Log("HTTP", "error.message: " + msg2);
                         }
@@ -160,19 +190,53 @@ namespace GxPT
             }
         }
 
+        // IChatStreamer: build the body (with tools) then stream parsed chunks. Used by the
+        // McpChatOrchestrator; the assembler reassembles tool_calls and forwards text deltas.
+        public void StreamChat(string model, IList<ChatMessage> messages, IList<JObject> tools,
+                               ClientProperties props, Action<ChatCompletionChunk> onChunk, Action<string> onError)
+        {
+            if (props == null) props = new ClientProperties();
+            if (!props.Stream.HasValue) props.Stream = true;
+            string body = BuildRequestBody(model, messages, tools, props);
+            StreamRawChunks(body, onChunk, onError);
+        }
+
         public void CreateCompletionStream(string model, IList<ChatMessage> messages, Action<string> onDelta, Action onDone, Action<string> onError)
         {
             // Backward-compatible API: defaults to stream
             CreateCompletionStream(model, messages, null, onDelta, onDone, onError);
         }
 
-        // New overload accepting ClientProperties
+        // Text-only streaming wrapper over StreamRawChunks (no tools): forwards content deltas.
         public void CreateCompletionStream(string model, IList<ChatMessage> messages, ClientProperties props, Action<string> onDelta, Action onDone, Action<string> onError)
         {
             if (props == null) props = new ClientProperties();
-            // Ensure stream flag defaults to true for stream API
             if (!props.Stream.HasValue) props.Stream = true;
-            string body = BuildRequestBody(model, messages, props);
+            string body = BuildRequestBody(model, messages, null, props);
+
+            bool failed = false;
+            StreamRawChunks(body,
+                delegate(ChatCompletionChunk chunk)
+                {
+                    if (chunk != null && chunk.choices != null)
+                    {
+                        foreach (var ch in chunk.choices)
+                        {
+                            string content = (ch != null && ch.delta != null) ? ch.delta.content : null;
+                            if (!string.IsNullOrEmpty(content) && onDelta != null) onDelta(content);
+                        }
+                    }
+                },
+                delegate(string err) { failed = true; if (onError != null) onError(err); });
+
+            if (!failed && onDone != null) onDone();
+        }
+
+        // The shared curl + SSE streaming loop. Each "data:" line is parsed (Newtonsoft) into a
+        // ChatCompletionChunk and handed to onChunk; if the whole stream yields no chunks, the body
+        // is inspected for a JSON error and onError is called.
+        public void StreamRawChunks(string body, Action<ChatCompletionChunk> onChunk, Action<string> onError)
+        {
             List<string> tempFiles;
             string args = BuildCurlArgs(body, out tempFiles);
 
@@ -191,7 +255,6 @@ namespace GxPT
                 var proc = new Process();
                 proc.StartInfo = psi;
                 proc.EnableRaisingEvents = false;
-                Logger.Log("Stream", "Starting curl for model=" + model + ", messages=" + (messages != null ? messages.Count : 0));
                 proc.Start();
 
                 // Read lines as they arrive (SSE: lines like "data: {...}") with explicit UTF-8 decoding
@@ -199,13 +262,12 @@ namespace GxPT
                 var sr = new StreamReader(proc.StandardOutput.BaseStream, utf8, false);
                 var er = new StreamReader(proc.StandardError.BaseStream, utf8, false);
                 string line;
-                var ser = new JavaScriptSerializer();
-                bool sawAnyDelta = false;
+                bool sawAnyChunk = false;
                 var stdoutBuf = new StringBuilder();
                 while ((line = sr.ReadLine()) != null)
                 {
                     line = line.Trim();
-                    // Buffer all stdout; if no deltas are seen, we'll inspect this for a JSON error body.
+                    // Buffer all stdout; if no chunks are seen, we'll inspect this for a JSON error body.
                     if (line.Length > 0)
                     {
                         try { stdoutBuf.AppendLine(line); }
@@ -214,91 +276,53 @@ namespace GxPT
                     if (line.Length == 0) continue;
                     if (line.StartsWith("data:")) line = line.Substring(5).Trim();
                     if (line == "[DONE]") break;
-                    try
+
+                    ChatCompletionChunk chunk = null;
+                    try { chunk = JsonConvert.DeserializeObject<ChatCompletionChunk>(line); }
+                    catch { continue; } // Ignore malformed keepalive/heartbeat lines
+                    if (chunk != null)
                     {
-                        var chunk = ser.Deserialize<ChatCompletionChunk>(line);
-                        if (chunk != null && chunk.choices != null)
-                        {
-                            foreach (var ch in chunk.choices)
-                            {
-                                string content = (ch != null && ch.delta != null) ? ch.delta.content : null;
-                                if (!string.IsNullOrEmpty(content))
-                                {
-                                    sawAnyDelta = true;
-                                    if (onDelta != null) onDelta(content);
-                                }
-                            }
-                        }
-                    }
-                    catch
-                    {
-                        // Ignore malformed keepalive/heartbeat lines
-                        continue;
+                        sawAnyChunk = true;
+                        if (onChunk != null) onChunk(chunk);
                     }
                 }
                 try { proc.WaitForExit(); }
                 catch { }
-                // If process wrote errors and we produced no deltas, surface error
-                try
+
+                // If the process produced no chunks, surface an error from the body/stderr.
+                string err = null;
+                try { err = er.ReadToEnd(); }
+                catch { }
+                if (!sawAnyChunk)
                 {
-                    string err = er.ReadToEnd();
-                    if (!sawAnyDelta)
+                    string rawBody = null;
+                    try { rawBody = stdoutBuf.ToString().Trim(); }
+                    catch { }
+
+                    string extractedMsg = null;
+                    if (!string.IsNullOrEmpty(rawBody))
                     {
-                        // Prefer any JSON error body sent on stdout (with --fail-with-body)
-                        string rawBody = null;
-                        try { rawBody = stdoutBuf.ToString().Trim(); }
+                        try { extractedMsg = ExtractErrorMessage(SafeParse(rawBody)); }
+                        catch { }
+                        try { Logger.Log("HTTP", "curl error body (no chunks): " + rawBody); }
+                        catch { }
+                        if (!string.IsNullOrEmpty(extractedMsg))
+                            try { Logger.Log("HTTP", "error.message: " + extractedMsg); }
+                            catch { }
+                    }
+                    if (!string.IsNullOrEmpty(err))
+                        try { Logger.Log("Stream", "curl stderr (no chunks): " + err); }
                         catch { }
 
-                        string userMsg = null;
-                        string extractedMsg = null;
-                        if (!string.IsNullOrEmpty(rawBody))
-                        {
-                            try
-                            {
-                                // Attempt to parse common error shapes
-                                var dict = ser.Deserialize<Dictionary<string, object>>(rawBody);
-                                extractedMsg = ExtractErrorMessage(dict);
-                                userMsg = extractedMsg ?? rawBody;
-                                try { Logger.Log("HTTP", "curl error body (no deltas): " + rawBody); }
-                                catch { }
-                                try
-                                {
-                                    if (!string.IsNullOrEmpty(extractedMsg))
-                                        Logger.Log("HTTP", "error.message: " + extractedMsg);
-                                }
-                                catch { }
-                            }
-                            catch
-                            {
-                                // Not JSON; fall back to raw body text
-                                userMsg = rawBody;
-                                try { Logger.Log("HTTP", "curl non-JSON body (no deltas): " + rawBody); }
-                                catch { }
-                            }
-                        }
-
-                        // Log stderr too for diagnostics
-                        if (!string.IsNullOrEmpty(err))
-                        {
-                            try { Logger.Log("Stream", "curl stderr (no deltas): " + err); }
-                            catch { }
-                        }
-
-                        if (onError != null)
-                        {
-                            // Prefer API error.message if present; otherwise fall back to curl's stderr summary
-                            var msg = !string.IsNullOrEmpty(extractedMsg) ? extractedMsg : (!string.IsNullOrEmpty(err) ? err : "Request failed");
-                            onError(msg.Trim());
-                        }
-                        // Clean up temp files
-                        CleanupTempFiles(tempFiles);
-                        return;
+                    if (onError != null)
+                    {
+                        var msg = !string.IsNullOrEmpty(extractedMsg) ? extractedMsg : (!string.IsNullOrEmpty(err) ? err : "Request failed");
+                        onError(msg.Trim());
                     }
+                    CleanupTempFiles(tempFiles);
+                    return;
                 }
-                catch { }
 
-                if (onDone != null) onDone();
-                // Clean up temp files
                 CleanupTempFiles(tempFiles);
             }
             catch (Exception ex)
@@ -398,55 +422,46 @@ namespace GxPT
             }
         }
 
-        // Extracts a human-readable error message from common JSON error shapes (C# 3.0 compatible)
-        private static string ExtractErrorMessage(Dictionary<string, object> root)
+        private static JObject SafeParse(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return null;
+            try { return JObject.Parse(json); }
+            catch { return null; }
+        }
+
+        // Extracts a human-readable error message from common JSON error shapes.
+        internal static string ExtractErrorMessage(JObject root)
         {
             if (root == null) return null;
             try
             {
-                // { "error": { "message": "..." } }
-                object errorObj;
-                if (root.TryGetValue("error", out errorObj))
+                // { "error": { "message": "..." } } (or error/detail)
+                JToken errorObj = root["error"];
+                if (errorObj != null && errorObj.Type == JTokenType.Object)
                 {
-                    var errDict = errorObj as Dictionary<string, object>;
-                    if (errDict != null)
-                    {
-                        object v;
-                        if (errDict.TryGetValue("message", out v))
-                        {
-                            var s = v as string;
-                            if (!string.IsNullOrEmpty(s)) return s;
-                        }
-                        if (errDict.TryGetValue("error", out v))
-                        {
-                            var s2 = v as string;
-                            if (!string.IsNullOrEmpty(s2)) return s2;
-                        }
-                        if (errDict.TryGetValue("detail", out v))
-                        {
-                            var s3 = v as string;
-                            if (!string.IsNullOrEmpty(s3)) return s3;
-                        }
-                    }
+                    string m = AsString(errorObj["message"]);
+                    if (!string.IsNullOrEmpty(m)) return m;
+                    string e2 = AsString(errorObj["error"]);
+                    if (!string.IsNullOrEmpty(e2)) return e2;
+                    string d = AsString(errorObj["detail"]);
+                    if (!string.IsNullOrEmpty(d)) return d;
                 }
 
                 // { "message": "..." }
-                object msgVal;
-                if (root.TryGetValue("message", out msgVal))
-                {
-                    var msgStr = msgVal as string;
-                    if (!string.IsNullOrEmpty(msgStr)) return msgStr;
-                }
+                string msg = AsString(root["message"]);
+                if (!string.IsNullOrEmpty(msg)) return msg;
                 // { "detail": "..." }
-                object detVal;
-                if (root.TryGetValue("detail", out detVal))
-                {
-                    var detStr = detVal as string;
-                    if (!string.IsNullOrEmpty(detStr)) return detStr;
-                }
+                string det = AsString(root["detail"]);
+                if (!string.IsNullOrEmpty(det)) return det;
             }
             catch { }
             return null;
+        }
+
+        private static string AsString(JToken t)
+        {
+            if (t == null || t.Type != JTokenType.String) return null;
+            return (string)t;
         }
     }
 

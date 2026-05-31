@@ -59,6 +59,10 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>lib\itextsharp.dll</HintPath>
     </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\src\Mcp35.Core\lib\Newtonsoft.Json.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Web.Extensions">
       <RequiredTargetFramework>3.5</RequiredTargetFramework>
@@ -110,6 +114,16 @@
     <Compile Include="Services\Logger.cs" />
     <Compile Include="Services\OpenRouterClient.cs">
     </Compile>
+    <Compile Include="Services\Mcp\IChatStreamer.cs" />
+    <Compile Include="Services\Mcp\IToolApprovalPolicy.cs" />
+    <Compile Include="Services\Mcp\ToolCallAssembler.cs" />
+    <Compile Include="Services\Mcp\McpToolRegistry.cs" />
+    <Compile Include="Services\Mcp\McpChatOrchestrator.cs" />
+    <Compile Include="Services\Mcp\McpServerSpec.cs" />
+    <Compile Include="Services\Mcp\McpConfig.cs" />
+    <Compile Include="Services\Mcp\IServerConnector.cs" />
+    <Compile Include="Services\Mcp\McpHost.cs" />
+    <Compile Include="Services\Mcp\DefaultServerConnector.cs" />
     <Compile Include="Forms\MainForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -277,6 +291,19 @@
       <ProductName>Windows Installer 3.1</ProductName>
       <Install>true</Install>
     </BootstrapperPackage>
+  </ItemGroup>
+  <ItemGroup>
+    <!-- GxPT names Mcp35.Core types directly (ILogSink, Tool, Implementation, CallToolResult, ...),
+         so it needs a direct reference: MSBuild 3.5 / VS2008 does not flow project references
+         transitively through Mcp35.Client. -->
+    <ProjectReference Include="..\src\Mcp35.Core\Mcp35.Core.csproj">
+      <Project>{667AC466-F30B-4CDB-BEC9-7A139A709AA9}</Project>
+      <Name>Mcp35.Core</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\src\Mcp35.Client\Mcp35.Client.csproj">
+      <Project>{A043F034-FFF5-44CE-9605-B40FF0016262}</Project>
+      <Name>Mcp35.Client</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

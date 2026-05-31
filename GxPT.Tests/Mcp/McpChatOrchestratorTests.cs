@@ -1,0 +1,292 @@
+using System.Collections.Generic;
+using GxPT;
+using Newtonsoft.Json.Linq;
+using Xunit;
+
+namespace GxPT.Tests.Mcp
+{
+    public class McpChatOrchestratorTests
+    {
+        private static McpToolRegistry RegistryWith(out RegistryFakeTransport ft, string server, params ToolDef[] tools)
+        {
+            var conn = FakeConn.Ready(server, out ft, tools);
+            var reg = new McpToolRegistry(8, null);
+            reg.AddConnection(conn);
+            return reg;
+        }
+
+        private static McpChatOrchestrator New(ScriptedStreamer s, McpToolRegistry reg)
+        {
+            return new McpChatOrchestrator(s, reg, null, "test-model", null);
+        }
+
+        [Fact]
+        public void Single_tool_call_then_result_then_final_answer()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            ft.OnCall = delegate(string name, JObject args) { return RegistryFakeTransport.TextResult("file contents"); };
+
+            var streamer = new ScriptedStreamer();
+            streamer.Turns.Add(Chunks.OneToolCall("call_1", "files__read", "{\"path\":\"a.txt\"}"));
+            streamer.Turns.Add(Chunks.Text("Here is the file."));
+
+            var history = new List<ChatMessage>();
+            var ui = new RecordingUi();
+            New(streamer, reg).RunTurn(history, "read a.txt", ui);
+
+            Assert.True(ui.Completed);
+            Assert.Equal("Here is the file.", ui.Text.ToString());
+            Assert.Equal(new[] { "files__read" }, ui.ToolCalls.ToArray());
+            Assert.Contains("file contents", ui.ToolResults[0]);
+            Assert.False(ui.ToolErrors[0]);
+            Assert.Equal(2, streamer.Calls);
+
+            // history: user, assistant(+tool_calls), tool(result), assistant(final)
+            Assert.Equal(4, history.Count);
+            Assert.Equal("user", history[0].Role);
+            Assert.Equal("assistant", history[1].Role);
+            Assert.NotNull(history[1].ToolCalls);
+            Assert.Single(history[1].ToolCalls);
+            Assert.Equal("tool", history[2].Role);
+            Assert.Equal("call_1", history[2].ToolCallId);
+            Assert.Contains("file contents", history[2].Content);
+            Assert.Equal("assistant", history[3].Role);
+            Assert.Equal("Here is the file.", history[3].Content);
+        }
+
+        [Fact]
+        public void Passes_manifest_system_message_and_tools_to_streamer()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            var streamer = new ScriptedStreamer();
+            streamer.Turns.Add(Chunks.Text("hi"));
+
+            New(streamer, reg).RunTurn(new List<ChatMessage>(), "hello", new RecordingUi());
+
+            // first request: leading system message is the names manifest, history follows
+            var msgs = streamer.SeenMessages[0];
+            Assert.Equal("system", msgs[0].Role);
+            Assert.Contains("Available MCP tools", msgs[0].Content);
+            Assert.Equal("user", msgs[1].Role);
+            // exposed tools always lead with reveal_tools
+            Assert.Equal("reveal_tools", (string)streamer.SeenTools[0][0]["function"]["name"]);
+        }
+
+        [Fact]
+        public void Multiple_tool_calls_in_one_turn_run_serially()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"), new ToolDef("list"));
+            ft.OnCall = delegate(string name, JObject args) { return RegistryFakeTransport.TextResult("r:" + name); };
+
+            var streamer = new ScriptedStreamer();
+            streamer.Turns.Add(new[]
+            {
+                Chunks.ToolChunk(0, "c1", "files__read", "{}", null),
+                Chunks.ToolChunk(1, "c2", "files__list", "{}", "tool_calls")
+            });
+            streamer.Turns.Add(Chunks.Text("done"));
+
+            var history = new List<ChatMessage>();
+            New(streamer, reg).RunTurn(history, "go", new RecordingUi());
+
+            Assert.Equal(new[] { "read", "list" }, ft.CalledTools.ToArray());
+            // user, assistant(2 calls), tool, tool, assistant(final)
+            Assert.Equal(5, history.Count);
+            Assert.Equal(2, history[1].ToolCalls.Count);
+            Assert.Equal("tool", history[2].Role);
+            Assert.Equal("tool", history[3].Role);
+        }
+
+        [Fact]
+        public void Reveal_tools_then_follow_up_call_succeeds_locally()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            ft.OnCall = delegate(string name, JObject args) { return RegistryFakeTransport.TextResult("content"); };
+
+            var streamer = new ScriptedStreamer();
+            streamer.Turns.Add(Chunks.OneToolCall("r1", "reveal_tools", "{\"names\":[\"files__read\"]}"));
+            streamer.Turns.Add(Chunks.OneToolCall("c1", "files__read", "{}"));
+            streamer.Turns.Add(Chunks.Text("final"));
+
+            var history = new List<ChatMessage>();
+            var ui = new RecordingUi();
+            New(streamer, reg).RunTurn(history, "use the read tool", ui);
+
+            Assert.Equal(3, streamer.Calls);
+            Assert.Equal(new[] { "reveal_tools", "files__read" }, ui.ToolCalls.ToArray());
+            // reveal_tools is local — only the real tool hit the transport
+            Assert.Equal(new[] { "read" }, ft.CalledTools.ToArray());
+            // the reveal result lists the requested def
+            Assert.Contains("files__read", ui.ToolResults[0]);
+            Assert.False(ui.ToolErrors[0]);
+            Assert.Equal("final", ui.Text.ToString());
+        }
+
+        [Fact]
+        public void Hitting_iteration_cap_returns_a_note()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            ft.OnCall = delegate(string name, JObject args) { return RegistryFakeTransport.TextResult("x"); };
+
+            var streamer = new ScriptedStreamer();
+            streamer.Fallback = delegate(int i) { return Chunks.OneToolCall("c" + i, "files__read", "{}"); };
+
+            var orch = new McpChatOrchestrator(streamer, reg, null, "m", null, 3, 1000);
+            var history = new List<ChatMessage>();
+            var ui = new RecordingUi();
+            orch.RunTurn(history, "loop forever", ui);
+
+            Assert.True(ui.Completed);
+            Assert.Equal(3, streamer.Calls);
+            Assert.Equal("[Tool-call limit reached.]", history[history.Count - 1].Content);
+            // user + 3*(assistant+tool) + note
+            Assert.Equal(1 + 6 + 1, history.Count);
+        }
+
+        [Fact]
+        public void Tool_isError_result_is_fed_back_and_loop_continues()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            ft.OnCall = delegate(string name, JObject args)
+            {
+                JObject r = RegistryFakeTransport.TextResult("boom");
+                r["isError"] = true;
+                return r;
+            };
+
+            var streamer = new ScriptedStreamer();
+            streamer.Turns.Add(Chunks.OneToolCall("c1", "files__read", "{}"));
+            streamer.Turns.Add(Chunks.Text("recovered"));
+
+            var ui = new RecordingUi();
+            New(streamer, reg).RunTurn(new List<ChatMessage>(), "go", ui);
+
+            Assert.True(ui.ToolErrors[0]);
+            Assert.Contains("boom", ui.ToolResults[0]);
+            Assert.Equal("recovered", ui.Text.ToString());
+            Assert.True(ui.Completed);
+        }
+
+        [Fact]
+        public void Transport_fault_during_call_surfaces_server_unavailable()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            ft.ThrowTransportOnCall = true;
+
+            var streamer = new ScriptedStreamer();
+            streamer.Turns.Add(Chunks.OneToolCall("c1", "files__read", "{}"));
+            streamer.Turns.Add(Chunks.Text("after"));
+
+            var ui = new RecordingUi();
+            New(streamer, reg).RunTurn(new List<ChatMessage>(), "go", ui);
+
+            Assert.True(ui.ToolErrors[0]);
+            Assert.Equal("[Server unavailable.]", ui.ToolResults[0]);
+            Assert.Equal("after", ui.Text.ToString());
+        }
+
+        [Fact]
+        public void Json_rpc_error_during_call_surfaces_tool_error()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            ft.ErrorOnCall = true;
+
+            var streamer = new ScriptedStreamer();
+            streamer.Turns.Add(Chunks.OneToolCall("c1", "files__read", "{}"));
+            streamer.Turns.Add(Chunks.Text("after"));
+
+            var ui = new RecordingUi();
+            New(streamer, reg).RunTurn(new List<ChatMessage>(), "go", ui);
+
+            Assert.True(ui.ToolErrors[0]);
+            Assert.StartsWith("[Tool error:", ui.ToolResults[0]);
+        }
+
+        [Fact]
+        public void Unknown_tool_is_reported_without_hitting_transport()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+
+            var streamer = new ScriptedStreamer();
+            streamer.Turns.Add(Chunks.OneToolCall("c1", "files__nope", "{}"));
+            streamer.Turns.Add(Chunks.Text("ok"));
+
+            var ui = new RecordingUi();
+            New(streamer, reg).RunTurn(new List<ChatMessage>(), "go", ui);
+
+            Assert.True(ui.ToolErrors[0]);
+            Assert.Contains("Unknown tool", ui.ToolResults[0]);
+            Assert.Empty(ft.CalledTools);
+        }
+
+        [Fact]
+        public void Malformed_arguments_surface_as_an_error()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+
+            var streamer = new ScriptedStreamer();
+            streamer.Turns.Add(Chunks.OneToolCall("c1", "files__read", "{not valid json"));
+            streamer.Turns.Add(Chunks.Text("ok"));
+
+            var ui = new RecordingUi();
+            New(streamer, reg).RunTurn(new List<ChatMessage>(), "go", ui);
+
+            Assert.True(ui.ToolErrors[0]);
+            Assert.Contains("Invalid tool arguments", ui.ToolResults[0]);
+            Assert.Empty(ft.CalledTools);
+        }
+
+        [Fact]
+        public void Denied_call_is_not_executed()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+
+            var streamer = new ScriptedStreamer();
+            streamer.Turns.Add(Chunks.OneToolCall("c1", "files__read", "{}"));
+            streamer.Turns.Add(Chunks.Text("ok"));
+
+            var ui = new RecordingUi();
+            var orch = new McpChatOrchestrator(streamer, reg, new DenyAllApprovalPolicy(), "m", null);
+            orch.RunTurn(new List<ChatMessage>(), "go", ui);
+
+            Assert.True(ui.ToolErrors[0]);
+            Assert.Equal("[Call denied by user.]", ui.ToolResults[0]);
+            Assert.Empty(ft.CalledTools);
+        }
+
+        [Fact]
+        public void Streaming_error_stops_the_turn()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+
+            var streamer = new ScriptedStreamer();
+            streamer.ErrorMessage = "network down";
+            streamer.ErrorOnCall = 0;
+
+            var history = new List<ChatMessage>();
+            var ui = new RecordingUi();
+            New(streamer, reg).RunTurn(history, "go", ui);
+
+            Assert.Equal("network down", ui.Error);
+            Assert.False(ui.Completed);
+            Assert.Single(history); // only the user message was added
+        }
+    }
+
+    internal sealed class DenyAllApprovalPolicy : IToolApprovalPolicy
+    {
+        public ApprovalDecision Check(string functionName, JObject args) { return ApprovalDecision.Deny; }
+    }
+}

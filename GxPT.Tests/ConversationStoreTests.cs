@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using GxPT;
 using Xunit;
 
@@ -67,6 +68,70 @@ namespace GxPT.Tests
             Assert.Single(msg.Attachments);
             Assert.Equal("foo.txt", msg.Attachments[0].FileName);
             Assert.Contains("hello world", msg.Attachments[0].Content);
+        }
+
+        // ---- Newtonsoft migration (D16): tool-call persistence + backward compatibility ----
+
+        [Fact]
+        public void ToJson_then_Load_roundtrips_tool_calls_and_tool_messages()
+        {
+            var convo = new Conversation(null);
+            convo.Name = "T";
+            convo.History.Add(new ChatMessage("user", "read it"));
+
+            var asst = new ChatMessage("assistant", "");
+            asst.ToolCalls = new List<ToolCall> { new ToolCall("call_1", "files__read", "{\"path\":\"a\"}") };
+            convo.History.Add(asst);
+
+            var tool = new ChatMessage("tool", "file contents");
+            tool.ToolCallId = "call_1";
+            convo.History.Add(tool);
+
+            string json = ConversationStore.ToJson(convo);
+            var reload = ConversationStore.LoadFromJson(null, json);
+
+            Assert.Equal(3, reload.History.Count);
+
+            var a = reload.History[1];
+            Assert.NotNull(a.ToolCalls);
+            Assert.Single(a.ToolCalls);
+            Assert.Equal("call_1", a.ToolCalls[0].Id);
+            Assert.Equal("files__read", a.ToolCalls[0].Name);
+            Assert.Equal("{\"path\":\"a\"}", a.ToolCalls[0].ArgumentsJson);
+
+            var t = reload.History[2];
+            Assert.Equal("tool", t.Role);
+            Assert.Equal("call_1", t.ToolCallId);
+            Assert.Equal("file contents", t.Content);
+        }
+
+        [Fact]
+        public void ToJson_omits_tool_fields_for_plain_messages()
+        {
+            var convo = new Conversation(null);
+            convo.History.Add(new ChatMessage("user", "hi"));
+            string json = ConversationStore.ToJson(convo);
+            Assert.DoesNotContain("ToolCalls", json);
+            Assert.DoesNotContain("ToolCallId", json);
+        }
+
+        [Fact]
+        public void Load_legacy_file_without_tool_fields_has_null_tool_data()
+        {
+            string json = "{\"Name\":\"C\",\"Messages\":[{\"Role\":\"assistant\",\"Content\":\"hi\"}]}";
+            var convo = ConversationStore.LoadFromJson(null, json);
+            Assert.Null(convo.History[0].ToolCalls);
+            Assert.Null(convo.History[0].ToolCallId);
+        }
+
+        [Fact]
+        public void Load_parses_legacy_microsoft_date_format()
+        {
+            // Files written by the old JavaScriptSerializer used "\/Date(ms)\/" timestamps; Newtonsoft
+            // must still parse them so reloading pre-migration conversations preserves LastUpdated.
+            string json = "{\"Name\":\"C\",\"LastUpdated\":\"\\/Date(1700000000000)\\/\",\"Messages\":[]}";
+            var convo = ConversationStore.LoadFromJson(null, json);
+            Assert.Equal(2023, convo.LastUpdated.Year);
         }
     }
 }

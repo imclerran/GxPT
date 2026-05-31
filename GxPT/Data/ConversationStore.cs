@@ -2,8 +2,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Web.Script.Serialization;
 using System.Text;
+using Newtonsoft.Json;
 
 namespace GxPT
 {
@@ -11,6 +11,13 @@ namespace GxPT
     {
         private const string FolderName = "Conversations";
         private const string FileExt = ".json";
+
+        // Newtonsoft (D16): omit null members so non-tool messages keep their compact shape and
+        // existing files stay byte-compatible in spirit. Reads remain backward-compatible — the
+        // PascalCase property names match the previous JavaScriptSerializer output, and Newtonsoft
+        // parses both ISO and the legacy "\/Date(...)\/" timestamps.
+        private static readonly JsonSerializerSettings _jsonSettings =
+            new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore };
 
         // Per-file metadata cache for ListAll, so repeated sidebar refreshes don't re-read and
         // re-parse every conversation file. Entries are keyed by path and validated against the
@@ -71,19 +78,8 @@ namespace GxPT
         public static void Save(Conversation convo)
         {
             if (convo == null) return;
-            EnsureConversationId(convo);
-
-            var dto = new ConversationDto
-            {
-                Id = convo.Id,
-                Name = convo.Name,
-                SelectedModel = convo.SelectedModel,
-                LastUpdated = convo.LastUpdated,
-                Messages = convo.History.Select(m => new MessageDto { Role = m.Role, Content = m.Content, Attachments = (m.Attachments != null && m.Attachments.Count > 0) ? m.Attachments : null }).ToList()
-            };
-
-            var ser = new JavaScriptSerializer();
-            string json = ser.Serialize(dto);
+            string json = ToJson(convo);
+            if (json == null) return;
 
             string path = GetPathForId(convo.Id);
             if (string.IsNullOrEmpty(path)) return;
@@ -92,14 +88,53 @@ namespace GxPT
             FileSafe.WriteAllTextAtomic(path, json, new UTF8Encoding(false));
         }
 
+        // Serializes a conversation to its on-disk JSON (split out from Save so it is unit-testable
+        // without touching the filesystem).
+        internal static string ToJson(Conversation convo)
+        {
+            if (convo == null) return null;
+            EnsureConversationId(convo);
+
+            var dto = new ConversationDto
+            {
+                Id = convo.Id,
+                Name = convo.Name,
+                SelectedModel = convo.SelectedModel,
+                LastUpdated = convo.LastUpdated,
+                Messages = convo.History.Select(m => ToMessageDto(m)).ToList()
+            };
+            return JsonConvert.SerializeObject(dto, _jsonSettings);
+        }
+
+        private static MessageDto ToMessageDto(ChatMessage m)
+        {
+            var dto = new MessageDto
+            {
+                Role = m.Role,
+                Content = m.Content,
+                Attachments = (m.Attachments != null && m.Attachments.Count > 0) ? m.Attachments : null,
+                ToolCallId = m.ToolCallId
+            };
+            if (m.ToolCalls != null && m.ToolCalls.Count > 0)
+            {
+                var calls = new List<ToolCallDto>();
+                foreach (var c in m.ToolCalls)
+                {
+                    if (c == null) continue;
+                    calls.Add(new ToolCallDto { Id = c.Id, Name = c.Name, ArgumentsJson = c.ArgumentsJson });
+                }
+                dto.ToolCalls = calls;
+            }
+            return dto;
+        }
+
         public static Conversation Load(OpenRouterClient client, string path)
         {
             try
             {
                 if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
                 string json = File.ReadAllText(path);
-                var ser = new JavaScriptSerializer();
-                var dto = ser.Deserialize<ConversationDto>(json);
+                var dto = JsonConvert.DeserializeObject<ConversationDto>(json);
                 return FromDto(client, dto, path);
             }
             catch { return null; }
@@ -110,8 +145,7 @@ namespace GxPT
             try
             {
                 if (string.IsNullOrEmpty(json)) return null;
-                var ser = new JavaScriptSerializer();
-                var dto = ser.Deserialize<ConversationDto>(json);
+                var dto = JsonConvert.DeserializeObject<ConversationDto>(json);
                 return FromDto(client, dto, null);
             }
             catch { return null; }
@@ -146,7 +180,16 @@ namespace GxPT
                         atts = parsed;
                     }
                     // Add chat message directly to history (no naming trigger needed on load)
-                    convo.History.Add(new ChatMessage(role, content, atts));
+                    var cm = new ChatMessage(role, content, atts);
+                    cm.ToolCallId = m.ToolCallId;
+                    if (m.ToolCalls != null && m.ToolCalls.Count > 0)
+                    {
+                        var calls = new List<ToolCall>();
+                        foreach (var c in m.ToolCalls)
+                            if (c != null) calls.Add(new ToolCall(c.Id, c.Name, c.ArgumentsJson));
+                        cm.ToolCalls = calls;
+                    }
+                    convo.History.Add(cm);
                 }
             }
             return convo;
@@ -215,7 +258,7 @@ namespace GxPT
             try
             {
                 string json = File.ReadAllText(path);
-                var dto = new JavaScriptSerializer().Deserialize<ConversationMetaDto>(json);
+                var dto = JsonConvert.DeserializeObject<ConversationMetaDto>(json);
                 if (dto == null) return null;
                 return new ConversationListItem
                 {
@@ -281,6 +324,16 @@ namespace GxPT
             public string Role { get; set; }
             public string Content { get; set; }
             public List<AttachedFile> Attachments { get; set; }
+            // Tool-call loop (phase 4): assistant tool calls + the id a tool result answers.
+            public List<ToolCallDto> ToolCalls { get; set; }
+            public string ToolCallId { get; set; }
+        }
+
+        internal sealed class ToolCallDto
+        {
+            public string Id { get; set; }
+            public string Name { get; set; }
+            public string ArgumentsJson { get; set; }
         }
 
         // Extract attachments embedded using the delimiter format:

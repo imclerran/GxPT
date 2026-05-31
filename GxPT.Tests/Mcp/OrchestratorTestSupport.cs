@@ -1,0 +1,108 @@
+using System;
+using System.Collections.Generic;
+using System.Text;
+using GxPT;
+using Newtonsoft.Json.Linq;
+
+namespace GxPT.Tests.Mcp
+{
+    // Builds ChatCompletionChunks / chunk sequences ("turns") for driving the orchestrator.
+    internal static class Chunks
+    {
+        public static ChatCompletionChunk TextChunk(string content, string finish)
+        {
+            var c = new ChatCompletionChunk();
+            c.choices = new List<ChatCompletionChunk.Choice>();
+            var ch = new ChatCompletionChunk.Choice();
+            ch.delta = new ChatCompletionChunk.Delta { content = content };
+            ch.finish_reason = finish;
+            c.choices.Add(ch);
+            return c;
+        }
+
+        public static ChatCompletionChunk ToolChunk(int index, string id, string name, string args, string finish)
+        {
+            var c = new ChatCompletionChunk();
+            c.choices = new List<ChatCompletionChunk.Choice>();
+            var ch = new ChatCompletionChunk.Choice();
+            ch.delta = new ChatCompletionChunk.Delta();
+            ch.delta.tool_calls = new List<ToolCallDelta>();
+            ch.delta.tool_calls.Add(new ToolCallDelta
+            {
+                index = index,
+                id = id,
+                type = id != null ? "function" : null,
+                function = new FunctionDelta { name = name, arguments = args }
+            });
+            ch.finish_reason = finish;
+            c.choices.Add(ch);
+            return c;
+        }
+
+        public static ChatCompletionChunk[] Text(string content)
+        {
+            return new[] { TextChunk(content, "stop") };
+        }
+
+        public static ChatCompletionChunk[] OneToolCall(string id, string name, string args)
+        {
+            return new[] { ToolChunk(0, id, name, args, "tool_calls") };
+        }
+    }
+
+    // An IChatStreamer that replays scripted chunk sequences, one per StreamChat call, and records
+    // what it was asked to send. A Fallback supplies chunks once Turns is exhausted (e.g. an
+    // always-tool-call script for the iteration-cap test); an optional error can be injected.
+    internal sealed class ScriptedStreamer : IChatStreamer
+    {
+        public readonly List<ChatCompletionChunk[]> Turns = new List<ChatCompletionChunk[]>();
+        public Func<int, ChatCompletionChunk[]> Fallback;
+        public string ErrorMessage;   // when set, signal onError instead of streaming
+        public int ErrorOnCall = -1;  // -1 = every call; otherwise only this call index
+
+        public int Calls;
+        public readonly List<IList<ChatMessage>> SeenMessages = new List<IList<ChatMessage>>();
+        public readonly List<IList<JObject>> SeenTools = new List<IList<JObject>>();
+
+        public void StreamChat(string model, IList<ChatMessage> messages, IList<JObject> tools,
+                               ClientProperties props, Action<ChatCompletionChunk> onChunk, Action<string> onError)
+        {
+            int idx = Calls++;
+            SeenMessages.Add(messages);
+            SeenTools.Add(tools);
+
+            if (ErrorMessage != null && (ErrorOnCall < 0 || ErrorOnCall == idx))
+            {
+                if (onError != null) onError(ErrorMessage);
+                return;
+            }
+
+            ChatCompletionChunk[] chunks = idx < Turns.Count
+                ? Turns[idx]
+                : (Fallback != null ? Fallback(idx) : null);
+            if (chunks != null)
+                foreach (var ch in chunks)
+                    if (onChunk != null) onChunk(ch);
+        }
+    }
+
+    internal sealed class RecordingUi : IToolLoopUi
+    {
+        public readonly StringBuilder Text = new StringBuilder();
+        public readonly List<string> ToolCalls = new List<string>();
+        public readonly List<string> ToolResults = new List<string>();
+        public readonly List<bool> ToolErrors = new List<bool>();
+        public string Error;
+        public bool Completed;
+
+        public void AppendTextDelta(string text) { Text.Append(text); }
+        public void OnToolCall(string functionName, string argumentsJson) { ToolCalls.Add(functionName); }
+        public void OnToolResult(string functionName, string resultText, bool isError)
+        {
+            ToolResults.Add(resultText);
+            ToolErrors.Add(isError);
+        }
+        public void OnError(string message) { Error = message; }
+        public void Complete() { Completed = true; }
+    }
+}
