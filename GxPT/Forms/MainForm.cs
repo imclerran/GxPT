@@ -18,6 +18,8 @@ namespace GxPT
     public partial class MainForm : Form
     {
         private OpenRouterClient _client;
+        private McpHost _mcpHost;
+        private McpToolRegistry _mcpRegistry;
         private const string HelpApiKeysId = "help:api_keys";
         private const string HelpPrivacyId = "help:privacy";
 
@@ -247,6 +249,10 @@ namespace GxPT
                 string activeId = GetActiveConversationId();
                 SessionState.SaveOpenTabs(openIds, activeId);
             }
+            catch { }
+
+            // Shut down MCP servers (close stdio children / HTTP sessions).
+            try { if (_mcpHost != null) _mcpHost.Dispose(); }
             catch { }
         }
 
@@ -680,6 +686,80 @@ namespace GxPT
                 }
             }
             catch { }
+
+            // (Re)build the MCP host from the current settings (toggles, web-search key, GitHub PAT,
+            // and mcp.json custom servers). Connecting happens on a background thread.
+            RebuildMcpHost();
+        }
+
+        // Assembles MCP server specs from settings and (re)starts the host. Safe to call repeatedly
+        // (e.g. after Settings is saved). Workdir-independent servers (web + GitHub + custom) connect
+        // here; files/git/command are deferred until a working-directory UX exists.
+        private void RebuildMcpHost()
+        {
+            try
+            {
+                // Tear down any previous host (servers from the old settings).
+                if (_mcpHost != null)
+                {
+                    try { _mcpHost.Dispose(); }
+                    catch { }
+                    _mcpHost = null;
+                }
+
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string curlPath = System.IO.Path.Combine(baseDir, "Lib\\curl.exe");
+                string caBundle = System.IO.Path.Combine(baseDir, "Lib\\curl-ca-bundle.crt");
+
+                var opts = new McpConfig.BuiltInOptions();
+                opts.WebEnabled = AppSettings.GetBool("mcp_web_enabled", false);
+                opts.FilesEnabled = AppSettings.GetBool("mcp_files_enabled", false);
+                opts.GitEnabled = AppSettings.GetBool("mcp_git_enabled", false);
+                opts.CommandEnabled = AppSettings.GetBool("mcp_command_enabled", false);
+                opts.WebSearchKey = AppSettings.GetString("mcp_websearch_key");
+                opts.CurlPath = curlPath;
+                opts.ServerDir = baseDir; // server exes expected alongside GxPT.exe (deployed later)
+
+                var specs = new List<McpServerSpec>(McpConfig.BuiltInSpecs(opts));
+                specs.Add(McpConfig.GitHubSpec(
+                    AppSettings.GetBool("mcp_github_enabled", false),
+                    AppSettings.GetString("mcp_github_pat")));
+
+                // Custom servers from mcp.json (GitHub is configured above, not here).
+                try
+                {
+                    string mcpFile = System.IO.Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                        "GxPT\\mcp.json");
+                    if (System.IO.File.Exists(mcpFile))
+                    {
+                        string mcpText = System.IO.File.ReadAllText(mcpFile);
+                        specs.AddRange(McpConfig.ParseUserServers(mcpText, LoggerSink.Instance));
+                    }
+                }
+                catch { }
+
+                var clientInfo = new Mcp35.Core.Protocol.Implementation();
+                clientInfo.Name = "GxPT";
+                clientInfo.Version = "1.0";
+
+                _mcpRegistry = new McpToolRegistry(McpToolRegistry.DefaultRevealCap, LoggerSink.Instance);
+                var connector = new DefaultServerConnector(clientInfo, curlPath, caBundle, LoggerSink.Instance);
+                _mcpHost = new McpHost(connector, _mcpRegistry, LoggerSink.Instance);
+
+                // Connecting (handshakes / process spawns) can block — do it off the UI thread.
+                McpHost hostRef = _mcpHost;
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                {
+                    try { hostRef.Start(specs); }
+                    catch (Exception ex) { try { Logger.Log("mcp", "host start failed: " + ex.Message); } catch { } }
+                });
+            }
+            catch (Exception ex)
+            {
+                try { Logger.Log("mcp", "RebuildMcpHost failed: " + ex.Message); }
+                catch { }
+            }
         }
 
         // Build a context for the existing designer tab (tabPage1 + chatTranscript)
@@ -1070,6 +1150,13 @@ namespace GxPT
                             catch { providerAllow = true; }
                         }
 
+                        if (_mcpRegistry != null && _mcpRegistry.HasTools)
+                        {
+                            // MCP enabled with tools available: run the tool-call loop.
+                            RunMcpToolTurn(ctx, modelToUse, providerAllow, sbLock, assistantBuilder, assistantIndex, renderTimer);
+                        }
+                        else
+                        {
                         _client.CreateCompletionStream(
                             modelToUse,
                             snapshot,
@@ -1120,6 +1207,7 @@ namespace GxPT
                                 });
                             }
                         );
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -1142,6 +1230,65 @@ namespace GxPT
                 ctx.IsSending = false;
                 throw;
             }
+        }
+
+        // Runs one MCP tool-call turn synchronously (called on the send worker thread). The
+        // orchestrator streams model text + inline tool markers into assistantBuilder (rendered by the
+        // UI timer) and appends the structured assistant/tool messages to the conversation history;
+        // Complete/Error finalize on the UI thread (no extra AddAssistantMessage — already added).
+        private void RunMcpToolTurn(TabManager.ChatTabContext ctx, string model, bool providerAllow, object sbLock,
+                                    StringBuilder assistantBuilder, int assistantIndex,
+                                    System.Windows.Forms.Timer renderTimer)
+        {
+            var orch = new McpChatOrchestrator(_client, _mcpRegistry, new AllowAllApprovalPolicy(),
+                                               model, LoggerSink.Instance);
+            orch.ProviderDataCollectionAllowed = providerAllow;
+            orch.RequestMessageTransform = delegate(IList<ChatMessage> h)
+            {
+                List<ChatMessage> asList = h as List<ChatMessage>;
+                if (asList == null) asList = new List<ChatMessage>(h);
+                return BuildMessagesForModel(asList);
+            };
+
+            Action<string> onAppend = delegate(string t)
+            {
+                lock (sbLock) { assistantBuilder.Append(t); }
+            };
+            Action onComplete = delegate
+            {
+                string finalText;
+                lock (sbLock) { finalText = assistantBuilder.ToString(); }
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    try { renderTimer.Stop(); renderTimer.Dispose(); }
+                    catch { }
+                    try { ctx.Transcript.StickToBottomDuringStreaming = false; }
+                    catch { }
+                    ctx.Transcript.UpdateMessageAt(assistantIndex, finalText);
+                    // The orchestrator already appended assistant/tool messages to History.
+                    ctx.Conversation.SelectedModel = ctx.SelectedModel;
+                    if (!ctx.NoSaveUntilUserSend) ConversationStore.Save(ctx.Conversation);
+                    ctx.IsSending = false;
+                    if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
+                });
+            };
+            Action<string> onErr = delegate(string err)
+            {
+                if (string.IsNullOrEmpty(err)) err = "Unknown error.";
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    try { renderTimer.Stop(); renderTimer.Dispose(); }
+                    catch { }
+                    try { ctx.Transcript.StickToBottomDuringStreaming = false; }
+                    catch { }
+                    string cur; lock (sbLock) { cur = assistantBuilder.ToString(); }
+                    ctx.Transcript.UpdateMessageAt(assistantIndex,
+                        (cur.Length > 0 ? cur + "\r\n\r\n" : string.Empty) + "Error: " + err);
+                    ctx.IsSending = false;
+                });
+            };
+
+            orch.RunTurn(ctx.Conversation.History, new DelegateToolLoopUi(onAppend, onComplete, onErr));
         }
 
         // Build a list of messages for the model, appending any attachments to the user message content
@@ -1169,7 +1316,11 @@ namespace GxPT
                     }
                     content = sb.ToString();
                 }
-                list.Add(new ChatMessage(m.Role, content));
+                var nm = new ChatMessage(m.Role, content);
+                // Preserve tool-call linkage so this is safe as the orchestrator's request transform.
+                nm.ToolCalls = m.ToolCalls;
+                nm.ToolCallId = m.ToolCallId;
+                list.Add(nm);
             }
             return list;
         }

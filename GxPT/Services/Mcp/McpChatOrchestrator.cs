@@ -33,6 +33,10 @@ namespace GxPT
         // preserve assistant ToolCalls and tool-role ToolCallId.
         public Func<IList<ChatMessage>, IList<ChatMessage>> RequestMessageTransform { get; set; }
 
+        // Provider data-collection (ZDR) preference applied to every request in the turn. Null leaves
+        // it unset (provider default).
+        public bool? ProviderDataCollectionAllowed { get; set; }
+
         public McpChatOrchestrator(IChatStreamer streamer, McpToolRegistry registry,
                                    IToolApprovalPolicy approval, string model, ILogSink log)
             : this(streamer, registry, approval, model, log, DefaultMaxIterations, DefaultCallTimeoutMs)
@@ -86,6 +90,7 @@ namespace GxPT
 
                 ClientProperties props = new ClientProperties();
                 props.Stream = true;
+                props.ProviderDataCollectionAllowed = ProviderDataCollectionAllowed;
 
                 Action<string> textSink = (ui != null) ? new Action<string>(ui.AppendTextDelta) : null;
                 ToolCallAssembler asm = new ToolCallAssembler(textSink);
