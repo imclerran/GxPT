@@ -4,7 +4,7 @@
     Tests for GitMcpServer (phase 7). Links Core + Server + the GitMcpServer sources and drives
     Run(stdin, stdout) via the scripted-stream harness. git is stubbed via GXPT_GIT_PATH pointing
     at a fake script that echoes its argv and stdin, so we can assert how the command line was
-    constructed (discrete tokens, message via stdin, path after --). Targets net48.
+    constructed (discrete tokens, message via stdin, path after the pathspec separator). Targets net48.
 
     Program.Main is excluded (second entry point would clash with the test host).
     NOTE: intentionally NOT in GxPT.sln.
