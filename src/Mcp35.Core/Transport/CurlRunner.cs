@@ -54,10 +54,15 @@ namespace Mcp35.Core.Transport
                         stderr = e.ReadToEnd();
                     WaitWithTimeout(p, req.TimeoutMs);
 
+                    // curl's -w status marker is written to stdout after the body; split it off
+                    // so it neither pollutes Body nor is mistaken for response content.
+                    int status;
+                    body = SplitStatusMarker(body, out status);
+
                     CurlResult result = new CurlResult();
                     result.Body = body;
                     result.Stderr = stderr;
-                    result.HttpStatus = ParseHttpStatus(stderr);
+                    result.HttpStatus = status;
                     return result;
                 }
             }
@@ -138,8 +143,10 @@ namespace Mcp35.Core.Transport
             // -sS: silent but still show errors; --fail-with-body: fail on HTTP errors but keep body.
             sb.Append("-sS --fail-with-body ");
 
-            // Surface the HTTP status on stderr in a parseable form (kept off the body).
-            sb.Append("-w \"\\nHTTP_STATUS:%{http_code}\" ");
+            // For buffered requests, append the HTTP status as a trailing stdout marker we split
+            // off afterwards. Skip it when streaming so it can't be mistaken for an SSE line.
+            if (!streaming)
+                sb.Append("-w \"").Append(StatusMarker).Append("%{http_code}\" ");
 
             if (!string.IsNullOrEmpty(_caBundlePath))
                 sb.Append("--cacert \"").Append(_caBundlePath).Append("\" ");
@@ -229,18 +236,40 @@ namespace Mcp35.Core.Transport
             }
         }
 
-        private static int ParseHttpStatus(string stderr)
+        /// <summary>
+        /// The trailing stdout marker our <c>-w</c> appends; e.g. "__GXPT_HTTP_STATUS__200".
+        /// Deliberately alphanumeric+underscore (no shell metacharacters) so it survives being
+        /// emitted by any shell/echo and is vanishingly unlikely to collide with real body content.
+        /// </summary>
+        private const string StatusMarker = "__GXPT_HTTP_STATUS__";
+
+        /// <summary>
+        /// Find the trailing status marker in curl's stdout, parse the code, and return the body
+        /// with the marker removed. If the marker is absent (e.g. curl never ran), returns the
+        /// input unchanged with status 0.
+        /// </summary>
+        private static string SplitStatusMarker(string stdout, out int status)
         {
-            if (string.IsNullOrEmpty(stderr)) return 0;
-            const string marker = "HTTP_STATUS:";
-            int i = stderr.LastIndexOf(marker, StringComparison.Ordinal);
-            if (i < 0) return 0;
-            int start = i + marker.Length;
+            status = 0;
+            if (string.IsNullOrEmpty(stdout)) return stdout;
+
+            int i = stdout.LastIndexOf(StatusMarker, StringComparison.Ordinal);
+            if (i < 0) return stdout;
+
+            int start = i + StatusMarker.Length;
             int end = start;
-            while (end < stderr.Length && char.IsDigit(stderr[end])) end++;
-            if (end == start) return 0;
-            int code;
-            return int.TryParse(stderr.Substring(start, end - start), out code) ? code : 0;
+            while (end < stdout.Length && char.IsDigit(stdout[end])) end++;
+            if (end > start)
+            {
+                int code;
+                if (int.TryParse(stdout.Substring(start, end - start), out code)) status = code;
+            }
+
+            // Strip the marker (and a single preceding newline, if present) from the body.
+            int cut = i;
+            if (cut > 0 && stdout[cut - 1] == '\n') cut--;
+            if (cut > 0 && stdout[cut - 1] == '\r') cut--;
+            return stdout.Substring(0, cut);
         }
 
         private string WriteTempFile(string prefix, string ext, string content)

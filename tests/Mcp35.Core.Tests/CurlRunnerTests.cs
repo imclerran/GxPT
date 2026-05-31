@@ -31,18 +31,23 @@ namespace Mcp35.Core.Tests
             try { Directory.Delete(_dir, true); } catch { }
         }
 
-        /// <summary>Write a fake curl that prints the given body then the HTTP_STATUS marker line.</summary>
+        // Mirrors CurlRunner's internal status marker (kept in sync intentionally).
+        private const string StatusMarker = "__GXPT_HTTP_STATUS__";
+
+        /// <summary>
+        /// Write a fake "curl" that prints the body followed by the status marker — exactly what
+        /// CurlRunner's real <c>-w</c> appends to stdout. The runner then splits the marker off.
+        /// </summary>
         private string FakeCurl(string body, int status)
         {
             if (IsWindows)
             {
                 string path = Path.Combine(_dir, "fakecurl.cmd");
-                // @echo off; print body; then the -w style status line.
+                // echo prints the body + CRLF; the second echo prints the marker line.
                 string script =
                     "@echo off\r\n" +
-                    "<nul set /p=" + body + "\r\n" +
-                    "echo.\r\n" +
-                    "<nul set /p=HTTP_STATUS:" + status + "\r\n";
+                    "echo " + body + "\r\n" +
+                    "echo " + StatusMarker + status + "\r\n";
                 File.WriteAllText(path, script);
                 return path;
             }
@@ -51,7 +56,8 @@ namespace Mcp35.Core.Tests
                 string path = Path.Combine(_dir, "fakecurl.sh");
                 string script =
                     "#!/bin/sh\n" +
-                    "printf '%s\\nHTTP_STATUS:" + status + "' '" + body.Replace("'", "'\\''") + "'\n";
+                    "echo '" + body.Replace("'", "'\\''") + "'\n" +
+                    "printf '%s%d' '" + StatusMarker + "' " + status + "\n";
                 File.WriteAllText(path, script);
                 try { System.Diagnostics.Process.Start("/bin/chmod", "+x \"" + path + "\"").WaitForExit(); } catch { }
                 return path;
@@ -77,6 +83,8 @@ namespace Mcp35.Core.Tests
 
             Assert.Contains("{\"ok\":true}", result.Body);
             Assert.Equal(200, result.HttpStatus);
+            // The status marker must be split off, not left polluting the body.
+            Assert.DoesNotContain(StatusMarker, result.Body);
         }
 
         [Fact]
