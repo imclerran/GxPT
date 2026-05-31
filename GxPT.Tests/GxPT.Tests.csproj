@@ -37,6 +37,7 @@
     <Compile Include="..\GxPT\Models\Conversation.cs" Link="Linked\Conversation.cs" />
     <Compile Include="..\GxPT\Models\ChatModels.cs" Link="Linked\ChatModels.cs" />
     <Compile Include="..\GxPT\Services\OpenRouterClient.cs" Link="Linked\OpenRouterClient.cs" />
+    <Compile Include="..\GxPT\Services\Mcp\ToolCallAssembler.cs" Link="Linked\Mcp\ToolCallAssembler.cs" />
     <Compile Include="..\GxPT\Services\Logger.cs" Link="Linked\Logger.cs" />
     <Compile Include="..\GxPT\Services\AppSettings.cs" Link="Linked\AppSettings.cs" />
   </ItemGroup>
