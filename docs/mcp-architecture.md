@@ -492,7 +492,7 @@ the Consolas `rtbJson` RichTextBox):
 4. **Tool-call loop** + OpenRouter `tools`/`tool_calls` — first real
    end-to-end invocation. → **Detailed in [`mcp35-toolloop-spec.md`](mcp35-toolloop-spec.md).**
 5. **Tool discovery**: names manifest + `reveal_tools` (define-on-demand + LRU
-   cap).
+   cap). → **Detailed in [`mcp35-discovery-spec.md`](mcp35-discovery-spec.md).**
    → *Split `Mcp35.*` into its own repo here once the API is stable.*
 6. **Approval tiers** (gate Command / git writes).
 7. **Four servers**, riskiest last: Files → Serper → Git → Command.
@@ -530,9 +530,9 @@ the Consolas `rtbJson` RichTextBox):
 
 **Still open:**
 - **Reveal cap value**: how many tool defs may ride in `tools` at once before
-  LRU eviction kicks in — tune empirically.
-- **Manifest refresh cadence**: rebuilt per request vs cached until a server's
-  `tools/list` changes.
+  LRU eviction kicks in — tune empirically (≈16–32).
+- ~~Manifest refresh cadence~~ → *resolved*: cache the manifest string, rebuild
+  lazily on the next request after a catalog mutation (discovery spec §13).
 
 **Deferred:**
 - A `search_tools(query)` fallback ranking over the host's internal cache, to
