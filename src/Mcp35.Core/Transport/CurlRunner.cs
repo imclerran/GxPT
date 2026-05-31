@@ -16,7 +16,7 @@ namespace Mcp35.Core.Transport
     /// in Core without a native build dependency. Shared by the client's HttpTransport (phase 8)
     /// and WebSearchMcpServer (phase 7). See mcp35-core-spec.md §6.
     /// </summary>
-    public sealed class CurlRunner
+    public sealed class CurlRunner : ICurlRunner
     {
         // No BOM; the request body / config must be plain UTF-8 for curl.
         private static readonly UTF8Encoding Utf8NoBom = new UTF8Encoding(false);
@@ -42,7 +42,12 @@ namespace Mcp35.Core.Transport
             List<string> tempFiles = new List<string>();
             try
             {
-                string args = BuildArgs(req, false, tempFiles);
+                // Capture response headers to a temp file via -D so callers can read Content-Type,
+                // Mcp-Session-Id, etc. (needed by HttpTransport).
+                string headerPath = WriteTempFile("gxpt_curlhdr_", ".txt", string.Empty);
+                if (headerPath != null) tempFiles.Add(headerPath);
+
+                string args = BuildArgs(req, false, tempFiles, headerPath);
                 ProcessStartInfo psi = NewStartInfo(args);
 
                 using (Process p = Process.Start(psi))
@@ -63,6 +68,7 @@ namespace Mcp35.Core.Transport
                     result.Body = body;
                     result.Stderr = stderr;
                     result.HttpStatus = status;
+                    result.Headers = ReadHeaders(headerPath);
                     return result;
                 }
             }
@@ -84,7 +90,7 @@ namespace Mcp35.Core.Transport
             List<string> tempFiles = new List<string>();
             try
             {
-                string args = BuildArgs(req, true, tempFiles);
+                string args = BuildArgs(req, true, tempFiles, null);
                 ProcessStartInfo psi = NewStartInfo(args);
 
                 using (Process p = Process.Start(psi))
@@ -137,7 +143,7 @@ namespace Mcp35.Core.Transport
 
         // ---- argument construction ----
 
-        private string BuildArgs(CurlRequest req, bool streaming, List<string> tempFiles)
+        private string BuildArgs(CurlRequest req, bool streaming, List<string> tempFiles, string headerDumpPath)
         {
             StringBuilder sb = new StringBuilder();
             // -sS: silent but still show errors; --fail-with-body: fail on HTTP errors but keep body.
@@ -147,6 +153,10 @@ namespace Mcp35.Core.Transport
             // off afterwards. Skip it when streaming so it can't be mistaken for an SSE line.
             if (!streaming)
                 sb.Append("-w \"").Append(StatusMarker).Append("%{http_code}\" ");
+
+            // -D dumps response headers to a file so the caller can read them (Content-Type, etc.).
+            if (!string.IsNullOrEmpty(headerDumpPath))
+                sb.Append("-D \"").Append(headerDumpPath).Append("\" ");
 
             if (!string.IsNullOrEmpty(_caBundlePath))
                 sb.Append("--cacert \"").Append(_caBundlePath).Append("\" ");
@@ -302,6 +312,43 @@ namespace Mcp35.Core.Transport
                 catch (Exception ex) { _log.Log("curl", "temp cleanup: " + ex.Message); }
             }
         }
+
+        /// <summary>
+        /// Parse curl's -D header dump into a case-insensitive map. On a redirect or multiple
+        /// response blocks, later "Name: value" lines win (the final response's headers). The
+        /// HTTP status line(s) are ignored.
+        /// </summary>
+        private Dictionary<string, string> ReadHeaders(string headerPath)
+        {
+            Dictionary<string, string> headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrEmpty(headerPath)) return headers;
+
+            string text;
+            try
+            {
+                if (!File.Exists(headerPath)) return headers;
+                text = File.ReadAllText(headerPath, Utf8Decode);
+            }
+            catch (Exception ex)
+            {
+                _log.Log("curl", "header read failed: " + ex.Message);
+                return headers;
+            }
+
+            string[] lines = text.Replace("\r\n", "\n").Split('\n');
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i];
+                if (line.Length == 0) continue;
+                if (line.StartsWith("HTTP/", StringComparison.OrdinalIgnoreCase)) continue; // status line
+                int colon = line.IndexOf(':');
+                if (colon <= 0) continue;
+                string name = line.Substring(0, colon).Trim();
+                string value = line.Substring(colon + 1).Trim();
+                if (name.Length > 0) headers[name] = value; // last wins across redirect blocks
+            }
+            return headers;
+        }
     }
 
     /// <summary>A curl request: URL + method + optional JSON body and headers.</summary>
@@ -327,5 +374,16 @@ namespace Mcp35.Core.Transport
         public int HttpStatus;
         public string Body;
         public string Stderr;
+
+        /// <summary>Response headers (case-insensitive). Populated by the buffered <see cref="CurlRunner.Run"/>.</summary>
+        public IDictionary<string, string> Headers;
+
+        /// <summary>Get a response header value, or null if absent. Case-insensitive.</summary>
+        public string GetHeader(string name)
+        {
+            string v;
+            if (Headers != null && Headers.TryGetValue(name, out v)) return v;
+            return null;
+        }
     }
 }

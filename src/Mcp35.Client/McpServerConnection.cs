@@ -30,6 +30,14 @@ namespace Mcp35.Client
         private List<Tool> _toolsCache;
         private bool _toolsDirty = true;
 
+        /// <summary>
+        /// Optional minimum acceptable negotiated protocol version (inclusive). null = accept any
+        /// (stdio default; framing is identical across revisions). The host sets this to
+        /// <c>ProtocolVersions.HttpFloor</c> for HTTP connections, where older dual-endpoint
+        /// transports are unsupported (mcp35-http-spec.md §3).
+        /// </summary>
+        public string MinProtocolVersion;
+
         public event EventHandler<ConnectionStateEventArgs> StateChanged;
         public event EventHandler ToolsChanged;
 
@@ -225,9 +233,13 @@ namespace Mcp35.Client
 
         private bool IsAcceptableVersion(string negotiated)
         {
-            // Stdio accepts any returned version (framing is identical across revisions).
-            // HTTP's >= HttpFloor gate is enforced by HttpTransport/host in phase 8.
-            return !string.IsNullOrEmpty(negotiated);
+            if (string.IsNullOrEmpty(negotiated)) return false;
+            // Stdio accepts any returned version (framing is identical across revisions). HTTP sets
+            // MinProtocolVersion = HttpFloor; the date-shaped version strings sort lexicographically,
+            // so an ordinal compare is a correct >= test.
+            if (!string.IsNullOrEmpty(MinProtocolVersion))
+                return string.CompareOrdinal(negotiated, MinProtocolVersion) >= 0;
+            return true;
         }
 
         private static JsonSerializer Serializer()

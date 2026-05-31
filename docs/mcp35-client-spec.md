@@ -101,12 +101,14 @@ pending calls and `StdioTransport` reports `IsConnected == false`;
 
 ---
 
-## 3. `HttpTransport` (phase 8 — placeholder)
+## 3. `HttpTransport` (implemented — phase 8)
 
-Lives here for symmetry but is specified in the phase-8 work: `IRpcTransport`
-implemented directly over Core's `CurlRunner` + `SseParser` (one POST = one
-correlated response; no `JsonRpcPeer` needed). In phase 3 it is an unimplemented
-stub so `McpServerConnection` can be written transport-agnostically.
+`IRpcTransport` implemented directly over Core's `CurlRunner` + `SseParser` (one
+POST = one correlated response; no `JsonRpcPeer` needed). It was an unimplemented
+stub in phase 3 so `McpServerConnection` could be written transport-agnostically;
+phase 8 fills it in. See `mcp35-http-spec.md` for the full contract (session +
+version headers, `Content-Type` branching, `DELETE` teardown, the HTTP version
+floor enforced via `McpServerConnection.MinProtocolVersion`).
 
 ---
 
