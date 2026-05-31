@@ -42,16 +42,22 @@ namespace GxPT
 
         internal sealed class BuiltInOptions
         {
-            public bool WebEnabled;
-            public bool FilesEnabled;
-            public bool GitEnabled;
-            public bool CommandEnabled;
+            public bool WebEnabled { get; set; }
+            public bool FilesEnabled { get; set; }
+            public bool GitEnabled { get; set; }
+            public bool CommandEnabled { get; set; }
 
-            public string WebSearchKey;            // GXPT_WEB_SEARCH_KEY (web)
-            public string CurlPath;                // GXPT_CURL_PATH (web)
-            public string GitPath = "git";         // GXPT_GIT_PATH (git)
-            public string CmdShell = "cmd.exe";    // GXPT_CMD_SHELL (command)
-            public string ServerDir;               // directory holding the built server exes
+            public string WebSearchKey { get; set; }   // GXPT_WEB_SEARCH_KEY (web)
+            public string CurlPath { get; set; }        // GXPT_CURL_PATH (web)
+            public string GitPath { get; set; }         // GXPT_GIT_PATH (git)
+            public string CmdShell { get; set; }        // GXPT_CMD_SHELL (command)
+            public string ServerDir { get; set; }       // directory holding the built server exes
+
+            public BuiltInOptions()
+            {
+                GitPath = "git";
+                CmdShell = "cmd.exe";
+            }
         }
 
         public static IList<McpServerSpec> BuiltInSpecs(BuiltInOptions o)
