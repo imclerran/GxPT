@@ -251,15 +251,25 @@ Passing this unblocks phase 4 (the tool-call loop).
 
 ---
 
-## 9. Open questions (Client / host)
+## 9. Server-lifecycle decisions (resolved)
 
-- **Connection open timing (server lifecycle)** — eager (open enabled servers
-  when a chat opens) vs lazy (open on first tool need)? Deferred to the
-  server-lifecycle design; leaning **lazy with a warm-keepalive**, but it's a
-  host-policy decision, not a Client-library one.
-- **Restart/disable on fault** — host policy: auto-restart a crashed stdio
-  server N times, or mark disabled + surface to the user? (Lifecycle work.)
-- **Startup timeout defaults** — `initializeTimeoutMs` / call timeouts; tune
-  empirically (stdio cold-start vs HTTP latency differ).
-- **Inbound server→client requests** — handled by Core's `JsonRpcPeer`
-  (auto-`ping`, `-32601` otherwise); the connection just logs them in phase 3.
+All host policy (the Client library stays mechanism-only); these set the
+defaults the `McpHost` implements.
+
+- **Connection open timing** — *resolved*: **lazy open + warm keepalive**. A
+  server isn't spawned/handshaken until the catalog is first needed (the model
+  is offered tools / a call resolves to it); once open it **stays open** across
+  turns (no per-turn re-handshake) until the chat closes or it faults. Avoids
+  paying cold-start for servers a given chat never uses, without re-init churn.
+- **Restart/disable on fault** — *resolved*: **auto-restart a crashed stdio
+  server up to 2× per session**, then **mark it disabled and surface that to the
+  user** (a status indicator), rather than retrying forever. An HTTP server that
+  faults is marked disabled immediately (re-enable is user-driven). A disabled
+  server drops out of the catalog so the model stops being offered its tools.
+- **Startup / call timeout defaults** — *resolved*: `initializeTimeoutMs`
+  **10 s** (stdio cold-start headroom), default `tools/call` timeout **60 s**;
+  both named constants, **tunable** without a design change. HTTP handshakes use
+  the same init timeout.
+- **Inbound server→client requests** — *resolved*: handled by Core's
+  `JsonRpcPeer` (auto-`ping`, `-32601` otherwise); the connection just logs them
+  (no sampling/roots/elicitation in scope).

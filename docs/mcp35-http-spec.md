@@ -213,17 +213,17 @@ HTTP GitHub, behind one registry, one approval gate, one tool-call loop.
 
 ---
 
-## 8. Decisions to confirm
+## 8. Resolved decisions
 
-1. **Session expiry on 404** — *recommended*: **fault, don't auto-reinitialize**
-   (simplest; the host can re-open). (Alt: transparently re-handshake and replay
-   — more robust but adds reconnect state to a deliberately stateless transport.)
-2. **Standalone GET listening stream** — *recommended*: **out of scope** (no
-   unsolicited server→client messages; inbound only on POST SSE). (Alt: add the
-   GET stream for full duplex — only needed if we later support
-   sampling/roots/elicitation.)
-3. **Per-call retry** — *recommended*: **none in the transport** (tool calls are
-   user-visible and gated; silent retries could double a side effect). (Alt:
-   bounded retry on idempotent reads only.)
-4. **CA bundle** — *recommended*: inject the same CA-bundle path the OpenRouter
-   curl path already uses (one source of truth). (Alt: a dedicated MCP bundle.)
+1. **Session expiry on 404** — **resolved**: **fault, don't auto-reinitialize**.
+   A post-init `404` faults the connection; re-opening is a host decision. Keeps
+   `HttpTransport` deliberately stateless — no reconnect/replay machinery.
+2. **Standalone GET listening stream** — **resolved**: **out of scope**. Inbound
+   messages are handled only when they arrive on a POST's own SSE response;
+   GitHub is request/response, and we don't yet support
+   sampling/roots/elicitation that would need unsolicited server→client streams.
+3. **Per-call retry** — **resolved**: **none in the transport**. Tool calls are
+   user-visible and gated; a silent retry could double a side effect. Any retry
+   policy is a host concern, not the transport's.
+4. **CA bundle** — **resolved**: inject the **same CA-bundle path** the existing
+   OpenRouter curl path uses (one source of truth) — no dedicated MCP bundle.

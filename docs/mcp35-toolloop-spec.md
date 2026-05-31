@@ -307,16 +307,19 @@ phase 8 adds GitHub over HTTP.
 
 ---
 
-## 12. Open questions / decisions
+## 12. Resolved decisions
 
 - ~~Conversation persistence of tool messages~~ — *resolved*: **persist** (extend
   `ConversationStore` schema; migrate it to Newtonsoft, D16) for correct context
   on reload.
 - ~~Host JSON library~~ — *resolved*: **Newtonsoft** for the OpenRouter/MCP path
   + `ConversationStore`; `AppSettings` deferred (D16).
-- **Serial vs parallel tool execution within a turn** — serial in phase 4;
-  parallel later if latency warrants.
-- **`MaxIterations` default** — 8? tune.
-- **Non-text content blocks** in tool results — minimal textual placeholder in
-  phase 4; richer (inline images/resources) later.
-- **`tool_choice`** — leave at `auto`; do we ever force a tool? (Not in phase 4.)
+- ~~Serial vs parallel tool execution within a turn~~ — *resolved*: **serial** in
+  phase 4 (one call fully handled before the next; matches the server SDK's serial
+  dispatch); parallel only if latency later warrants.
+- ~~`MaxIterations` default~~ — *resolved*: **8**, a named constant (tunable). A
+  turn that hits the cap returns with a note rather than looping unbounded.
+- ~~Non-text content blocks~~ — *resolved*: a **minimal textual placeholder** in
+  phase 4 (e.g. `[image]` / `[resource: <uri>]`); richer inline rendering later.
+- ~~`tool_choice`~~ — *resolved*: leave at **`auto`**; no forced-tool path in
+  phase 4.

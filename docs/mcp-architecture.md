@@ -538,9 +538,10 @@ the Consolas `rtbJson` RichTextBox):
   batch `reveal_tools` (multi-reveal for ambiguity); no free-text search tool —
   deferred until/if the catalog grows huge (D4).
 
-**Still open:**
-- **Reveal cap value**: how many tool defs may ride in `tools` at once before
-  LRU eviction kicks in — tune empirically (≈16–32).
+**Resolved:**
+- ~~Reveal cap value~~ → *resolved*: default `_revealCap = 24` (mid of the
+  16–32 range), exposed as a named constant so it stays **tunable** without a
+  design change. LRU eviction kicks in past 24 revealed defs.
 - ~~Manifest refresh cadence~~ → *resolved*: cache the manifest string, rebuild
   lazily on the next request after a catalog mutation (discovery spec §13).
 

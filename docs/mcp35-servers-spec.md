@@ -246,19 +246,19 @@ feature is end-to-end.
 
 ---
 
-## 9. Decisions to confirm
+## 9. Resolved decisions
 
-1. **Files write/delete granularity** — *recommended*: `write` is path-scoped and
-   `delete` is files + **empty** dirs only (no recursive delete) — the smallest
-   blast radius per approved call. (Looser alt: allow recursive `delete` with a
-   louder gate.)
-2. **Command shell vs argv** — *recommended*: run via `cmd.exe /c <command>` (a
-   shell line, matching what the user approved verbatim). (Stricter alt: require
-   the model to pass an argv array and **never** invoke a shell — safer against
-   shell metacharacters, but breaks pipes/redirects users expect.)
-3. **Read range/paging** — *recommended*: phase-7 `read` is whole-file with a size
-   cap + `Error` over it; add `offset`/`limit` later if needed. (Alt: ship range
-   reads now.)
-4. **Serper result shape** — *recommended*: condense to `organic[] {title, link,
-   snippet}` + answer/knowledge boxes. (Alt: pass the raw Serper JSON through —
-   bigger context cost, more for the model to parse.)
+1. **Files write/delete granularity** — **resolved**: `write` is path-scoped
+   (Argument(`path`)); `delete` handles files + **empty** dirs only (no recursive
+   delete) — the smallest blast radius per approved call. Recursive delete would
+   need its own louder gate and isn't worth the risk in phase 7.
+2. **Command shell vs argv** — **resolved (confirmed)**: run via `cmd.exe /c
+   <command>` — a shell line matching what the user approved verbatim (pipes /
+   redirects / env-expansion work as users expect). Containment is the host gate
+   + working-dir + timeout, not string filtering (§5).
+3. **Read range/paging** — **resolved**: `read` is whole-file with a size cap +
+   `Error` over it; `offset`/`limit` are a later enhancement if a real need
+   appears.
+4. **Serper result shape** — **resolved**: condense to `organic[] {title, link,
+   snippet}` + answer/knowledge boxes (via `ToolResults.Json`) — keeps context
+   cost down vs. passing raw Serper JSON through.

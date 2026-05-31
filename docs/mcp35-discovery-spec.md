@@ -288,12 +288,15 @@ into its own repo** before phases 6–8.
 
 ---
 
-## 13. Open questions
+## 13. Resolved questions
 
-- **`_revealCap` default** — generous enough that batches rarely exceed it
-  (≈16–32?); tune empirically (this is the architecture §15 "reveal cap value").
-- **Manifest format** — flat list vs grouped-by-server headers (both names-only);
-  pick whichever the model navigates better in testing.
+- **`_revealCap` default** — *resolved*: **24** (mid of the 16–32 range), a named
+  constant so it stays tunable without a design change (closes architecture §15
+  "reveal cap value").
+- **Manifest format** — *resolved*: **flat list** of qualified names. The
+  `server__tool` prefix already groups names visually (`github__…`, `files__…`),
+  so explicit per-server headers add tokens for little gain; revisit only if
+  testing shows the model navigates a grouped layout meaningfully better.
 - **Manifest cadence** — *resolved*: cache the string, rebuild lazily on the next
   request after a catalog mutation (closes architecture §15 "manifest refresh
   cadence").

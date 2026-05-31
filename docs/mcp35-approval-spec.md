@@ -7,8 +7,8 @@
 Phase 6 replaces the phase-4 allow-all `IToolApprovalPolicy` stub with the real
 gate: classify each tool, decide whether to auto-allow or prompt, show a clear
 confirmation, and remember safe choices. It is **GxPT host code**
-(`Services/Mcp/` + a small WinForms dialog). The recommended policy below is
-flagged where a decision is yours to confirm (§11).
+(`Services/Mcp/` + a small WinForms dialog). The policy below is settled; the
+decisions behind it are recorded in §11.
 
 ---
 
@@ -278,7 +278,13 @@ picture is complete in one place.
    exact command or base+subcommand, `files__*` by exact path or directory).
    **No free-form / regex patterns** — rules come only from fixed scope buttons.
 
-### Still open
-- **Default first-party scope details** — confirm `git__commit` is Tool-scope
-  (vs argument-scoped by repo) and whether `files__write` should be
-  directory-scoped by default.
+### First-party scope details (resolved)
+- **`git__commit` → Tool scope.** Commits are local and reversible (amend /
+  reset), and the session runs against a single `GXPT_WORKDIR` (one repo), so
+  per-repo argument scoping buys nothing — "always allow `git commit`" is the
+  right grain.
+- **`files__write` → Argument(`path`)**, *not* whole-tool — a remembered write
+  must never mean "overwrite any file in the workspace." The dialog offers
+  **this exact path** and **this directory and below**; the **primary/default**
+  remember is **exact path** (least surprise), with directory as the explicit
+  broaden option. ("Allow once" remains the top button.)

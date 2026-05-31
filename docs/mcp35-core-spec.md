@@ -480,7 +480,7 @@ build on `Rpc`.
 
 ---
 
-## 13. Open questions (Core)
+## 13. Resolved questions (Core)
 
 - **Protocol version** — *resolved*: negotiation-tolerant, advertise the latest
   validated stable (`ProtocolVersions.Default`, currently `2025-11-25`) with an
