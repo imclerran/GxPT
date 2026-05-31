@@ -42,6 +42,8 @@
     <Compile Include="..\GxPT\Services\Mcp\McpToolRegistry.cs" Link="Linked\Mcp\McpToolRegistry.cs" />
     <Compile Include="..\GxPT\Services\Mcp\IChatStreamer.cs" Link="Linked\Mcp\IChatStreamer.cs" />
     <Compile Include="..\GxPT\Services\Mcp\McpChatOrchestrator.cs" Link="Linked\Mcp\McpChatOrchestrator.cs" />
+    <Compile Include="..\GxPT\Services\Mcp\McpServerSpec.cs" Link="Linked\Mcp\McpServerSpec.cs" />
+    <Compile Include="..\GxPT\Services\Mcp\McpConfig.cs" Link="Linked\Mcp\McpConfig.cs" />
     <Compile Include="..\GxPT\Services\Logger.cs" Link="Linked\Logger.cs" />
     <Compile Include="..\GxPT\Services\AppSettings.cs" Link="Linked\AppSettings.cs" />
   </ItemGroup>
