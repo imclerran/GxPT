@@ -494,7 +494,8 @@ the Consolas `rtbJson` RichTextBox):
 5. **Tool discovery**: names manifest + `reveal_tools` (define-on-demand + LRU
    cap). → **Detailed in [`mcp35-discovery-spec.md`](mcp35-discovery-spec.md).**
    → *Split `Mcp35.*` into its own repo here once the API is stable.*
-6. **Approval tiers** (gate Command / git writes).
+6. **Approval tiers** (gate Command / git writes). → **Detailed in
+   [`mcp35-approval-spec.md`](mcp35-approval-spec.md).**
 7. **Four servers**, riskiest last: Files → Serper → Git → Command.
 8. **`Mcp35.Client` HttpTransport + GitHub MCP** via its `mcp.json` entry + PAT
    shape gate (the names manifest + `reveal_tools` now tame its large tool
