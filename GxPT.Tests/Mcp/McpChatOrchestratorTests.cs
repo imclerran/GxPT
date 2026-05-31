@@ -266,6 +266,49 @@ namespace GxPT.Tests.Mcp
         }
 
         [Fact]
+        public void RunTurn_overload_does_not_add_a_user_message()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            var streamer = new ScriptedStreamer();
+            streamer.Turns.Add(Chunks.Text("hi"));
+
+            var history = new List<ChatMessage> { new ChatMessage("user", "already here") };
+            New(streamer, reg).RunTurn(history, new RecordingUi());
+
+            Assert.Equal(2, history.Count); // user(existing) + assistant(final); no duplicate user
+            Assert.Equal("user", history[0].Role);
+            Assert.Equal("already here", history[0].Content);
+            Assert.Equal("assistant", history[1].Role);
+        }
+
+        [Fact]
+        public void RequestMessageTransform_changes_sent_messages_not_history()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            var streamer = new ScriptedStreamer();
+            streamer.Turns.Add(Chunks.Text("ok"));
+
+            var orch = New(streamer, reg);
+            orch.RequestMessageTransform = delegate(IList<ChatMessage> h)
+            {
+                var outp = new List<ChatMessage>();
+                foreach (var m in h) outp.Add(new ChatMessage(m.Role, m.Content + " [T]"));
+                return outp;
+            };
+
+            var history = new List<ChatMessage>();
+            orch.RunTurn(history, "hello", new RecordingUi());
+
+            bool sentTransformed = false;
+            foreach (var m in streamer.SeenMessages[0])
+                if (m.Role == "user" && m.Content == "hello [T]") sentTransformed = true;
+            Assert.True(sentTransformed);             // what's sent is transformed
+            Assert.Equal("hello", history[0].Content); // persisted history is untouched
+        }
+
+        [Fact]
         public void Streaming_error_stops_the_turn()
         {
             RegistryFakeTransport ft;

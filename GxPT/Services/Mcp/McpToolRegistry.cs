@@ -153,6 +153,13 @@ namespace GxPT
 
         // ---- per-request (from the orchestrator) ----
 
+        // True when at least one connected server has contributed a tool — the host uses this to
+        // decide whether to route a chat turn through the tool-call loop at all.
+        public bool HasTools
+        {
+            get { lock (_lock) { return _byFunctionName.Count > 0; } }
+        }
+
         public string NamesManifestSystemMessage()
         {
             lock (_lock)

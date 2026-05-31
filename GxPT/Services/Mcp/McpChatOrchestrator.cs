@@ -28,6 +28,11 @@ namespace GxPT
         private readonly int _maxIterations;
         private readonly int _callTimeoutMs;
 
+        // Optional hook to transform history into the messages actually sent (e.g. inline file
+        // attachments) without mutating the persisted history. Identity transform when null. Must
+        // preserve assistant ToolCalls and tool-role ToolCallId.
+        public Func<IList<ChatMessage>, IList<ChatMessage>> RequestMessageTransform { get; set; }
+
         public McpChatOrchestrator(IChatStreamer streamer, McpToolRegistry registry,
                                    IToolApprovalPolicy approval, string model, ILogSink log)
             : this(streamer, registry, approval, model, log, DefaultMaxIterations, DefaultCallTimeoutMs)
@@ -54,6 +59,14 @@ namespace GxPT
         {
             if (history == null) throw new ArgumentNullException("history");
             history.Add(new ChatMessage("user", userText));
+            RunTurn(history, ui);
+        }
+
+        // Same loop, but over a history whose last message is already the user's turn — the host's
+        // chat path adds the user message to the conversation itself. history is mutated in place.
+        public void RunTurn(IList<ChatMessage> history, IToolLoopUi ui)
+        {
+            if (history == null) throw new ArgumentNullException("history");
 
             for (int iter = 0; iter < _maxIterations; iter++)
             {
@@ -65,7 +78,11 @@ namespace GxPT
                 List<ChatMessage> requestMessages = new List<ChatMessage>();
                 if (!string.IsNullOrEmpty(manifest))
                     requestMessages.Add(new ChatMessage("system", manifest));
-                requestMessages.AddRange(history);
+                // Build the sent messages from history, optionally transformed (e.g. attachments
+                // inlined). The transform must not drop tool_calls / tool_call_id.
+                IList<ChatMessage> contextMessages = RequestMessageTransform != null
+                    ? RequestMessageTransform(history) : history;
+                requestMessages.AddRange(contextMessages);
 
                 ClientProperties props = new ClientProperties();
                 props.Stream = true;
