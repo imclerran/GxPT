@@ -25,9 +25,13 @@ jobs:
         run: |
           dotnet restore GxPT.Tests/GxPT.Tests.csproj
           dotnet restore tests/Mcp35.Core.Tests/Mcp35.Core.Tests.csproj
+          dotnet restore tests/Mcp35.Server.Tests/Mcp35.Server.Tests.csproj
 
       - name: Test (GxPT)
         run: dotnet test GxPT.Tests/GxPT.Tests.csproj --configuration Release --no-restore --verbosity normal
 
       - name: Test (Mcp35.Core)
         run: dotnet test tests/Mcp35.Core.Tests/Mcp35.Core.Tests.csproj --configuration Release --no-restore --verbosity normal
+
+      - name: Test (Mcp35.Server)
+        run: dotnet test tests/Mcp35.Server.Tests/Mcp35.Server.Tests.csproj --configuration Release --no-restore --verbosity normal

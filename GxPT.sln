@@ -7,6 +7,8 @@ Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "GxPT.Setup", "GxPT.Setup\Gx
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mcp35.Core", "src\Mcp35.Core\Mcp35.Core.csproj", "{667AC466-F30B-4CDB-BEC9-7A139A709AA9}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mcp35.Server", "src\Mcp35.Server\Mcp35.Server.csproj", "{DCA697A6-1B4C-430C-BC45-134CB5F90072}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -23,6 +25,10 @@ Global
 		{667AC466-F30B-4CDB-BEC9-7A139A709AA9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{667AC466-F30B-4CDB-BEC9-7A139A709AA9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{667AC466-F30B-4CDB-BEC9-7A139A709AA9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DCA697A6-1B4C-430C-BC45-134CB5F90072}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DCA697A6-1B4C-430C-BC45-134CB5F90072}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DCA697A6-1B4C-430C-BC45-134CB5F90072}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DCA697A6-1B4C-430C-BC45-134CB5F90072}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
