@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    JSON spike + unit tests for Mcp35.Core (phase 1).
+
+    Like GxPT.Tests, this links the production source files under test and compiles them
+    into the test assembly rather than building the VS2008-era net35 library project (which a
+    stock SDK CI runner cannot build). Targets net48 and runs via 'dotnet test'.
+
+    Newtonsoft is resolved via a version-pinned PackageReference (D12) at 13.0.3 — the same
+    version as the net35 DLL vendored under src/Mcp35.Core/lib/, so the JSON behaviour under
+    test (DateParseHandling, MaxDepth, large-payload handling) is identical. The net35 binary
+    itself is exercised when GxPT is built in VS2008.
+
+    NOTE: intentionally NOT added to GxPT.sln (VS2008 cannot load SDK-style projects).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>Mcp35.Core.Tests</AssemblyName>
+    <RootNamespace>Mcp35.Core.Tests</RootNamespace>
+    <!-- Core source is hand-written for C# 3 / net35; don't let net48 implicit usings or
+         nullable leak in and mask incompatibilities. -->
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <!-- Production source under test, compiled directly into the test assembly. The glob
+       auto-picks up new Core files as the library grows; AssemblyInfo is excluded so it
+       doesn't clash with this project's generated assembly attributes. -->
+  <ItemGroup>
+    <Compile Include="..\..\src\Mcp35.Core\**\*.cs"
+             Exclude="..\..\src\Mcp35.Core\Properties\**\*.cs;..\..\src\Mcp35.Core\obj\**\*.cs;..\..\src\Mcp35.Core\bin\**\*.cs"
+             Link="Linked\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
