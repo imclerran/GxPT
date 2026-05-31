@@ -101,7 +101,7 @@ namespace GxPT
                 Name = convo.Name,
                 SelectedModel = convo.SelectedModel,
                 LastUpdated = convo.LastUpdated,
-                Messages = convo.History.Select(ToMessageDto).ToList()
+                Messages = convo.History.Select(m => ToMessageDto(m)).ToList()
             };
             return JsonConvert.SerializeObject(dto, _jsonSettings);
         }
