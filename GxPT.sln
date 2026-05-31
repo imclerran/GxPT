@@ -15,6 +15,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FilesMcpServer", "servers\F
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebSearchMcpServer", "servers\WebSearchMcpServer\WebSearchMcpServer.csproj", "{785B59BD-B282-488C-BD78-4529CD80BA49}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GitMcpServer", "servers\GitMcpServer\GitMcpServer.csproj", "{96B66F73-25A8-4B45-994B-D9EFAFCDF4F7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CommandMcpServer", "servers\CommandMcpServer\CommandMcpServer.csproj", "{8B1149E6-9C3E-4860-A946-95989D4FD4D2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -47,6 +51,14 @@ Global
 		{785B59BD-B282-488C-BD78-4529CD80BA49}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{785B59BD-B282-488C-BD78-4529CD80BA49}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{785B59BD-B282-488C-BD78-4529CD80BA49}.Release|Any CPU.Build.0 = Release|Any CPU
+		{96B66F73-25A8-4B45-994B-D9EFAFCDF4F7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{96B66F73-25A8-4B45-994B-D9EFAFCDF4F7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{96B66F73-25A8-4B45-994B-D9EFAFCDF4F7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{96B66F73-25A8-4B45-994B-D9EFAFCDF4F7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8B1149E6-9C3E-4860-A946-95989D4FD4D2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8B1149E6-9C3E-4860-A946-95989D4FD4D2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8B1149E6-9C3E-4860-A946-95989D4FD4D2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8B1149E6-9C3E-4860-A946-95989D4FD4D2}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

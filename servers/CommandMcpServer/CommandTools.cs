@@ -1,0 +1,91 @@
+using System;
+using Mcp35.Core.Protocol;
+using Mcp35.Server;
+using Mcp35.Server.Process;
+using Newtonsoft.Json.Linq;
+
+namespace CommandMcpServer
+{
+    /// <summary>
+    /// The Command server's single tool, run (→ command__run, Destructive, argument-scoped). It
+    /// executes an already-approved command line via the shell and reports the outcome verbatim.
+    /// The server has no allowlist of its own — containment is the host gate + working-dir +
+    /// timeout, NOT string filtering. It treats the command as opaque and never sanitizes it
+    /// (sanitizing would give a false sense of safety). See servers-spec §5.
+    /// </summary>
+    internal static class CommandTools
+    {
+        private const int DefaultTimeoutMs = 60000;
+        private const int MaxTimeoutMs = 600000;
+        private const int OutputCap = 100000; // chars per stream
+
+        public static void Register(McpServer server, CommandConfig config)
+        {
+            ProcessRunner runner = new ProcessRunner(null);
+
+            server.AddTool("run",
+                "Run a shell command line and capture its stdout, stderr, and exit code.",
+                SchemaBuilder.Object()
+                    .Str("command", true, "The exact command line to run")
+                    .Int("timeout_ms", false, "Kill the command after this many milliseconds (default 60000)")
+                    .Build(),
+                delegate(ToolCallContext ctx) { return Run(config, runner, ctx); });
+        }
+
+        private static CallToolResult Run(CommandConfig config, ProcessRunner runner, ToolCallContext ctx)
+        {
+            string command = ctx.Arguments.Value<string>("command");
+            if (string.IsNullOrEmpty(command)) return ToolResults.Error("command is required");
+
+            int timeout = IntArg(ctx, "timeout_ms", DefaultTimeoutMs, 1, MaxTimeoutMs);
+
+            ProcessRequest req = new ProcessRequest();
+            req.FileName = config.Shell;
+            // Hand the command to the shell as written; the shell (not this server) parses it.
+            // The host already showed the user this exact string at the approval gate.
+            req.Arguments = "/c " + command;
+            req.WorkingDirectory = config.WorkDir;
+            req.TimeoutMs = timeout;
+
+            ProcessResult result;
+            try
+            {
+                result = runner.Run(req);
+            }
+            catch (Exception ex)
+            {
+                return ToolResults.Error("failed to run command: " + ex.Message);
+            }
+
+            bool outTrunc, errTrunc;
+            JObject outp = new JObject();
+            outp["exitCode"] = result.ExitCode;
+            outp["stdout"] = Cap(result.StdOut, out outTrunc);
+            outp["stderr"] = Cap(result.StdErr, out errTrunc);
+            outp["timedOut"] = result.TimedOut;
+            if (outTrunc || errTrunc) outp["truncated"] = true;
+            return ToolResults.Json(outp);
+        }
+
+        private static int IntArg(ToolCallContext ctx, string name, int fallback, int min, int max)
+        {
+            JToken t = ctx.Arguments[name];
+            if (t == null || t.Type == JTokenType.Null) return fallback;
+            int n;
+            try { n = t.Value<int>(); }
+            catch { return fallback; }
+            if (n < min) return min;
+            if (n > max) return max;
+            return n;
+        }
+
+        private static string Cap(string s, out bool truncated)
+        {
+            truncated = false;
+            if (s == null) return string.Empty;
+            if (s.Length <= OutputCap) return s;
+            truncated = true;
+            return s.Substring(0, OutputCap);
+        }
+    }
+}

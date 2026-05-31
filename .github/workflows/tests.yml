@@ -29,6 +29,8 @@ jobs:
           dotnet restore tests/Mcp35.Client.Tests/Mcp35.Client.Tests.csproj
           dotnet restore tests/FilesMcpServer.Tests/FilesMcpServer.Tests.csproj
           dotnet restore tests/WebSearchMcpServer.Tests/WebSearchMcpServer.Tests.csproj
+          dotnet restore tests/GitMcpServer.Tests/GitMcpServer.Tests.csproj
+          dotnet restore tests/CommandMcpServer.Tests/CommandMcpServer.Tests.csproj
 
       - name: Test (GxPT)
         run: dotnet test GxPT.Tests/GxPT.Tests.csproj --configuration Release --no-restore --verbosity normal
@@ -47,3 +49,9 @@ jobs:
 
       - name: Test (WebSearchMcpServer)
         run: dotnet test tests/WebSearchMcpServer.Tests/WebSearchMcpServer.Tests.csproj --configuration Release --no-restore --verbosity normal
+
+      - name: Test (GitMcpServer)
+        run: dotnet test tests/GitMcpServer.Tests/GitMcpServer.Tests.csproj --configuration Release --no-restore --verbosity normal
+
+      - name: Test (CommandMcpServer)
+        run: dotnet test tests/CommandMcpServer.Tests/CommandMcpServer.Tests.csproj --configuration Release --no-restore --verbosity normal
