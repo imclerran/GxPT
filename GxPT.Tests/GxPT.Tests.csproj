@@ -40,6 +40,8 @@
     <Compile Include="..\GxPT\Services\Mcp\ToolCallAssembler.cs" Link="Linked\Mcp\ToolCallAssembler.cs" />
     <Compile Include="..\GxPT\Services\Mcp\IToolApprovalPolicy.cs" Link="Linked\Mcp\IToolApprovalPolicy.cs" />
     <Compile Include="..\GxPT\Services\Mcp\McpToolRegistry.cs" Link="Linked\Mcp\McpToolRegistry.cs" />
+    <Compile Include="..\GxPT\Services\Mcp\IChatStreamer.cs" Link="Linked\Mcp\IChatStreamer.cs" />
+    <Compile Include="..\GxPT\Services\Mcp\McpChatOrchestrator.cs" Link="Linked\Mcp\McpChatOrchestrator.cs" />
     <Compile Include="..\GxPT\Services\Logger.cs" Link="Linked\Logger.cs" />
     <Compile Include="..\GxPT\Services\AppSettings.cs" Link="Linked\AppSettings.cs" />
   </ItemGroup>

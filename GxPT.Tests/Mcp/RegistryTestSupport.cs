@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Mcp35.Client;
+using Mcp35.Core.Errors;
 using Mcp35.Core.Protocol;
 using Mcp35.Core.Rpc;
 using Newtonsoft.Json.Linq;
@@ -31,6 +32,12 @@ namespace GxPT.Tests.Mcp
         public List<ToolDef> Tools = new List<ToolDef>();
         private bool _connected = true;
 
+        // tools/call behavior (orchestrator tests):
+        public Func<string, JObject, JObject> OnCall; // (toolName, args) => CallToolResult JObject
+        public bool ThrowTransportOnCall;             // simulate a transport fault mid-call
+        public bool ErrorOnCall;                      // simulate a JSON-RPC error (e.g. unknown tool)
+        public readonly List<string> CalledTools = new List<string>();
+
         public event EventHandler<JsonRpcInboundEventArgs> Inbound;
 
         public RegistryFakeTransport(IEnumerable<ToolDef> tools)
@@ -47,6 +54,19 @@ namespace GxPT.Tests.Mcp
         {
             if (method == "initialize") return Ok(InitializeResult());
             if (method == "tools/list") return Ok(ToolsListResult());
+            if (method == "tools/call")
+            {
+                if (ThrowTransportOnCall) { _connected = false; throw new McpTransportException("simulated transport fault"); }
+
+                JObject p = @params as JObject;
+                string toolName = p != null && p["name"] != null ? (string)p["name"] : null;
+                JObject args = p != null ? p["arguments"] as JObject : null;
+                CalledTools.Add(toolName);
+
+                if (ErrorOnCall) return Error(-32602, "unknown tool: " + toolName);
+                JObject result = OnCall != null ? OnCall(toolName, args) : TextResult("ok:" + toolName);
+                return Ok(result);
+            }
             return Ok(new JObject());
         }
 
@@ -67,6 +87,26 @@ namespace GxPT.Tests.Mcp
             r.IsError = false;
             r.Result = result;
             return r;
+        }
+
+        private static JsonRpcResponse Error(int code, string message)
+        {
+            JsonRpcResponse r = new JsonRpcResponse();
+            r.Id = RequestId.FromLong(1);
+            r.IsError = true;
+            r.Error = new JsonRpcError(code, message);
+            return r;
+        }
+
+        // A minimal CallToolResult { content: [ { type:"text", text } ] }.
+        public static JObject TextResult(string text)
+        {
+            JObject block = new JObject();
+            block["type"] = "text";
+            block["text"] = text;
+            JObject result = new JObject();
+            result["content"] = new JArray(block);
+            return result;
         }
 
         private static JObject InitializeResult()
