@@ -50,6 +50,10 @@
       <Project>{DCA697A6-1B4C-430C-BC45-134CB5F90072}</Project>
       <Name>Mcp35.Server</Name>
     </ProjectReference>
+    <ProjectReference Include="..\..\src\Mcp35.Core\Mcp35.Core.csproj">
+      <Project>{667AC466-F30B-4CDB-BEC9-7A139A709AA9}</Project>
+      <Name>Mcp35.Core</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
