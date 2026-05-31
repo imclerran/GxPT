@@ -115,5 +115,28 @@ namespace Mcp35.Core.Tests
             // The secret must never have ended up in the returned body/stderr.
             Assert.DoesNotContain("secret-should-go-in-config-file", result.Body);
         }
+
+        [Fact]
+        public void Run_populates_headers_dictionary_even_when_empty()
+        {
+            // The fake curl ignores -D, so no headers are written, but Run must still return a
+            // non-null Headers map so callers can GetHeader without null checks.
+            string curl = FakeCurl("ok", 200);
+            var runner = new CurlRunner(curl, null, null);
+            CurlResult result = runner.Run(Req("https://example.test/x"));
+            Assert.NotNull(result.Headers);
+            Assert.Null(result.GetHeader("Content-Type")); // absent → null, no throw
+        }
+
+        [Fact]
+        public void GetHeader_is_case_insensitive()
+        {
+            CurlResult r = new CurlResult();
+            r.Headers = new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
+            r.Headers["Mcp-Session-Id"] = "abc";
+            Assert.Equal("abc", r.GetHeader("mcp-session-id"));
+            Assert.Equal("abc", r.GetHeader("MCP-SESSION-ID"));
+            Assert.Null(r.GetHeader("nope"));
+        }
     }
 }

@@ -52,6 +52,7 @@
     <Compile Include="Transport\StdioFraming.cs" />
     <Compile Include="Transport\SseParser.cs" />
     <Compile Include="Transport\CurlRunner.cs" />
+    <Compile Include="Transport\ICurlRunner.cs" />
     <Compile Include="Protocol\McpMethods.cs" />
     <Compile Include="Protocol\ProtocolVersions.cs" />
     <Compile Include="Protocol\Initialize.cs" />
