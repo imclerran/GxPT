@@ -508,7 +508,7 @@ the Consolas `rtbJson` RichTextBox):
    in [`mcp35-servers-spec.md`](mcp35-servers-spec.md).**
 8. **`Mcp35.Client` HttpTransport + GitHub MCP** via its `mcp.json` entry + PAT
    shape gate (the names manifest + `reveal_tools` now tame its large tool
-   count).
+   count). → **Detailed in [`mcp35-http-spec.md`](mcp35-http-spec.md).**
 
 ---
 
