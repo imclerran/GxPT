@@ -20,7 +20,7 @@ decision-oriented rather than code.
 - Ship a small, reusable, role-neutral MCP library (**Mcp35**) targeting **.NET
   Framework 3.5**, usable outside GxPT later — for *both* writing clients/hosts
   and writing servers.
-- Provide a handful of useful **stdio servers** (serper, file ops, git,
+- Provide a handful of useful **stdio servers** (web search, file ops, git,
   command-line) and connect to **GitHub's hosted MCP** over HTTP.
 - Keep token cost bounded as the tool catalog grows (progressive disclosure /
   progressive disclosure via a name manifest + define-on-demand).
@@ -45,13 +45,13 @@ decision-oriented rather than code.
 | D6 | Approval = **three tiers** (ReadOnly/Write remember-eligible per-tool; **Destructive always confirms**), with **argument-scoped rules** (exact / base+subcommand / directory — no regex) for arbitrary-exec & file tools | Read/write stay low-friction; cmd/code/file tools get *granular* allowlisting, never a blanket "allow this tool" → §9, `mcp35-approval-spec.md` |
 | D7 | **Dependencies are injected, never embedded** in the library | Keeps Core binary-pure and the future split cheap |
 | D8 | **`Mcp35.Client` is a real, separate project now** (transports + **single-connection** lifecycle); GxPT depends on it **one-way** | A compile-time project boundary prevents client logic from intertwining with GxPT — stronger than "extract later" |
-| D9 | **curl-exec helper lives in `Mcp35.Core`** | Shared by Client `HttpTransport` and the Serper server; avoids duplication |
+| D9 | **curl-exec helper lives in `Mcp35.Core`** | Shared by Client `HttpTransport` and the web search server; avoids duplication |
 | D10 | **Each server is its own independent `.csproj`** depending on mcp35; extractable to its own repo. Not part of the mcp35 library package | Maximum modularity — servers can each peel off as standalone projects/repos |
 | D11 | **Multi-server aggregation, collision-naming, ranking & reveal all live in the GxPT host registry**; `Mcp35.Client` stays strictly single-connection | Keeps Client minimal; host owns all multi-server policy |
 | D12 | **net48 test projects resolve Newtonsoft via version-pinned `PackageReference`** | Consistent with `GxPT.Tests`; pin matches the vendored net35 dll to avoid drift |
-| D13 | **Concrete servers get neutral names** (`SerperMcpServer`, `FilesMcpServer`, `GitMcpServer`, `CommandMcpServer`) — *not* `Mcp35.Servers.*` | They're independent consumers (D10), not a collection inside the `Mcp35.Server` SDK |
+| D13 | **Concrete servers get neutral names** (`WebSearchMcpServer`, `FilesMcpServer`, `GitMcpServer`, `CommandMcpServer`) — *not* `Mcp35.Servers.*` | They're independent consumers (D10), not a collection inside the `Mcp35.Server` SDK |
 | D14 | **MCP servers are configured only in a dedicated MCP settings tab**; custom servers live in `%AppData%/GxPT/mcp.json` (Cursor-style schema, **snake_case** `mcp_servers`, transport inferred from `url`/`command`) | One clear home for MCP config, separate from `settings.json`; familiar Cursor-like format |
-| D15 | **Only first-party servers are obscured** (hardcoded, out of `mcp.json`, managed via toggles + a Serper key field in `settings.json`). **GitHub lives in `mcp.json`** like any HTTP server, PAT in its `Authorization` header; a malformed PAT disables that server | Keeps internal wiring safe while giving GitHub the standard, Cursor-familiar config path |
+| D15 | **Only first-party servers are obscured** (hardcoded, out of `mcp.json`, managed via toggles + a web search key field in `settings.json`). **GitHub lives in `mcp.json`** like any HTTP server, PAT in its `Authorization` header; a malformed PAT disables that server | Keeps internal wiring safe while giving GitHub the standard, Cursor-familiar config path |
 | D16 | **Host adopts Newtonsoft.Json**, migrated **scoped + incrementally** from JavaScriptSerializer: OpenRouter wire path + MCP/host glue + `mcp.json` now; `ConversationStore` with tool-message persistence; **`AppSettings` deferred** | One JSON library across host+library removes the `JObject`/`Dictionary` seam in the tool loop, kills the `MaxJsonLength` cap, and reuses the already-shipping Newtonsoft DLL (one HintPath, no new vendored binary) |
 
 ---
@@ -77,7 +77,7 @@ decision-oriented rather than code.
    deps: Newtonsoft.Json only · NO GxPT refs                      ▲
                                                                   │ builds on
                                                        MCP server exes (independent consumers)
-                                                       SerperMcpServer · FilesMcpServer ·
+                                                       WebSearchMcpServer · FilesMcpServer ·
                                                        GitMcpServer · CommandMcpServer
 ```
 
@@ -95,7 +95,7 @@ Server — servers are independent executables.
   in).
 - **Shared curl-exec helper** (`CurlRunner` — pure BCL process spawn + temp
   files, curl path **injected**). Used by both Client's `HttpTransport` and the
-  Serper server, so it lives here rather than being duplicated.
+  web search server, so it lives here rather than being duplicated.
 - JSON strategy: **typed DTOs** for stable envelopes; **`JObject`/`JToken`** at
   the open-ended boundaries (tool input-schemas, tool results).
 - **Only** managed dependency is `Newtonsoft.Json`. No reference to `GxPT.*`.
@@ -122,7 +122,7 @@ Server — servers are independent executables.
 - The stdio dispatch loop (read framed requests on stdin, write responses on
   stdout).
 - A **process-exec** helper (for git/cmd-style servers). curl-exec is *not*
-  here — it lives in Core (D9), since `SerperMcpServer` and the client's
+  here — it lives in Core (D9), since `WebSearchMcpServer` and the client's
   `HttpTransport` both need it.
 - The four servers are its first consumers and its dogfooding.
 
@@ -131,7 +131,7 @@ Everything here is GxPT-specific orchestration, deliberately kept *out* of the
 library:
 - `McpHost` — owns the **collection** of `Mcp35.Client.McpServerConnection`
   instances and their lifecycle, assembled from **enabled Tier-1 first-party
-  servers** (Serper key injected) plus every valid **Tier-2 `mcp.json` entry**
+  servers** (web search key injected) plus every valid **Tier-2 `mcp.json` entry**
   (incl. GitHub, subject to its PAT gate) — see §8.
 - `McpToolRegistry` — **catalog aggregation** across connections,
   **server-qualified collision naming**, **manifest assembly** (qualified names
@@ -147,7 +147,7 @@ library:
 ### MCP server executables (independent consumers, net35 console exes)
 Each is its own project/repo (D10) consuming the `Mcp35.Server` SDK; neutrally
 named because they are *not* part of the library (D13).
-- `SerperMcpServer` — web search (Serper API; needs curl for TLS 1.2).
+- `WebSearchMcpServer` — web search + page extraction (Tavily API; needs curl for TLS 1.2).
 - `FilesMcpServer` — file read/list/write.
 - `GitMcpServer` — git status/diff/commit (uses `git.exe`).
 - `CommandMcpServer` — arbitrary command execution (sharpest security edge;
@@ -220,7 +220,7 @@ GxPT.sln                         (VS2008 format)
 ├─ src/Mcp35.Client/            net35 lib   (ProjectRef → Mcp35.Core)
 ├─ src/Mcp35.Server/            net35 lib   (ProjectRef → Mcp35.Core)  ← server SDK
 └─ servers/                     independent consumer exes (own projects/repos)
-   ├─ SerperMcpServer/          net35 Exe   (ProjectRef → Mcp35.Server)
+   ├─ WebSearchMcpServer/       net35 Exe   (ProjectRef → Mcp35.Server)
    ├─ FilesMcpServer/           net35 Exe
    ├─ GitMcpServer/             net35 Exe
    └─ CommandMcpServer/         net35 Exe
@@ -259,7 +259,7 @@ always supplied by whoever runs the process:
 | Artifact | Native need | Source of the binary |
 |----------|-------------|----------------------|
 | GxPT host (Client `HttpTransport` → GitHub) | curl | **already vendored** in `GxPT/lib/`; host injects the path into the transport |
-| `SerperMcpServer` | curl (TLS 1.2 to Serper API) | own `lib/curl.exe` next to the exe |
+| `WebSearchMcpServer` | curl (TLS 1.2 to Tavily API) | own `lib/curl.exe` next to the exe |
 | `GitMcpServer` | `git.exe` | injected path → PATH |
 | `FilesMcpServer` / `CommandMcpServer` | none | BCL only |
 | `Mcp35.Core` / `.Client` / `.Server` (DLLs) | none | pure managed |
@@ -269,7 +269,7 @@ Path resolution everywhere: injected explicit path → app-relative
 
 > Note on TLS: .NET 3.5's `HttpWebRequest` can't reliably negotiate TLS 1.2,
 > which is why curl is vendored. Anything hitting a modern HTTPS endpoint
-> (GitHub, Serper) needs curl — `WebClient` is not a substitute.
+> (GitHub, Tavily) needs curl — `WebClient` is not a substitute.
 
 ### Why Newtonsoft (and not JavaScriptSerializer / SimpleJson)
 - **JSON-RPC field presence is semantic**: a notification is a request with
@@ -347,15 +347,15 @@ dedicated **MCP tab** in `SettingsForm` — never via the Visual or JSON
 (settings.json) tabs (D14).
 
 ### Tier 1 — first-party servers (obscured)
-The bundled first-party servers (`SerperMcpServer`, `FilesMcpServer`,
+The bundled first-party servers (`WebSearchMcpServer`, `FilesMcpServer`,
 `GitMcpServer`, `CommandMcpServer`) are *built in*: their stdio launch commands
 are **hardcoded in GxPT and never appear in `mcp.json`** (D15). Users manage
 them with:
 - a per-server **enable toggle**, persisted in `settings.json` via `AppSettings`
-  (e.g. `AppSettings.SetBool("mcp.builtin.serper.enabled", …)`);
-- a **Serper API Key** field, stored like the existing OpenRouter key
+  (e.g. `AppSettings.SetBool("mcp.builtin.web.enabled", …)`);
+- a **Web Search API Key** field, stored like the existing OpenRouter key
   (`AppSettings.SetString`, in `settings.json`) and injected into
-  `SerperMcpServer`'s `env` at runtime — never written to `mcp.json`.
+  `WebSearchMcpServer`'s `env` at runtime — never written to `mcp.json`.
 
 (GitHub is **not** in this tier — it lives in `mcp.json` like any HTTP server;
 see Tier 2.)
@@ -394,7 +394,7 @@ error spam.
 
 ### Assembly
 `McpHost` builds its connection collection (D11) from **enabled Tier-1
-first-party servers** (Serper key injected) **plus every valid Tier-2 entry** in
+first-party servers** (web search key injected) **plus every valid Tier-2 entry** in
 `mcp.json` (the GitHub entry only if its PAT passes the shape gate). The host
 parses `mcp.json` with **Newtonsoft** (`JObject`), consistent with the host's
 adoption of Newtonsoft for the OpenRouter/MCP path (D16); snake_case maps
@@ -406,14 +406,14 @@ vendored binary.
 A new `TabPage` in `SettingsForm`, modeled on the existing JSON tab (`tabJson` /
 the Consolas `rtbJson` RichTextBox):
 - **Top:** per-server **enable toggles** (`CheckBox` per first-party server) and
-  the **Serper API Key** `TextBox` (plaintext, matching the existing
+  the **Web Search API Key** `TextBox` (plaintext, matching the existing
   `txtApiKey`; masking is a possible later enhancement).
 - **Below:** a Consolas RichTextBox editing **`mcp.json`** — custom servers
   **and** the GitHub entry (the PAT is pasted into its `Authorization` header
   here).
 - Shares the form's **Save**: validates the editor JSON, writes `mcp.json`
   crash-safe (as `AppSettings` does for `settings.json`), and persists the
-  first-party toggles + Serper key to `settings.json`. Invalid JSON blocks the
+  first-party toggles + web search key to `settings.json`. Invalid JSON blocks the
   save with an error.
 
 ---
@@ -433,7 +433,7 @@ the Consolas `rtbJson` RichTextBox):
 - `CommandMcpServer` is the sharpest edge: always-confirm (no blanket remember) +
   process isolation; treat all server/tool output as untrusted input at the parse
   boundary (the gate is also the prompt-injection backstop).
-- **Secrets**: the Serper key lives in `settings.json` (like the OpenRouter
+- **Secrets**: the web search key lives in `settings.json` (like the OpenRouter
   key); the **GitHub PAT lives in `mcp.json`** (in the `Authorization` header,
   Cursor-style), so **`mcp.json` is sensitive** — not freely shareable. All HTTP
   `headers` reach curl via `-K`, never the command line. A malformed GitHub PAT
@@ -504,7 +504,7 @@ the Consolas `rtbJson` RichTextBox):
    → *Split `Mcp35.*` into its own repo here once the API is stable.*
 6. **Approval tiers** (gate Command / git writes). → **Detailed in
    [`mcp35-approval-spec.md`](mcp35-approval-spec.md).**
-7. **Four servers**, riskiest last: Files → Serper → Git → Command. → **Detailed
+7. **Four servers**, riskiest last: Files → Web → Git → Command. → **Detailed
    in [`mcp35-servers-spec.md`](mcp35-servers-spec.md).**
 8. **`Mcp35.Client` HttpTransport + GitHub MCP** via its `mcp.json` entry + PAT
    shape gate (the names manifest + `reveal_tools` now tame its large tool
@@ -533,7 +533,7 @@ the Consolas `rtbJson` RichTextBox):
 - ~~Newtonsoft net48 build in tests~~ → version-pinned PackageReference (D12).
 
 - ~~Server project naming~~ → `Mcp35.Server` is the singular SDK; concrete
-  servers get neutral names (`SerperMcpServer`, …), not `Mcp35.Servers.*` (D13).
+  servers get neutral names (`WebSearchMcpServer`, …), not `Mcp35.Servers.*` (D13).
 - ~~Tool discovery mechanism~~ → names-only manifest with define-on-demand via
   batch `reveal_tools` (multi-reveal for ambiguity); no free-text search tool —
   deferred until/if the catalog grows huge (D4).

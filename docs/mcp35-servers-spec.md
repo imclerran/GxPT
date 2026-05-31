@@ -5,7 +5,7 @@
 Realizes **phase 7** of the roadmap.
 **Branch:** `claude/mcp-server-architecture-cJ088` · PR #22
 
-The four bundled servers — **Files → Serper → Git → Command** (built in that
+The four bundled servers — **Files → Web → Git → Command** (built in that
 order, *riskiest last*). Each is an independent net35 console exe consuming the
 `Mcp35.Server` SDK (D10/D13); none references `GxPT.*`. They are the SDK's first
 real consumers and its dogfooding.
@@ -52,15 +52,15 @@ contract — keep it small and namespaced `GXPT_*`:
 |--------|---------|-------------------|
 | *all* | `GXPT_WORKDIR` | sandbox / working root; default = process `CurrentDirectory` |
 | Files | (uses `GXPT_WORKDIR` as its root) | — |
-| Serper | `GXPT_SERPER_KEY` | **required**; absent → tool returns `Error` |
-| Serper | `GXPT_CURL_PATH` | curl exe (TLS 1.2); **required** (net35 can't TLS-1.2 natively) |
+| Web | `GXPT_WEB_SEARCH_KEY` | **required** (Tavily bearer token); absent → tool returns `Error` |
+| Web | `GXPT_CURL_PATH` | curl exe (TLS 1.2); **required** (net35 can't TLS-1.2 natively) |
 | Git | `GXPT_GIT_PATH` | `git` exe; default `"git"` (resolved on `PATH`) |
 | Command | `GXPT_CMD_SHELL` | shell for `/c`; default `cmd.exe` (from `%ComSpec%`) |
 
 Rules for the contract:
-- A **missing required** secret (Serper key/curl) doesn't crash the server — the
-  affected tool returns `ToolResults.Error("Serper API key not configured.")`.
-  (The host normally won't even enable Serper without a key, §8 architecture, but
+- A **missing required** secret (web key/curl) doesn't crash the server — the
+  affected tool returns `ToolResults.Error("Web search API key not configured.")`.
+  (The host normally won't even enable the web server without a key, §8 architecture, but
   the server stays defensive.)
 - Config is read **once at startup** (`Config.FromEnvironment`), not per call.
 - Secrets are never echoed into results, logs, or error text.
@@ -106,28 +106,35 @@ string Resolve(string root, string rel) {
 - Symlink/junction escapes: on net35/Windows, resolve via `GetFullPath` and the
   boundary check; do **not** follow a path that resolves outside root.
 
-## 3. SerperMcpServer (server name `serper`)
+## 3. WebSearchMcpServer (server name `web`)
 
-One tool, `search` (→ `serper__search`, ReadOnly). Web search via
-`google.serper.dev`, over **curl** because net35's `WebRequest`/`ServicePointManager`
-can't reliably negotiate TLS 1.2. Reuses **`Mcp35.Core`'s `CurlRunner`** (the
-shared curl-exec helper lives in Core precisely so the Serper server and the
-client's `HttpTransport` share it — D9, architecture §3).
+Two tools backed by the **Tavily API**, over **curl** because net35's
+`WebRequest`/`ServicePointManager` can't reliably negotiate TLS 1.2. Reuses
+**`Mcp35.Core`'s `CurlRunner`** (the shared curl-exec helper lives in Core
+precisely so this server and the client's `HttpTransport` share it — D9,
+architecture §3).
 
-| Tool | Schema | Behavior |
-|------|--------|----------|
-| `search` | `query*`, `num?` (default 10, cap ~20), `gl?`, `hl?` | POST search; return condensed organic results. |
+| Tool | Approval | Schema (required *) | Behavior |
+|------|----------|---------------------|----------|
+| `search` (→ `web__search`) | ReadOnly | `query*`, `max_results?` (default 5, cap 20), `topic?`, `search_depth?`, `chunks_per_source?`, `include_answer?`, `include_raw_content?`, `time_range?`, `start_date?`, `end_date?`, `country?`, `include_domains?`, `exclude_domains?` | `POST /search`; condensed results + optional answer. |
+| `extract` (→ `web__extract`) | **Write (confirm each call)** | `urls*` (string or array), `extract_depth?`, `format?`, `include_images?` | `POST /extract`; fetch and return full page content for the given URLs. |
 
-- Request: `POST https://google.serper.dev/search`, header `X-API-KEY:
-  <GXPT_SERPER_KEY>` (passed to curl via **`-K` config file**, never the command
-  line — same discipline as `HttpTransport`/architecture §8), JSON body
-  `{ "q": query, "num": n, "gl": …, "hl": … }`.
-- Response: parse with Newtonsoft; project `organic[]` → `{title, link, snippet}`
-  plus `answerBox`/`knowledgeGraph` if present. Return via
-  `ToolResults.Json(structured)` (structuredContent + a readable text rendering),
-  so the model gets both a clean list and prose.
-- Failure modes → `Error` (never throw): missing key, curl non-zero/timeout,
-  non-200 status, unparseable JSON. The raw API key never appears in any message.
+`extract` is gated as **Write** (not ReadOnly): it fetches arbitrary external
+pages — more network/token cost, and it pulls in whatever content the page
+serves — so each call is confirmed (`mcp35-approval-spec.md`).
+
+- Auth: `Authorization: Bearer <GXPT_WEB_SEARCH_KEY>`, passed to curl via a
+  **`-K` config file**, never the command line (same discipline as
+  `HttpTransport`/architecture §8). Content type `application/json`.
+- Endpoints: `https://api.tavily.com/search` and `https://api.tavily.com/extract`.
+- `search` response: parse with Newtonsoft; project `results[]` →
+  `{title, url, content, score?, raw_content?}` plus the synthesized `answer`
+  when `include_answer` was set. `extract` response: `results[] {url,
+  raw_content, images?}` plus any `failed_results`. Both return via
+  `ToolResults.Json(structured)` (structuredContent + a readable text rendering).
+- Failure modes → `Error` (never throw): missing key/curl, curl non-zero/timeout,
+  non-2xx status, empty/unparseable JSON, empty query / no URLs. The raw API key
+  never appears in any message.
 
 ## 4. GitMcpServer (server name `git`)
 
@@ -198,7 +205,7 @@ observably**.
   host drains it into `GxPT.Logger` (SDK §5).
 - **Graceful shutdown** — stdin EOF → `OnShutdown` hooks → flush → exit 0. Git
   and Command register cleanup hooks if they hold any transient state
-  (temp files); Files/Serper are stateless.
+  (temp files); Files/Web are stateless.
 - **First-party classification is hardcoded host-side** — these servers do **not**
   emit MCP annotations expecting to be trusted; the host's approval table is
   authoritative for them (`mcp35-approval-spec.md` §2). Annotations, if present,
@@ -211,7 +218,7 @@ observably**.
 ```
 servers/
 ├─ FilesMcpServer/      net35 Exe  (ProjectRef → Mcp35.Server)
-├─ SerperMcpServer/     net35 Exe  (also uses Mcp35.Core.CurlRunner)
+├─ WebSearchMcpServer/  net35 Exe  (also uses Mcp35.Core.CurlRunner)
 ├─ GitMcpServer/        net35 Exe
 └─ CommandMcpServer/    net35 Exe
 ```
@@ -229,7 +236,7 @@ Per server, over the scripted-stream harness:
 2. **Files sandbox** — `..`, absolute paths, and `/root` vs `/root-evil` boundary
    tricks are all rejected; in-root read/list/write/delete round-trip; oversize
    and binary reads → `Error`; write is atomic; delete refuses non-empty dirs.
-3. **Serper** — happy path parses `organic[]` into structured+text (curl stubbed
+3. **Web** — happy path parses `results[]` into structured+text (curl stubbed
    via injected `GXPT_CURL_PATH` pointing at a fake); missing key, curl failure,
    non-200, bad JSON → `Error`; key never leaks into output.
 4. **Git** — args built as discrete tokens (assert the `ProcessRequest`);
@@ -259,6 +266,7 @@ feature is end-to-end.
 3. **Read range/paging** — **resolved**: `read` is whole-file with a size cap +
    `Error` over it; `offset`/`limit` are a later enhancement if a real need
    appears.
-4. **Serper result shape** — **resolved**: condense to `organic[] {title, link,
-   snippet}` + answer/knowledge boxes (via `ToolResults.Json`) — keeps context
-   cost down vs. passing raw Serper JSON through.
+4. **Web result shape** — **resolved**: condense to `results[] {title, url,
+   content, score?}` + optional synthesized `answer` (via `ToolResults.Json`) —
+   keeps context cost down vs. passing raw Tavily JSON through. `extract` returns
+   `results[] {url, raw_content}` + `failed_results`.

@@ -213,13 +213,13 @@ This is the GxPT side that consumes the Client and lands the config plumbing
   D16) → a list of server defs; infers transport (`url`→HTTP,
   `command`→stdio); applies the **GitHub PAT shape gate** (disable on malformed).
 - **`BuiltInServers`** — hardcoded first-party launch defs (resolve
-  `SerperMcpServer`/etc. under an app-relative `servers/` dir; inject the Serper
+  `WebSearchMcpServer`/etc. under an app-relative `servers/` dir; inject the web search
   key into `env`), each gated by its `AppSettings` enable toggle.
 - **`McpHost`** — assembles `McpServerConnection`s from **enabled built-ins** +
   **valid mcp.json entries**, builds the matching `StdioTransport`
   (`HttpTransport` in phase 8), `Open`s them, and exposes the connections to
   `McpToolRegistry`.
-- **MCP settings tab** + toggles + Serper key field land here too (architecture
+- **MCP settings tab** + toggles + web search key field land here too (architecture
   §8 UI).
 
 **Phase-3 milestone:** the host can enumerate the **union of tools** across
