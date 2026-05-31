@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mcp35.Core", "src\Mcp35.Cor
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mcp35.Server", "src\Mcp35.Server\Mcp35.Server.csproj", "{DCA697A6-1B4C-430C-BC45-134CB5F90072}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mcp35.Client", "src\Mcp35.Client\Mcp35.Client.csproj", "{A043F034-FFF5-44CE-9605-B40FF0016262}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -29,6 +31,10 @@ Global
 		{DCA697A6-1B4C-430C-BC45-134CB5F90072}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DCA697A6-1B4C-430C-BC45-134CB5F90072}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DCA697A6-1B4C-430C-BC45-134CB5F90072}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A043F034-FFF5-44CE-9605-B40FF0016262}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A043F034-FFF5-44CE-9605-B40FF0016262}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A043F034-FFF5-44CE-9605-B40FF0016262}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A043F034-FFF5-44CE-9605-B40FF0016262}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

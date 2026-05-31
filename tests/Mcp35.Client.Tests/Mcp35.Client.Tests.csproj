@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Tests for Mcp35.Client (phase 3). Links the Core + Client production sources (same
+    linked-source pattern as the other test projects) and compiles them into the test assembly.
+    Targets net48; Newtonsoft via pinned PackageReference (13.0.3) matching the vendored net35 DLL.
+
+    The end-to-end test (criterion 5) launches the EchoMcpServer exe as a child process; we
+    reference that project (ReferenceOutputAssembly=false) purely to force a build ordering and
+    to locate its output path.
+
+    NOTE: intentionally NOT added to GxPT.sln (VS2008 cannot load SDK-style projects).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>Mcp35.Client.Tests</AssemblyName>
+    <RootNamespace>Mcp35.Client.Tests</RootNamespace>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\src\Mcp35.Core\**\*.cs"
+             Exclude="..\..\src\Mcp35.Core\Properties\**\*.cs;..\..\src\Mcp35.Core\obj\**\*.cs;..\..\src\Mcp35.Core\bin\**\*.cs"
+             Link="Linked\Core\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Mcp35.Client\**\*.cs"
+             Exclude="..\..\src\Mcp35.Client\Properties\**\*.cs;..\..\src\Mcp35.Client\obj\**\*.cs;..\..\src\Mcp35.Client\bin\**\*.cs"
+             Link="Linked\Client\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Build the echo server first; the e2e test discovers its exe via EchoServerPath. -->
+    <ProjectReference Include="..\EchoMcpServer\EchoMcpServer.csproj"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!--
+    Copy the (already-built, via ProjectReference) EchoMcpServer output into a known subfolder of
+    this test's output dir so the e2e test can launch it via AppContext.BaseDirectory/echo-server.
+  -->
+  <Target Name="CopyEchoServer" AfterTargets="Build">
+    <ItemGroup>
+      <EchoServerFiles Include="..\EchoMcpServer\bin\$(Configuration)\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(EchoServerFiles)"
+          DestinationFiles="@(EchoServerFiles->'$(OutDir)echo-server\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>
