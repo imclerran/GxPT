@@ -194,6 +194,35 @@ namespace GxPT.Tests.Mcp
         }
 
         [Fact]
+        public void Directory_rule_covers_siblings_in_a_nested_folder()
+        {
+            // Multi-level path: the parent dir is "a/b", and a sibling "a/b/y.txt" must match.
+            var prompt = new ScriptedPrompt { Next = ApprovalChoice.RememberPrefixArg };
+            var pol = Policy(prompt, new InMemoryApprovalStore());
+
+            pol.Check("files__write", Args("{\"path\":\"a/b/x.txt\"}"));
+            Assert.Equal(1, prompt.Calls);
+
+            Assert.Equal(ApprovalDecision.Allow, pol.Check("files__write", Args("{\"path\":\"a/b/y.txt\"}")));
+            Assert.Equal(1, prompt.Calls);
+            // deeper still under a/b is covered
+            Assert.Equal(ApprovalDecision.Allow, pol.Check("files__write", Args("{\"path\":\"a/b/c/z.txt\"}")));
+            Assert.Equal(1, prompt.Calls);
+            // sibling directory "a/bc" must NOT match the "a/b" boundary
+            pol.Check("files__write", Args("{\"path\":\"a/bc/w.txt\"}"));
+            Assert.Equal(2, prompt.Calls);
+        }
+
+        [Fact]
+        public void Path_matching_normalizes_separators()
+        {
+            // A rule stored with a backslash separator still matches a forward-slash value.
+            Assert.True(ToolApprovalPolicy.PrefixMatches("a/b/y.txt", "a\\b", true));
+            Assert.True(ToolApprovalPolicy.PrefixMatches("a\\b\\y.txt", "a/b", true));
+            Assert.False(ToolApprovalPolicy.PrefixMatches("a/bc/y.txt", "a\\b", true));
+        }
+
+        [Fact]
         public void Prefix_command_boundary_helper()
         {
             Assert.True(ToolApprovalPolicy.PrefixMatches("git status -s", "git status", false));

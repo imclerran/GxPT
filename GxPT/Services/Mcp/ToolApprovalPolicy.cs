@@ -86,21 +86,40 @@ namespace GxPT
         internal static bool PrefixMatches(string value, string pattern, bool isPath)
         {
             if (value == null || pattern == null) return false;
-            // An empty path pattern means the workspace root itself ("this directory and below" for a
-            // file sitting directly in the root) — it matches any relative path under the root.
-            if (isPath && pattern.Length == 0) return true;
-            if (value.Equals(pattern, StringComparison.Ordinal)) return true;
-            if (!value.StartsWith(pattern, StringComparison.Ordinal)) return false;
 
-            char next = value[pattern.Length];
             if (isPath)
             {
-                char last = pattern.Length > 0 ? pattern[pattern.Length - 1] : '\0';
-                if (last == '/' || last == '\\') return true; // pattern already ends at a boundary
-                return next == '/' || next == '\\';
+                // Normalize separators so a rule stored with one separator (e.g. '\' from
+                // Path.GetDirectoryName on Windows) still matches a value using the other ('/' from
+                // the model). Compare case-insensitively (Windows paths).
+                value = NormalizePath(value);
+                pattern = NormalizePath(pattern);
+
+                // An empty pattern is the workspace root: matches any relative path under it.
+                if (pattern.Length == 0) return true;
+                if (value.Equals(pattern, StringComparison.OrdinalIgnoreCase)) return true;
+                if (!value.StartsWith(pattern, StringComparison.OrdinalIgnoreCase)) return false;
+                // Directory boundary: the char after the pattern must be a separator
+                // ("sub" matches "sub/a", not "subdir/a").
+                return value[pattern.Length] == '/';
             }
-            // command: the boundary must be whitespace
+
+            // command: token-aware prefix.
+            if (value.Equals(pattern, StringComparison.Ordinal)) return true;
+            if (!value.StartsWith(pattern, StringComparison.Ordinal)) return false;
+            char next = value[pattern.Length];
             return next == ' ' || next == '\t';
+        }
+
+        // Canonical relative-path form for comparison: '\' -> '/', collapse a leading './', drop any
+        // trailing separator.
+        private static string NormalizePath(string p)
+        {
+            if (string.IsNullOrEmpty(p)) return string.Empty;
+            p = p.Replace('\\', '/');
+            while (p.StartsWith("./", StringComparison.Ordinal)) p = p.Substring(2);
+            while (p.Length > 1 && p[p.Length - 1] == '/') p = p.Substring(0, p.Length - 1);
+            return p;
         }
 
         // ---- persistence of the user's choice ----
@@ -132,12 +151,13 @@ namespace GxPT
             if (val == null) return string.Empty;
             if (req.Policy.ScopeArgPath == "path")
             {
-                // "directory and below": the rule covers the file's PARENT directory, so other files
-                // in the same folder match. PrefixMatches enforces the directory boundary.
-                string dir = null;
-                try { dir = System.IO.Path.GetDirectoryName(val); }
-                catch { dir = null; }
-                return string.IsNullOrEmpty(dir) ? val : dir;
+                // "directory and below": the rule is the file's PARENT directory, so other files in
+                // the same folder match. Compute it with normalized '/' separators (NOT
+                // Path.GetDirectoryName, which yields '\' on Windows and wouldn't match the model's
+                // forward-slash paths). A root-level file yields "" — the workspace root.
+                string norm = NormalizePath(val);
+                int slash = norm.LastIndexOf('/');
+                return slash < 0 ? string.Empty : norm.Substring(0, slash);
             }
             // command: base + first subcommand (first two whitespace tokens)
             string trimmed = val.Trim();
