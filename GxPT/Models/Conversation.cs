@@ -16,6 +16,9 @@ namespace GxPT
         public string Name { get; internal set; }
         public string Id { get; internal set; } // UUID-like id
         public string SelectedModel { get; set; }
+        // MCP working folder for this conversation (GXPT_WORKDIR sandbox root); null = none. Persisted
+        // so the conversation re-opens with the same folder.
+        public string WorkingDir { get; set; }
         public DateTime LastUpdated { get; set; }
         public event Action<string> NameGenerated;
 

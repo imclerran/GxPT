@@ -100,6 +100,7 @@ namespace GxPT
                 Id = convo.Id,
                 Name = convo.Name,
                 SelectedModel = convo.SelectedModel,
+                WorkingDir = convo.WorkingDir,
                 LastUpdated = convo.LastUpdated,
                 Messages = convo.History.Select(m => ToMessageDto(m)).ToList()
             };
@@ -159,6 +160,7 @@ namespace GxPT
                 Id = dto.Id,
                 Name = dto.Name ?? "New Conversation",
                 SelectedModel = dto.SelectedModel,
+                WorkingDir = dto.WorkingDir,
                 LastUpdated = dto.LastUpdated == default(DateTime) && !string.IsNullOrEmpty(path)
                     ? File.GetLastWriteTimeUtc(path)
                     : (dto.LastUpdated == default(DateTime) ? DateTime.Now : dto.LastUpdated)
@@ -315,6 +317,7 @@ namespace GxPT
             public string Id { get; set; }
             public string Name { get; set; }
             public string SelectedModel { get; set; }
+            public string WorkingDir { get; set; }
             public DateTime LastUpdated { get; set; }
             public List<MessageDto> Messages { get; set; }
         }

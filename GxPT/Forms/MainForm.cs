@@ -562,6 +562,11 @@ namespace GxPT
             if (ctx == null || ctx.Page == null) return;
             try
             {
+                // Seed from the (possibly loaded) conversation so a re-opened chat keeps its folder.
+                if (string.IsNullOrEmpty(ctx.WorkingDir) && ctx.Conversation != null &&
+                    !string.IsNullOrEmpty(ctx.Conversation.WorkingDir))
+                    ctx.WorkingDir = ctx.Conversation.WorkingDir;
+
                 var strip = new WorkspaceContextStrip();
                 ctx.WorkspaceStrip = strip;
                 var ctxRef = ctx;
@@ -599,6 +604,7 @@ namespace GxPT
                 if (dlg.ShowDialog(this) != DialogResult.OK) return;
                 ctx.WorkingDir = dlg.SelectedPath;
             }
+            PersistWorkingDir(ctx);
             if (ctx.WorkspaceStrip != null)
             {
                 ctx.WorkspaceStrip.SetWorkingDir(ctx.WorkingDir);
@@ -611,8 +617,33 @@ namespace GxPT
         {
             if (ctx == null) return;
             ctx.WorkingDir = null;
+            PersistWorkingDir(ctx);
             if (ctx.WorkspaceStrip != null) ctx.WorkspaceStrip.SetWorkingDir(null);
             SyncMcpWorkingDirFromActiveTab();
+        }
+
+        // After a conversation is loaded into a tab, adopt its persisted working folder onto the tab
+        // context + strip and (re)bind the MCP host to it.
+        private void ApplyLoadedWorkingDir(TabManager.ChatTabContext ctx)
+        {
+            if (ctx == null) return;
+            ctx.WorkingDir = (ctx.Conversation != null) ? ctx.Conversation.WorkingDir : null;
+            if (ctx.WorkspaceStrip != null)
+            {
+                ctx.WorkspaceStrip.SetWorkingDir(ctx.WorkingDir);
+                ctx.WorkspaceStrip.Visible = true;
+            }
+            SyncMcpWorkingDirFromActiveTab();
+        }
+
+        // Mirror the tab's working folder onto its persisted conversation and save, so it re-opens
+        // with the same folder. Skipped for brand-new, never-sent conversations (NoSaveUntilUserSend).
+        private void PersistWorkingDir(TabManager.ChatTabContext ctx)
+        {
+            if (ctx == null || ctx.Conversation == null) return;
+            ctx.Conversation.WorkingDir = ctx.WorkingDir;
+            try { if (!ctx.NoSaveUntilUserSend) ConversationStore.Save(ctx.Conversation); }
+            catch { }
         }
 
         private void OnTabsChanged()
@@ -2254,6 +2285,9 @@ namespace GxPT
             // Rebuild transcript UI off the UI thread to avoid freezes on large histories
             RebuildTranscriptAsync(ctx, convo);
 
+            // Adopt the conversation's saved working folder.
+            ApplyLoadedWorkingDir(ctx);
+
             // Update tab title and window
             try
             {
@@ -2292,6 +2326,9 @@ namespace GxPT
 
                 // Rebuild transcript UI off the UI thread to avoid freezes on large histories
                 RebuildTranscriptAsync(ctx, convo);
+
+                // Adopt the conversation's saved working folder.
+                ApplyLoadedWorkingDir(ctx);
 
                 // Hook name updates for this conversation
                 try
