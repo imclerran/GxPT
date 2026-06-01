@@ -4,13 +4,22 @@ using System.Windows.Forms;
 
 namespace GxPT
 {
-    // A thin strip docked at the top of the chat/transcript area showing the active conversation's
-    // working folder (the MCP files/git/command sandbox root, GXPT_WORKDIR) with controls to set or
-    // clear it. Raised events are handled by MainForm, which updates the tab context + the host.
+    // A thin strip docked at the top of each chat tab, above its transcript, showing that
+    // conversation's working folder (the MCP files/git/command sandbox root, GXPT_WORKDIR) with a
+    // link to set / change / clear it.
+    //
+    // Styling note: this intentionally uses FIXED colors and does NOT follow the app's light/dark
+    // theme — it is meant to match the tab strip above it (which is also un-themed system chrome).
     internal sealed class WorkspaceContextStrip : Panel
     {
-        private readonly Label _icon;
-        private readonly Label _path;
+        // Fixed palette (does not follow the app theme).
+        private static readonly Color SetBack = Color.FromArgb(237, 244, 237);   // subtle green-grey
+        private static readonly Color UnsetBack = Color.FromArgb(252, 246, 220); // cream / warning
+        private static readonly Color TextColor = Color.FromArgb(55, 55, 55);
+        private static readonly Color BorderColor = Color.FromArgb(200, 200, 200);
+        private static readonly Color LinkColor = Color.FromArgb(0, 90, 158);
+
+        private readonly Label _text;
         private readonly LinkLabel _change;
         private readonly LinkLabel _clear;
 
@@ -20,27 +29,17 @@ namespace GxPT
         public WorkspaceContextStrip()
         {
             this.Dock = DockStyle.Top;
-            this.Height = 24;
-            this.Padding = new Padding(8, 3, 8, 3);
-
-            _icon = new Label();
-            _icon.AutoSize = true;
-            _icon.Dock = DockStyle.Left;
-            _icon.Text = "Workspace:";
-            _icon.TextAlign = ContentAlignment.MiddleLeft;
-
-            _path = new Label();
-            _path.AutoSize = false;
-            _path.Dock = DockStyle.Fill;
-            _path.AutoEllipsis = true;
-            _path.TextAlign = ContentAlignment.MiddleLeft;
-            _path.Padding = new Padding(6, 0, 6, 0);
+            this.Height = 26;
+            this.Padding = new Padding(8, 0, 8, 0);
 
             _change = new LinkLabel();
             _change.AutoSize = true;
             _change.Dock = DockStyle.Right;
-            _change.Text = "Set folder";
             _change.TextAlign = ContentAlignment.MiddleRight;
+            _change.LinkColor = LinkColor;
+            _change.ActiveLinkColor = LinkColor;
+            _change.VisitedLinkColor = LinkColor;
+            _change.LinkBehavior = LinkBehavior.HoverUnderline;
             _change.LinkClicked += delegate { if (ChangeRequested != null) ChangeRequested(this, EventArgs.Empty); };
 
             _clear = new LinkLabel();
@@ -48,33 +47,57 @@ namespace GxPT
             _clear.Dock = DockStyle.Right;
             _clear.Text = "Clear";
             _clear.TextAlign = ContentAlignment.MiddleRight;
-            _clear.Padding = new Padding(0, 0, 8, 0);
+            _clear.LinkColor = LinkColor;
+            _clear.ActiveLinkColor = LinkColor;
+            _clear.VisitedLinkColor = LinkColor;
+            _clear.LinkBehavior = LinkBehavior.HoverUnderline;
+            _clear.Padding = new Padding(0, 0, 12, 0);
             _clear.Visible = false;
             _clear.LinkClicked += delegate { if (ClearRequested != null) ClearRequested(this, EventArgs.Empty); };
 
-            // Fill must be added first so the docked siblings flank it correctly.
-            this.Controls.Add(_path);
-            this.Controls.Add(_change);
+            _text = new Label();
+            _text.Dock = DockStyle.Fill;
+            _text.AutoEllipsis = true;
+            _text.TextAlign = ContentAlignment.MiddleLeft;
+            _text.ForeColor = TextColor;
+
+            // Fill first, edge-docked controls after — matches the app's working docking order
+            // (e.g. pnlInput). Do NOT BringToFront the strip itself or the Fill transcript stops
+            // reserving space for it.
+            this.Controls.Add(_text);
             this.Controls.Add(_clear);
-            this.Controls.Add(_icon);
+            this.Controls.Add(_change);
+
+            SetWorkingDir(null);
         }
 
-        // Reflect the given working folder (null/empty => "no folder set").
+        // Reflect the given working folder (null/empty => "no folder" warning state).
         public void SetWorkingDir(string dir)
         {
             bool has = !string.IsNullOrEmpty(dir);
-            _path.Text = has ? dir : "(no folder set — file, git, and command tools are disabled)";
-            _path.ForeColor = has ? this.ForeColor : SystemColors.GrayText;
-            _change.Text = has ? "Change" : "Set folder";
-            _clear.Visible = has;
+            if (has)
+            {
+                this.BackColor = SetBack;
+                _text.Text = "Working folder:  " + dir + "      file, git & command tools run here";
+                _change.Text = "Change...";
+                _clear.Visible = true;
+            }
+            else
+            {
+                this.BackColor = UnsetBack;
+                _text.Text = "No working folder — file, git & command tools are disabled for this conversation.";
+                _change.Text = "Set folder...";
+                _clear.Visible = false;
+            }
+            this.Invalidate();
         }
 
-        // Apply theme colors (called by MainForm's theme application).
-        public void ApplyColors(Color back, Color fore)
+        protected override void OnPaint(PaintEventArgs e)
         {
-            this.BackColor = back;
-            _icon.ForeColor = fore;
-            _path.ForeColor = fore;
+            base.OnPaint(e);
+            // A subtle bottom separator so the strip reads as chrome above the transcript.
+            using (var pen = new Pen(BorderColor))
+                e.Graphics.DrawLine(pen, 0, this.Height - 1, this.Width, this.Height - 1);
         }
     }
 }

@@ -567,27 +567,13 @@ namespace GxPT
                 var ctxRef = ctx;
                 strip.ChangeRequested += delegate { SetWorkingFolderForContext(ctxRef); };
                 strip.ClearRequested += delegate { ClearWorkingFolderForContext(ctxRef); };
-                // Add after the (Fill) transcript and bring to front so the Top dock sits above it.
+                // Dock order: the strip is Top and the transcript is Fill. WinForms lays out docked
+                // controls by REVERSE z-order, so the Fill transcript must be the frontmost child for
+                // it to fill the area *below* the Top strip (otherwise the strip overlaps the
+                // transcript's top). Add the strip, then send the transcript to front.
                 ctx.Page.Controls.Add(strip);
-                strip.BringToFront();
+                if (ctx.Transcript != null) ctx.Transcript.BringToFront();
                 strip.SetWorkingDir(ctx.WorkingDir);
-                if (_themeManager != null) _themeManager.ApplyWorkspaceStripTheme(strip);
-            }
-            catch { }
-        }
-
-        // Re-theme every tab's workspace strip (called after a theme change).
-        private void RefreshWorkspaceStripThemes()
-        {
-            if (_tabManager == null || _themeManager == null) return;
-            try
-            {
-                foreach (var kv in _tabManager.TabContexts)
-                {
-                    var c = kv.Value;
-                    if (c != null && c.WorkspaceStrip != null)
-                        _themeManager.ApplyWorkspaceStripTheme(c.WorkspaceStrip);
-                }
             }
             catch { }
         }
@@ -760,7 +746,6 @@ namespace GxPT
             // Apply theme across existing transcripts and primary UI
             try { if (_themeManager != null) _themeManager.ApplyThemeToAllTranscripts(); }
             catch { }
-            RefreshWorkspaceStripThemes();
 
             // Sync Dark Mode menu checked state from settings
             try
@@ -2593,7 +2578,6 @@ namespace GxPT
                     _themeManager.ApplyThemeToAllTranscripts();
                     _themeManager.ApplyFontSizeSettingToAllUi(); // keep fonts consistent; no-op for theme but safe
                 }
-                RefreshWorkspaceStripThemes();
 
                 // Also refresh tab headers (font/color may rely on system colors)
                 try { if (this.tabControl1 != null) this.tabControl1.Invalidate(); }
