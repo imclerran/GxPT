@@ -68,7 +68,8 @@ namespace GxPT.Tests.Mcp
             // first request: leading system message is the names manifest, history follows
             var msgs = streamer.SeenMessages[0];
             Assert.Equal("system", msgs[0].Role);
-            Assert.Contains("Available MCP tools", msgs[0].Content);
+            Assert.Contains("reveal_tools", msgs[0].Content);   // manifest instructs reveal-before-call
+            Assert.Contains("files__read", msgs[0].Content);     // and lists tool names
             Assert.Equal("user", msgs[1].Role);
             // exposed tools always lead with reveal_tools
             Assert.Equal("reveal_tools", (string)streamer.SeenTools[0][0]["function"]["name"]);

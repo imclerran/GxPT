@@ -170,8 +170,13 @@ namespace GxPT
                     names.Sort(StringComparer.Ordinal); // server__ prefix groups visually
 
                     StringBuilder sb = new StringBuilder();
-                    sb.Append("Available MCP tools. Call reveal_tools({\"names\":[...]}) to load a tool's ");
-                    sb.Append("full definition before you can call it.");
+                    sb.Append("The following MCP tools are available, listed by name only. ");
+                    sb.Append("You CANNOT call any of these tools directly from this list. ");
+                    sb.Append("Before calling a tool, you MUST first call reveal_tools({\"names\":[...]}) ");
+                    sb.Append("with the exact names you intend to use; that loads their full definitions ");
+                    sb.Append("and makes them callable on the next step. You may reveal several at once. ");
+                    sb.Append("Only reveal_tools and tools you have already revealed can be called.");
+                    sb.Append("\n\nAvailable tools:");
                     for (int i = 0; i < names.Count; i++)
                         sb.Append("\n- ").Append(names[i]);
                     _manifestCache = sb.ToString();
