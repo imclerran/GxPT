@@ -2317,6 +2317,18 @@ namespace GxPT
                             return; // handled
                         }
                     }
+
+                    // Edit-diff body/scrollbar: shift+wheel scrolls it horizontally.
+                    EditDiffScrollHit edh;
+                    if (HitTestEditDiffScrollArea(e.Location, out edh) && edh.ContentWidth > edh.ViewportWidth)
+                    {
+                        int hStep = Math.Max(16, ScrollStep);
+                        int deltaX = (int)System.Math.Round(-(e.Delta / 120.0) * hStep, MidpointRounding.AwayFromZero);
+                        int maxScroll = Math.Max(0, edh.ContentWidth - edh.ViewportWidth);
+                        SetEditDiffScroll(edh.Key, Math.Max(0, Math.Min(maxScroll, GetEditDiffScroll(edh.Key) + deltaX)));
+                        Invalidate();
+                        return; // handled
+                    }
                 }
             }
             catch { }
