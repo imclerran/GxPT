@@ -62,6 +62,12 @@ namespace GxPT
         private const int BulletIndent = 18;
         private const int BulletGap = 8;
         private const int CodeBlockPadding = 6;
+
+        // Edit-diff record layout: a one-line clickable header, then (when expanded) a chromeless
+        // diff body indented under it.
+        private const int EditDiffHeaderPad = 3;  // vertical padding around the header text
+        private const int EditDiffBodyGap = 2;    // gap between header and body
+        private const int EditDiffBodyPad = 4;    // padding below the body
         private const int InlineCodePaddingX = 3;
         private const int InlineCodePaddingY = 1;
 
@@ -198,6 +204,8 @@ namespace GxPT
             public List<Rectangle> AttachmentPillRects; // computed per-draw for hit testing
             // Link hit rectangles captured at draw time (virtual coordinates)
             public List<LinkHit> LinkHits;
+            // Edit-diff header hit rectangles captured at draw time (virtual coords) for collapse toggling
+            public List<EditDiffHit> EditDiffHits;
             // Drawn inline text segments for selection/copy (paragraphs, headings, lists, table cells)
             public List<DrawnSeg> DrawnSegments;
             // Unique link run id counter per message (increments when a new link run starts)
@@ -208,6 +216,48 @@ namespace GxPT
         private readonly List<MessageItem> _items = new List<MessageItem>();
         private MessageItem _hoverAttachItem; private int _hoverAttachIndex = -1;
         private MessageItem _pressAttachItem; private int _pressAttachIndex = -1;
+
+        // ---------- Edit-diff records (collapsible, chromeless; data derived from tool-call args) ----------
+        private struct EditDiffHit { public Rectangle Rect; public string Key; }
+
+        private sealed class EditDiffData { public string Path; public string Body; public int Added; public int Removed; }
+        private readonly object _editDiffLock = new object();
+        private readonly Dictionary<string, EditDiffData> _editDiffs = new Dictionary<string, EditDiffData>(StringComparer.Ordinal);
+        private readonly Dictionary<string, bool> _editDiffCollapsed = new Dictionary<string, bool>(StringComparer.Ordinal);
+
+        // Registers (or refreshes) the diff for one edit tool call, keyed by its (persisted) call id.
+        // Called from the streaming worker thread and the history reload path, so it is lock-guarded.
+        public void RegisterEditDiff(string key, string path, string body, int added, int removed)
+        {
+            if (string.IsNullOrEmpty(key)) return;
+            lock (_editDiffLock)
+            {
+                _editDiffs[key] = new EditDiffData { Path = path ?? string.Empty, Body = body ?? string.Empty, Added = added, Removed = removed };
+            }
+        }
+
+        private EditDiffData GetEditDiffData(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return null;
+            lock (_editDiffLock) { EditDiffData d; return _editDiffs.TryGetValue(key, out d) ? d : null; }
+        }
+
+        // Collapse state is UI-thread-only; default (absent) = collapsed.
+        private bool IsEditDiffCollapsed(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return true;
+            bool c; return _editDiffCollapsed.TryGetValue(key, out c) ? c : true;
+        }
+
+        // The header line, e.g. "▸ edited src/main.py  (+3 −1)" (collapsed) / "▾ …" (expanded).
+        private static string BuildEditDiffHeaderText(EditDiffData data, bool collapsed)
+        {
+            string tri = collapsed ? "▸" : "▾";
+            string path = (data != null && !string.IsNullOrEmpty(data.Path)) ? data.Path : "(file)";
+            int add = data != null ? data.Added : 0;
+            int rem = data != null ? data.Removed : 0;
+            return tri + " edited " + path + "  (+" + add + " −" + rem + ")";
+        }
 
         // ---------- Batch update state ----------
         // Coalesce expensive reflow/paint while adding many messages (e.g., when opening history)
@@ -925,6 +975,30 @@ namespace GxPT
                             return new Size(Math.Max(24, boxW), Math.Max(headerH + 2 * CodeBlockPadding, boxH));
                         }
                     }
+                case BlockType.EditDiff:
+                    {
+                        var ed = (EditDiffBlock)blk;
+                        EditDiffData data = GetEditDiffData(ed.Key);
+                        bool collapsed = IsEditDiffCollapsed(ed.Key);
+                        int headerH = _baseFont.Height + 2 * EditDiffHeaderPad;
+                        string headerText = BuildEditDiffHeaderText(data, collapsed);
+                        int headerW = TextRenderer.MeasureText(headerText, _baseFont).Width;
+                        int w = headerW;
+                        int h = headerH;
+                        if (data != null && !collapsed)
+                        {
+                            using (Graphics g = CreateGraphics())
+                            {
+                                SyntaxHighlightingRenderer.EnqueueHighlight("diff", _isDarkTheme, data.Body, _monoFont);
+                                var colored = SyntaxHighlightingRenderer.GetColoredSegments(data.Body, "diff", _monoFont, _isDarkTheme);
+                                Size content = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, colored);
+                                int bodyH = Math.Max(_monoFont.Height, content.Height);
+                                h += EditDiffBodyGap + bodyH + EditDiffBodyPad;
+                                w = Math.Max(w, Math.Min(maxWidth, content.Width));
+                            }
+                        }
+                        return new Size(Math.Max(24, Math.Min(maxWidth, w)), h);
+                    }
                 case BlockType.Table:
                     {
                         var t = (TableBlock)blk;
@@ -1227,6 +1301,8 @@ namespace GxPT
             Rectangle content = new Rectangle(r.X + BubblePadding, r.Y + BubblePadding, r.Width - 2 * BubblePadding, r.Height - 2 * BubblePadding);
             // Reset link hit rectangles for this item before drawing
             if (it.LinkHits == null) it.LinkHits = new List<LinkHit>(); else it.LinkHits.Clear();
+            // Reset edit-diff header hit rectangles before drawing
+            if (it.EditDiffHits == null) it.EditDiffHits = new List<EditDiffHit>(); else it.EditDiffHits.Clear();
             // Reset drawn text segments list (for selection)
             if (it.DrawnSegments == null) it.DrawnSegments = new List<DrawnSeg>(); else it.DrawnSegments.Clear();
             // Reset link run sequence
@@ -1395,6 +1471,43 @@ namespace GxPT
                         if (owner != null) { if (owner.DrawnSegments == null) owner.DrawnSegments = new List<DrawnSeg>(); owner.DrawnSegments.Add(new DrawnSeg { IsNewLine = true, IsHardBreak = true, Rect = new Rectangle(x0, y, 0, 0), Text = null, Font = _baseFont }); }
                     }
                     // Avoid extra block-level newline to prevent double spacing
+                }
+                else if (blk.Type == BlockType.EditDiff)
+                {
+                    var ed = (EditDiffBlock)blk;
+                    EditDiffData data = GetEditDiffData(ed.Key);
+                    bool collapsed = IsEditDiffCollapsed(ed.Key);
+                    int headerH = _baseFont.Height + 2 * EditDiffHeaderPad;
+
+                    // Clickable header row (spans the content width); captured for collapse hit-testing.
+                    string headerText = BuildEditDiffHeaderText(data, collapsed);
+                    using (var brush = new SolidBrush(ForeColor))
+                    using (var fmt = StringFormat.GenericTypographic)
+                    {
+                        fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+                        g.DrawString(headerText, _baseFont, brush, new PointF(x0, y + EditDiffHeaderPad), fmt);
+                    }
+                    if (owner != null)
+                    {
+                        if (owner.EditDiffHits == null) owner.EditDiffHits = new List<EditDiffHit>();
+                        owner.EditDiffHits.Add(new EditDiffHit { Rect = new Rectangle(x0, y, maxWidth, headerH), Key = ed.Key });
+                    }
+                    y += headerH;
+
+                    // Expanded: chromeless diff body, full-width red/green bands, clipped to width
+                    // (horizontal scroll for wide diffs is a following increment).
+                    if (data != null && !collapsed)
+                    {
+                        y += EditDiffBodyGap;
+                        SyntaxHighlightingRenderer.EnqueueHighlight("diff", _isDarkTheme, data.Body, _monoFont);
+                        var colored = SyntaxHighlightingRenderer.GetColoredSegments(data.Body, "diff", _monoFont, _isDarkTheme);
+                        Size content = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, colored);
+                        int bodyH = Math.Max(_monoFont.Height, content.Height);
+                        Rectangle textRect = new Rectangle(x0, y, maxWidth, bodyH);
+                        SyntaxHighlightingRenderer.DrawColoredSegmentsNoWrap(g, colored, textRect, 0);
+                        y += bodyH + EditDiffBodyPad;
+                    }
+                    numberedCounters.Clear();
                 }
                 else if (blk.Type == BlockType.CodeBlock)
                 {
@@ -2224,6 +2337,15 @@ namespace GxPT
                     OpenAttachmentInViewer(pill.Item, pill.Index);
                     return;
                 }
+                // Edit-diff header click → toggle collapse and re-layout
+                string edKey;
+                if (HitTestEditDiff(e.Location, out edKey))
+                {
+                    _editDiffCollapsed[edKey] = !IsEditDiffCollapsed(edKey);
+                    Reflow();
+                    Invalidate();
+                    return;
+                }
                 // Copy button click
                 var ui = HitTestCodeUI(e.Location);
                 if (ui.Hit && ui.Which == CodeUiHit.CopyButton && ui.Item != null)
@@ -2552,6 +2674,23 @@ namespace GxPT
                     return _items[i];
             }
             return null;
+        }
+
+        // Returns true and the diff key if the point is over an edit-diff header row.
+        private bool HitTestEditDiff(Point clientPt, out string key)
+        {
+            key = null;
+            Point virt = new Point(clientPt.X, clientPt.Y + _scrollOffset);
+            foreach (var it in _items)
+            {
+                if (it.EditDiffHits == null || it.EditDiffHits.Count == 0) continue;
+                if (!it.Bounds.Contains(virt)) continue;
+                for (int i = 0; i < it.EditDiffHits.Count; i++)
+                {
+                    if (it.EditDiffHits[i].Rect.Contains(virt)) { key = it.EditDiffHits[i].Key; return true; }
+                }
+            }
+            return false;
         }
 
         private string HitTestLink(Point clientPt)
