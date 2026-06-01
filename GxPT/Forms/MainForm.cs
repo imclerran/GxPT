@@ -576,6 +576,20 @@ namespace GxPT
         private void SetWorkingFolderForActiveTab()
         {
             var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            SetWorkingFolderForContext(ctx);
+        }
+
+        // Set the working folder for a specific tab (tab right-click menu).
+        internal void SetWorkingFolderForTab(TabPage page)
+        {
+            if (_tabManager == null || page == null) return;
+            TabManager.ChatTabContext ctx;
+            if (!_tabManager.TabContexts.TryGetValue(page, out ctx) || ctx == null) return;
+            SetWorkingFolderForContext(ctx);
+        }
+
+        private void SetWorkingFolderForContext(TabManager.ChatTabContext ctx)
+        {
             if (ctx == null) return;
             using (var dlg = new FolderBrowserDialog())
             {

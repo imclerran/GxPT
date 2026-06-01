@@ -321,10 +321,14 @@
        been built yet (that server's tool just won't be available at runtime). -->
   <Target Name="AfterBuild">
     <ItemGroup>
-      <McpServerFiles Include="..\servers\FilesMcpServer\bin\$(Configuration)\**\*.*" />
-      <McpServerFiles Include="..\servers\GitMcpServer\bin\$(Configuration)\**\*.*" />
-      <McpServerFiles Include="..\servers\CommandMcpServer\bin\$(Configuration)\**\*.*" />
-      <McpServerFiles Include="..\servers\WebSearchMcpServer\bin\$(Configuration)\**\*.*" />
+      <McpServerFiles Include="..\servers\FilesMcpServer\bin\$(Configuration)\**\*.*"
+                      Exclude="..\servers\FilesMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\FilesMcpServer\bin\$(Configuration)\**\*.xml" />
+      <McpServerFiles Include="..\servers\GitMcpServer\bin\$(Configuration)\**\*.*"
+                      Exclude="..\servers\GitMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\GitMcpServer\bin\$(Configuration)\**\*.xml" />
+      <McpServerFiles Include="..\servers\CommandMcpServer\bin\$(Configuration)\**\*.*"
+                      Exclude="..\servers\CommandMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\CommandMcpServer\bin\$(Configuration)\**\*.xml" />
+      <McpServerFiles Include="..\servers\WebSearchMcpServer\bin\$(Configuration)\**\*.*"
+                      Exclude="..\servers\WebSearchMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\WebSearchMcpServer\bin\$(Configuration)\**\*.xml" />
     </ItemGroup>
     <Copy SourceFiles="@(McpServerFiles)"
           DestinationFiles="@(McpServerFiles->'$(OutDir)mcp-servers\%(RecursiveDir)%(Filename)%(Extension)')"
