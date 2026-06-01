@@ -12,10 +12,11 @@ namespace GxPT
             return string.IsNullOrEmpty(functionName) ? string.Empty : functionName.Replace("__", " / ");
         }
 
-        // A compact, markdown-safe "using <tool>" marker (italic, no internal underscores).
+        // A compact "using <tool>" marker, plain (not italic) for consistency with the collapsible
+        // tool records. Display() turns the qualified name into "web / search" with no underscores.
         public static string Call(string functionName)
         {
-            return "_using " + Display(functionName) + "_";
+            return "using " + Display(functionName);
         }
 
         // For files__edit / command__run, the generic "using" marker is replaced by a collapsible
