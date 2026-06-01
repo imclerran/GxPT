@@ -1898,6 +1898,15 @@ namespace GxPT
         // Markdown is parsed on a background thread and the resulting blocks are appended to the
         // transcript in small batches on a UI timer. System messages are skipped; help templates
         // (NoSaveUntilUserSend) are scrolled to the top, otherwise the view sticks to the bottom.
+        // Emits the accumulated assistant turn (model text + tool markers) as one transcript bubble.
+        private static void FlushAssistantBuffer(List<ChatMessage> items, ref System.Text.StringBuilder asst)
+        {
+            if (asst == null) return;
+            string text = asst.ToString();
+            asst = null;
+            if (text.Trim().Length > 0) items.Add(new ChatMessage("assistant", text));
+        }
+
         private void RebuildTranscriptAsync(TabManager.ChatTabContext ctx, Conversation convo)
         {
             if (ctx == null || ctx.Transcript == null || convo == null) return;
@@ -1908,14 +1917,45 @@ namespace GxPT
                 try { ctx.Transcript.RefreshTheme(); }
                 catch { }
 
-                // Snapshot messages to process (skip system for transcript)
+                // Snapshot messages to process. System and tool messages are not shown. A tool-using
+                // assistant turn is persisted as several messages (assistant-with-tool_calls, tool
+                // result(s), ..., final assistant); coalesce each such run into ONE assistant bubble
+                // with the model's text plus compact "using <tool>" markers — never the raw tool
+                // results. This matches the live streamed view.
                 var items = new List<ChatMessage>();
+                System.Text.StringBuilder asst = null;
                 foreach (var m in convo.History)
                 {
                     if (m == null) continue;
-                    if (string.Equals(m.Role, "system", StringComparison.OrdinalIgnoreCase)) continue;
-                    items.Add(m);
+                    string role = (m.Role ?? string.Empty).ToLowerInvariant();
+                    if (role == "system" || role == "tool") continue; // not shown
+
+                    if (role == "user")
+                    {
+                        FlushAssistantBuffer(items, ref asst);
+                        items.Add(m);
+                        continue;
+                    }
+
+                    // assistant (or any unexpected role): accumulate text + tool-call markers
+                    if (asst == null) asst = new System.Text.StringBuilder();
+                    if (!string.IsNullOrEmpty(m.Content))
+                    {
+                        if (asst.Length > 0) asst.Append("\r\n\r\n");
+                        asst.Append(m.Content);
+                    }
+                    if (m.ToolCalls != null)
+                    {
+                        for (int ti = 0; ti < m.ToolCalls.Count; ti++)
+                        {
+                            var tc = m.ToolCalls[ti];
+                            if (tc == null) continue;
+                            if (asst.Length > 0) asst.Append("\r\n\r\n");
+                            asst.Append(McpMarkers.Call(tc.Name));
+                        }
+                    }
                 }
+                FlushAssistantBuffer(items, ref asst);
 
                 // Producer-consumer: parse off-UI, consume on UI timer in small chunks
                 var parsed = new List<ParsedMessage>(Math.Max(4, items.Count));
