@@ -250,6 +250,18 @@ namespace GxPT.Tests.Mcp
         }
 
         [Fact]
+        public void HasTools_reflects_the_catalog()
+        {
+            var reg = NewRegistry(8);
+            Assert.False(reg.HasTools);
+            var conn = FakeConn.Ready("files", new ToolDef("read"));
+            reg.AddConnection(conn);
+            Assert.True(reg.HasTools);
+            reg.RemoveConnection(conn);
+            Assert.False(reg.HasTools);
+        }
+
+        [Fact]
         public void Reveal_tools_name_is_never_produced_by_munging()
         {
             var reg = NewRegistry(8);

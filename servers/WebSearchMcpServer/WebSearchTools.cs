@@ -23,12 +23,14 @@ namespace WebSearchMcpServer
             TavilyClient client = new TavilyClient(config, null);
 
             server.AddTool("search",
-                "Search the web and return relevant results (title, url, content snippet), optionally with a synthesized answer.",
+                "Search the web and return relevant results, each with a title, URL, and content snippet (optionally a synthesized answer). " +
+                "Start here when you need current information. The returned URLs can be passed to web__extract to read full page content.",
                 BuildSearchSchema(),
                 delegate(ToolCallContext ctx) { return Search(config, client, ctx); });
 
             server.AddTool("extract",
-                "Fetch and extract the full text content of one or more web pages by URL.",
+                "Fetch the full text of specific web pages you ALREADY have URLs for (for example, URLs returned by web__search). " +
+                "Requires the 'urls' argument: one or more absolute http(s) URLs. Do not call this without URLs — run web__search first to find them.",
                 BuildExtractSchema(),
                 delegate(ToolCallContext ctx) { return Extract(config, client, ctx); });
         }
@@ -64,7 +66,7 @@ namespace WebSearchMcpServer
             JObject depth = StrEnum("Extraction depth: 'basic' (faster) or 'advanced' (more thorough).", new string[] { "basic", "advanced" });
 
             return SchemaBuilder.Object()
-                .Arr("urls", "string", true, "One or more page URLs to fetch and extract")
+                .Arr("urls", "string", true, "Required. One or more absolute http(s) page URLs to fetch (e.g. URLs returned by web__search). Must not be empty.")
                 .Raw("extract_depth", depth, false)
                 .Raw("format", fmt, false)
                 .Bool("include_images", false, "Include image URLs found on the pages")

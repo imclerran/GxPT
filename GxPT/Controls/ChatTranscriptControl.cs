@@ -11,7 +11,7 @@ using System.IO;
 
 namespace GxPT
 {
-    public enum MessageRole { User, Assistant, System }
+    public enum MessageRole { User, Assistant, System, Tool }
 
     [ToolboxItem(true)]
     public sealed partial class ChatTranscriptControl : UserControl
@@ -1211,12 +1211,16 @@ namespace GxPT
             else if (it.Role == MessageRole.Assistant) { back = _clrAsstBack; border = _clrAsstBorder; }
             else { back = _clrSysBack; border = _clrSysBorder; }
 
-            using (var path = RoundedRect(r, BubbleRadius))
-            using (var b = new SolidBrush(back))
-            using (var pen = new Pen(border))
+            // Tool-activity messages render as plain text with no bubble chrome (background/border).
+            if (it.Role != MessageRole.Tool)
             {
-                g.FillPath(b, path);
-                g.DrawPath(pen, path);
+                using (var path = RoundedRect(r, BubbleRadius))
+                using (var b = new SolidBrush(back))
+                using (var pen = new Pen(border))
+                {
+                    g.FillPath(b, path);
+                    g.DrawPath(pen, path);
+                }
             }
 
             // Content area

@@ -19,6 +19,8 @@ namespace GxPT
         public const string FilesName = "files";
         public const string GitName = "git";
         public const string CommandName = "command";
+        public const string GitHubName = "github";
+        public const string GitHubUrl = "https://api.githubcopilot.com/mcp/";
 
         // Env var names the host injects (servers spec §1).
         public const string EnvWorkdir = "GXPT_WORKDIR";
@@ -58,6 +60,23 @@ namespace GxPT
                 GitPath = "git";
                 CmdShell = "cmd.exe";
             }
+        }
+
+        // The GitHub HTTP server, configured from settings.json (enable toggle + PAT) rather than
+        // mcp.json. Enabled only when the toggle is on and the PAT is well-formed; workdir-independent.
+        public static McpServerSpec GitHubSpec(bool enabled, string pat)
+        {
+            string token = pat != null ? pat.Trim() : string.Empty;
+            McpServerSpec s = new McpServerSpec();
+            s.Name = GitHubName;
+            s.Kind = McpTransportKind.Http;
+            s.BuiltIn = true;
+            s.WorkdirScoped = false;
+            s.Url = GitHubUrl;
+            if (!string.IsNullOrEmpty(token))
+                s.Headers["Authorization"] = "Bearer " + token;
+            s.Enabled = enabled && IsValidGitHubPat(token);
+            return s;
         }
 
         public static IList<McpServerSpec> BuiltInSpecs(BuiltInOptions o)

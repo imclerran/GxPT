@@ -124,6 +124,8 @@
     <Compile Include="Services\Mcp\IServerConnector.cs" />
     <Compile Include="Services\Mcp\McpHost.cs" />
     <Compile Include="Services\Mcp\DefaultServerConnector.cs" />
+    <Compile Include="Services\Mcp\DelegateToolLoopUi.cs" />
+    <Compile Include="Services\Mcp\LoggerSink.cs" />
     <Compile Include="Forms\MainForm.cs">
       <SubType>Form</SubType>
     </Compile>

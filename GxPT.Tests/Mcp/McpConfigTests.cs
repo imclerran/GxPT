@@ -98,6 +98,21 @@ namespace GxPT.Tests.Mcp
         // ---- Tier 1: built-in specs ----
 
         [Fact]
+        public void GitHubSpec_is_http_and_enabled_only_with_a_valid_pat()
+        {
+            var ok = McpConfig.GitHubSpec(true, ClassicPat);
+            Assert.Equal("github", ok.Name);
+            Assert.Equal(McpTransportKind.Http, ok.Kind);
+            Assert.Equal(McpConfig.GitHubUrl, ok.Url);
+            Assert.Equal("Bearer " + ClassicPat, ok.Headers["Authorization"]);
+            Assert.False(ok.WorkdirScoped);
+            Assert.True(ok.Enabled);
+
+            Assert.False(McpConfig.GitHubSpec(true, "YOUR_GITHUB_PAT").Enabled); // malformed PAT
+            Assert.False(McpConfig.GitHubSpec(false, ClassicPat).Enabled);       // toggle off
+        }
+
+        [Fact]
         public void Builtins_cover_the_four_servers_with_toggles_and_env()
         {
             var o = new McpConfig.BuiltInOptions
