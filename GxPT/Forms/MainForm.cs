@@ -441,10 +441,12 @@ namespace GxPT
             {
                 _approvalPanel = new ToolApprovalPanel();
                 if (this.pnlBottom != null) this.pnlBottom.Controls.Add(_approvalPanel);
+                // Remembered approvals are kept only for the lifetime of the app (in-memory), not
+                // persisted to settings.json — a remembered choice lasts the session, then resets.
                 _mcpApproval = new ToolApprovalPolicy(
                     new ToolClassifier(),
                     new TranscriptApprovalPrompt(this, delegate { return _approvalPanel; }),
-                    new SettingsApprovalStore());
+                    new InMemoryApprovalStore());
             }
             catch { }
 

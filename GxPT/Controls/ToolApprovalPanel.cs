@@ -115,7 +115,7 @@ namespace GxPT
             }
             else if (scope == RememberScope.Argument && argPath == "path")
             {
-                AddButton("Always allow this path", ApprovalChoice.RememberExactArg, false);
+                AddButton("Always allow this file", ApprovalChoice.RememberExactArg, false);
                 AddButton("Always allow this directory", ApprovalChoice.RememberPrefixArg, false);
             }
             // Scope == None: no remember buttons (Allow once / Deny only).

@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
-using Newtonsoft.Json;
 
 namespace GxPT
 {
-    // Persistence of remembered approvals (approval spec §5): a set of Tool-scope function names and
-    // a list of Argument-scope rules. Abstracted so the policy is testable with an in-memory store.
+    // Remembered approvals for the current app session (approval spec §5): a set of Tool-scope
+    // function names and a list of Argument-scope rules. Kept in memory only — not persisted, so
+    // remembered choices last until the app closes. Abstracted behind an interface for testing.
     internal interface IApprovalStore
     {
         bool IsToolApproved(string functionName);
@@ -14,7 +14,7 @@ namespace GxPT
         void AddRule(ApprovalRule rule);
     }
 
-    // In-memory store (tests; also the base behavior the settings-backed store builds on).
+    // In-memory store: remembered approvals live for the app session only.
     internal class InMemoryApprovalStore : IApprovalStore
     {
         protected readonly Dictionary<string, bool> _approvedTools = new Dictionary<string, bool>(StringComparer.Ordinal);
@@ -49,77 +49,6 @@ namespace GxPT
                     r.ArgPath == rule.ArgPath && r.Pattern == rule.Pattern) return;
             }
             _rules.Add(rule);
-        }
-    }
-
-    // settings.json-backed store via AppSettings (spec §5): mcp.approvedTools (string list) and
-    // mcp.approvalRules (list of JSON-serialized ApprovalRule). AppSettings stays on
-    // JavaScriptSerializer (D16); rules are serialized with Newtonsoft for a stable shape.
-    internal sealed class SettingsApprovalStore : InMemoryApprovalStore
-    {
-        public const string ApprovedToolsKey = "mcp.approvedTools";
-        public const string ApprovalRulesKey = "mcp.approvalRules";
-
-        public SettingsApprovalStore()
-        {
-            Load();
-        }
-
-        private void Load()
-        {
-            try
-            {
-                IList<string> tools = AppSettings.GetList(ApprovedToolsKey);
-                if (tools != null)
-                    for (int i = 0; i < tools.Count; i++)
-                        if (!string.IsNullOrEmpty(tools[i])) _approvedTools[tools[i]] = true;
-            }
-            catch { }
-
-            try
-            {
-                IList<string> ruleJson = AppSettings.GetList(ApprovalRulesKey);
-                if (ruleJson != null)
-                {
-                    for (int i = 0; i < ruleJson.Count; i++)
-                    {
-                        try
-                        {
-                            ApprovalRule r = JsonConvert.DeserializeObject<ApprovalRule>(ruleJson[i]);
-                            if (r != null && !string.IsNullOrEmpty(r.FunctionName)) _rules.Add(r);
-                        }
-                        catch { }
-                    }
-                }
-            }
-            catch { }
-        }
-
-        public override void AddApprovedTool(string functionName)
-        {
-            base.AddApprovedTool(functionName);
-            Save();
-        }
-
-        public override void AddRule(ApprovalRule rule)
-        {
-            base.AddRule(rule);
-            Save();
-        }
-
-        private void Save()
-        {
-            try
-            {
-                var tools = new List<string>(_approvedTools.Keys);
-                AppSettings.SetList(ApprovedToolsKey, tools);
-
-                var ruleJson = new List<string>();
-                for (int i = 0; i < _rules.Count; i++)
-                    ruleJson.Add(JsonConvert.SerializeObject(_rules[i]));
-                AppSettings.SetList(ApprovalRulesKey, ruleJson);
-            }
-            catch { }
         }
     }
 }
