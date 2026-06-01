@@ -86,6 +86,7 @@ namespace GxPT
         {
             _highlighters = new Dictionary<string, ISyntaxHighlighter>(StringComparer.OrdinalIgnoreCase);
             RegisterDefaultHighlighters();
+            RegisterFileExtensionAliases(); // also resolve highlighters by file extension (a.cs -> "cs")
         }
 
         /// <summary>
@@ -371,8 +372,11 @@ namespace GxPT
         }
 
         /// <summary>
-        /// Resolves a highlighter language id from a file name's extension (e.g. "src/a.cs" -> "csharp").
-        /// Returns null when the extension is unknown, in which case callers should render plain text.
+        /// Resolves a highlighter language id from a file name by stripping the extension's dot
+        /// (e.g. "src/a.cs" -> "cs"). The highlighter table itself understands extensions — every
+        /// highlighter's FileTypes are registered as lookup keys (see RegisterFileExtensionAliases) —
+        /// so an a.cs file and a ```cs fence resolve through the same path. Returns null when there is
+        /// no extension (caller renders plain text).
         /// </summary>
         public static string GetLanguageForFileName(string fileName)
         {
@@ -380,54 +384,79 @@ namespace GxPT
             string ext;
             try { ext = System.IO.Path.GetExtension(fileName); }
             catch { return null; }
-            if (string.IsNullOrEmpty(ext)) return null;
-            switch (ext.ToLowerInvariant())
+            if (string.IsNullOrEmpty(ext) || ext.Length < 2) return null;
+            return ext.Substring(1).ToLowerInvariant(); // drop the leading dot; the lookup does the rest
+        }
+
+        // Registers each highlighter's FileTypes extensions (without the dot) as additional lookup keys,
+        // so file extensions resolve through the same table as code-fence language names. First-wins, so
+        // it never clobbers a primary language id or explicit alias; "winners" are listed first to settle
+        // extensions shared by multiple highlighters (.php, .config, .ps1xml).
+        private static void RegisterFileExtensionAliases()
+        {
+            AddExtAliases(PhpHighlighter.FileTypes, "php");
+            AddExtAliases(PropertiesHighlighter.FileTypes, "properties");
+            AddExtAliases(PowerShellHighlighter.FileTypes, "powershell");
+            AddExtAliases(AdaHighlighter.FileTypes, "ada");
+            AddExtAliases(AssemblyHighlighter.FileTypes, "assembly");
+            AddExtAliases(BashHighlighter.FileTypes, "bash");
+            AddExtAliases(BasicHighlighter.FileTypes, "basic");
+            AddExtAliases(BatchHighlighter.FileTypes, "batch");
+            AddExtAliases(CHighlighter.FileTypes, "c");
+            AddExtAliases(CppHighlighter.FileTypes, "cpp");
+            AddExtAliases(CSharpHighlighter.FileTypes, "csharp");
+            AddExtAliases(CssHighlighter.FileTypes, "css");
+            AddExtAliases(CsvHighlighter.FileTypes, "csv");
+            AddExtAliases(DartHighlighter.FileTypes, "dart");
+            AddExtAliases(DiffHighlighter.FileTypes, "diff");
+            AddExtAliases(EbnfHighlighter.FileTypes, "ebnf");
+            AddExtAliases(ElixirHighlighter.FileTypes, "elixir");
+            AddExtAliases(ErlangHighlighter.FileTypes, "erlang");
+            AddExtAliases(FortranHighlighter.FileTypes, "fortran");
+            AddExtAliases(FSharpHighlighter.FileTypes, "fsharp");
+            AddExtAliases(GoHighlighter.FileTypes, "go");
+            AddExtAliases(GqlHighlighter.FileTypes, "gql");
+            AddExtAliases(HaskellHighlighter.FileTypes, "haskell");
+            AddExtAliases(HtmlHighlighter.FileTypes, "html");
+            AddExtAliases(JavaHighlighter.FileTypes, "java");
+            AddExtAliases(JavaScriptHighlighter.FileTypes, "javascript");
+            AddExtAliases(JsonHighlighter.FileTypes, "json");
+            AddExtAliases(KotlinHighlighter.FileTypes, "kotlin");
+            AddExtAliases(LispHighlighter.FileTypes, "lisp");
+            AddExtAliases(LuaHighlighter.FileTypes, "lua");
+            AddExtAliases(McfunctionHighlighter.FileTypes, "mcfunction");
+            AddExtAliases(OcamlHighlighter.FileTypes, "ocaml");
+            AddExtAliases(PascalHighlighter.FileTypes, "pascal");
+            AddExtAliases(PerlHighlighter.FileTypes, "perl");
+            AddExtAliases(PythonHighlighter.FileTypes, "python");
+            AddExtAliases(RegexHighlighter.FileTypes, "regex");
+            AddExtAliases(RubyHighlighter.FileTypes, "ruby");
+            AddExtAliases(RustHighlighter.FileTypes, "rust");
+            AddExtAliases(ScalaHighlighter.FileTypes, "scala");
+            AddExtAliases(SqlHighlighter.FileTypes, "sql");
+            AddExtAliases(SwiftHighlighter.FileTypes, "swift");
+            AddExtAliases(TypeScriptHighlighter.FileTypes, "typescript");
+            AddExtAliases(VisualBasicHighlighter.FileTypes, "visualbasic");
+            AddExtAliases(XmlHighlighter.FileTypes, "xml");
+            AddExtAliases(YamlHighlighter.FileTypes, "yaml");
+            AddExtAliases(ZigHighlighter.FileTypes, "zig");
+        }
+
+        // Maps each "*.ext" pattern to the registered highlighter for 'language', under the bare
+        // extension key ("*.cs" -> "cs"). First-wins, so existing language ids / aliases are preserved.
+        private static void AddExtAliases(string[] fileTypes, string language)
+        {
+            if (fileTypes == null) return;
+            ISyntaxHighlighter h;
+            if (!_highlighters.TryGetValue(language, out h) || h == null) return;
+            for (int i = 0; i < fileTypes.Length; i++)
             {
-                case ".cs": case ".csx": return "csharp";
-                case ".js": case ".jsx": case ".mjs": case ".cjs": return "javascript";
-                case ".ts": case ".tsx": return "typescript";
-                case ".json": case ".jsonc": case ".json5": return "json";
-                case ".py": case ".pyw": case ".pyi": case ".pyx": return "python";
-                case ".html": case ".htm": case ".xhtml": return "html";
-                case ".css": case ".scss": case ".sass": case ".less": return "css";
-                case ".xml": case ".xaml": case ".xsd": case ".xsl": case ".xslt": case ".svg":
-                case ".csproj": case ".vbproj": case ".resx": case ".props": case ".targets": return "xml";
-                case ".yml": case ".yaml": return "yaml";
-                case ".sh": case ".bash": case ".zsh": case ".ksh": return "bash";
-                case ".bat": case ".cmd": return "batch";
-                case ".ps1": case ".psm1": case ".psd1": return "powershell";
-                case ".c": case ".h": return "c";
-                case ".cpp": case ".cxx": case ".cc": case ".hpp": case ".hxx": case ".hh": return "cpp";
-                case ".go": return "go";
-                case ".rs": return "rust";
-                case ".java": case ".jav": return "java";
-                case ".rb": case ".rake": case ".gemspec": return "ruby";
-                case ".php": case ".phtml": return "php";
-                case ".sql": return "sql";
-                case ".swift": return "swift";
-                case ".kt": case ".kts": return "kotlin";
-                case ".lua": return "lua";
-                case ".pl": case ".pm": return "perl";
-                case ".scala": case ".sc": return "scala";
-                case ".dart": return "dart";
-                case ".ex": case ".exs": return "elixir";
-                case ".erl": case ".hrl": return "erlang";
-                case ".hs": case ".lhs": return "haskell";
-                case ".fs": case ".fsi": case ".fsx": return "fsharp";
-                case ".ml": case ".mli": return "ocaml";
-                case ".pas": case ".pp": return "pascal";
-                case ".vb": case ".vbs": case ".vba": return "visualbasic";
-                case ".zig": return "zig";
-                case ".diff": case ".patch": return "diff";
-                case ".csv": return "csv";
-                case ".gql": case ".graphql": return "gql";
-                case ".ini": case ".cfg": case ".conf": case ".properties": case ".toml": return "properties";
-                case ".asm": case ".s": case ".nasm": return "assembly";
-                case ".ada": case ".adb": case ".ads": return "ada";
-                case ".f": case ".for": case ".f90": case ".f95": return "fortran";
-                case ".bas": return "basic";
-                case ".mcfunction": return "mcfunction";
-                default: return null;
+                string p = fileTypes[i];
+                if (string.IsNullOrEmpty(p)) continue;
+                int dot = p.LastIndexOf('.');
+                if (dot < 0 || dot >= p.Length - 1) continue;
+                string key = p.Substring(dot + 1); // "*.cs" -> "cs"
+                if (!_highlighters.ContainsKey(key)) _highlighters[key] = h;
             }
         }
 
