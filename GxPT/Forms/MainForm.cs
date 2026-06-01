@@ -875,8 +875,11 @@ namespace GxPT
                 opts.CommandEnabled = AppSettings.GetBool("mcp_command_enabled", false);
                 opts.WebSearchKey = AppSettings.GetString("mcp_websearch_key");
                 opts.CurlPath = curlPath;
-                // Server exes are deployed beside GxPT.exe under 'mcp-servers' (AfterBuild copy / installer).
-                opts.ServerDir = System.IO.Path.Combine(baseDir, "mcp-servers");
+                // Server exes: dev builds deploy them to a 'mcp-servers' subfolder (AfterBuild copy);
+                // the installer lays them flat beside GxPT.exe (so VS dedupes the shared Mcp35/
+                // Newtonsoft DLLs). Prefer the subfolder when present, else use the app dir.
+                string serverSubdir = System.IO.Path.Combine(baseDir, "mcp-servers");
+                opts.ServerDir = System.IO.Directory.Exists(serverSubdir) ? serverSubdir : baseDir;
 
                 var specs = new List<McpServerSpec>(McpConfig.BuiltInSpecs(opts));
                 specs.Add(McpConfig.GitHubSpec(
