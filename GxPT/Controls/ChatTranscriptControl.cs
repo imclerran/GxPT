@@ -1504,6 +1504,12 @@ namespace GxPT
                         Size content = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, colored);
                         int bodyH = Math.Max(_monoFont.Height, content.Height);
                         Rectangle textRect = new Rectangle(x0, y, maxWidth, bodyH);
+                        // Neutral backing (theme-aware bubble color) so unchanged/blank lines read as
+                        // part of the diff block rather than the transcript background; the per-line
+                        // red/green bands paint over this. History-record only — the shared "diff"
+                        // highlighter (used by ```diff fences) is unchanged.
+                        using (var bg = new SolidBrush(_clrAsstBack))
+                            g.FillRectangle(bg, textRect);
                         SyntaxHighlightingRenderer.DrawColoredSegmentsNoWrap(g, colored, textRect, 0);
                         y += bodyH + EditDiffBodyPad;
                     }
