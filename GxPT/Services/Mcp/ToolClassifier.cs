@@ -25,7 +25,9 @@ namespace GxPT
             var t = new Dictionary<string, ToolPolicy>(StringComparer.Ordinal);
             t["files__read"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
             t["files__list"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
+            t["files__search"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
             t["files__write"] = new ToolPolicy(ToolTier.Write, RememberScope.Argument, "path");
+            t["files__edit"] = new ToolPolicy(ToolTier.Write, RememberScope.Argument, "path");
             t["files__delete"] = new ToolPolicy(ToolTier.Destructive, RememberScope.Argument, "path");
             t["git__status"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
             t["git__diff"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
