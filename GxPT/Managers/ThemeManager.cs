@@ -168,6 +168,23 @@ namespace GxPT
             catch { }
         }
 
+        // Theme a per-tab workspace context strip to match the current UI colors.
+        public void ApplyWorkspaceStripTheme(WorkspaceContextStrip strip)
+        {
+            if (strip == null) return;
+            try
+            {
+                string theme = null;
+                try { theme = AppSettings.GetString("theme"); }
+                catch { theme = null; }
+                bool dark = !string.IsNullOrEmpty(theme) &&
+                    theme.Trim().Equals("dark", StringComparison.OrdinalIgnoreCase);
+                var colors = ThemeService.GetColors(dark);
+                strip.ApplyColors(colors.UiBackground, colors.UiForeground);
+            }
+            catch { }
+        }
+
         public void ApplyThemeToTextBox()
         {
             try

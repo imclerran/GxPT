@@ -122,6 +122,7 @@
     <Compile Include="Services\Mcp\ApprovalStore.cs" />
     <Compile Include="Services\Mcp\TranscriptApprovalPrompt.cs" />
     <Compile Include="Controls\ToolApprovalPanel.cs" />
+    <Compile Include="Controls\WorkspaceContextStrip.cs" />
     <Compile Include="Services\Mcp\ToolCallAssembler.cs" />
     <Compile Include="Services\Mcp\McpToolRegistry.cs" />
     <Compile Include="Services\Mcp\McpChatOrchestrator.cs" />

@@ -473,24 +473,6 @@ namespace GxPT
         {
             this.Resize += MainForm_Resize;
 
-            // Add a "Set Working Folder…" item to the File menu (programmatic so the Designer is
-            // untouched). Sets the active conversation's GXPT_WORKDIR for files/git/command tools.
-            try
-            {
-                if (this.miFile != null)
-                {
-                    var miWorkdir = new ToolStripMenuItem();
-                    miWorkdir.Name = "miSetWorkingFolder";
-                    miWorkdir.Text = "Set &Working Folder...";
-                    miWorkdir.Click += delegate { SetWorkingFolderForActiveTab(); };
-                    // Insert near the top of the File menu (before Settings if present).
-                    int idx = (this.miSettings != null) ? this.miFile.DropDownItems.IndexOf(this.miSettings) : -1;
-                    if (idx < 0) this.miFile.DropDownItems.Add(miWorkdir);
-                    else this.miFile.DropDownItems.Insert(idx, miWorkdir);
-                }
-            }
-            catch { }
-
             // Wire menu items
             try
             {
@@ -572,20 +554,42 @@ namespace GxPT
             });
         }
 
-        // Menu/command handler: pick a working folder for the active conversation.
-        private void SetWorkingFolderForActiveTab()
+        // Creates the per-tab workspace strip docked above this tab's transcript, wiring its
+        // Set/Change/Clear actions to that conversation's working folder. Called by TabManager when a
+        // tab context is created.
+        internal void AttachWorkspaceStrip(TabManager.ChatTabContext ctx)
         {
-            var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
-            SetWorkingFolderForContext(ctx);
+            if (ctx == null || ctx.Page == null) return;
+            try
+            {
+                var strip = new WorkspaceContextStrip();
+                ctx.WorkspaceStrip = strip;
+                var ctxRef = ctx;
+                strip.ChangeRequested += delegate { SetWorkingFolderForContext(ctxRef); };
+                strip.ClearRequested += delegate { ClearWorkingFolderForContext(ctxRef); };
+                // Add after the (Fill) transcript and bring to front so the Top dock sits above it.
+                ctx.Page.Controls.Add(strip);
+                strip.BringToFront();
+                strip.SetWorkingDir(ctx.WorkingDir);
+                if (_themeManager != null) _themeManager.ApplyWorkspaceStripTheme(strip);
+            }
+            catch { }
         }
 
-        // Set the working folder for a specific tab (tab right-click menu).
-        internal void SetWorkingFolderForTab(TabPage page)
+        // Re-theme every tab's workspace strip (called after a theme change).
+        private void RefreshWorkspaceStripThemes()
         {
-            if (_tabManager == null || page == null) return;
-            TabManager.ChatTabContext ctx;
-            if (!_tabManager.TabContexts.TryGetValue(page, out ctx) || ctx == null) return;
-            SetWorkingFolderForContext(ctx);
+            if (_tabManager == null || _themeManager == null) return;
+            try
+            {
+                foreach (var kv in _tabManager.TabContexts)
+                {
+                    var c = kv.Value;
+                    if (c != null && c.WorkspaceStrip != null)
+                        _themeManager.ApplyWorkspaceStripTheme(c.WorkspaceStrip);
+                }
+            }
+            catch { }
         }
 
         private void SetWorkingFolderForContext(TabManager.ChatTabContext ctx)
@@ -598,8 +602,16 @@ namespace GxPT
                 if (dlg.ShowDialog(this) != DialogResult.OK) return;
                 ctx.WorkingDir = dlg.SelectedPath;
             }
+            if (ctx.WorkspaceStrip != null) ctx.WorkspaceStrip.SetWorkingDir(ctx.WorkingDir);
             SyncMcpWorkingDirFromActiveTab();
-            UpdateWindowTitleFromActiveTab();
+        }
+
+        private void ClearWorkingFolderForContext(TabManager.ChatTabContext ctx)
+        {
+            if (ctx == null) return;
+            ctx.WorkingDir = null;
+            if (ctx.WorkspaceStrip != null) ctx.WorkspaceStrip.SetWorkingDir(null);
+            SyncMcpWorkingDirFromActiveTab();
         }
 
         private void OnTabsChanged()
@@ -748,6 +760,7 @@ namespace GxPT
             // Apply theme across existing transcripts and primary UI
             try { if (_themeManager != null) _themeManager.ApplyThemeToAllTranscripts(); }
             catch { }
+            RefreshWorkspaceStripThemes();
 
             // Sync Dark Mode menu checked state from settings
             try
@@ -2580,6 +2593,7 @@ namespace GxPT
                     _themeManager.ApplyThemeToAllTranscripts();
                     _themeManager.ApplyFontSizeSettingToAllUi(); // keep fonts consistent; no-op for theme but safe
                 }
+                RefreshWorkspaceStripThemes();
 
                 // Also refresh tab headers (font/color may rely on system colors)
                 try { if (this.tabControl1 != null) this.tabControl1.Invalidate(); }
