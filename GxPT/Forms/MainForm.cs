@@ -473,6 +473,24 @@ namespace GxPT
         {
             this.Resize += MainForm_Resize;
 
+            // Add a "Set Working Folder…" item to the File menu (programmatic so the Designer is
+            // untouched). Sets the active conversation's GXPT_WORKDIR for files/git/command tools.
+            try
+            {
+                if (this.miFile != null)
+                {
+                    var miWorkdir = new ToolStripMenuItem();
+                    miWorkdir.Name = "miSetWorkingFolder";
+                    miWorkdir.Text = "Set &Working Folder...";
+                    miWorkdir.Click += delegate { SetWorkingFolderForActiveTab(); };
+                    // Insert near the top of the File menu (before Settings if present).
+                    int idx = (this.miSettings != null) ? this.miFile.DropDownItems.IndexOf(this.miSettings) : -1;
+                    if (idx < 0) this.miFile.DropDownItems.Add(miWorkdir);
+                    else this.miFile.DropDownItems.Insert(idx, miWorkdir);
+                }
+            }
+            catch { }
+
             // Wire menu items
             try
             {
@@ -526,7 +544,48 @@ namespace GxPT
             SyncComboModelFromActiveTab();
             // Refresh the attachments banner to reflect the active tab's pending attachments
             RebuildAttachmentsBanner();
+            // Point the MCP host's workdir-scoped servers (files/git/command) at the active tab's folder.
+            SyncMcpWorkingDirFromActiveTab();
             if (_inputManager != null) _inputManager.FocusInputSoon();
+        }
+
+        // Bind the MCP host's workdir-scoped servers to the active conversation's working folder
+        // (re-launches files/git/command against it; null disconnects them). Runs off the UI thread
+        // because (re)connecting can block.
+        private void SyncMcpWorkingDirFromActiveTab()
+        {
+            if (_mcpHost == null) return;
+            string wd = null;
+            try
+            {
+                var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                if (ctx != null) wd = ctx.WorkingDir;
+            }
+            catch { }
+            if (_mcpHost.ActiveWorkingDir == wd) return; // no change
+            McpHost hostRef = _mcpHost;
+            string target = wd;
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                try { hostRef.SetActiveWorkingDir(target); }
+                catch (Exception ex) { try { Logger.Log("mcp", "SetActiveWorkingDir failed: " + ex.Message); } catch { } }
+            });
+        }
+
+        // Menu/command handler: pick a working folder for the active conversation.
+        private void SetWorkingFolderForActiveTab()
+        {
+            var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            if (ctx == null) return;
+            using (var dlg = new FolderBrowserDialog())
+            {
+                dlg.Description = "Select a working folder for file, git, and command tools in this conversation.";
+                if (!string.IsNullOrEmpty(ctx.WorkingDir)) dlg.SelectedPath = ctx.WorkingDir;
+                if (dlg.ShowDialog(this) != DialogResult.OK) return;
+                ctx.WorkingDir = dlg.SelectedPath;
+            }
+            SyncMcpWorkingDirFromActiveTab();
+            UpdateWindowTitleFromActiveTab();
         }
 
         private void OnTabsChanged()

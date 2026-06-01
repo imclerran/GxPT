@@ -35,6 +35,9 @@ namespace GxPT
             public bool IsSending;
             public string SelectedModel;
             public bool NoSaveUntilUserSend;
+            // Per-conversation working directory for MCP files/git/command servers (GXPT_WORKDIR);
+            // null = no workspace (those tools won't connect for this tab).
+            public string WorkingDir;
             public List<AttachedFile> PendingAttachments = new List<AttachedFile>();
             // Pending edit of a prior user message (by transcript/history index)
             public bool PendingEditActive;
