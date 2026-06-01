@@ -20,6 +20,8 @@ namespace GxPT
         private OpenRouterClient _client;
         private McpHost _mcpHost;
         private McpToolRegistry _mcpRegistry;
+        private IToolApprovalPolicy _mcpApproval;
+        private ToolApprovalPanel _approvalPanel;
         private const string HelpApiKeysId = "help:api_keys";
         private const string HelpPrivacyId = "help:privacy";
 
@@ -432,6 +434,22 @@ namespace GxPT
 
         private void InitializeManagers()
         {
+            // The MCP tool-approval prompt: a panel docked at the bottom of the chat area, above the
+            // input. Created in code (not the Designer) and added to pnlBottom so it sits over the
+            // input panel when a tool call awaits approval.
+            try
+            {
+                _approvalPanel = new ToolApprovalPanel();
+                if (this.pnlBottom != null) this.pnlBottom.Controls.Add(_approvalPanel);
+                // Remembered approvals are kept only for the lifetime of the app (in-memory), not
+                // persisted to settings.json — a remembered choice lasts the session, then resets.
+                _mcpApproval = new ToolApprovalPolicy(
+                    new ToolClassifier(),
+                    new TranscriptApprovalPrompt(this, delegate { return _approvalPanel; }),
+                    new InMemoryApprovalStore());
+            }
+            catch { }
+
             // Initialize managers for UI concerns
             _sidebarManager = new SidebarManager(this, this.splitContainer1, this.miConversationHistory);
             _tabManager = new TabManager(this, this.tabControl1, this.msMain);
@@ -510,7 +528,146 @@ namespace GxPT
             SyncComboModelFromActiveTab();
             // Refresh the attachments banner to reflect the active tab's pending attachments
             RebuildAttachmentsBanner();
+            // Point the MCP host's workdir-scoped servers (files/git/command) at the active tab's folder.
+            SyncMcpWorkingDirFromActiveTab();
             if (_inputManager != null) _inputManager.FocusInputSoon();
+        }
+
+        // Bind the MCP host's workdir-scoped servers to the active conversation's working folder
+        // (re-launches files/git/command against it; null disconnects them). Runs off the UI thread
+        // because (re)connecting can block.
+        private void SyncMcpWorkingDirFromActiveTab()
+        {
+            if (_mcpHost == null) return;
+            string wd = null;
+            try
+            {
+                var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                if (ctx != null) wd = ctx.WorkingDir;
+            }
+            catch { }
+            if (_mcpHost.ActiveWorkingDir == wd) return; // no change
+            McpHost hostRef = _mcpHost;
+            string target = wd;
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                try { hostRef.SetActiveWorkingDir(target); }
+                catch (Exception ex) { try { Logger.Log("mcp", "SetActiveWorkingDir failed: " + ex.Message); } catch { } }
+            });
+        }
+
+        // Creates the per-tab workspace strip docked above this tab's transcript, wiring its
+        // Set/Change/Clear actions to that conversation's working folder. Called by TabManager when a
+        // tab context is created.
+        internal void AttachWorkspaceStrip(TabManager.ChatTabContext ctx)
+        {
+            if (ctx == null || ctx.Page == null) return;
+            try
+            {
+                // Seed from the (possibly loaded) conversation so a re-opened chat keeps its folder.
+                if (string.IsNullOrEmpty(ctx.WorkingDir) && ctx.Conversation != null &&
+                    !string.IsNullOrEmpty(ctx.Conversation.WorkingDir))
+                    ctx.WorkingDir = ctx.Conversation.WorkingDir;
+
+                var strip = new WorkspaceContextStrip();
+                ctx.WorkspaceStrip = strip;
+                var ctxRef = ctx;
+                strip.ChangeRequested += delegate { SetWorkingFolderForContext(ctxRef); };
+                strip.ClearRequested += delegate { ClearWorkingFolderForContext(ctxRef); };
+                strip.DismissRequested += delegate { DismissWorkspaceStripForContext(ctxRef); };
+                // Dock order: the strip is Top and the transcript is Fill. WinForms lays out docked
+                // controls by REVERSE z-order, so the Fill transcript must be the frontmost child for
+                // it to fill the area *below* the Top strip (otherwise the strip overlaps the
+                // transcript's top). Add the strip, then send the transcript to front.
+                ctx.Page.Controls.Add(strip);
+                if (ctx.Transcript != null) ctx.Transcript.BringToFront();
+                strip.SetWorkingDir(ctx.WorkingDir);
+                // Honor a persisted dismissal (only meaningful when no folder is set; setting one
+                // re-shows the strip).
+                if (string.IsNullOrEmpty(ctx.WorkingDir) && ctx.Conversation != null &&
+                    ctx.Conversation.WorkspaceStripDismissed)
+                    strip.Visible = false;
+            }
+            catch { }
+        }
+
+        private void DismissWorkspaceStripForContext(TabManager.ChatTabContext ctx)
+        {
+            if (ctx == null) return;
+            if (ctx.WorkspaceStrip != null) ctx.WorkspaceStrip.Visible = false;
+            if (ctx.Conversation != null)
+            {
+                ctx.Conversation.WorkspaceStripDismissed = true;
+                try { if (!ctx.NoSaveUntilUserSend) ConversationStore.Save(ctx.Conversation); }
+                catch { }
+            }
+        }
+
+        // Entry point for the tab context menu: set the working folder for a specific tab. Useful
+        // when the strip has been dismissed (setting a folder re-shows it).
+        internal void SetWorkingFolderForTab(TabPage page)
+        {
+            if (_tabManager == null || page == null) return;
+            TabManager.ChatTabContext ctx;
+            if (!_tabManager.TabContexts.TryGetValue(page, out ctx) || ctx == null) return;
+            SetWorkingFolderForContext(ctx);
+        }
+
+        private void SetWorkingFolderForContext(TabManager.ChatTabContext ctx)
+        {
+            if (ctx == null) return;
+            using (var dlg = new FolderBrowserDialog())
+            {
+                dlg.Description = "Select a working folder for file, git, and command tools in this conversation.";
+                if (!string.IsNullOrEmpty(ctx.WorkingDir)) dlg.SelectedPath = ctx.WorkingDir;
+                if (dlg.ShowDialog(this) != DialogResult.OK) return;
+                ctx.WorkingDir = dlg.SelectedPath;
+            }
+            // Setting a folder re-shows the strip, so a prior dismissal no longer applies.
+            if (ctx.Conversation != null) ctx.Conversation.WorkspaceStripDismissed = false;
+            PersistWorkingDir(ctx);
+            if (ctx.WorkspaceStrip != null)
+            {
+                ctx.WorkspaceStrip.SetWorkingDir(ctx.WorkingDir);
+                ctx.WorkspaceStrip.Visible = true; // re-show if it had been dismissed
+            }
+            SyncMcpWorkingDirFromActiveTab();
+        }
+
+        private void ClearWorkingFolderForContext(TabManager.ChatTabContext ctx)
+        {
+            if (ctx == null) return;
+            ctx.WorkingDir = null;
+            PersistWorkingDir(ctx);
+            if (ctx.WorkspaceStrip != null) ctx.WorkspaceStrip.SetWorkingDir(null);
+            SyncMcpWorkingDirFromActiveTab();
+        }
+
+        // After a conversation is loaded into a tab, adopt its persisted working folder onto the tab
+        // context + strip and (re)bind the MCP host to it.
+        private void ApplyLoadedWorkingDir(TabManager.ChatTabContext ctx)
+        {
+            if (ctx == null) return;
+            ctx.WorkingDir = (ctx.Conversation != null) ? ctx.Conversation.WorkingDir : null;
+            if (ctx.WorkspaceStrip != null)
+            {
+                ctx.WorkspaceStrip.SetWorkingDir(ctx.WorkingDir);
+                // Hidden only if there's no folder AND the user previously dismissed it.
+                bool dismissed = string.IsNullOrEmpty(ctx.WorkingDir) && ctx.Conversation != null &&
+                                 ctx.Conversation.WorkspaceStripDismissed;
+                ctx.WorkspaceStrip.Visible = !dismissed;
+            }
+            SyncMcpWorkingDirFromActiveTab();
+        }
+
+        // Mirror the tab's working folder onto its persisted conversation and save, so it re-opens
+        // with the same folder. Skipped for brand-new, never-sent conversations (NoSaveUntilUserSend).
+        private void PersistWorkingDir(TabManager.ChatTabContext ctx)
+        {
+            if (ctx == null || ctx.Conversation == null) return;
+            ctx.Conversation.WorkingDir = ctx.WorkingDir;
+            try { if (!ctx.NoSaveUntilUserSend) ConversationStore.Save(ctx.Conversation); }
+            catch { }
         }
 
         private void OnTabsChanged()
@@ -718,7 +875,8 @@ namespace GxPT
                 opts.CommandEnabled = AppSettings.GetBool("mcp_command_enabled", false);
                 opts.WebSearchKey = AppSettings.GetString("mcp_websearch_key");
                 opts.CurlPath = curlPath;
-                opts.ServerDir = baseDir; // server exes expected alongside GxPT.exe (deployed later)
+                // Server exes are deployed beside GxPT.exe under 'mcp-servers' (AfterBuild copy / installer).
+                opts.ServerDir = System.IO.Path.Combine(baseDir, "mcp-servers");
 
                 var specs = new List<McpServerSpec>(McpConfig.BuiltInSpecs(opts));
                 specs.Add(McpConfig.GitHubSpec(
@@ -1280,7 +1438,8 @@ namespace GxPT
             {
                 try
                 {
-                    var orch = new McpChatOrchestrator(_client, _mcpRegistry, new AllowAllApprovalPolicy(),
+                    var approval = _mcpApproval != null ? _mcpApproval : (IToolApprovalPolicy)new AllowAllApprovalPolicy();
+                    var orch = new McpChatOrchestrator(_client, _mcpRegistry, approval,
                                                        model, LoggerSink.Instance);
                     orch.ProviderDataCollectionAllowed = providerAllow;
                     orch.RequestMessageTransform = delegate(IList<ChatMessage> h)
@@ -2150,6 +2309,9 @@ namespace GxPT
             // Rebuild transcript UI off the UI thread to avoid freezes on large histories
             RebuildTranscriptAsync(ctx, convo);
 
+            // Adopt the conversation's saved working folder.
+            ApplyLoadedWorkingDir(ctx);
+
             // Update tab title and window
             try
             {
@@ -2188,6 +2350,9 @@ namespace GxPT
 
                 // Rebuild transcript UI off the UI thread to avoid freezes on large histories
                 RebuildTranscriptAsync(ctx, convo);
+
+                // Adopt the conversation's saved working folder.
+                ApplyLoadedWorkingDir(ctx);
 
                 // Hook name updates for this conversation
                 try

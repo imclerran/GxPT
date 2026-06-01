@@ -116,6 +116,13 @@
     </Compile>
     <Compile Include="Services\Mcp\IChatStreamer.cs" />
     <Compile Include="Services\Mcp\IToolApprovalPolicy.cs" />
+    <Compile Include="Services\Mcp\ToolApproval.cs" />
+    <Compile Include="Services\Mcp\ToolClassifier.cs" />
+    <Compile Include="Services\Mcp\ToolApprovalPolicy.cs" />
+    <Compile Include="Services\Mcp\ApprovalStore.cs" />
+    <Compile Include="Services\Mcp\TranscriptApprovalPrompt.cs" />
+    <Compile Include="Controls\ToolApprovalPanel.cs" />
+    <Compile Include="Controls\WorkspaceContextStrip.cs" />
     <Compile Include="Services\Mcp\ToolCallAssembler.cs" />
     <Compile Include="Services\Mcp\McpToolRegistry.cs" />
     <Compile Include="Services\Mcp\McpChatOrchestrator.cs" />
@@ -308,7 +315,28 @@
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+  <!-- Deploy the first-party MCP server exes next to GxPT.exe in a flat 'mcp-servers' folder, so the
+       host can launch them (ServerDir points here). The servers are independent projects GxPT does
+       NOT reference; build them first via Build > Build Solution, or set Project Dependencies so
+       GxPT depends on the four servers. ContinueOnError keeps GxPT building even if a server hasn't
+       been built yet (that server's tool just won't be available at runtime). -->
+  <Target Name="AfterBuild">
+    <ItemGroup>
+      <McpServerFiles Include="..\servers\FilesMcpServer\bin\$(Configuration)\**\*.*"
+                      Exclude="..\servers\FilesMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\FilesMcpServer\bin\$(Configuration)\**\*.xml" />
+      <McpServerFiles Include="..\servers\GitMcpServer\bin\$(Configuration)\**\*.*"
+                      Exclude="..\servers\GitMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\GitMcpServer\bin\$(Configuration)\**\*.xml" />
+      <McpServerFiles Include="..\servers\CommandMcpServer\bin\$(Configuration)\**\*.*"
+                      Exclude="..\servers\CommandMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\CommandMcpServer\bin\$(Configuration)\**\*.xml" />
+      <McpServerFiles Include="..\servers\WebSearchMcpServer\bin\$(Configuration)\**\*.*"
+                      Exclude="..\servers\WebSearchMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\WebSearchMcpServer\bin\$(Configuration)\**\*.xml" />
+    </ItemGroup>
+    <Copy SourceFiles="@(McpServerFiles)"
+          DestinationFiles="@(McpServerFiles->'$(OutDir)mcp-servers\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true"
+          ContinueOnError="true" />
+  </Target>
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it.
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">
   </Target>

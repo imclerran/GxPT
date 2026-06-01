@@ -203,7 +203,11 @@ namespace GxPT
             sb.AppendLine("  \"enable_logging\": false,")
             ;
             // Default provider data collection allowed (true)
-            sb.AppendLine("  \"provider_data_collection\": true");
+            sb.AppendLine("  \"provider_data_collection\": true,");
+            // First-party MCP servers enabled by default where no credential is required
+            // (files/command; they connect once a working folder is set).
+            sb.AppendLine("  \"mcp_files_enabled\": true,");
+            sb.AppendLine("  \"mcp_command_enabled\": true");
             sb.AppendLine("}");
             return sb.ToString();
         }
@@ -244,7 +248,10 @@ namespace GxPT
                 transcript_max_width = 1000,
                 // Percent (50-100) under legacy key name
                 message_max_width = 90,
-                provider_data_collection = true
+                provider_data_collection = true,
+                // First-party MCP servers enabled by default where no credential is required.
+                mcp_files_enabled = true,
+                mcp_command_enabled = true
             };
         }
 

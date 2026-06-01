@@ -116,6 +116,37 @@ namespace GxPT.Tests
         }
 
         [Fact]
+        public void WorkingDir_round_trips()
+        {
+            var convo = new Conversation(null);
+            convo.Name = "W";
+            convo.WorkingDir = "C:\\Projects\\report-tool";
+            convo.History.Add(new ChatMessage("user", "hi"));
+
+            var reload = ConversationStore.LoadFromJson(null, ConversationStore.ToJson(convo));
+            Assert.Equal("C:\\Projects\\report-tool", reload.WorkingDir);
+        }
+
+        [Fact]
+        public void Load_legacy_file_without_working_dir_is_null()
+        {
+            var convo = ConversationStore.LoadFromJson(null, "{\"Name\":\"C\",\"Messages\":[]}");
+            Assert.Null(convo.WorkingDir);
+        }
+
+        [Fact]
+        public void WorkspaceStripDismissed_round_trips_and_defaults_false()
+        {
+            var convo = new Conversation(null);
+            convo.WorkspaceStripDismissed = true;
+            var reload = ConversationStore.LoadFromJson(null, ConversationStore.ToJson(convo));
+            Assert.True(reload.WorkspaceStripDismissed);
+
+            var legacy = ConversationStore.LoadFromJson(null, "{\"Name\":\"C\",\"Messages\":[]}");
+            Assert.False(legacy.WorkspaceStripDismissed);
+        }
+
+        [Fact]
         public void Load_legacy_file_without_tool_fields_has_null_tool_data()
         {
             string json = "{\"Name\":\"C\",\"Messages\":[{\"Role\":\"assistant\",\"Content\":\"hi\"}]}";
