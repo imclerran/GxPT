@@ -371,6 +371,67 @@ namespace GxPT
         }
 
         /// <summary>
+        /// Resolves a highlighter language id from a file name's extension (e.g. "src/a.cs" -> "csharp").
+        /// Returns null when the extension is unknown, in which case callers should render plain text.
+        /// </summary>
+        public static string GetLanguageForFileName(string fileName)
+        {
+            if (string.IsNullOrEmpty(fileName)) return null;
+            string ext;
+            try { ext = System.IO.Path.GetExtension(fileName); }
+            catch { return null; }
+            if (string.IsNullOrEmpty(ext)) return null;
+            switch (ext.ToLowerInvariant())
+            {
+                case ".cs": case ".csx": return "csharp";
+                case ".js": case ".jsx": case ".mjs": case ".cjs": return "javascript";
+                case ".ts": case ".tsx": return "typescript";
+                case ".json": case ".jsonc": case ".json5": return "json";
+                case ".py": case ".pyw": case ".pyi": case ".pyx": return "python";
+                case ".html": case ".htm": case ".xhtml": return "html";
+                case ".css": case ".scss": case ".sass": case ".less": return "css";
+                case ".xml": case ".xaml": case ".xsd": case ".xsl": case ".xslt": case ".svg":
+                case ".csproj": case ".vbproj": case ".resx": case ".props": case ".targets": return "xml";
+                case ".yml": case ".yaml": return "yaml";
+                case ".sh": case ".bash": case ".zsh": case ".ksh": return "bash";
+                case ".bat": case ".cmd": return "batch";
+                case ".ps1": case ".psm1": case ".psd1": return "powershell";
+                case ".c": case ".h": return "c";
+                case ".cpp": case ".cxx": case ".cc": case ".hpp": case ".hxx": case ".hh": return "cpp";
+                case ".go": return "go";
+                case ".rs": return "rust";
+                case ".java": case ".jav": return "java";
+                case ".rb": case ".rake": case ".gemspec": return "ruby";
+                case ".php": case ".phtml": return "php";
+                case ".sql": return "sql";
+                case ".swift": return "swift";
+                case ".kt": case ".kts": return "kotlin";
+                case ".lua": return "lua";
+                case ".pl": case ".pm": return "perl";
+                case ".scala": case ".sc": return "scala";
+                case ".dart": return "dart";
+                case ".ex": case ".exs": return "elixir";
+                case ".erl": case ".hrl": return "erlang";
+                case ".hs": case ".lhs": return "haskell";
+                case ".fs": case ".fsi": case ".fsx": return "fsharp";
+                case ".ml": case ".mli": return "ocaml";
+                case ".pas": case ".pp": return "pascal";
+                case ".vb": case ".vbs": case ".vba": return "visualbasic";
+                case ".zig": return "zig";
+                case ".diff": case ".patch": return "diff";
+                case ".csv": return "csv";
+                case ".gql": case ".graphql": return "gql";
+                case ".ini": case ".cfg": case ".conf": case ".properties": case ".toml": return "properties";
+                case ".asm": case ".s": case ".nasm": return "assembly";
+                case ".ada": case ".adb": case ".ads": return "ada";
+                case ".f": case ".for": case ".f90": case ".f95": return "fortran";
+                case ".bas": return "basic";
+                case ".mcfunction": return "mcfunction";
+                default: return null;
+            }
+        }
+
+        /// <summary>
         /// Returns a deduplicated set of file dialog patterns (e.g., "*.cs") contributed by
         /// built-in highlighters. This avoids reflection by referencing the known types.
         /// </summary>

@@ -242,8 +242,10 @@ namespace GxPT
         }
 
         // A collapsible "tool record": a header label plus a highlighted body in some language.
-        // Used for the files__edit diff (language "diff", red/green bands) and the command__run
-        // record (language "batch"). HeaderText excludes the disclosure triangle (added at draw time).
+        // Used for files__edit (diff), command__run (batch), web__search (plain), and the other tool
+        // records — the caller (MainForm) builds the label/body/language per tool. An empty body makes
+        // it a non-collapsible one-line label (e.g. "Deleted <path>"). HeaderText excludes the
+        // disclosure triangle (added at draw time when there is a body).
         private sealed class EditDiffData { public string HeaderText; public string Body; public string Language; }
         private readonly object _editDiffLock = new object();
         private readonly Dictionary<string, EditDiffData> _editDiffs = new Dictionary<string, EditDiffData>(StringComparer.Ordinal);
@@ -251,34 +253,13 @@ namespace GxPT
 
         // Registers (or refreshes) a tool record, keyed by its (persisted) call id. Called from the
         // streaming worker thread and the history reload path, so it is lock-guarded.
-        private void RegisterToolRecord(string key, string headerText, string body, string language)
+        public void RegisterToolRecord(string key, string headerText, string body, string language)
         {
             if (string.IsNullOrEmpty(key)) return;
             lock (_editDiffLock)
             {
-                _editDiffs[key] = new EditDiffData { HeaderText = headerText ?? string.Empty, Body = body ?? string.Empty, Language = language ?? "diff" };
+                _editDiffs[key] = new EditDiffData { HeaderText = headerText ?? string.Empty, Body = body ?? string.Empty, Language = language ?? "text" };
             }
-        }
-
-        // Edit (files__edit): a "diff"-highlighted body with an "edited <path> (+A −R)" header.
-        public void RegisterEditDiff(string key, string path, string body, int added, int removed)
-        {
-            string p = string.IsNullOrEmpty(path) ? "(file)" : path;
-            string header = "edited " + p + "  (+" + added + " −" + removed + ")";
-            RegisterToolRecord(key, header, body, "diff");
-        }
-
-        // Command (command__run): the command line, highlighted as a cmd batch script.
-        public void RegisterCommandRun(string key, string command)
-        {
-            RegisterToolRecord(key, "Ran a command", command, "batch");
-        }
-
-        // Web search (web__search): the query, plain — "text" has no highlighter, so it renders
-        // without syntax coloring.
-        public void RegisterWebSearch(string key, string query)
-        {
-            RegisterToolRecord(key, "Searched the web", query, "text");
         }
 
         private EditDiffData GetEditDiffData(string key)
@@ -294,12 +275,13 @@ namespace GxPT
             bool c; return _editDiffCollapsed.TryGetValue(key, out c) ? c : true;
         }
 
-        // The header line: disclosure triangle + the record's stored label.
-        private static string BuildEditDiffHeaderText(EditDiffData data, bool collapsed)
+        // The header line. With a body, a disclosure triangle precedes the label (collapsible);
+        // without a body it is a plain one-line label (e.g. "Deleted <path>").
+        private static string BuildEditDiffHeaderText(EditDiffData data, bool collapsed, bool hasBody)
         {
-            string tri = collapsed ? "▸" : "▾";
             string label = (data != null && !string.IsNullOrEmpty(data.HeaderText)) ? data.HeaderText : "(record)";
-            return tri + " " + label;
+            if (!hasBody) return label;
+            return (collapsed ? "▸" : "▾") + " " + label;
         }
 
         // ---------- Batch update state ----------
@@ -1034,13 +1016,14 @@ namespace GxPT
                     {
                         var ed = (EditDiffBlock)blk;
                         EditDiffData data = GetEditDiffData(ed.Key);
+                        bool hasBody = data != null && !string.IsNullOrEmpty(data.Body);
                         bool collapsed = IsEditDiffCollapsed(ed.Key);
                         int headerH = _baseFont.Height + 2 * EditDiffHeaderPad;
-                        string headerText = BuildEditDiffHeaderText(data, collapsed);
+                        string headerText = BuildEditDiffHeaderText(data, collapsed, hasBody);
                         int headerW = TextRenderer.MeasureText(headerText, _baseFont).Width;
                         int w = headerW;
                         int h = headerH;
-                        if (data != null && !collapsed)
+                        if (hasBody && !collapsed)
                         {
                             using (Graphics g = CreateGraphics())
                             {
@@ -1533,27 +1516,29 @@ namespace GxPT
                 {
                     var ed = (EditDiffBlock)blk;
                     EditDiffData data = GetEditDiffData(ed.Key);
+                    bool hasBody = data != null && !string.IsNullOrEmpty(data.Body);
                     bool collapsed = IsEditDiffCollapsed(ed.Key);
                     int headerH = _baseFont.Height + 2 * EditDiffHeaderPad;
 
-                    // Clickable header row (spans the content width); captured for collapse hit-testing.
-                    string headerText = BuildEditDiffHeaderText(data, collapsed);
+                    // Header row. With a body it's a clickable disclosure header (captured for the
+                    // collapse hit test); without one it's a plain non-interactive label.
+                    string headerText = BuildEditDiffHeaderText(data, collapsed, hasBody);
                     using (var brush = new SolidBrush(ForeColor))
                     using (var fmt = StringFormat.GenericTypographic)
                     {
                         fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
                         g.DrawString(headerText, _baseFont, brush, new PointF(x0, y + EditDiffHeaderPad), fmt);
                     }
-                    if (owner != null)
+                    if (hasBody && owner != null)
                     {
                         if (owner.EditDiffHits == null) owner.EditDiffHits = new List<EditDiffHit>();
                         owner.EditDiffHits.Add(new EditDiffHit { Rect = new Rectangle(x0, y, maxWidth, headerH), Key = ed.Key });
                     }
                     y += headerH;
 
-                    // Expanded: chromeless diff body, full-width red/green bands, clipped to width
-                    // (horizontal scroll for wide diffs is a following increment).
-                    if (data != null && !collapsed)
+                    // Expanded: chromeless highlighted body, clipped to width (with horizontal scroll
+                    // for over-wide content).
+                    if (hasBody && !collapsed)
                     {
                         y += EditDiffBodyGap;
                         SyntaxHighlightingRenderer.EnqueueHighlight(data.Language, _isDarkTheme, data.Body, _monoFont);

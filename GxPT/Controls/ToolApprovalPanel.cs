@@ -131,6 +131,54 @@ namespace GxPT
                         handled = true;
                     }
                 }
+                else if (string.Equals(req.FunctionName, "files__write", StringComparison.Ordinal))
+                {
+                    string path = req.Arguments.Value<string>("path") ?? string.Empty;
+                    string content = req.Arguments.Value<string>("content") ?? string.Empty;
+                    string lang = SyntaxHighlighter.GetLanguageForFileName(path) ?? "text";
+                    _diffPanel.SetContent(path, content, lang, dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                    _previewLabel.Text = "Write:";
+                    handled = true;
+                }
+                else if (string.Equals(req.FunctionName, "git__commit", StringComparison.Ordinal))
+                {
+                    string msg = req.Arguments.Value<string>("message") ?? string.Empty;
+                    if (msg.Trim().Length > 0)
+                    {
+                        _diffPanel.SetContent(string.Empty, msg, "text", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                        _previewLabel.Text = "Commit message:";
+                        handled = true;
+                    }
+                }
+                else if (string.Equals(req.FunctionName, "web__extract", StringComparison.Ordinal))
+                {
+                    string urls = JoinUrlArgs(req.Arguments);
+                    if (urls.Length > 0)
+                    {
+                        _diffPanel.SetContent(string.Empty, urls, "text", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                        _previewLabel.Text = "Fetch URLs:";
+                        handled = true;
+                    }
+                }
+                else if (string.Equals(req.FunctionName, "files__delete", StringComparison.Ordinal))
+                {
+                    string path = req.Arguments.Value<string>("path") ?? string.Empty;
+                    if (path.Length > 0)
+                    {
+                        _diffPanel.SetContent(string.Empty, path, "text", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                        _previewLabel.Text = "Delete:";
+                        handled = true;
+                    }
+                }
+                else if (string.Equals(req.FunctionName, "git__push", StringComparison.Ordinal))
+                {
+                    string remote = req.Arguments.Value<string>("remote") ?? string.Empty;
+                    string branch = req.Arguments.Value<string>("branch") ?? string.Empty;
+                    string tgt = remote.Length > 0 ? (branch.Length > 0 ? remote + "/" + branch : remote) : (branch.Length > 0 ? branch : "(default remote/branch)");
+                    _diffPanel.SetContent(string.Empty, tgt, "text", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                    _previewLabel.Text = "Push to:";
+                    handled = true;
+                }
             }
 
             if (handled)
@@ -220,6 +268,26 @@ namespace GxPT
                 return File.ReadAllText(full);
             }
             catch { return null; }
+        }
+
+        // One URL per line from the web__extract "urls" array argument.
+        private static string JoinUrlArgs(Newtonsoft.Json.Linq.JObject args)
+        {
+            try
+            {
+                var arr = args["urls"] as Newtonsoft.Json.Linq.JArray;
+                if (arr == null) return string.Empty;
+                var sb = new System.Text.StringBuilder();
+                foreach (var u in arr)
+                {
+                    string s = (string)u;
+                    if (string.IsNullOrEmpty(s)) continue;
+                    if (sb.Length > 0) sb.Append("\r\n");
+                    sb.Append(s);
+                }
+                return sb.ToString();
+            }
+            catch { return string.Empty; }
         }
 
         private static string BuildPreviewText(ApprovalRequest req)
