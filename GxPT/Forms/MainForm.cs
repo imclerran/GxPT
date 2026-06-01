@@ -2211,6 +2211,20 @@ namespace GxPT
                     }
                     catch { /* fall through to the generic marker */ }
                 }
+                else if (string.Equals(name, "web__search", StringComparison.Ordinal))
+                {
+                    try
+                    {
+                        var args = Newtonsoft.Json.Linq.JObject.Parse(string.IsNullOrEmpty(argsJson) ? "{}" : argsJson);
+                        string query = (string)args["query"] ?? string.Empty;
+                        if (query.Trim().Length > 0)
+                        {
+                            transcript.RegisterWebSearch(key, query);
+                            return McpMarkers.EditDiff(key);
+                        }
+                    }
+                    catch { /* fall through to the generic marker */ }
+                }
             }
             return McpMarkers.Call(name);
         }
