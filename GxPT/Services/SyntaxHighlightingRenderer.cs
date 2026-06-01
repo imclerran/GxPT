@@ -14,14 +14,21 @@ namespace GxPT
     {
         public string Text;
         public Color Color;
+        public Color? BackColor; // optional background band behind the run (e.g. diff add/remove); null = none
         public Font Font;
         public int StartIndex;
         public int Length;
 
         public ColoredSegment(string text, Color color, Font font, int startIndex)
+            : this(text, color, null, font, startIndex)
+        {
+        }
+
+        public ColoredSegment(string text, Color color, Color? backColor, Font font, int startIndex)
         {
             Text = text;
             Color = color;
+            BackColor = backColor;
             Font = font;
             StartIndex = startIndex;
             Length = text != null ? text.Length : 0;
@@ -146,7 +153,8 @@ namespace GxPT
                                 segs.Add(new ColoredSegment(gap, SyntaxHighlighter.GetTokenColorForTheme(TokenType.Normal, wi.Dark), null, lastEnd));
                             }
                             var tokColor = SyntaxHighlighter.GetTokenColorForTheme(t.Type, wi.Dark);
-                            segs.Add(new ColoredSegment(t.Text, tokColor, null, t.StartIndex));
+                            var tokBack = SyntaxHighlighter.GetTokenBackgroundColorForTheme(t.Type, wi.Dark);
+                            segs.Add(new ColoredSegment(t.Text, tokColor, tokBack, null, t.StartIndex));
                             lastEnd = t.StartIndex + t.Length;
                         }
                         if (lastEnd < wi.Code.Length)
@@ -249,7 +257,7 @@ namespace GxPT
                     for (int i = 0; i < cached.Count; i++)
                     {
                         var s = cached[i];
-                        rebuilt.Add(new ColoredSegment(s.Text, s.Color, monoFont, s.StartIndex));
+                        rebuilt.Add(new ColoredSegment(s.Text, s.Color, s.BackColor, monoFont, s.StartIndex));
                     }
                     return rebuilt;
                 }
@@ -497,6 +505,18 @@ namespace GxPT
                                 y += lineHeight;
                                 x = viewport.X - scrollX;
                             }
+
+                            // Full-width row band (e.g. diff add/remove). Painted at the fixed
+                            // viewport left/width — not the scrolled x — so it highlights the whole
+                            // visible row regardless of horizontal scroll, then the text draws on top.
+                            // Diff color tokens are single-line (see DiffHighlighter), so a banded
+                            // segment owns its row; this never paints over a neighbouring run.
+                            if (segment.BackColor.HasValue && lineHeight > 0f)
+                            {
+                                using (var bgBrush = new SolidBrush(segment.BackColor.Value))
+                                    g.FillRectangle(bgBrush, new RectangleF(viewport.X, y, viewport.Width, lineHeight));
+                            }
+
                             if (line.Length == 0)
                                 continue;
 

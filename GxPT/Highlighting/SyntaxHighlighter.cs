@@ -21,7 +21,15 @@ namespace GxPT
         Operator,    // Operators (+, -, =, etc.)
         Punctuation, // Braces, brackets, semicolons
         Type,        // Built-in types (int, string, bool)
-        Method       // Method/function names
+        Method,      // Method/function names
+
+        // Diff/patch tokens. Unlike the categories above (whose colors are theme-driven), these
+        // map to a FIXED red/green family in GetTokenColorForTheme — a diff must always read as a
+        // diff regardless of the active accent palette. They are also the only token types that
+        // carry a background color (see GetTokenBackgroundColorForTheme).
+        Addition,    // A '+' line in a unified diff (added)
+        Deletion,    // A '-' line in a unified diff (removed)
+        DiffMeta     // Hunk/file headers and metadata (@@, +++/---, diff --git, ...)
     }
 
     /// <summary>
@@ -96,6 +104,7 @@ namespace GxPT
             RegisterHighlighter(new CssHighlighter());
             RegisterHighlighter(new CsvHighlighter());
             RegisterHighlighter(new DartHighlighter());
+            RegisterHighlighter(new DiffHighlighter());
             RegisterHighlighter(new EbnfHighlighter());
             RegisterHighlighter(new ElixirHighlighter());
             RegisterHighlighter(new ErlangHighlighter());
@@ -245,6 +254,13 @@ namespace GxPT
                         return ColorTranslator.FromHtml("#74c7ec"); // Sapphire
                     case TokenType.Method:
                         return ColorTranslator.FromHtml("#89b4fa"); // Blue
+                    // Diff: fixed red/green family (NOT theme-arbitrary), tuned for the dark palette.
+                    case TokenType.Addition:
+                        return ColorTranslator.FromHtml("#a6e3a1"); // Green
+                    case TokenType.Deletion:
+                        return ColorTranslator.FromHtml("#f38ba8"); // Red
+                    case TokenType.DiffMeta:
+                        return ColorTranslator.FromHtml("#89dceb"); // Sky
                     case TokenType.Normal:
                     default:
                         return ColorTranslator.FromHtml("#cdd6f4"); // Text
@@ -271,9 +287,50 @@ namespace GxPT
                         return ColorTranslator.FromHtml("#209fb5"); // sapphire
                     case TokenType.Method:
                         return ColorTranslator.FromHtml("#1e66f5"); // blue
+                    // Diff: fixed red/green family (NOT theme-arbitrary), tuned for the light palette.
+                    case TokenType.Addition:
+                        return ColorTranslator.FromHtml("#40a02b"); // green
+                    case TokenType.Deletion:
+                        return ColorTranslator.FromHtml("#d20f39"); // red
+                    case TokenType.DiffMeta:
+                        return ColorTranslator.FromHtml("#209fb5"); // sapphire
                     case TokenType.Normal:
                     default:
                         return SystemColors.WindowText; // Align with renderer/default
+                }
+            }
+        }
+
+        /// <summary>
+        /// Background color for a token type, or null for "no background" (the common case). Only the
+        /// diff token types return a value: a desaturated red/green band behind added/removed lines so
+        /// a diff reads at a glance even past the foreground color. Like the diff foreground colors,
+        /// these are a fixed red/green family — theme-tuned shades, never the accent palette.
+        /// </summary>
+        public static Color? GetTokenBackgroundColorForTheme(TokenType tokenType, bool dark)
+        {
+            if (dark)
+            {
+                switch (tokenType)
+                {
+                    case TokenType.Addition:
+                        return ColorTranslator.FromHtml("#28361f"); // muted green band on dark
+                    case TokenType.Deletion:
+                        return ColorTranslator.FromHtml("#3a2228"); // muted red band on dark
+                    default:
+                        return null;
+                }
+            }
+            else
+            {
+                switch (tokenType)
+                {
+                    case TokenType.Addition:
+                        return ColorTranslator.FromHtml("#e6f3e0"); // pale green band on light
+                    case TokenType.Deletion:
+                        return ColorTranslator.FromHtml("#fbe0e4"); // pale red band on light
+                    default:
+                        return null;
                 }
             }
         }
