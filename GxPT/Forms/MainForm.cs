@@ -567,6 +567,7 @@ namespace GxPT
                 var ctxRef = ctx;
                 strip.ChangeRequested += delegate { SetWorkingFolderForContext(ctxRef); };
                 strip.ClearRequested += delegate { ClearWorkingFolderForContext(ctxRef); };
+                strip.DismissRequested += delegate { if (ctxRef.WorkspaceStrip != null) ctxRef.WorkspaceStrip.Visible = false; };
                 // Dock order: the strip is Top and the transcript is Fill. WinForms lays out docked
                 // controls by REVERSE z-order, so the Fill transcript must be the frontmost child for
                 // it to fill the area *below* the Top strip (otherwise the strip overlaps the
@@ -576,6 +577,16 @@ namespace GxPT
                 strip.SetWorkingDir(ctx.WorkingDir);
             }
             catch { }
+        }
+
+        // Entry point for the tab context menu: set the working folder for a specific tab. Useful
+        // when the strip has been dismissed (setting a folder re-shows it).
+        internal void SetWorkingFolderForTab(TabPage page)
+        {
+            if (_tabManager == null || page == null) return;
+            TabManager.ChatTabContext ctx;
+            if (!_tabManager.TabContexts.TryGetValue(page, out ctx) || ctx == null) return;
+            SetWorkingFolderForContext(ctx);
         }
 
         private void SetWorkingFolderForContext(TabManager.ChatTabContext ctx)
@@ -588,7 +599,11 @@ namespace GxPT
                 if (dlg.ShowDialog(this) != DialogResult.OK) return;
                 ctx.WorkingDir = dlg.SelectedPath;
             }
-            if (ctx.WorkspaceStrip != null) ctx.WorkspaceStrip.SetWorkingDir(ctx.WorkingDir);
+            if (ctx.WorkspaceStrip != null)
+            {
+                ctx.WorkspaceStrip.SetWorkingDir(ctx.WorkingDir);
+                ctx.WorkspaceStrip.Visible = true; // re-show if it had been dismissed
+            }
             SyncMcpWorkingDirFromActiveTab();
         }
 

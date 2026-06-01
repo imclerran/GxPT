@@ -17,6 +17,7 @@ namespace GxPT
         private ToolStripMenuItem _miTabNew;
         private ToolStripMenuItem _miTabClose;
         private ToolStripMenuItem _miTabCloseOthers;
+        private ToolStripMenuItem _miTabWorkdir;
         private TabPage _tabCtxTarget;
 
         // Custom toolbar buttons
@@ -92,12 +93,14 @@ namespace GxPT
                 _miTabNew = new ToolStripMenuItem("New Tab");
                 _miTabClose = new ToolStripMenuItem("Close");
                 _miTabCloseOthers = new ToolStripMenuItem("Close Others");
+                _miTabWorkdir = new ToolStripMenuItem("Set Working Folder...");
 
                 _miTabNew.Click += delegate { CreateConversationTab(); };
                 _miTabClose.Click += delegate { if (_tabCtxTarget != null) CloseConversationTab(_tabCtxTarget); };
                 _miTabCloseOthers.Click += delegate { if (_tabCtxTarget != null) CloseOtherTabs(_tabCtxTarget); };
+                _miTabWorkdir.Click += delegate { if (_tabCtxTarget != null) _mainForm.SetWorkingFolderForTab(_tabCtxTarget); };
 
-                _tabCtxMenu.Items.AddRange(new ToolStripItem[] { _miTabNew, new ToolStripSeparator(), _miTabClose, _miTabCloseOthers });
+                _tabCtxMenu.Items.AddRange(new ToolStripItem[] { _miTabNew, new ToolStripSeparator(), _miTabWorkdir, new ToolStripSeparator(), _miTabClose, _miTabCloseOthers });
             }
             catch { }
         }
