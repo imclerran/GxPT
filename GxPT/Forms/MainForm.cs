@@ -20,6 +20,8 @@ namespace GxPT
         private OpenRouterClient _client;
         private McpHost _mcpHost;
         private McpToolRegistry _mcpRegistry;
+        private IToolApprovalPolicy _mcpApproval;
+        private ToolApprovalPanel _approvalPanel;
         private const string HelpApiKeysId = "help:api_keys";
         private const string HelpPrivacyId = "help:privacy";
 
@@ -432,6 +434,20 @@ namespace GxPT
 
         private void InitializeManagers()
         {
+            // The MCP tool-approval prompt: a panel docked at the bottom of the chat area, above the
+            // input. Created in code (not the Designer) and added to pnlBottom so it sits over the
+            // input panel when a tool call awaits approval.
+            try
+            {
+                _approvalPanel = new ToolApprovalPanel();
+                if (this.pnlBottom != null) this.pnlBottom.Controls.Add(_approvalPanel);
+                _mcpApproval = new ToolApprovalPolicy(
+                    new ToolClassifier(),
+                    new TranscriptApprovalPrompt(this, delegate { return _approvalPanel; }),
+                    new SettingsApprovalStore());
+            }
+            catch { }
+
             // Initialize managers for UI concerns
             _sidebarManager = new SidebarManager(this, this.splitContainer1, this.miConversationHistory);
             _tabManager = new TabManager(this, this.tabControl1, this.msMain);
@@ -1281,7 +1297,8 @@ namespace GxPT
             {
                 try
                 {
-                    var orch = new McpChatOrchestrator(_client, _mcpRegistry, new AllowAllApprovalPolicy(),
+                    var approval = _mcpApproval != null ? _mcpApproval : (IToolApprovalPolicy)new AllowAllApprovalPolicy();
+                    var orch = new McpChatOrchestrator(_client, _mcpRegistry, approval,
                                                        model, LoggerSink.Instance);
                     orch.ProviderDataCollectionAllowed = providerAllow;
                     orch.RequestMessageTransform = delegate(IList<ChatMessage> h)

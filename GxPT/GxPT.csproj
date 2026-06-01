@@ -120,6 +120,8 @@
     <Compile Include="Services\Mcp\ToolClassifier.cs" />
     <Compile Include="Services\Mcp\ToolApprovalPolicy.cs" />
     <Compile Include="Services\Mcp\ApprovalStore.cs" />
+    <Compile Include="Services\Mcp\TranscriptApprovalPrompt.cs" />
+    <Compile Include="Controls\ToolApprovalPanel.cs" />
     <Compile Include="Services\Mcp\ToolCallAssembler.cs" />
     <Compile Include="Services\Mcp\McpToolRegistry.cs" />
     <Compile Include="Services\Mcp\McpChatOrchestrator.cs" />
