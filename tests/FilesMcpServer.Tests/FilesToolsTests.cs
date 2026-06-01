@@ -303,6 +303,57 @@ namespace FilesMcpServer.Tests
             Assert.Contains("escape", Harness.Text(msgs[0]));
         }
 
+        [Fact]
+        public void Edit_works_on_oversize_file()
+        {
+            var sb = new StringBuilder();
+            for (int i = 0; i < 60000; i++) sb.Append("padding padding padding\n"); // ~1.4 MiB
+            sb.Append("UNIQUE_MARKER stays here\n");
+            for (int i = 0; i < 60000; i++) sb.Append("more more more more more\n");
+            File.WriteAllText(Abs("big.txt"), sb.ToString());
+            Assert.True(new FileInfo(Abs("big.txt")).Length > 1024 * 1024);
+
+            var msgs = Harness.Exchange(Harness.NewFilesServer(_root),
+                Harness.ToolsCall(1, "edit", Harness.Args("path", "big.txt",
+                    "old_string", "UNIQUE_MARKER", "new_string", "REPLACED")));
+            Assert.False(Harness.IsError(msgs[0]));
+            Assert.Equal(1, (int)msgs[0]["result"]["structuredContent"]["replacements"]);
+
+            string after = File.ReadAllText(Abs("big.txt"));
+            Assert.Contains("REPLACED stays here", after);
+            Assert.DoesNotContain("UNIQUE_MARKER", after);
+            // surrounding content is preserved verbatim
+            Assert.True(after.StartsWith("padding padding padding\n"));
+            Assert.True(after.EndsWith("more more more more more\n"));
+        }
+
+        [Fact]
+        public void Edit_replaces_match_spanning_a_read_chunk_boundary()
+        {
+            // The streaming reader chunks at 64K chars; place a match straddling that boundary so
+            // only the carry-buffer logic can catch it. 65535 dots + "NEEDLE" => 'N' is char #65536.
+            string prefix = new string('.', 65535);
+            File.WriteAllText(Abs("span.txt"), prefix + "NEEDLE" + "tail");
+
+            var msgs = Harness.Exchange(Harness.NewFilesServer(_root),
+                Harness.ToolsCall(1, "edit", Harness.Args("path", "span.txt",
+                    "old_string", "NEEDLE", "new_string", "FOUND")));
+            Assert.False(Harness.IsError(msgs[0]));
+            Assert.Equal(1, (int)msgs[0]["result"]["structuredContent"]["replacements"]);
+            Assert.Equal(prefix + "FOUND" + "tail", File.ReadAllText(Abs("span.txt")));
+        }
+
+        [Fact]
+        public void Edit_preserves_crlf_line_endings_outside_the_span()
+        {
+            File.WriteAllText(Abs("crlf.txt"), "one\r\ntwo\r\nthree");
+            var msgs = Harness.Exchange(Harness.NewFilesServer(_root),
+                Harness.ToolsCall(1, "edit", Harness.Args("path", "crlf.txt",
+                    "old_string", "two", "new_string", "TWO")));
+            Assert.False(Harness.IsError(msgs[0]));
+            Assert.Equal("one\r\nTWO\r\nthree", File.ReadAllText(Abs("crlf.txt")));
+        }
+
         // ---- search ----
 
         [Fact]

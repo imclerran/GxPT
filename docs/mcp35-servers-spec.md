@@ -87,10 +87,10 @@ options — exist so the model can locate and surgically modify code without
 rewriting whole files (fewer tokens, fewer clobbers). All share the sandbox and
 binary sniff; `edit` reuses `write`'s atomic temp-then-move. The 1 MiB cap is a
 **context** guard, so it applies only to operations that emit a whole file into
-the model: a *whole-file* `read`. `search` and a *ranged* `read` **stream**
-line-by-line — their output is bounded by `max_results` / the line range, not the
-file size — so large files (where grep matters most) remain searchable and a
-slice is always readable.
+the model: a *whole-file* `read`. Everything else **streams**, bounding output (or
+memory) rather than file size: `search` and a *ranged* `read` by line, `edit` by a
+chunk + carry buffer. So large files remain searchable, a slice is always readable,
+and any file is editable — only a whole-file `read` is capped.
 
 **Sandbox — the one rule that matters here:** every `path` is resolved against
 the root and must stay inside it.
@@ -124,10 +124,13 @@ string Resolve(string root, string rel) {
 - `write`: write to a temp file in the same dir then `File.Move`/replace (atomic,
   crash-safe — mirrors `AppSettings`' settings.json write); `create_dirs` gates
   parent creation; refuse to overwrite a directory.
-- `edit`: read (size cap + binary sniff), require `old_string` to occur exactly
-  once (or `replace_all` to replace every occurrence), then write back via the same
-  atomic temp-then-move as `write`; missing file / no match / non-unique match →
-  `Error` (file left untouched). Returns the replacement count.
+- `edit`: **streams** the file (binary sniff on the head, no size cap — its output
+  goes to disk, not the model context) through a find/replace into a temp file, then
+  atomic temp-then-move as `write`. A `carry` of `len(old_string)-1` chars bridges a
+  match that straddles a read boundary, and content outside the matched span is
+  copied **verbatim** (line endings preserved). `old_string` must occur exactly once
+  unless `replace_all`; missing file / no match / non-unique match → `Error` (file
+  left untouched — the temp is discarded). Returns the replacement count.
 - `delete`: files and **empty** directories only (never recursive — keeps the
   blast radius of a single approved call bounded); missing path → `Error`.
 - Symlink/junction escapes: on net35/Windows, resolve via `GetFullPath` and the

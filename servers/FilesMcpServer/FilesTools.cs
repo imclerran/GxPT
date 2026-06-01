@@ -296,6 +296,8 @@ namespace FilesMcpServer
 
         // ---- edit ----
 
+        private const int EditChunkChars = 64 * 1024;
+
         private static CallToolResult Edit(PathSandbox sandbox, ToolCallContext ctx)
         {
             string full;
@@ -311,32 +313,102 @@ namespace FilesMcpServer
             if (newString == null) return ToolResults.Error("new_string is required");
             bool replaceAll = BoolArg(ctx, "replace_all", false);
 
-            FileInfo fi = new FileInfo(full);
-            if (fi.Length > MaxReadBytes)
-                return ToolResults.Error("file too large (" + fi.Length + " bytes; max " + MaxReadBytes + ")");
+            // Stream the file through a transform into a temp file, then atomically move it over the
+            // original (mirrors WriteAtomic). No size cap: edit writes to disk, not the model context,
+            // so memory is the only concern and it stays bounded by one chunk + the carried tail.
+            // A `carry` of (oldString.Length - 1) chars bridges matches that straddle a read boundary.
+            StreamReader sr;
+            try { sr = OpenTextReaderOrNull(full); }
+            catch { return ToolResults.Error("file not found"); }
+            if (sr == null) return ToolResults.Error("not a text file");
 
-            byte[] bytes = File.ReadAllBytes(full);
-            if (LooksBinary(bytes)) return ToolResults.Error("not a text file");
-            string text = DecodeUtf8(bytes);
+            string parent = Path.GetDirectoryName(full);
+            string tmp = Path.Combine(parent, "." + Guid.NewGuid().ToString("N") + ".tmp");
+            int oldLen = oldString.Length;
+            int keep = oldLen - 1;
+            int replacements = 0;
+            bool tooMany = false;
+            bool committed = false;
+            try
+            {
+                using (sr)
+                using (StreamWriter sw = new StreamWriter(
+                    new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None),
+                    new UTF8Encoding(false)))
+                {
+                    char[] buf = new char[EditChunkChars];
+                    string carry = string.Empty;
+                    int read;
+                    while (!tooMany && (read = sr.Read(buf, 0, buf.Length)) > 0)
+                    {
+                        string window = carry + new string(buf, 0, read);
+                        carry = ProcessEditWindow(window, oldString, newString, replaceAll, keep,
+                            sw, ref replacements, ref tooMany);
+                    }
+                    // EOF: carry is shorter than oldString, so it cannot contain a full match — emit it.
+                    if (!tooMany) sw.Write(carry);
+                }
 
-            int count = CountOccurrences(text, oldString);
-            if (count == 0) return ToolResults.Error("old_string not found in file");
-            if (count > 1 && !replaceAll)
-                return ToolResults.Error("old_string is not unique (" + count
-                    + " occurrences); add surrounding context or set replace_all");
+                if (tooMany)
+                    return ToolResults.Error("old_string is not unique (matches more than once); "
+                        + "add surrounding context or set replace_all");
+                if (replacements == 0)
+                    return ToolResults.Error("old_string not found in file");
 
-            string updated = replaceAll
-                ? text.Replace(oldString, newString)
-                : ReplaceFirst(text, oldString, newString);
-            int replacements = replaceAll ? count : 1;
-
-            int bytesWritten = WriteAtomic(full, updated);
+                if (File.Exists(full)) File.Delete(full);
+                File.Move(tmp, full);
+                committed = true;
+            }
+            finally
+            {
+                if (!committed)
+                {
+                    try { if (File.Exists(tmp)) File.Delete(tmp); }
+                    catch { }
+                }
+            }
 
             JObject result = new JObject();
             result["path"] = sandbox.ToRelative(full);
             result["replacements"] = replacements;
-            result["bytesWritten"] = bytesWritten;
+            result["bytesWritten"] = new FileInfo(full).Length;
             return ToolResults.Json(result);
+        }
+
+        // Process one window of text: write replaced/verbatim content for everything that can be
+        // resolved now, and return the trailing (up to `keep`) chars to carry — they might be the
+        // prefix of a match completed by the next read. Sets tooMany when a unique edit sees a 2nd hit.
+        private static string ProcessEditWindow(string window, string oldString, string newString,
+            bool replaceAll, int keep, StreamWriter sw, ref int replacements, ref bool tooMany)
+        {
+            int pos = 0;
+            while (true)
+            {
+                int idx = window.IndexOf(oldString, pos, StringComparison.Ordinal);
+                if (idx < 0) break;
+
+                if (!replaceAll && replacements >= 1)
+                {
+                    // A second occurrence in unique mode: abort (caller discards the temp file).
+                    // (Substring, not Write(window, pos, len): that binds to the composite-format
+                    // overload Write(string, object, object) and would emit the whole string.)
+                    sw.Write(window.Substring(pos, idx - pos));
+                    tooMany = true;
+                    return string.Empty;
+                }
+
+                sw.Write(window.Substring(pos, idx - pos));   // verbatim gap before the match
+                sw.Write(newString);                          // the replacement
+                replacements++;
+                pos = idx + oldString.Length;
+            }
+
+            // No more full matches at/after pos. Emit up to the last `keep` chars; carry the rest so a
+            // match spanning into the next read isn't split. (keep == 0 when oldString is a single char.)
+            int emitUpto = window.Length - keep;
+            if (emitUpto < pos) emitUpto = pos;
+            sw.Write(window.Substring(pos, emitUpto - pos));
+            return window.Substring(emitUpto);
         }
 
         // ---- search ----
@@ -540,25 +612,6 @@ namespace FilesMcpServer
             if (normalized.Length > 0 && normalized[normalized.Length - 1] == '\n')
                 normalized = normalized.Substring(0, normalized.Length - 1);
             return normalized.Split('\n');
-        }
-
-        private static int CountOccurrences(string haystack, string needle)
-        {
-            int count = 0;
-            int idx = 0;
-            while ((idx = haystack.IndexOf(needle, idx, StringComparison.Ordinal)) >= 0)
-            {
-                count++;
-                idx += needle.Length;
-            }
-            return count;
-        }
-
-        private static string ReplaceFirst(string text, string oldValue, string newValue)
-        {
-            int idx = text.IndexOf(oldValue, StringComparison.Ordinal);
-            if (idx < 0) return text;
-            return text.Substring(0, idx) + newValue + text.Substring(idx + oldValue.Length);
         }
 
         private static string CapText(string s)
