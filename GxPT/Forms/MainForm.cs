@@ -1471,7 +1471,9 @@ namespace GxPT
                     };
 
                     Action<string> onAppend = delegate(string t) { lock (sbLock) { answerSb.Append(t); } };
-                    Action<string> onToolCall = delegate(string name)
+                    // argsJson is threaded through for files__edit, which renders a collapsible diff
+                    // record instead of the generic "using" marker (wired in a following change).
+                    Action<string, string> onToolCall = delegate(string name, string argsJson)
                     {
                         lock (sbLock)
                         {
