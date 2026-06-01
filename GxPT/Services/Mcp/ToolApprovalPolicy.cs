@@ -25,9 +25,23 @@ namespace GxPT
             _store = store != null ? store : new InMemoryApprovalStore();
         }
 
+        // Tools that never require approval (always allowed, no prompt). web__search is read-only and
+        // high-frequency, so prompting adds friction without meaningful risk; web__extract (which
+        // fetches arbitrary pages) deliberately stays gated.
+        private static readonly Dictionary<string, bool> _autoAllow = BuildAutoAllowSet();
+        private static Dictionary<string, bool> BuildAutoAllowSet()
+        {
+            var s = new Dictionary<string, bool>(StringComparer.Ordinal);
+            s["web__search"] = true;
+            return s;
+        }
+
         // The orchestrator calls this. functionName is the qualified name; args already parsed.
         public ApprovalDecision Check(string functionName, JObject args)
         {
+            if (functionName != null && _autoAllow.ContainsKey(functionName))
+                return ApprovalDecision.Allow;
+
             string server = ServerOf(functionName);
             bool firstParty = server != null && _firstPartyServers.ContainsKey(server);
             JObject annotations = null; // third-party annotations not yet plumbed; unknown -> Write/Tool

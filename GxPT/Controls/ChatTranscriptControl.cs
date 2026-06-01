@@ -274,6 +274,13 @@ namespace GxPT
             RegisterToolRecord(key, "Ran a command", command, "batch");
         }
 
+        // Web search (web__search): the query, plain — "text" has no highlighter, so it renders
+        // without syntax coloring.
+        public void RegisterWebSearch(string key, string query)
+        {
+            RegisterToolRecord(key, "Searched the web", query, "text");
+        }
+
         private EditDiffData GetEditDiffData(string key)
         {
             if (string.IsNullOrEmpty(key)) return null;
