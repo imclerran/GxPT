@@ -24,9 +24,9 @@ namespace CommandMcpServer
             ProcessRunner runner = new ProcessRunner(null);
 
             server.AddTool("run",
-                "Run a shell command line and capture its stdout, stderr, and exit code.",
+                "Run a command line on Windows via cmd.exe (/c) and capture its stdout, stderr, and exit code.",
                 SchemaBuilder.Object()
-                    .Str("command", true, "The exact command line to run")
+                    .Str("command", true, "The exact command line to run, in Windows cmd.exe syntax")
                     .Int("timeout_ms", false, "Kill the command after this many milliseconds (default 60000)")
                     .Build(),
                 delegate(ToolCallContext ctx) { return Run(config, runner, ctx); });
