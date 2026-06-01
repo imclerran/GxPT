@@ -192,6 +192,28 @@ namespace GxPT
             return result;
         }
 
+        // Store a list of strings (round-trips through GetList). Stored as object[] so the
+        // JavaScriptSerializer emits a JSON array.
+        public static void SetList(string key, IList<string> values)
+        {
+            if (string.IsNullOrEmpty(key)) return;
+            lock (_gate)
+            {
+                EnsureLoadedLocked();
+                if (values == null)
+                {
+                    _cache[key] = new object[0];
+                }
+                else
+                {
+                    var arr = new object[values.Count];
+                    for (int i = 0; i < values.Count; i++) arr[i] = values[i];
+                    _cache[key] = arr;
+                }
+                PersistLocked();
+            }
+        }
+
         public static double GetDouble(string key, double defaultValue)
         {
             lock (_gate)

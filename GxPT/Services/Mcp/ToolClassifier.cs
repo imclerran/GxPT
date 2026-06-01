@@ -1,0 +1,70 @@
+using System;
+using System.Collections.Generic;
+using Newtonsoft.Json.Linq;
+
+namespace GxPT
+{
+    // Classifies a tool into a ToolPolicy (tier + remember scope), per approval spec §2:
+    //   1. reveal_tools is handled upstream (never reaches here / never gated).
+    //   2. First-party tools use a hardcoded, authoritative table (annotations ignored).
+    //   3. Third-party tools use advisory annotations (readOnlyHint / destructiveHint); since we
+    //      can't infer their argument semantics, they never get Argument scope.
+    //   4. Unknown / unannotated -> Write/Tool.
+    internal interface IToolClassifier
+    {
+        ToolPolicy Classify(string functionName, JObject annotations, bool isFirstParty);
+    }
+
+    internal sealed class ToolClassifier : IToolClassifier
+    {
+        // First-party table keyed by qualified function name (approval spec §2).
+        private static readonly Dictionary<string, ToolPolicy> _firstParty = BuildFirstPartyTable();
+
+        private static Dictionary<string, ToolPolicy> BuildFirstPartyTable()
+        {
+            var t = new Dictionary<string, ToolPolicy>(StringComparer.Ordinal);
+            t["files__read"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
+            t["files__list"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
+            t["files__write"] = new ToolPolicy(ToolTier.Write, RememberScope.Argument, "path");
+            t["files__delete"] = new ToolPolicy(ToolTier.Destructive, RememberScope.Argument, "path");
+            t["git__status"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
+            t["git__diff"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
+            t["git__log"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
+            t["git__commit"] = new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
+            t["git__push"] = new ToolPolicy(ToolTier.Destructive, RememberScope.None, null);
+            t["command__run"] = new ToolPolicy(ToolTier.Destructive, RememberScope.Argument, "command");
+            t["web__search"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
+            t["web__extract"] = new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
+            return t;
+        }
+
+        public ToolPolicy Classify(string functionName, JObject annotations, bool isFirstParty)
+        {
+            if (isFirstParty && functionName != null)
+            {
+                ToolPolicy fp;
+                if (_firstParty.TryGetValue(functionName, out fp))
+                    return new ToolPolicy(fp.Tier, fp.Scope, fp.ScopeArgPath);
+                // First-party but not in the table (shouldn't happen) -> conservative Write/Tool.
+                return new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
+            }
+
+            // Third-party: advisory annotation hints only; never Argument scope (we can't infer
+            // which argument is a command/path).
+            if (annotations != null)
+            {
+                if (IsTrue(annotations["destructiveHint"]))
+                    return new ToolPolicy(ToolTier.Destructive, RememberScope.None, null);
+                if (IsTrue(annotations["readOnlyHint"]))
+                    return new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
+            }
+            // No annotation / unknown -> Write/Tool (remember-eligible only after a first prompt).
+            return new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
+        }
+
+        private static bool IsTrue(JToken t)
+        {
+            return t != null && t.Type == JTokenType.Boolean && (bool)t;
+        }
+    }
+}
