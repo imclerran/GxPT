@@ -79,7 +79,7 @@ namespace GxPT
                     }
 
                     string json = _client.CreateCompletion(
-                        "google/gemini-2.0-flash-001",
+                        "google/gemma-4-26b-a4b-it",
                         msgs,
                         new ClientProperties { Stream = false, ProviderDataCollectionAllowed = providerAllow }
                     );
