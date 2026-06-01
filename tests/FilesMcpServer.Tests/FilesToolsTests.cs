@@ -501,6 +501,45 @@ namespace FilesMcpServer.Tests
             Assert.Contains("too large", Harness.Text(msgs[0]));
         }
 
+        [Fact]
+        public void Read_range_cap_counts_utf8_bytes_not_chars()
+        {
+            // 2000 lines × 250 '€' (3 bytes each) ≈ 1.5 MiB of UTF-8, but only ~0.5M chars — under a
+            // char-based cap, over the byte cap. The range read must reject it on real byte size.
+            var sb = new StringBuilder();
+            for (int i = 0; i < 2000; i++) sb.Append(new string('€', 250)).Append('\n');
+            File.WriteAllText(Abs("uni.txt"), sb.ToString(), new UTF8Encoding(false));
+            Assert.True(sb.Length < 1024 * 1024);                                  // char count under cap
+            Assert.True(new FileInfo(Abs("uni.txt")).Length > 1024 * 1024);        // byte count over cap
+
+            var msgs = Harness.Exchange(Harness.NewFilesServer(_root),
+                Harness.ToolsCall(1, "read", Harness.Args("path", "uni.txt", "start_line", 1)));
+            Assert.True(Harness.IsError(msgs[0]));
+            Assert.Contains("too large", Harness.Text(msgs[0]));
+        }
+
+        [Fact]
+        public void Read_range_at_cap_boundary_returns_just_under_and_rejects_just_over()
+        {
+            // 16-byte ASCII lines; joined by '\n' that is 17 bytes/line. Output for N lines = 17N-1.
+            // 17×61681-1 = 1,048,576 = the 1 MiB cap exactly (fits, since the check is strictly >);
+            // 61682 lines = 1,048,593 bytes, just over.
+            string row = new string('x', 16);
+            var sb = new StringBuilder();
+            for (int i = 0; i < 70000; i++) sb.Append(row).Append('\n');
+            File.WriteAllText(Abs("rows.txt"), sb.ToString(), new UTF8Encoding(false));
+
+            var ok = Harness.Exchange(Harness.NewFilesServer(_root),
+                Harness.ToolsCall(1, "read", Harness.Args("path", "rows.txt", "start_line", 1, "end_line", 61681)));
+            Assert.False(Harness.IsError(ok[0]));
+            Assert.Equal(61681 * 17 - 1, Harness.Text(ok[0]).Length); // 61681 rows joined by 61680 '\n'
+
+            var over = Harness.Exchange(Harness.NewFilesServer(_root),
+                Harness.ToolsCall(1, "read", Harness.Args("path", "rows.txt", "start_line", 1, "end_line", 61682)));
+            Assert.True(Harness.IsError(over[0]));
+            Assert.Contains("too large", Harness.Text(over[0]));
+        }
+
         // ---- Criterion 6: lifecycle ----
 
         [Fact]

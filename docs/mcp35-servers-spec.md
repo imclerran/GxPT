@@ -109,9 +109,11 @@ string Resolve(string root, string rel) {
 - `read`: a **whole-file** read enforces the **1 MiB** cap (over → `Error`,
   pointing the model at a line range) and detects binary (NUL byte in a head
   sample) → `Error("not a text file")`. A **ranged** read (`start_line`/`end_line`,
-  1-based inclusive) **streams** instead: it works on files past the cap, with the
-  *output* capped at 1 MiB (over → `Error`); a `start_line` past EOF → `Error`, an
-  `end_line` past EOF just stops at the last line. `line_numbers` prefixes each
+  1-based inclusive) **streams** instead: it works on files past the cap, but its
+  **rendered output** is held to the same 1 MiB — counted as exact UTF-8 bytes (line
+  content + `\n` separators + the line-number prefix when numbering), so a slice that
+  would render over 1 MiB → `Error`. A `start_line` past EOF → `Error`, an `end_line`
+  past EOF just stops at the last line. `line_numbers` prefixes each
   returned line with a right-aligned number + tab. With no range and no numbering,
   content is returned **verbatim** (exact bytes preserved).
 - `list`: cap entries (e.g. 1000) and note truncation; `recursive` bounded depth.

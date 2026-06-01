@@ -146,9 +146,10 @@ namespace FilesMcpServer
             catch { return ToolResults.Error("file not found"); }
             if (sr == null) return ToolResults.Error("not a text file");
 
+            UTF8Encoding utf8NoBom = new UTF8Encoding(false);
             List<string> picked = new List<string>();
             int lineNo = 0;
-            long outBytes = 0;
+            long contentBytes = 0;
             using (sr)
             {
                 string line;
@@ -158,10 +159,18 @@ namespace FilesMcpServer
                     if (lineNo < start) continue;
                     if (lineNo > end) break;
                     picked.Add(line);
-                    outBytes += line.Length + 12; // rough per-line overhead (number + tab + newline)
-                    if (outBytes > MaxReadBytes)
+                    contentBytes += utf8NoBom.GetByteCount(line);
+
+                    // Cap the exact rendered UTF-8 size, not the char count. The rendered output is:
+                    // the line bytes, '\n' separators (count - 1), and — when numbering — a prefix on
+                    // every line of `width` digits + a '\t', where width is the digit count of the
+                    // LAST line number (right-aligned PadLeft). `lineNo` is that last number so far, so
+                    // applying its width to all picked lines makes this total exact at the final line.
+                    long total = contentBytes + (picked.Count - 1);
+                    if (lineNumbers) total += (long)picked.Count * (DigitCount(lineNo) + 1);
+                    if (total > MaxReadBytes)
                         return ToolResults.Error("requested range is too large (over " + MaxReadBytes
-                            + " bytes of text) — narrow start_line/end_line");
+                            + " bytes of rendered output) — narrow start_line/end_line");
                 }
             }
 
@@ -612,6 +621,14 @@ namespace FilesMcpServer
             if (normalized.Length > 0 && normalized[normalized.Length - 1] == '\n')
                 normalized = normalized.Substring(0, normalized.Length - 1);
             return normalized.Split('\n');
+        }
+
+        // Number of decimal digits in a non-negative line number (matches its rendered width).
+        private static int DigitCount(int n)
+        {
+            int digits = 1;
+            while (n >= 10) { n /= 10; digits++; }
+            return digits;
         }
 
         private static string CapText(string s)
