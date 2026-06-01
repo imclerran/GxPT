@@ -107,6 +107,7 @@
       <DependentUpon>FileViewerForm.cs</DependentUpon>
     </Compile>
     <Compile Include="Services\AttachmentService.cs" />
+    <Compile Include="Services\DiffUtil.cs" />
     <Compile Include="Services\DocxAttachmentExtractor.cs" />
     <Compile Include="Services\HoverWheelRouter.cs" />
     <Compile Include="Managers\InputManager.cs" />
