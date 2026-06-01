@@ -2431,7 +2431,7 @@ namespace GxPT
 
         public override string[] Aliases
         {
-            get { return new string[] { "ini", "conf", "cfg", "desktop", "reg", "inf", "gitconfig", "config" }; }
+            get { return new string[] { "ini", "conf", "cfg", "desktop", "reg", "inf", "gitconfig" }; }
         }
 
         protected override TokenPattern[] GetPatterns()
