@@ -68,6 +68,7 @@ namespace GxPT
         private const int EditDiffHeaderPad = 3;  // vertical padding around the header text
         private const int EditDiffBodyGap = 2;    // gap between header and body
         private const int EditDiffBodyPad = 4;    // padding below the body
+        private const int EditDiffScrollSlack = 6; // overflow under this many px doesn't get a scrollbar
         private const int InlineCodePaddingX = 3;
         private const int InlineCodePaddingY = 1;
 
@@ -221,7 +222,7 @@ namespace GxPT
 
         // ---------- Edit-diff records (collapsible, chromeless; data derived from tool-call args) ----------
         private struct EditDiffHit { public Rectangle Rect; public string Key; }
-        private struct EditDiffScrollHit { public Rectangle Track; public string Key; public int ContentWidth; public int ViewportWidth; }
+        private struct EditDiffScrollHit { public Rectangle Track; public Rectangle Body; public string Key; public int ContentWidth; public int ViewportWidth; }
 
         // Horizontal scroll offset per diff key (UI-thread only); 0 when absent.
         private readonly Dictionary<string, int> _editDiffScroll = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -451,6 +452,18 @@ namespace GxPT
                             Invalidate();
                             return;
                         }
+                    }
+
+                    // Edit-diff body/scrollbar: shift+wheel scrolls it horizontally.
+                    EditDiffScrollHit edh;
+                    if (HitTestEditDiffScrollArea(clientPt, out edh) && edh.ContentWidth > edh.ViewportWidth)
+                    {
+                        int hStep = Math.Max(16, ScrollStep);
+                        int deltaX = (int)System.Math.Round(-(wheelDelta / 120.0) * hStep, MidpointRounding.AwayFromZero);
+                        int maxScroll = Math.Max(0, edh.ContentWidth - edh.ViewportWidth);
+                        SetEditDiffScroll(edh.Key, Math.Max(0, Math.Min(maxScroll, GetEditDiffScroll(edh.Key) + deltaX)));
+                        Invalidate();
+                        return;
                     }
                 }
                 // Fallback to normal vertical scroll
@@ -1013,7 +1026,7 @@ namespace GxPT
                                 var colored = SyntaxHighlightingRenderer.GetColoredSegments(data.Body, "diff", _monoFont, _isDarkTheme);
                                 Size content = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, colored);
                                 int bodyH = Math.Max(_monoFont.Height, content.Height);
-                                bool needH = content.Width > maxWidth;
+                                bool needH = content.Width > maxWidth + EditDiffScrollSlack;
                                 h += EditDiffBodyGap + bodyH + (needH ? CodeHScrollHeight : 0) + EditDiffBodyPad;
                                 w = Math.Max(w, Math.Min(maxWidth, content.Width));
                             }
@@ -1526,7 +1539,7 @@ namespace GxPT
                         Size content = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, colored);
                         int bodyH = Math.Max(_monoFont.Height, content.Height);
                         int viewportW = maxWidth;
-                        bool needH = content.Width > viewportW;
+                        bool needH = content.Width > viewportW + EditDiffScrollSlack;
 
                         int scrollX = 0;
                         if (needH)
@@ -1569,7 +1582,7 @@ namespace GxPT
                             if (owner != null)
                             {
                                 if (owner.EditDiffScrollHits == null) owner.EditDiffScrollHits = new List<EditDiffScrollHit>();
-                                owner.EditDiffScrollHits.Add(new EditDiffScrollHit { Track = track, Key = ed.Key, ContentWidth = content.Width, ViewportWidth = viewportW });
+                                owner.EditDiffScrollHits.Add(new EditDiffScrollHit { Track = track, Body = textRect, Key = ed.Key, ContentWidth = content.Width, ViewportWidth = viewportW });
                             }
                             y += CodeHScrollHeight;
                         }
@@ -2817,6 +2830,24 @@ namespace GxPT
                 for (int i = 0; i < it.EditDiffScrollHits.Count; i++)
                 {
                     if (it.EditDiffScrollHits[i].Track.Contains(virt)) { hit = it.EditDiffScrollHits[i]; return true; }
+                }
+            }
+            return false;
+        }
+
+        // Like HitTestEditDiffScroll but matches the diff body too (for shift+wheel over the content).
+        private bool HitTestEditDiffScrollArea(Point clientPt, out EditDiffScrollHit hit)
+        {
+            hit = default(EditDiffScrollHit);
+            Point virt = new Point(clientPt.X, clientPt.Y + _scrollOffset);
+            foreach (var it in _items)
+            {
+                if (it.EditDiffScrollHits == null || it.EditDiffScrollHits.Count == 0) continue;
+                if (!it.Bounds.Contains(virt)) continue;
+                for (int i = 0; i < it.EditDiffScrollHits.Count; i++)
+                {
+                    var h = it.EditDiffScrollHits[i];
+                    if (h.Body.Contains(virt) || h.Track.Contains(virt)) { hit = h; return true; }
                 }
             }
             return false;
