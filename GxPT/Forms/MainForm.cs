@@ -718,7 +718,8 @@ namespace GxPT
                 opts.CommandEnabled = AppSettings.GetBool("mcp_command_enabled", false);
                 opts.WebSearchKey = AppSettings.GetString("mcp_websearch_key");
                 opts.CurlPath = curlPath;
-                opts.ServerDir = baseDir; // server exes expected alongside GxPT.exe (deployed later)
+                // Server exes are deployed beside GxPT.exe under 'mcp-servers' (AfterBuild copy / installer).
+                opts.ServerDir = System.IO.Path.Combine(baseDir, "mcp-servers");
 
                 var specs = new List<McpServerSpec>(McpConfig.BuiltInSpecs(opts));
                 specs.Add(McpConfig.GitHubSpec(
