@@ -16,7 +16,6 @@ namespace GxPT
         private static readonly Color SetBack = Color.FromArgb(237, 244, 237);   // subtle green-grey
         private static readonly Color UnsetBack = Color.FromArgb(252, 246, 220); // cream / warning
         private static readonly Color TextColor = Color.FromArgb(55, 55, 55);
-        private static readonly Color BorderColor = Color.FromArgb(200, 200, 200);
         private static readonly Color LinkColor = Color.FromArgb(0, 90, 158);
 
         private readonly Label _text;
@@ -78,26 +77,17 @@ namespace GxPT
             if (has)
             {
                 this.BackColor = SetBack;
-                _text.Text = "Working folder:  " + dir + "      file, git & command tools run here";
+                _text.Text = "Working folder:  " + dir;
                 _change.Text = "Change...";
                 _clear.Visible = true;
             }
             else
             {
                 this.BackColor = UnsetBack;
-                _text.Text = "No working folder — file, git & command tools are disabled for this conversation.";
+                _text.Text = "No working folder — file, git, and command tools are disabled for this conversation.";
                 _change.Text = "Set folder...";
                 _clear.Visible = false;
             }
-            this.Invalidate();
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            base.OnPaint(e);
-            // A subtle bottom separator so the strip reads as chrome above the transcript.
-            using (var pen = new Pen(BorderColor))
-                e.Graphics.DrawLine(pen, 0, this.Height - 1, this.Width, this.Height - 1);
         }
     }
 }
