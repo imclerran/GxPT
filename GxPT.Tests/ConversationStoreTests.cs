@@ -135,6 +135,18 @@ namespace GxPT.Tests
         }
 
         [Fact]
+        public void WorkspaceStripDismissed_round_trips_and_defaults_false()
+        {
+            var convo = new Conversation(null);
+            convo.WorkspaceStripDismissed = true;
+            var reload = ConversationStore.LoadFromJson(null, ConversationStore.ToJson(convo));
+            Assert.True(reload.WorkspaceStripDismissed);
+
+            var legacy = ConversationStore.LoadFromJson(null, "{\"Name\":\"C\",\"Messages\":[]}");
+            Assert.False(legacy.WorkspaceStripDismissed);
+        }
+
+        [Fact]
         public void Load_legacy_file_without_tool_fields_has_null_tool_data()
         {
             string json = "{\"Name\":\"C\",\"Messages\":[{\"Role\":\"assistant\",\"Content\":\"hi\"}]}";

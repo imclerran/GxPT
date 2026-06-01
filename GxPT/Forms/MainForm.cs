@@ -572,7 +572,7 @@ namespace GxPT
                 var ctxRef = ctx;
                 strip.ChangeRequested += delegate { SetWorkingFolderForContext(ctxRef); };
                 strip.ClearRequested += delegate { ClearWorkingFolderForContext(ctxRef); };
-                strip.DismissRequested += delegate { if (ctxRef.WorkspaceStrip != null) ctxRef.WorkspaceStrip.Visible = false; };
+                strip.DismissRequested += delegate { DismissWorkspaceStripForContext(ctxRef); };
                 // Dock order: the strip is Top and the transcript is Fill. WinForms lays out docked
                 // controls by REVERSE z-order, so the Fill transcript must be the frontmost child for
                 // it to fill the area *below* the Top strip (otherwise the strip overlaps the
@@ -580,8 +580,25 @@ namespace GxPT
                 ctx.Page.Controls.Add(strip);
                 if (ctx.Transcript != null) ctx.Transcript.BringToFront();
                 strip.SetWorkingDir(ctx.WorkingDir);
+                // Honor a persisted dismissal (only meaningful when no folder is set; setting one
+                // re-shows the strip).
+                if (string.IsNullOrEmpty(ctx.WorkingDir) && ctx.Conversation != null &&
+                    ctx.Conversation.WorkspaceStripDismissed)
+                    strip.Visible = false;
             }
             catch { }
+        }
+
+        private void DismissWorkspaceStripForContext(TabManager.ChatTabContext ctx)
+        {
+            if (ctx == null) return;
+            if (ctx.WorkspaceStrip != null) ctx.WorkspaceStrip.Visible = false;
+            if (ctx.Conversation != null)
+            {
+                ctx.Conversation.WorkspaceStripDismissed = true;
+                try { if (!ctx.NoSaveUntilUserSend) ConversationStore.Save(ctx.Conversation); }
+                catch { }
+            }
         }
 
         // Entry point for the tab context menu: set the working folder for a specific tab. Useful
@@ -604,6 +621,8 @@ namespace GxPT
                 if (dlg.ShowDialog(this) != DialogResult.OK) return;
                 ctx.WorkingDir = dlg.SelectedPath;
             }
+            // Setting a folder re-shows the strip, so a prior dismissal no longer applies.
+            if (ctx.Conversation != null) ctx.Conversation.WorkspaceStripDismissed = false;
             PersistWorkingDir(ctx);
             if (ctx.WorkspaceStrip != null)
             {
@@ -631,7 +650,10 @@ namespace GxPT
             if (ctx.WorkspaceStrip != null)
             {
                 ctx.WorkspaceStrip.SetWorkingDir(ctx.WorkingDir);
-                ctx.WorkspaceStrip.Visible = true;
+                // Hidden only if there's no folder AND the user previously dismissed it.
+                bool dismissed = string.IsNullOrEmpty(ctx.WorkingDir) && ctx.Conversation != null &&
+                                 ctx.Conversation.WorkspaceStripDismissed;
+                ctx.WorkspaceStrip.Visible = !dismissed;
             }
             SyncMcpWorkingDirFromActiveTab();
         }

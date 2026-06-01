@@ -19,6 +19,9 @@ namespace GxPT
         // MCP working folder for this conversation (GXPT_WORKDIR sandbox root); null = none. Persisted
         // so the conversation re-opens with the same folder.
         public string WorkingDir { get; set; }
+        // Whether the user dismissed the (unset) workspace strip for this conversation; persisted so
+        // the strip stays hidden on reopen until they set a folder.
+        public bool WorkspaceStripDismissed { get; set; }
         public DateTime LastUpdated { get; set; }
         public event Action<string> NameGenerated;
 
