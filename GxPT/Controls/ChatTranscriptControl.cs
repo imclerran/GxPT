@@ -2590,6 +2590,20 @@ namespace GxPT
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
+            // An active edit-diff scrollbar drag takes precedence over selection/hover so dragging past
+            // the selection threshold doesn't get hijacked into a text selection.
+            if (_draggingEditDiffScroll && !string.IsNullOrEmpty(_dragEditDiffKey))
+            {
+                int ddx = e.X - _dragEditDiffStartMouseX;
+                int dtrackWidth = Math.Max(1, _dragEditDiffTrack.Width);
+                int dthumbW = Math.Max(CodeHScrollThumbMin, (int)Math.Round((double)dtrackWidth * _dragEditDiffViewportWidth / Math.Max(1, _dragEditDiffContentWidth)));
+                int dtrackRange = Math.Max(1, dtrackWidth - dthumbW);
+                int dmaxScroll = Math.Max(0, _dragEditDiffContentWidth - _dragEditDiffViewportWidth);
+                int ddelta = (int)Math.Round((double)ddx / dtrackRange * dmaxScroll);
+                SetEditDiffScroll(_dragEditDiffKey, Math.Max(0, Math.Min(dmaxScroll, _dragEditDiffStartScroll + ddelta)));
+                Invalidate();
+                return;
+            }
             // If mouse is down over a message but we haven't entered selection yet, start selection on threshold
             if (!_isSelecting && _selectionItem != null && (Control.MouseButtons & MouseButtons.Left) == MouseButtons.Left)
             {
@@ -2614,18 +2628,6 @@ namespace GxPT
                 {
                     _suppressLinkClick = true; _hasSelection = true;
                 }
-                Invalidate();
-                return;
-            }
-            if (_draggingEditDiffScroll && !string.IsNullOrEmpty(_dragEditDiffKey))
-            {
-                int dx = e.X - _dragEditDiffStartMouseX;
-                int trackWidth = Math.Max(1, _dragEditDiffTrack.Width);
-                int thumbW = Math.Max(CodeHScrollThumbMin, (int)Math.Round((double)trackWidth * _dragEditDiffViewportWidth / Math.Max(1, _dragEditDiffContentWidth)));
-                int trackRange = Math.Max(1, trackWidth - thumbW);
-                int maxScroll = Math.Max(0, _dragEditDiffContentWidth - _dragEditDiffViewportWidth);
-                int deltaScroll = (int)Math.Round((double)dx / trackRange * maxScroll);
-                SetEditDiffScroll(_dragEditDiffKey, Math.Max(0, Math.Min(maxScroll, _dragEditDiffStartScroll + deltaScroll)));
                 Invalidate();
                 return;
             }
