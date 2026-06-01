@@ -1,7 +1,7 @@
 // DiffPreviewPanel.cs
-// Owner-drawn, auto-scrolling panel that renders a unified-diff body (via the "diff" syntax
-// highlighter) with a path header. Used by the tool approval prompt to show a files__edit change
-// instead of raw JSON. AutoScroll handles both tall and wide diffs.
+// Owner-drawn, auto-scrolling panel that renders a syntax-highlighted body (any registered language)
+// with an optional header line. Used by the tool approval prompt to show a files__edit diff or a
+// command__run command line instead of raw JSON. AutoScroll handles both tall and wide content.
 // Target: .NET 3.5, Windows XP compatible.
 
 using System;
@@ -12,8 +12,9 @@ namespace GxPT
 {
     internal sealed class DiffPreviewPanel : Panel
     {
-        private string _path = string.Empty;
+        private string _header = string.Empty;
         private string _body = string.Empty;
+        private string _language = "diff";
         private bool _dark;
         private Font _monoFont;
         private Color _codeBack = Color.FromArgb(245, 245, 245);
@@ -30,11 +31,14 @@ namespace GxPT
             catch { }
         }
 
-        // Set the diff to display. monoFont is owned by the caller; colors come from the active theme.
-        public void SetDiff(string path, string body, bool dark, Font monoFont, Color codeBack, Color foreColor)
+        // Set the content to display. monoFont is owned by the caller; colors come from the active
+        // theme. An empty header omits the header line. language is any registered highlighter id
+        // (e.g. "diff" for an edit, "batch" for a command).
+        public void SetContent(string header, string body, string language, bool dark, Font monoFont, Color codeBack, Color foreColor)
         {
-            _path = path ?? string.Empty;
+            _header = header ?? string.Empty;
             _body = body ?? string.Empty;
+            _language = string.IsNullOrEmpty(language) ? "diff" : language;
             _dark = dark;
             _monoFont = monoFont;
             _codeBack = codeBack;
@@ -47,7 +51,7 @@ namespace GxPT
 
         private int HeaderHeight
         {
-            get { return (this.Font != null ? this.Font.Height : 14) + Pad; }
+            get { return string.IsNullOrEmpty(_header) ? 0 : (this.Font != null ? this.Font.Height : 14) + Pad; }
         }
 
         private void UpdateScrollSize()
@@ -57,7 +61,7 @@ namespace GxPT
             {
                 using (Graphics g = CreateGraphics())
                 {
-                    var colored = SyntaxHighlightingRenderer.GetColoredSegments(_body, "diff", _monoFont, _dark);
+                    var colored = SyntaxHighlightingRenderer.GetColoredSegments(_body, _language, _monoFont, _dark);
                     Size content = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, colored);
                     int w = content.Width + 2 * Pad;
                     int h = HeaderHeight + Math.Max(_monoFont.Height, content.Height) + Pad;
@@ -78,16 +82,19 @@ namespace GxPT
             // Draw everything in content coordinates; AutoScroll moves the world for both axes.
             g.TranslateTransform(this.AutoScrollPosition.X, this.AutoScrollPosition.Y);
 
-            // Path header (the change is still pending here, so just the path — no tense)
-            Font hf = this.Font ?? _monoFont;
-            using (var br = new SolidBrush(_foreColor))
-                g.DrawString(_path, hf, br, new PointF(Pad, Pad / 2f));
+            // Optional header line
+            if (!string.IsNullOrEmpty(_header))
+            {
+                Font hf = this.Font ?? _monoFont;
+                using (var br = new SolidBrush(_foreColor))
+                    g.DrawString(_header, hf, br, new PointF(Pad, Pad / 2f));
+            }
 
             if (string.IsNullOrEmpty(_body)) return;
 
-            // Diff body
-            SyntaxHighlightingRenderer.EnqueueHighlight("diff", _dark, _body, _monoFont);
-            var colored = SyntaxHighlightingRenderer.GetColoredSegments(_body, "diff", _monoFont, _dark);
+            // Highlighted body
+            SyntaxHighlightingRenderer.EnqueueHighlight(_language, _dark, _body, _monoFont);
+            var colored = SyntaxHighlightingRenderer.GetColoredSegments(_body, _language, _monoFont, _dark);
             Size content = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, colored);
             int bodyH = Math.Max(_monoFont.Height, content.Height);
             int bodyW = Math.Max(content.Width, this.ClientSize.Width - 2 * Pad);

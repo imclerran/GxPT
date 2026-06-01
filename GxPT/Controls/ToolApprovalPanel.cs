@@ -95,17 +95,11 @@ namespace GxPT
             _tierBadge.ForeColor = (tier == ToolTier.Destructive) ? Color.Firebrick
                                   : (tier == ToolTier.Write ? Color.DarkGoldenrod : Color.ForestGreen);
 
-            // files__edit: show a colored diff (with a little live file context) instead of raw JSON.
-            bool isEdit = string.Equals(req.FunctionName, "files__edit", StringComparison.Ordinal) && req.Arguments != null;
-            if (isEdit)
+            // files__edit -> a colored diff (with a little live file context); command__run -> the
+            // command line, syntax-highlighted. Either replaces the raw JSON preview.
+            bool handled = false;
+            if (req.Arguments != null)
             {
-                string path = req.Arguments.Value<string>("path") ?? string.Empty;
-                string oldS = req.Arguments.Value<string>("old_string") ?? string.Empty;
-                string newS = req.Arguments.Value<string>("new_string") ?? string.Empty;
-                string workdir = WorkingDirProvider != null ? WorkingDirProvider() : null;
-                string fileText = ReadWorkspaceFile(workdir, path);
-                LineDiffResult diff = DiffUtil.BuildLineDiffWithContext(fileText, oldS, newS, 3);
-
                 bool dark = false;
                 try
                 {
@@ -115,8 +109,32 @@ namespace GxPT
                 catch { }
                 ThemeColors tc = ThemeService.GetColors(dark);
 
-                _diffPanel.SetDiff(path, diff.Body, dark, _monoFont, tc.CodeBack, tc.UiForeground);
-                _previewLabel.Text = "Diff:";
+                if (string.Equals(req.FunctionName, "files__edit", StringComparison.Ordinal))
+                {
+                    string path = req.Arguments.Value<string>("path") ?? string.Empty;
+                    string oldS = req.Arguments.Value<string>("old_string") ?? string.Empty;
+                    string newS = req.Arguments.Value<string>("new_string") ?? string.Empty;
+                    string workdir = WorkingDirProvider != null ? WorkingDirProvider() : null;
+                    string fileText = ReadWorkspaceFile(workdir, path);
+                    LineDiffResult diff = DiffUtil.BuildLineDiffWithContext(fileText, oldS, newS, 3);
+                    _diffPanel.SetContent(path, diff.Body, "diff", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                    _previewLabel.Text = "Diff:";
+                    handled = true;
+                }
+                else if (string.Equals(req.FunctionName, "command__run", StringComparison.Ordinal))
+                {
+                    string cmd = req.Arguments.Value<string>("command") ?? string.Empty;
+                    if (cmd.Trim().Length > 0)
+                    {
+                        _diffPanel.SetContent(string.Empty, cmd, "batch", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                        _previewLabel.Text = "Command:";
+                        handled = true;
+                    }
+                }
+            }
+
+            if (handled)
+            {
                 _preview.Visible = false;
                 _diffPanel.Visible = true;
                 this.Height = 260;

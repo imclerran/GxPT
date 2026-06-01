@@ -2176,25 +2176,41 @@ namespace GxPT
             }
         }
 
-        // Activity marker for a tool call. For files__edit, derive a line diff from the (persisted)
-        // arguments, register it with the transcript under a stable key, and return the collapsible
-        // edit-diff sentinel in place of the generic "using" marker. Any failure falls back to the
-        // generic marker so a malformed/edge-case call still renders.
+        // Activity marker for a tool call. For files__edit and command__run, register a collapsible
+        // record with the transcript under a stable key and return its sentinel in place of the generic
+        // "using" marker. Any failure falls back to the generic marker so an edge-case call still renders.
         private static string EditDiffMarkerOrCall(ChatTranscriptControl transcript, string name, string argsJson, string key)
         {
-            if (string.Equals(name, "files__edit", StringComparison.Ordinal) && transcript != null && !string.IsNullOrEmpty(key))
+            if (transcript != null && !string.IsNullOrEmpty(key))
             {
-                try
+                if (string.Equals(name, "files__edit", StringComparison.Ordinal))
                 {
-                    var args = Newtonsoft.Json.Linq.JObject.Parse(string.IsNullOrEmpty(argsJson) ? "{}" : argsJson);
-                    string path = (string)args["path"] ?? string.Empty;
-                    string oldS = (string)args["old_string"] ?? string.Empty;
-                    string newS = (string)args["new_string"] ?? string.Empty;
-                    LineDiffResult diff = DiffUtil.BuildLineDiff(oldS, newS);
-                    transcript.RegisterEditDiff(key, path, diff.Body, diff.Added, diff.Removed);
-                    return McpMarkers.EditDiff(key);
+                    try
+                    {
+                        var args = Newtonsoft.Json.Linq.JObject.Parse(string.IsNullOrEmpty(argsJson) ? "{}" : argsJson);
+                        string path = (string)args["path"] ?? string.Empty;
+                        string oldS = (string)args["old_string"] ?? string.Empty;
+                        string newS = (string)args["new_string"] ?? string.Empty;
+                        LineDiffResult diff = DiffUtil.BuildLineDiff(oldS, newS);
+                        transcript.RegisterEditDiff(key, path, diff.Body, diff.Added, diff.Removed);
+                        return McpMarkers.EditDiff(key);
+                    }
+                    catch { /* fall through to the generic marker */ }
                 }
-                catch { /* fall through to the generic marker */ }
+                else if (string.Equals(name, "command__run", StringComparison.Ordinal))
+                {
+                    try
+                    {
+                        var args = Newtonsoft.Json.Linq.JObject.Parse(string.IsNullOrEmpty(argsJson) ? "{}" : argsJson);
+                        string cmd = (string)args["command"] ?? string.Empty;
+                        if (cmd.Trim().Length > 0)
+                        {
+                            transcript.RegisterCommandRun(key, cmd);
+                            return McpMarkers.EditDiff(key);
+                        }
+                    }
+                    catch { /* fall through to the generic marker */ }
+                }
             }
             return McpMarkers.Call(name);
         }

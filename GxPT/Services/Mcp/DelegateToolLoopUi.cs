@@ -18,8 +18,8 @@ namespace GxPT
             return "_using " + Display(functionName) + "_";
         }
 
-        // For files__edit, the generic "using" marker is replaced by a collapsible diff record,
-        // anchored by this content-free sentinel line (resolved to the diff by the transcript).
+        // For files__edit / command__run, the generic "using" marker is replaced by a collapsible
+        // record, anchored by this content-free sentinel (resolved to the record by the transcript).
         public static string EditDiff(string key)
         {
             return MarkdownParser.EditDiffSentinel(key);
