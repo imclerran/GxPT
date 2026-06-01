@@ -497,17 +497,26 @@ namespace GxPT
                 // Labels: :label at line start
                 new TokenPattern(@"^\s*:[A-Za-z_][A-Za-z0-9_\-.]*", TokenType.Type, 5),
 
-                // Numbers
-                new TokenPattern(@"\b\d+\b", TokenType.Number, 6),
+                // Primary command: the first token of the line, or of each &&/||/|/&/( -separated
+                // command (optionally after a leading @). Colors e.g. "git", "npm", "echo" — whether
+                // or not it's a known batch keyword — so the invoked program always stands out.
+                new TokenPattern(@"(?<=(?:^|&&|\|\||\||&|\()[ \t]*@?)[A-Za-z_][A-Za-z0-9_.\-]*", TokenType.Keyword, 6),
 
-                // Keywords and common commands
-                new TokenPattern(@"\b(?:if|else|not|exist|defined|errorlevel|equ|neq|lss|leq|gtr|geq|for|in|do|call|goto|shift|set|setlocal|endlocal|echo|type|copy|move|ren|del|erase|mkdir|rmdir|rd|dir|pause|choice|start|exit|color|title|cls|pushd|popd|path|prompt|assoc|ftype)\b", TokenType.Keyword, 7),
+                // Flags / switches: --flag, -f, /s, /?. Each must be preceded by whitespace so that
+                // path/ref slashes (e.g. origin/claude) and hyphens inside words are not mis-flagged.
+                new TokenPattern(@"(?<=\s)(?:--?[A-Za-z][A-Za-z0-9\-]*|/[A-Za-z?][A-Za-z0-9\-]*)", TokenType.Method, 7),
+
+                // Numbers
+                new TokenPattern(@"\b\d+\b", TokenType.Number, 8),
+
+                // Keywords and common commands (for ones not in command position, e.g. in/do/exist)
+                new TokenPattern(@"\b(?:if|else|not|exist|defined|errorlevel|equ|neq|lss|leq|gtr|geq|for|in|do|call|goto|shift|set|setlocal|endlocal|echo|type|copy|move|ren|del|erase|mkdir|rmdir|rd|dir|pause|choice|start|exit|color|title|cls|pushd|popd|path|prompt|assoc|ftype)\b", TokenType.Keyword, 9),
 
                 // Operators and redirection
-                new TokenPattern(@"==|\|\||&&|\||>>|>|<|2>&1", TokenType.Operator, 8),
+                new TokenPattern(@"==|\|\||&&|\||>>|>|<|2>&1", TokenType.Operator, 10),
 
                 // Punctuation
-                new TokenPattern(@"[()\[\]{};,]", TokenType.Punctuation, 9)
+                new TokenPattern(@"[()\[\]{};,]", TokenType.Punctuation, 11)
             };
         }
     }
