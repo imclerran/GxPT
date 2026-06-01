@@ -941,6 +941,53 @@ namespace GxPT
     }
 
     /// <summary>
+    /// Unified-diff / patch highlighter. Special case: it emits the diff-specific token types
+    /// (Addition/Deletion/DiffMeta) that map to a FIXED red/green family rather than the theme
+    /// accent, and that carry a background band (see SyntaxHighlighter color tables). Because
+    /// RegexHighlighterBase runs every pattern in Multiline mode and '.' does not cross '\n', each
+    /// pattern below matches exactly one line — so a '+'/'-' line becomes a single full-line token.
+    /// Header patterns are ordered ahead of the bare +/- patterns so '+++'/'---' file headers and
+    /// '@@' hunks are classified as metadata, not as additions/deletions.
+    /// </summary>
+    public class DiffHighlighter : RegexHighlighterBase
+    {
+        public static readonly string[] FileTypes = new string[] { "*.diff", "*.patch" };
+        public override string Language
+        {
+            get { return "diff"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "diff", "patch", "udiff" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // File headers: "--- a/file" / "+++ b/file" (must beat the +/- line patterns).
+                new TokenPattern(@"^(?:---|\+\+\+) .*$", TokenType.DiffMeta, 1),
+
+                // Git extended-header / metadata lines.
+                new TokenPattern(@"^(?:diff --git |index |new file mode|deleted file mode|old mode |new mode |similarity index |dissimilarity index |rename (?:from|to) |copy (?:from|to) |Binary files |GIT binary patch).*$", TokenType.DiffMeta, 2),
+
+                // Hunk header: "@@ -l,s +l,s @@ optional section".
+                new TokenPattern(@"^@@.*$", TokenType.DiffMeta, 3),
+
+                // "\ No newline at end of file" marker.
+                new TokenPattern(@"^\\ .*$", TokenType.DiffMeta, 4),
+
+                // Added / removed lines (whole line, including the leading marker).
+                new TokenPattern(@"^\+.*$", TokenType.Addition, 5),
+                new TokenPattern(@"^-.*$", TokenType.Deletion, 6)
+
+                // Context lines (leading space) and blank lines fall through to Normal.
+            };
+        }
+    }
+
+    /// <summary>
     /// EBNF (Extended Backus-Naur Form) syntax highlighter
     /// </summary>
     public class EbnfHighlighter : RegexHighlighterBase

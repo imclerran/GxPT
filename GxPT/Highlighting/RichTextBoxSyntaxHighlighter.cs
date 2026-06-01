@@ -87,9 +87,10 @@ namespace GxPT
             BeginUpdate(rtb);
             try
             {
-                // Reset all to default color first
+                // Reset all to default color first (and clear any prior background bands)
                 rtb.SelectAll();
                 rtb.SelectionColor = SyntaxHighlighter.GetTokenColorForTheme(TokenType.Normal, darkTheme);
+                rtb.SelectionBackColor = rtb.BackColor;
 
                 // Apply token colors (use .NET text length for token bounds)
                 int maxLen = text.Length;
@@ -115,6 +116,10 @@ namespace GxPT
                     rtb.SelectionStart = selStart;
                     rtb.SelectionLength = selLen;
                     rtb.SelectionColor = SyntaxHighlighter.GetTokenColorForTheme(t.Type, darkTheme);
+                    // Background band for diff add/remove rows (null for every other token type).
+                    // RichTextBox can only tint behind the glyphs, not full-width like the GDI path.
+                    Color? back = SyntaxHighlighter.GetTokenBackgroundColorForTheme(t.Type, darkTheme);
+                    rtb.SelectionBackColor = back.HasValue ? back.Value : rtb.BackColor;
                 }
             }
             finally
