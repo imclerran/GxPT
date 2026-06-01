@@ -9,7 +9,7 @@ using System.Text.RegularExpressions;
 namespace GxPT
 {
     // ---------- Markdown model ----------
-    public enum BlockType { Paragraph, Heading, CodeBlock, BulletList, NumberedList, Table }
+    public enum BlockType { Paragraph, Heading, CodeBlock, BulletList, NumberedList, Table, EditDiff }
 
     [Flags]
     public enum RunStyle { Normal = 0, Bold = 1, Italic = 2, Code = 4, Link = 8 }
@@ -34,6 +34,16 @@ namespace GxPT
     {
         public string Text;
         public string Language; // Language for syntax highlighting
+    }
+
+    // A bespoke, chromeless, collapsible edit-diff record (files__edit). Carries only a stable key;
+    // the {path, diff body, +/- counts, collapse state} are looked up at render time from the
+    // transcript control's side map (the diff is derived from the persisted tool-call arguments, so
+    // nothing diff-specific is stored in the conversation document). Anchored in the markdown by a
+    // content-free sentinel line — see EditDiffSentinel/TryParseEditDiffKey.
+    public sealed class EditDiffBlock : Block
+    {
+        public string Key;
     }
 
     public sealed class BulletListBlock : Block
@@ -73,6 +83,32 @@ namespace GxPT
 
     public static class MarkdownParser
     {
+        // ---------- Edit-diff sentinel ----------
+        // A content-free anchor line emitted in place of the generic "using files / edit" marker.
+        // Uses mathematical white square brackets (U+27E6/U+27E7) so it can't collide with model text
+        // or ordinary markdown. The transcript control resolves the key to the actual diff record.
+        public const string EditDiffOpen = "⟦editdiff:";
+        public const string EditDiffClose = "⟧";
+
+        public static string EditDiffSentinel(string key)
+        {
+            return EditDiffOpen + (key ?? string.Empty) + EditDiffClose;
+        }
+
+        public static bool TryParseEditDiffKey(string line, out string key)
+        {
+            key = null;
+            if (line == null) return false;
+            string t = line.Trim();
+            if (!t.StartsWith(EditDiffOpen, StringComparison.Ordinal) ||
+                !t.EndsWith(EditDiffClose, StringComparison.Ordinal)) return false;
+            int start = EditDiffOpen.Length;
+            int len = t.Length - start - EditDiffClose.Length;
+            if (len <= 0) return false;
+            key = t.Substring(start, len);
+            return true;
+        }
+
         // ---------- Public API ----------
         public static List<Block> ParseMarkdown(string md)
         {
@@ -189,6 +225,17 @@ namespace GxPT
                     flushParagraph();
                     flushBullets();
                     flushNumbered();
+                    continue;
+                }
+
+                // edit-diff sentinel → its own bespoke block (content looked up at render time)
+                string editDiffKey;
+                if (TryParseEditDiffKey(line, out editDiffKey))
+                {
+                    flushParagraph();
+                    flushBullets();
+                    flushNumbered();
+                    blocks.Add(new EditDiffBlock { Type = BlockType.EditDiff, Key = editDiffKey });
                     continue;
                 }
 

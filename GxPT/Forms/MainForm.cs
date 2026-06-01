@@ -440,6 +440,7 @@ namespace GxPT
             try
             {
                 _approvalPanel = new ToolApprovalPanel();
+                _approvalPanel.WorkingDirProvider = delegate { return _mcpHost != null ? _mcpHost.ActiveWorkingDir : null; };
                 if (this.pnlBottom != null) this.pnlBottom.Controls.Add(_approvalPanel);
                 // Remembered approvals are kept only for the lifetime of the app (in-memory), not
                 // persisted to settings.json — a remembered choice lasts the session, then resets.
@@ -1471,12 +1472,18 @@ namespace GxPT
                     };
 
                     Action<string> onAppend = delegate(string t) { lock (sbLock) { answerSb.Append(t); } };
-                    Action<string> onToolCall = delegate(string name)
+                    // argsJson is threaded through for files__edit, which renders a collapsible diff
+                    // record instead of the generic "using" marker (wired in a following change).
+                    Action<string, string> onToolCall = delegate(string name, string argsJson)
                     {
+                        // Register the diff (if an edit) before appending its sentinel, so the data is
+                        // present by the time the marker text renders. Live keys are per-call GUIDs
+                        // (ephemeral — the reloaded view re-derives under the persisted call id).
+                        string marker = EditDiffMarkerOrCall(ctx.Transcript, name, argsJson, Guid.NewGuid().ToString("N"));
                         lock (sbLock)
                         {
                             if (activitySb.Length > 0) activitySb.Append("\r\n");
-                            activitySb.Append(McpMarkers.Call(name));
+                            activitySb.Append(marker);
                         }
                     };
                     Action onComplete = delegate
@@ -2169,6 +2176,29 @@ namespace GxPT
             }
         }
 
+        // Activity marker for a tool call. For files__edit, derive a line diff from the (persisted)
+        // arguments, register it with the transcript under a stable key, and return the collapsible
+        // edit-diff sentinel in place of the generic "using" marker. Any failure falls back to the
+        // generic marker so a malformed/edge-case call still renders.
+        private static string EditDiffMarkerOrCall(ChatTranscriptControl transcript, string name, string argsJson, string key)
+        {
+            if (string.Equals(name, "files__edit", StringComparison.Ordinal) && transcript != null && !string.IsNullOrEmpty(key))
+            {
+                try
+                {
+                    var args = Newtonsoft.Json.Linq.JObject.Parse(string.IsNullOrEmpty(argsJson) ? "{}" : argsJson);
+                    string path = (string)args["path"] ?? string.Empty;
+                    string oldS = (string)args["old_string"] ?? string.Empty;
+                    string newS = (string)args["new_string"] ?? string.Empty;
+                    LineDiffResult diff = DiffUtil.BuildLineDiff(oldS, newS);
+                    transcript.RegisterEditDiff(key, path, diff.Body, diff.Added, diff.Removed);
+                    return McpMarkers.EditDiff(key);
+                }
+                catch { /* fall through to the generic marker */ }
+            }
+            return McpMarkers.Call(name);
+        }
+
         private void RebuildTranscriptAsync(TabManager.ChatTabContext ctx, Conversation convo)
         {
             if (ctx == null || ctx.Transcript == null || convo == null) return;
@@ -2214,7 +2244,8 @@ namespace GxPT
                             var tc = m.ToolCalls[ti];
                             if (tc == null) continue;
                             if (activity.Length > 0) activity.Append("\r\n");
-                            activity.Append(McpMarkers.Call(tc.Name));
+                            string key = !string.IsNullOrEmpty(tc.Id) ? tc.Id : ("edit" + ti);
+                            activity.Append(EditDiffMarkerOrCall(ctx.Transcript, tc.Name, tc.ArgumentsJson, key));
                         }
                     }
                     else

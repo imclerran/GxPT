@@ -17,6 +17,13 @@ namespace GxPT
         {
             return "_using " + Display(functionName) + "_";
         }
+
+        // For files__edit, the generic "using" marker is replaced by a collapsible diff record,
+        // anchored by this content-free sentinel line (resolved to the diff by the transcript).
+        public static string EditDiff(string key)
+        {
+            return MarkdownParser.EditDiffSentinel(key);
+        }
     }
 
     // Adapts the orchestrator's IToolLoopUi to simple delegates so MainForm can render a tool-call
@@ -26,11 +33,11 @@ namespace GxPT
     internal sealed class DelegateToolLoopUi : IToolLoopUi
     {
         private readonly Action<string> _appendText;
-        private readonly Action<string> _onToolCall;
+        private readonly Action<string, string> _onToolCall; // (functionName, argumentsJson)
         private readonly Action _complete;
         private readonly Action<string> _error;
 
-        public DelegateToolLoopUi(Action<string> appendText, Action<string> onToolCall, Action complete, Action<string> error)
+        public DelegateToolLoopUi(Action<string> appendText, Action<string, string> onToolCall, Action complete, Action<string> error)
         {
             _appendText = appendText;
             _onToolCall = onToolCall;
@@ -45,7 +52,7 @@ namespace GxPT
 
         public void OnToolCall(string functionName, string argumentsJson)
         {
-            if (_onToolCall != null) _onToolCall(functionName);
+            if (_onToolCall != null) _onToolCall(functionName, argumentsJson);
         }
 
         public void OnToolResult(string functionName, string resultText, bool isError)
