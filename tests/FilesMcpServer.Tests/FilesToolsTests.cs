@@ -395,6 +395,61 @@ namespace FilesMcpServer.Tests
             Assert.True((bool)msgs[0]["result"]["structuredContent"]["truncated"]);
         }
 
+        // ---- large files: search streams (no size cap); ranged read streams a slice ----
+
+        [Fact]
+        public void Search_finds_matches_in_oversize_file()
+        {
+            var sb = new StringBuilder();
+            for (int i = 0; i < 100000; i++) sb.Append("filler line\n"); // ~1.2 MiB > 1 MiB cap
+            sb.Append("the needle is here\n");
+            File.WriteAllText(Abs("big.txt"), sb.ToString());
+            Assert.True(new FileInfo(Abs("big.txt")).Length > 1024 * 1024);
+
+            var msgs = Harness.Exchange(Harness.NewFilesServer(_root),
+                Harness.ToolsCall(1, "search", Harness.Args("query", "needle")));
+            Assert.False(Harness.IsError(msgs[0]));
+            Assert.Equal(1, (int)msgs[0]["result"]["structuredContent"]["count"]);
+            JArray m = (JArray)msgs[0]["result"]["structuredContent"]["matches"];
+            Assert.Equal(100001, (int)m[0]["line"]);
+        }
+
+        [Fact]
+        public void Read_range_works_on_oversize_file_while_whole_file_is_capped()
+        {
+            var sb = new StringBuilder();
+            sb.Append("first line\n");
+            for (int i = 0; i < 120000; i++) sb.Append("padding padding padding\n"); // ~2.8 MiB
+            File.WriteAllText(Abs("big.txt"), sb.ToString());
+            Assert.True(new FileInfo(Abs("big.txt")).Length > 1024 * 1024);
+
+            // Ranged read of the first line succeeds despite the file exceeding the cap.
+            var r = Harness.Exchange(Harness.NewFilesServer(_root),
+                Harness.ToolsCall(1, "read", Harness.Args("path", "big.txt", "start_line", 1, "end_line", 1)));
+            Assert.False(Harness.IsError(r[0]));
+            Assert.Equal("first line", Harness.Text(r[0]));
+
+            // Whole-file read is still capped.
+            var w = Harness.Exchange(Harness.NewFilesServer(_root),
+                Harness.ToolsCall(1, "read", Harness.Args("path", "big.txt")));
+            Assert.True(Harness.IsError(w[0]));
+            Assert.Contains("too large", Harness.Text(w[0]));
+        }
+
+        [Fact]
+        public void Read_range_rejects_an_oversize_selection()
+        {
+            var sb = new StringBuilder();
+            for (int i = 0; i < 120000; i++) sb.Append("padding padding padding\n"); // ~2.8 MiB
+            File.WriteAllText(Abs("big.txt"), sb.ToString());
+
+            // Asking for the whole thing via an open-ended range hits the output cap.
+            var msgs = Harness.Exchange(Harness.NewFilesServer(_root),
+                Harness.ToolsCall(1, "read", Harness.Args("path", "big.txt", "start_line", 1)));
+            Assert.True(Harness.IsError(msgs[0]));
+            Assert.Contains("too large", Harness.Text(msgs[0]));
+        }
+
         // ---- Criterion 6: lifecycle ----
 
         [Fact]

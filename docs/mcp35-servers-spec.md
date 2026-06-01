@@ -77,16 +77,20 @@ Tools map to the approval table: `read`/`list`/`search` ReadOnly,
 |------|---------------------|----------|
 | `read` | `path*`, `start_line?`, `end_line?`, `line_numbers?` | UTF-8 (BOM-aware) text of a file under root; optional 1-based inclusive line range and/or per-line numbering. |
 | `list` | `path*`, `recursive?` | Directory entries: `{name,type,size}`; capped count. |
-| `search` | `query*`, `path?`, `regex?`, `ignore_case?`, `glob?`, `max_results?` | Grep file contents under root → `{path,line,text}`; recursive, bounded; skips binary/oversize. |
+| `search` | `query*`, `path?`, `regex?`, `ignore_case?`, `glob?`, `max_results?` | Grep file contents under root → `{path,line,text}`; recursive, **streamed (any file size)**, skips binary. |
 | `write` | `path*`, `content*`, `create_dirs?` | Atomic create/overwrite under root. |
 | `edit` | `path*`, `old_string*`, `new_string*`, `replace_all?` | Targeted exact-span replacement; `old_string` must be unique unless `replace_all`. Atomic. |
 | `delete` | `path*` | Delete a file or **empty** dir under root (Destructive). |
 
 The **agentic** additions — `search`, `edit`, and `read`'s line-range/numbering
 options — exist so the model can locate and surgically modify code without
-rewriting whole files (fewer tokens, fewer clobbers). `edit` and `search` share
-the sandbox, size cap (1 MiB), and binary sniff with `read`/`write`; `edit`
-reuses `write`'s atomic temp-then-move.
+rewriting whole files (fewer tokens, fewer clobbers). All share the sandbox and
+binary sniff; `edit` reuses `write`'s atomic temp-then-move. The 1 MiB cap is a
+**context** guard, so it applies only to operations that emit a whole file into
+the model: a *whole-file* `read`. `search` and a *ranged* `read` **stream**
+line-by-line — their output is bounded by `max_results` / the line range, not the
+file size — so large files (where grep matters most) remain searchable and a
+slice is always readable.
 
 **Sandbox — the one rule that matters here:** every `path` is resolved against
 the root and must stay inside it.
@@ -102,18 +106,21 @@ string Resolve(string root, string rel) {
 // NOT a bare StartsWith — so "/root" does not match "/root-evil".
 ```
 
-- `read`: enforce a **max size** (1 MiB); over → `Error`. Detect binary (NUL byte
-  in a head sample) → `Error("not a text file")` rather than emitting garbage into
-  the model context. `start_line`/`end_line` are 1-based inclusive; a `start_line`
-  past EOF → `Error`, `end_line` is clamped to the last line. `line_numbers` prefixes
-  each returned line with a right-aligned number + tab. With no range and no
-  numbering, the content is returned **verbatim** (exact bytes preserved).
+- `read`: a **whole-file** read enforces the **1 MiB** cap (over → `Error`,
+  pointing the model at a line range) and detects binary (NUL byte in a head
+  sample) → `Error("not a text file")`. A **ranged** read (`start_line`/`end_line`,
+  1-based inclusive) **streams** instead: it works on files past the cap, with the
+  *output* capped at 1 MiB (over → `Error`); a `start_line` past EOF → `Error`, an
+  `end_line` past EOF just stops at the last line. `line_numbers` prefixes each
+  returned line with a right-aligned number + tab. With no range and no numbering,
+  content is returned **verbatim** (exact bytes preserved).
 - `list`: cap entries (e.g. 1000) and note truncation; `recursive` bounded depth.
 - `search`: walk the tree under `path` (default root) bounded by the same depth
-  cap as `list`; `regex` toggles literal-substring vs `.NET` regex (invalid regex →
-  `Error`); `ignore_case` and a filename `glob` (`*`/`?`) filter; cap matches
-  (`max_results` default 100, max 1000) and scanned files, noting `truncated`.
-  Skips binary and oversize files silently; per-match line text is length-capped.
+  cap as `list`, **streaming** each file line-by-line (no per-file size cap);
+  `regex` toggles literal-substring vs `.NET` regex (invalid regex → `Error`);
+  `ignore_case` and a filename `glob` (`*`/`?`) filter; cap matches (`max_results`
+  default 100, max 1000) and scanned files, noting `truncated`. Skips binary files
+  silently; per-match line text is length-capped.
 - `write`: write to a temp file in the same dir then `File.Move`/replace (atomic,
   crash-safe — mirrors `AppSettings`' settings.json write); `create_dirs` gates
   parent creation; refuse to overwrite a directory.

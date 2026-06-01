@@ -74,7 +74,7 @@ namespace FilesMcpServer
                 delegate(ToolCallContext ctx) { return Edit(sandbox, ctx); });
 
             server.AddTool("search", "Search file contents for a string or regex under the workspace root, "
-                + "returning matching {path, line, text}. Recursive, bounded; skips binary and oversize files.",
+                + "returning matching {path, line, text}. Recursive, streamed (any file size), skips binary files.",
                 SchemaBuilder.Object()
                     .Str("query", true, "Text or regex to search for")
                     .Str("path", false, "Directory (or file) to search under; defaults to the workspace root")
@@ -96,45 +96,90 @@ namespace FilesMcpServer
 
             if (!File.Exists(full)) return ToolResults.Error("file not found");
 
-            FileInfo fi = new FileInfo(full);
-            if (fi.Length > MaxReadBytes)
-                return ToolResults.Error("file too large (" + fi.Length + " bytes; max " + MaxReadBytes + ")");
-
-            byte[] bytes = File.ReadAllBytes(full);
-            if (LooksBinary(bytes)) return ToolResults.Error("not a text file");
-
-            string text = DecodeUtf8(bytes);
-
             bool hasStart = HasArg(ctx, "start_line");
             bool hasEnd = HasArg(ctx, "end_line");
             bool lineNumbers = BoolArg(ctx, "line_numbers", false);
 
+            // A line range streams, so a slice of a large file is readable even past the whole-file
+            // cap (the output is bounded by the range, not the file size).
+            if (hasStart || hasEnd)
+                return ReadRange(full, ctx, hasStart, hasEnd, lineNumbers);
+
+            // Whole-file read: bounded by the size cap (it all lands in the model context).
+            FileInfo fi = new FileInfo(full);
+            if (fi.Length > MaxReadBytes)
+                return ToolResults.Error("file too large (" + fi.Length + " bytes; max " + MaxReadBytes
+                    + ") — read a line range instead");
+
+            byte[] bytes = File.ReadAllBytes(full);
+            if (LooksBinary(bytes)) return ToolResults.Error("not a text file");
+            string text = DecodeUtf8(bytes);
+
             // Fast path: whole file, no numbering -> return content verbatim (preserves exact bytes).
-            if (!hasStart && !hasEnd && !lineNumbers)
+            if (!lineNumbers)
                 return ToolResults.Text(text);
 
             string[] lines = SplitLines(text);
-            int total = lines.Length;
+            int width = lines.Length.ToString().Length;
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < lines.Length; i++)
+            {
+                sb.Append((i + 1).ToString().PadLeft(width));
+                sb.Append('\t');
+                sb.Append(lines[i]);
+                if (i < lines.Length - 1) sb.Append('\n');
+            }
+            return ToolResults.Text(sb.ToString());
+        }
 
+        // Stream a 1-based inclusive line range; output bytes are capped (not the file size), so a
+        // slice of an arbitrarily large file is readable. start/end default to file bounds.
+        private static CallToolResult ReadRange(string full, ToolCallContext ctx, bool hasStart, bool hasEnd, bool lineNumbers)
+        {
             int start = hasStart ? IntArg(ctx, "start_line", 1, 1, int.MaxValue) : 1;
-            int end = hasEnd ? IntArg(ctx, "end_line", total, 1, int.MaxValue) : total;
-            if (start > total)
-                return ToolResults.Error("start_line " + start + " exceeds file length (" + total + " lines)");
-            if (end > total) end = total;
+            int end = hasEnd ? IntArg(ctx, "end_line", int.MaxValue, 1, int.MaxValue) : int.MaxValue;
             if (end < start)
                 return ToolResults.Error("end_line (" + end + ") is before start_line (" + start + ")");
 
-            int width = end.ToString().Length;
+            StreamReader sr;
+            try { sr = OpenTextReaderOrNull(full); }
+            catch { return ToolResults.Error("file not found"); }
+            if (sr == null) return ToolResults.Error("not a text file");
+
+            List<string> picked = new List<string>();
+            int lineNo = 0;
+            long outBytes = 0;
+            using (sr)
+            {
+                string line;
+                while ((line = sr.ReadLine()) != null)
+                {
+                    lineNo++;
+                    if (lineNo < start) continue;
+                    if (lineNo > end) break;
+                    picked.Add(line);
+                    outBytes += line.Length + 12; // rough per-line overhead (number + tab + newline)
+                    if (outBytes > MaxReadBytes)
+                        return ToolResults.Error("requested range is too large (over " + MaxReadBytes
+                            + " bytes of text) — narrow start_line/end_line");
+                }
+            }
+
+            if (picked.Count == 0)
+                return ToolResults.Error("start_line " + start + " exceeds file length (" + lineNo + " lines)");
+
+            int lastLineNo = start + picked.Count - 1;
+            int width = lastLineNo.ToString().Length;
             StringBuilder sb = new StringBuilder();
-            for (int i = start; i <= end; i++)
+            for (int i = 0; i < picked.Count; i++)
             {
                 if (lineNumbers)
                 {
-                    sb.Append(i.ToString().PadLeft(width));
+                    sb.Append((start + i).ToString().PadLeft(width));
                     sb.Append('\t');
                 }
-                sb.Append(lines[i - 1]);
-                if (i < end) sb.Append('\n');
+                sb.Append(picked[i]);
+                if (i < picked.Count - 1) sb.Append('\n');
             }
             return ToolResults.Text(sb.ToString());
         }
@@ -385,29 +430,31 @@ namespace FilesMcpServer
             if (scanned[0] >= MaxSearchScanFiles) return true; // scanned-file cap -> truncated
             scanned[0]++;
 
-            byte[] bytes;
-            try
-            {
-                FileInfo fi = new FileInfo(file);
-                if (fi.Length > MaxReadBytes) return false; // skip oversize silently
-                bytes = File.ReadAllBytes(file);
-            }
-            catch { return false; }
-            if (LooksBinary(bytes)) return false; // skip binary silently
+            // Stream line-by-line: file size is not a limit (output is bounded by maxResults), so
+            // large files — exactly where grep matters most — are searchable. Binary/unreadable skip.
+            StreamReader sr;
+            try { sr = OpenTextReaderOrNull(file); }
+            catch { return false; } // unreadable -> skip silently
+            if (sr == null) return false; // binary -> skip silently
 
-            string[] lines = SplitLines(DecodeUtf8(bytes));
             string relPath = sandbox.ToRelative(file);
-            for (int i = 0; i < lines.Length; i++)
+            using (sr)
             {
-                bool hit = rx != null ? rx.IsMatch(lines[i]) : lines[i].IndexOf(query, cmp) >= 0;
-                if (!hit) continue;
+                int lineNo = 0;
+                string line;
+                while ((line = sr.ReadLine()) != null)
+                {
+                    lineNo++;
+                    bool hit = rx != null ? rx.IsMatch(line) : line.IndexOf(query, cmp) >= 0;
+                    if (!hit) continue;
 
-                JObject m = new JObject();
-                m["path"] = relPath;
-                m["line"] = i + 1;
-                m["text"] = CapText(lines[i]);
-                matches.Add(m);
-                if (matches.Count >= maxResults) return true; // result cap -> truncated
+                    JObject m = new JObject();
+                    m["path"] = relPath;
+                    m["line"] = lineNo;
+                    m["text"] = CapText(line);
+                    matches.Add(m);
+                    if (matches.Count >= maxResults) return true; // result cap -> truncated
+                }
             }
             return false;
         }
@@ -537,10 +584,39 @@ namespace FilesMcpServer
 
         private static bool LooksBinary(byte[] bytes)
         {
-            int n = Math.Min(bytes.Length, BinarySniffBytes);
+            return LooksBinary(bytes, bytes.Length);
+        }
+
+        private static bool LooksBinary(byte[] bytes, int count)
+        {
+            int n = Math.Min(count, BinarySniffBytes);
             for (int i = 0; i < n; i++)
                 if (bytes[i] == 0) return true; // NUL byte → treat as binary
             return false;
+        }
+
+        /// <summary>
+        /// Open a file as BOM-aware UTF-8 text lines after sniffing its head for a NUL byte. Returns
+        /// <c>null</c> (stream disposed) if the file looks binary. Streaming lets search and ranged
+        /// read work on files larger than the whole-file cap — output is bounded by matches / range,
+        /// not file size. Caller owns the returned reader (wrap in <c>using</c>).
+        /// </summary>
+        private static StreamReader OpenTextReaderOrNull(string file)
+        {
+            FileStream fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            try
+            {
+                byte[] head = new byte[BinarySniffBytes];
+                int n = fs.Read(head, 0, head.Length);
+                if (LooksBinary(head, n)) { fs.Dispose(); return null; }
+                fs.Position = 0;
+                return new StreamReader(fs, new UTF8Encoding(false, false), true);
+            }
+            catch
+            {
+                fs.Dispose();
+                throw;
+            }
         }
 
         private static string DecodeUtf8(byte[] bytes)
