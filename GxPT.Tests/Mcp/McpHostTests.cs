@@ -69,6 +69,24 @@ namespace GxPT.Tests.Mcp
         }
 
         [Fact]
+        public void SetActiveWorkingDir_before_Start_still_launches_scoped_servers()
+        {
+            // Reproduces the startup race: the working folder is applied before Start() has captured
+            // the scoped specs. Start() must honor the already-set workdir and launch them.
+            FakeServerConnector c; McpToolRegistry reg;
+            var host = NewHost(out c, out reg);
+
+            host.SetActiveWorkingDir("C:\\proj");        // arrives first; no specs yet
+            Assert.Empty(c.CreatedNames);
+
+            host.Start(new[] { Specs.Scoped("command", true), Specs.Eager("web", true) });
+
+            Assert.Contains("command", c.CreatedNames);  // scoped server launched by Start
+            Assert.Contains("command__command_tool", Manifest(reg));
+            Assert.Equal("C:\\proj", host.ActiveWorkingDir);
+        }
+
+        [Fact]
         public void Switching_workdir_tears_down_old_scoped_and_opens_new()
         {
             FakeServerConnector c; McpToolRegistry reg;
