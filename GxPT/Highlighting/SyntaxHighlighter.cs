@@ -86,7 +86,6 @@ namespace GxPT
         {
             _highlighters = new Dictionary<string, ISyntaxHighlighter>(StringComparer.OrdinalIgnoreCase);
             RegisterDefaultHighlighters();
-            RegisterFileExtensionAliases(); // also resolve highlighters by file extension (a.cs -> "cs")
         }
 
         /// <summary>
@@ -373,10 +372,9 @@ namespace GxPT
 
         /// <summary>
         /// Resolves a highlighter language id from a file name by stripping the extension's dot
-        /// (e.g. "src/a.cs" -> "cs"). The highlighter table itself understands extensions — every
-        /// highlighter's FileTypes are registered as lookup keys (see RegisterFileExtensionAliases) —
-        /// so an a.cs file and a ```cs fence resolve through the same path. Returns null when there is
-        /// no extension (caller renders plain text).
+        /// (e.g. "src/a.cs" -> "cs"). Highlighters already register their extensions as aliases, so this
+        /// resolves through the same lookup (GetHighlighter) as a code-fence language name. Returns null
+        /// when there is no extension; an unknown extension simply falls back to plain at lookup time.
         /// </summary>
         public static string GetLanguageForFileName(string fileName)
         {
@@ -386,78 +384,6 @@ namespace GxPT
             catch { return null; }
             if (string.IsNullOrEmpty(ext) || ext.Length < 2) return null;
             return ext.Substring(1).ToLowerInvariant(); // drop the leading dot; the lookup does the rest
-        }
-
-        // Registers each highlighter's FileTypes extensions (without the dot) as additional lookup keys,
-        // so file extensions resolve through the same table as code-fence language names. First-wins, so
-        // it never clobbers a primary language id or explicit alias; "winners" are listed first to settle
-        // extensions shared by multiple highlighters (.php, .config, .ps1xml).
-        private static void RegisterFileExtensionAliases()
-        {
-            AddExtAliases(PhpHighlighter.FileTypes, "php");
-            AddExtAliases(PropertiesHighlighter.FileTypes, "properties");
-            AddExtAliases(PowerShellHighlighter.FileTypes, "powershell");
-            AddExtAliases(AdaHighlighter.FileTypes, "ada");
-            AddExtAliases(AssemblyHighlighter.FileTypes, "assembly");
-            AddExtAliases(BashHighlighter.FileTypes, "bash");
-            AddExtAliases(BasicHighlighter.FileTypes, "basic");
-            AddExtAliases(BatchHighlighter.FileTypes, "batch");
-            AddExtAliases(CHighlighter.FileTypes, "c");
-            AddExtAliases(CppHighlighter.FileTypes, "cpp");
-            AddExtAliases(CSharpHighlighter.FileTypes, "csharp");
-            AddExtAliases(CssHighlighter.FileTypes, "css");
-            AddExtAliases(CsvHighlighter.FileTypes, "csv");
-            AddExtAliases(DartHighlighter.FileTypes, "dart");
-            AddExtAliases(DiffHighlighter.FileTypes, "diff");
-            AddExtAliases(EbnfHighlighter.FileTypes, "ebnf");
-            AddExtAliases(ElixirHighlighter.FileTypes, "elixir");
-            AddExtAliases(ErlangHighlighter.FileTypes, "erlang");
-            AddExtAliases(FortranHighlighter.FileTypes, "fortran");
-            AddExtAliases(FSharpHighlighter.FileTypes, "fsharp");
-            AddExtAliases(GoHighlighter.FileTypes, "go");
-            AddExtAliases(GqlHighlighter.FileTypes, "gql");
-            AddExtAliases(HaskellHighlighter.FileTypes, "haskell");
-            AddExtAliases(HtmlHighlighter.FileTypes, "html");
-            AddExtAliases(JavaHighlighter.FileTypes, "java");
-            AddExtAliases(JavaScriptHighlighter.FileTypes, "javascript");
-            AddExtAliases(JsonHighlighter.FileTypes, "json");
-            AddExtAliases(KotlinHighlighter.FileTypes, "kotlin");
-            AddExtAliases(LispHighlighter.FileTypes, "lisp");
-            AddExtAliases(LuaHighlighter.FileTypes, "lua");
-            AddExtAliases(McfunctionHighlighter.FileTypes, "mcfunction");
-            AddExtAliases(OcamlHighlighter.FileTypes, "ocaml");
-            AddExtAliases(PascalHighlighter.FileTypes, "pascal");
-            AddExtAliases(PerlHighlighter.FileTypes, "perl");
-            AddExtAliases(PythonHighlighter.FileTypes, "python");
-            AddExtAliases(RegexHighlighter.FileTypes, "regex");
-            AddExtAliases(RubyHighlighter.FileTypes, "ruby");
-            AddExtAliases(RustHighlighter.FileTypes, "rust");
-            AddExtAliases(ScalaHighlighter.FileTypes, "scala");
-            AddExtAliases(SqlHighlighter.FileTypes, "sql");
-            AddExtAliases(SwiftHighlighter.FileTypes, "swift");
-            AddExtAliases(TypeScriptHighlighter.FileTypes, "typescript");
-            AddExtAliases(VisualBasicHighlighter.FileTypes, "visualbasic");
-            AddExtAliases(XmlHighlighter.FileTypes, "xml");
-            AddExtAliases(YamlHighlighter.FileTypes, "yaml");
-            AddExtAliases(ZigHighlighter.FileTypes, "zig");
-        }
-
-        // Maps each "*.ext" pattern to the registered highlighter for 'language', under the bare
-        // extension key ("*.cs" -> "cs"). First-wins, so existing language ids / aliases are preserved.
-        private static void AddExtAliases(string[] fileTypes, string language)
-        {
-            if (fileTypes == null) return;
-            ISyntaxHighlighter h;
-            if (!_highlighters.TryGetValue(language, out h) || h == null) return;
-            for (int i = 0; i < fileTypes.Length; i++)
-            {
-                string p = fileTypes[i];
-                if (string.IsNullOrEmpty(p)) continue;
-                int dot = p.LastIndexOf('.');
-                if (dot < 0 || dot >= p.Length - 1) continue;
-                string key = p.Substring(dot + 1); // "*.cs" -> "cs"
-                if (!_highlighters.ContainsKey(key)) _highlighters[key] = h;
-            }
         }
 
         /// <summary>
