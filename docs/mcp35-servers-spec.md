@@ -69,16 +69,28 @@ Rules for the contract:
 
 ## 2. FilesMcpServer (server name `files`)
 
-Read/list/write/delete confined to a single **root** (`GXPT_WORKDIR`). Tools map
-to the approval table: `read`/`list` ReadOnly, `write` Write(path-scoped),
-`delete` Destructive(path-scoped).
+Read/list/search/write/edit/delete confined to a single **root** (`GXPT_WORKDIR`).
+Tools map to the approval table: `read`/`list`/`search` ReadOnly,
+`write`/`edit` Write(path-scoped), `delete` Destructive(path-scoped).
 
 | Tool | Schema (required *) | Behavior |
 |------|---------------------|----------|
-| `read` | `path*` | UTF-8 (BOM-aware) text of a file under root. |
+| `read` | `path*`, `start_line?`, `end_line?`, `line_numbers?` | UTF-8 (BOM-aware) text of a file under root; optional 1-based inclusive line range and/or per-line numbering. |
 | `list` | `path*`, `recursive?` | Directory entries: `{name,type,size}`; capped count. |
+| `search` | `query*`, `path?`, `regex?`, `ignore_case?`, `glob?`, `max_results?` | Grep file contents under root → `{path,line,text}`; recursive, **streamed (any file size)**, skips binary. |
 | `write` | `path*`, `content*`, `create_dirs?` | Atomic create/overwrite under root. |
+| `edit` | `path*`, `old_string*`, `new_string*`, `replace_all?` | Targeted exact-span replacement; `old_string` must be unique unless `replace_all`. Atomic. |
 | `delete` | `path*` | Delete a file or **empty** dir under root (Destructive). |
+
+The **agentic** additions — `search`, `edit`, and `read`'s line-range/numbering
+options — exist so the model can locate and surgically modify code without
+rewriting whole files (fewer tokens, fewer clobbers). All share the sandbox and
+binary sniff; `edit` reuses `write`'s atomic temp-then-move. The 1 MiB cap is a
+**context** guard, so it applies only to operations that emit a whole file into
+the model: a *whole-file* `read`. Everything else **streams**, bounding output (or
+memory) rather than file size: `search` and a *ranged* `read` by line, `edit` by a
+chunk + carry buffer. So large files remain searchable, a slice is always readable,
+and any file is editable — only a whole-file `read` is capped.
 
 **Sandbox — the one rule that matters here:** every `path` is resolved against
 the root and must stay inside it.
@@ -94,13 +106,33 @@ string Resolve(string root, string rel) {
 // NOT a bare StartsWith — so "/root" does not match "/root-evil".
 ```
 
-- `read`: enforce a **max size** (e.g. 1 MiB); over → `Error` (range reads are a
-  later enhancement). Detect binary (NUL byte in a head sample) → `Error("not a
-  text file")` rather than emitting garbage into the model context.
+- `read`: a **whole-file** read enforces the **1 MiB** cap (over → `Error`,
+  pointing the model at a line range) and detects binary (NUL byte in a head
+  sample) → `Error("not a text file")`. A **ranged** read (`start_line`/`end_line`,
+  1-based inclusive) **streams** instead: it works on files past the cap, but its
+  **rendered output** is held to the same 1 MiB — counted as exact UTF-8 bytes (line
+  content + `\n` separators + the line-number prefix when numbering), so a slice that
+  would render over 1 MiB → `Error`. A `start_line` past EOF → `Error`, an `end_line`
+  past EOF just stops at the last line. `line_numbers` prefixes each
+  returned line with a right-aligned number + tab. With no range and no numbering,
+  content is returned **verbatim** (exact bytes preserved).
 - `list`: cap entries (e.g. 1000) and note truncation; `recursive` bounded depth.
+- `search`: walk the tree under `path` (default root) bounded by the same depth
+  cap as `list`, **streaming** each file line-by-line (no per-file size cap);
+  `regex` toggles literal-substring vs `.NET` regex (invalid regex → `Error`);
+  `ignore_case` and a filename `glob` (`*`/`?`) filter; cap matches (`max_results`
+  default 100, max 1000) and scanned files, noting `truncated`. Skips binary files
+  silently; per-match line text is length-capped.
 - `write`: write to a temp file in the same dir then `File.Move`/replace (atomic,
   crash-safe — mirrors `AppSettings`' settings.json write); `create_dirs` gates
   parent creation; refuse to overwrite a directory.
+- `edit`: **streams** the file (binary sniff on the head, no size cap — its output
+  goes to disk, not the model context) through a find/replace into a temp file, then
+  atomic temp-then-move as `write`. A `carry` of `len(old_string)-1` chars bridges a
+  match that straddles a read boundary, and content outside the matched span is
+  copied **verbatim** (line endings preserved). `old_string` must occur exactly once
+  unless `replace_all`; missing file / no match / non-unique match → `Error` (file
+  left untouched — the temp is discarded). Returns the replacement count.
 - `delete`: files and **empty** directories only (never recursive — keeps the
   blast radius of a single approved call bounded); missing path → `Error`.
 - Symlink/junction escapes: on net35/Windows, resolve via `GetFullPath` and the

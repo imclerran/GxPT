@@ -84,8 +84,8 @@ public interface IToolClassifier {
 2. **First-party → hardcoded table** (authoritative; annotations ignored):
    | Tool | Tier | Scope |
    |------|------|-------|
-   | `files__read`, `files__list` | ReadOnly | Tool |
-   | `files__write` | Write | Argument(`path`) |
+   | `files__read`, `files__list`, `files__search` | ReadOnly | Tool |
+   | `files__write`, `files__edit` | Write | Argument(`path`) |
    | `files__delete` | Destructive | Argument(`path`) |
    | `git__status/diff/log` | ReadOnly | Tool |
    | `git__commit` | Write | Tool |
