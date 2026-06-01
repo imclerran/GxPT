@@ -905,11 +905,29 @@ namespace GxPT
                 var connector = new DefaultServerConnector(clientInfo, curlPath, caBundle, LoggerSink.Instance);
                 _mcpHost = new McpHost(connector, _mcpRegistry, LoggerSink.Instance);
 
+                // Snapshot the active tab's working folder now (on the UI thread) so the rebuilt host
+                // re-binds its workdir-scoped servers (files/git/command) to it. Without this, a host
+                // rebuilt after a Settings save starts with no active workdir and those servers never
+                // launch even though the current conversation has a folder set.
+                string activeWorkdir = null;
+                try
+                {
+                    var actCtx = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                    if (actCtx != null) activeWorkdir = actCtx.WorkingDir;
+                }
+                catch { }
+
                 // Connecting (handshakes / process spawns) can block — do it off the UI thread.
                 McpHost hostRef = _mcpHost;
+                string wd = activeWorkdir;
                 System.Threading.ThreadPool.QueueUserWorkItem(delegate
                 {
-                    try { hostRef.Start(specs); }
+                    try
+                    {
+                        hostRef.Start(specs);
+                        // Launch the workdir-scoped servers for the active conversation's folder.
+                        if (!string.IsNullOrEmpty(wd)) hostRef.SetActiveWorkingDir(wd);
+                    }
                     catch (Exception ex) { try { Logger.Log("mcp", "host start failed: " + ex.Message); } catch { } }
                 });
             }

@@ -69,6 +69,19 @@ namespace GxPT
                     }
                 }
                 _scopedSpecs = scoped;
+
+                // If a working directory was already set (e.g. SetActiveWorkingDir raced ahead of
+                // Start on startup), launch the scoped servers for it now.
+                if (_currentWorkdir != null && _scoped.Count == 0)
+                {
+                    for (int i = 0; i < _scopedSpecs.Count; i++)
+                    {
+                        McpServerSpec spec = _scopedSpecs[i];
+                        if (spec == null || !spec.Enabled) continue;
+                        McpServerConnection conn = ConnectAndAdd(spec, _currentWorkdir);
+                        if (conn != null) _scoped.Add(conn);
+                    }
+                }
             }
         }
 
