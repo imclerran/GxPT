@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.IO;
 using System.Windows.Forms;
 using Newtonsoft.Json;
 
@@ -17,9 +18,15 @@ namespace GxPT
         private readonly Label _tierBadge;
         private readonly Label _previewLabel;
         private readonly TextBox _preview;
+        private readonly DiffPreviewPanel _diffPanel;   // shown instead of _preview for files__edit
+        private readonly Font _monoFont;
         private readonly FlowLayoutPanel _buttons;
 
         private Action<ApprovalChoice> _onChoose;
+
+        // Supplies the active workspace root so an edit approval can show a few lines of real file
+        // context around the change. Set by the host (MainForm); null disables context (bare diff).
+        public Func<string> WorkingDirProvider;
 
         public ToolApprovalPanel()
         {
@@ -45,12 +52,18 @@ namespace GxPT
             _previewLabel.Height = 16;
             _previewLabel.Text = "Details:";
 
+            _monoFont = new Font("Consolas", 9F);
+
             _preview = new TextBox();
             _preview.Multiline = true;
             _preview.ReadOnly = true;
             _preview.ScrollBars = ScrollBars.Vertical;
             _preview.Dock = DockStyle.Fill;
-            _preview.Font = new Font("Consolas", 9F);
+            _preview.Font = _monoFont;
+
+            _diffPanel = new DiffPreviewPanel();
+            _diffPanel.Dock = DockStyle.Fill;
+            _diffPanel.Visible = false;
 
             _buttons = new FlowLayoutPanel();
             _buttons.Dock = DockStyle.Bottom;
@@ -60,6 +73,7 @@ namespace GxPT
             _buttons.AutoScroll = true;
 
             // Order added (Fill must be added before docked siblings to lay out correctly):
+            this.Controls.Add(_diffPanel);
             this.Controls.Add(_preview);
             this.Controls.Add(_previewLabel);
             this.Controls.Add(_tierBadge);
@@ -81,7 +95,40 @@ namespace GxPT
             _tierBadge.ForeColor = (tier == ToolTier.Destructive) ? Color.Firebrick
                                   : (tier == ToolTier.Write ? Color.DarkGoldenrod : Color.ForestGreen);
 
-            _preview.Text = BuildPreviewText(req);
+            // files__edit: show a colored diff (with a little live file context) instead of raw JSON.
+            bool isEdit = string.Equals(req.FunctionName, "files__edit", StringComparison.Ordinal) && req.Arguments != null;
+            if (isEdit)
+            {
+                string path = req.Arguments.Value<string>("path") ?? string.Empty;
+                string oldS = req.Arguments.Value<string>("old_string") ?? string.Empty;
+                string newS = req.Arguments.Value<string>("new_string") ?? string.Empty;
+                string workdir = WorkingDirProvider != null ? WorkingDirProvider() : null;
+                string fileText = ReadWorkspaceFile(workdir, path);
+                LineDiffResult diff = DiffUtil.BuildLineDiffWithContext(fileText, oldS, newS, 3);
+
+                bool dark = false;
+                try
+                {
+                    string th = AppSettings.GetString("theme");
+                    dark = !string.IsNullOrEmpty(th) && th.Trim().Equals("dark", StringComparison.OrdinalIgnoreCase);
+                }
+                catch { }
+                ThemeColors tc = ThemeService.GetColors(dark);
+
+                _diffPanel.SetDiff(path, diff.Body, dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                _previewLabel.Text = "Diff:";
+                _preview.Visible = false;
+                _diffPanel.Visible = true;
+                this.Height = 260;
+            }
+            else
+            {
+                _preview.Text = BuildPreviewText(req);
+                _previewLabel.Text = "Details:";
+                _diffPanel.Visible = false;
+                _preview.Visible = true;
+                this.Height = 150;
+            }
 
             _buttons.Controls.Clear();
             // Deny is always present (added first => rightmost in RightToLeft flow).
@@ -136,6 +183,25 @@ namespace GxPT
             };
             _buttons.Controls.Add(b);
             if (defaultFocus) { try { b.Select(); } catch { } }
+        }
+
+        // Reads a workspace-relative file for diff context. Mirrors the files sandbox: relative paths
+        // only, must resolve inside the workspace root. Returns null on any failure (→ bare diff).
+        private static string ReadWorkspaceFile(string workdir, string relPath)
+        {
+            if (string.IsNullOrEmpty(workdir) || string.IsNullOrEmpty(relPath)) return null;
+            try
+            {
+                if (Path.IsPathRooted(relPath)) return null;
+                string root = Path.GetFullPath(workdir);
+                string full = Path.GetFullPath(Path.Combine(root, relPath));
+                string rootSep = root.EndsWith(Path.DirectorySeparatorChar.ToString()) ? root : root + Path.DirectorySeparatorChar;
+                if (!string.Equals(full, root, StringComparison.OrdinalIgnoreCase) &&
+                    !full.StartsWith(rootSep, StringComparison.OrdinalIgnoreCase)) return null;
+                if (!File.Exists(full)) return null;
+                return File.ReadAllText(full);
+            }
+            catch { return null; }
         }
 
         private static string BuildPreviewText(ApprovalRequest req)

@@ -46,6 +46,65 @@ namespace GxPT
             return Render(a, b, ops);
         }
 
+        /// <summary>
+        /// Like <see cref="BuildLineDiff"/> but surrounds the change with up to <paramref name="contextLines"/>
+        /// lines of real file context (for the approval prompt). Locates old_string in the file, expands to
+        /// full-line boundaries N lines out each way, and diffs the context-wrapped old/new blocks so the
+        /// surrounding lines render as context. Falls back to a bare old/new diff if the file text is
+        /// unavailable or old_string isn't found verbatim.
+        /// </summary>
+        public static LineDiffResult BuildLineDiffWithContext(string fileText, string oldText, string newText, int contextLines)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(fileText) || string.IsNullOrEmpty(oldText) || contextLines <= 0)
+                    return BuildLineDiff(oldText, newText);
+                int idx = fileText.IndexOf(oldText, StringComparison.Ordinal);
+                if (idx < 0) return BuildLineDiff(oldText, newText);
+                int endIdx = idx + oldText.Length;
+
+                int ctxStart = LineStartNAbove(fileText, idx, contextLines);
+                int ctxEnd = LineEndNBelow(fileText, endIdx, contextLines);
+
+                string before = fileText.Substring(ctxStart, idx - ctxStart);
+                string after = fileText.Substring(endIdx, ctxEnd - endIdx);
+                return BuildLineDiff(before + oldText + after, before + newText + after);
+            }
+            catch
+            {
+                return BuildLineDiff(oldText, newText);
+            }
+        }
+
+        // Char index of the start of the line that is `n` lines above the line containing `pos`.
+        private static int LineStartNAbove(string s, int pos, int n)
+        {
+            int p = pos < 0 ? 0 : (pos > s.Length ? s.Length : pos);
+            while (p > 0 && s[p - 1] != '\n') p--; // start of the line containing pos
+            for (int k = 0; k < n && p > 0; k++)
+            {
+                int prevStart = p - 1;               // the '\n' ending the previous line
+                while (prevStart > 0 && s[prevStart - 1] != '\n') prevStart--;
+                p = prevStart;
+            }
+            return p;
+        }
+
+        // Char index of the end (exclusive of the trailing '\n') of the line `n` lines below the line
+        // containing `pos`.
+        private static int LineEndNBelow(string s, int pos, int n)
+        {
+            int p = pos < 0 ? 0 : (pos > s.Length ? s.Length : pos);
+            while (p < s.Length && s[p] != '\n') p++;  // end of the line containing pos
+            for (int k = 0; k < n && p < s.Length; k++)
+            {
+                int nextEnd = p + 1;                  // start of the next line
+                while (nextEnd < s.Length && s[nextEnd] != '\n') nextEnd++;
+                p = nextEnd;
+            }
+            return p;
+        }
+
         // ---- line splitting ----
 
         // Split into lines on '\n', dropping a trailing '\r' (so "\r\n" and "\n" compare equal) and a

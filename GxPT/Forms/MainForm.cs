@@ -440,6 +440,7 @@ namespace GxPT
             try
             {
                 _approvalPanel = new ToolApprovalPanel();
+                _approvalPanel.WorkingDirProvider = delegate { return _mcpHost != null ? _mcpHost.ActiveWorkingDir : null; };
                 if (this.pnlBottom != null) this.pnlBottom.Controls.Add(_approvalPanel);
                 // Remembered approvals are kept only for the lifetime of the app (in-memory), not
                 // persisted to settings.json — a remembered choice lasts the session, then resets.
