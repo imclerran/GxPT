@@ -241,20 +241,37 @@ namespace GxPT
             if (!string.IsNullOrEmpty(key)) _editDiffScroll[key] = Math.Max(0, v);
         }
 
-        private sealed class EditDiffData { public string Path; public string Body; public int Added; public int Removed; }
+        // A collapsible "tool record": a header label plus a highlighted body in some language.
+        // Used for the files__edit diff (language "diff", red/green bands) and the command__run
+        // record (language "batch"). HeaderText excludes the disclosure triangle (added at draw time).
+        private sealed class EditDiffData { public string HeaderText; public string Body; public string Language; }
         private readonly object _editDiffLock = new object();
         private readonly Dictionary<string, EditDiffData> _editDiffs = new Dictionary<string, EditDiffData>(StringComparer.Ordinal);
         private readonly Dictionary<string, bool> _editDiffCollapsed = new Dictionary<string, bool>(StringComparer.Ordinal);
 
-        // Registers (or refreshes) the diff for one edit tool call, keyed by its (persisted) call id.
-        // Called from the streaming worker thread and the history reload path, so it is lock-guarded.
-        public void RegisterEditDiff(string key, string path, string body, int added, int removed)
+        // Registers (or refreshes) a tool record, keyed by its (persisted) call id. Called from the
+        // streaming worker thread and the history reload path, so it is lock-guarded.
+        private void RegisterToolRecord(string key, string headerText, string body, string language)
         {
             if (string.IsNullOrEmpty(key)) return;
             lock (_editDiffLock)
             {
-                _editDiffs[key] = new EditDiffData { Path = path ?? string.Empty, Body = body ?? string.Empty, Added = added, Removed = removed };
+                _editDiffs[key] = new EditDiffData { HeaderText = headerText ?? string.Empty, Body = body ?? string.Empty, Language = language ?? "diff" };
             }
+        }
+
+        // Edit (files__edit): a "diff"-highlighted body with an "edited <path> (+A −R)" header.
+        public void RegisterEditDiff(string key, string path, string body, int added, int removed)
+        {
+            string p = string.IsNullOrEmpty(path) ? "(file)" : path;
+            string header = "edited " + p + "  (+" + added + " −" + removed + ")";
+            RegisterToolRecord(key, header, body, "diff");
+        }
+
+        // Command (command__run): the command line, highlighted as a cmd batch script.
+        public void RegisterCommandRun(string key, string command)
+        {
+            RegisterToolRecord(key, "Ran a command", command, "batch");
         }
 
         private EditDiffData GetEditDiffData(string key)
@@ -270,14 +287,12 @@ namespace GxPT
             bool c; return _editDiffCollapsed.TryGetValue(key, out c) ? c : true;
         }
 
-        // The header line, e.g. "▸ edited src/main.py  (+3 −1)" (collapsed) / "▾ …" (expanded).
+        // The header line: disclosure triangle + the record's stored label.
         private static string BuildEditDiffHeaderText(EditDiffData data, bool collapsed)
         {
             string tri = collapsed ? "▸" : "▾";
-            string path = (data != null && !string.IsNullOrEmpty(data.Path)) ? data.Path : "(file)";
-            int add = data != null ? data.Added : 0;
-            int rem = data != null ? data.Removed : 0;
-            return tri + " edited " + path + "  (+" + add + " −" + rem + ")";
+            string label = (data != null && !string.IsNullOrEmpty(data.HeaderText)) ? data.HeaderText : "(record)";
+            return tri + " " + label;
         }
 
         // ---------- Batch update state ----------
@@ -1022,8 +1037,8 @@ namespace GxPT
                         {
                             using (Graphics g = CreateGraphics())
                             {
-                                SyntaxHighlightingRenderer.EnqueueHighlight("diff", _isDarkTheme, data.Body, _monoFont);
-                                var colored = SyntaxHighlightingRenderer.GetColoredSegments(data.Body, "diff", _monoFont, _isDarkTheme);
+                                SyntaxHighlightingRenderer.EnqueueHighlight(data.Language, _isDarkTheme, data.Body, _monoFont);
+                                var colored = SyntaxHighlightingRenderer.GetColoredSegments(data.Body, data.Language, _monoFont, _isDarkTheme);
                                 Size content = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, colored);
                                 int bodyH = Math.Max(_monoFont.Height, content.Height);
                                 bool needH = content.Width > maxWidth + EditDiffScrollSlack;
@@ -1534,8 +1549,8 @@ namespace GxPT
                     if (data != null && !collapsed)
                     {
                         y += EditDiffBodyGap;
-                        SyntaxHighlightingRenderer.EnqueueHighlight("diff", _isDarkTheme, data.Body, _monoFont);
-                        var colored = SyntaxHighlightingRenderer.GetColoredSegments(data.Body, "diff", _monoFont, _isDarkTheme);
+                        SyntaxHighlightingRenderer.EnqueueHighlight(data.Language, _isDarkTheme, data.Body, _monoFont);
+                        var colored = SyntaxHighlightingRenderer.GetColoredSegments(data.Body, data.Language, _monoFont, _isDarkTheme);
                         Size content = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, colored);
                         int bodyH = Math.Max(_monoFont.Height, content.Height);
                         int viewportW = maxWidth;
