@@ -86,6 +86,9 @@ namespace GxPT
         internal static bool PrefixMatches(string value, string pattern, bool isPath)
         {
             if (value == null || pattern == null) return false;
+            // An empty path pattern means the workspace root itself ("this directory and below" for a
+            // file sitting directly in the root) — it matches any relative path under the root.
+            if (isPath && pattern.Length == 0) return true;
             if (value.Equals(pattern, StringComparison.Ordinal)) return true;
             if (!value.StartsWith(pattern, StringComparison.Ordinal)) return false;
 

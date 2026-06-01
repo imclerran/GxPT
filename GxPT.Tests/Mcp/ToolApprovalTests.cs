@@ -156,16 +156,41 @@ namespace GxPT.Tests.Mcp
             var pol = Policy(prompt, new InMemoryApprovalStore());
 
             // Approve "directory and below" while writing one file...
-            pol.Check("files__write", Args("{\"path\":\"C:\\\\proj\\\\a.txt\"}"));
+            pol.Check("files__write", Args("{\"path\":\"sub/a.txt\"}"));
             Assert.Equal(1, prompt.Calls);
 
             // ...a different file in the SAME directory must match (the bug: it kept prompting).
-            Assert.Equal(ApprovalDecision.Allow, pol.Check("files__write", Args("{\"path\":\"C:\\\\proj\\\\b.txt\"}")));
+            Assert.Equal(ApprovalDecision.Allow, pol.Check("files__write", Args("{\"path\":\"sub/b.txt\"}")));
             Assert.Equal(1, prompt.Calls);
 
             // a file in a different directory still prompts
-            pol.Check("files__write", Args("{\"path\":\"C:\\\\other\\\\c.txt\"}"));
+            pol.Check("files__write", Args("{\"path\":\"other/c.txt\"}"));
             Assert.Equal(2, prompt.Calls);
+        }
+
+        [Fact]
+        public void Directory_rule_for_a_root_level_file_covers_siblings_in_the_root()
+        {
+            // Files server uses paths relative to the workspace root, so a file in the root has no
+            // directory component — the directory rule must still cover its root-level siblings.
+            var prompt = new ScriptedPrompt { Next = ApprovalChoice.RememberPrefixArg };
+            var pol = Policy(prompt, new InMemoryApprovalStore());
+
+            pol.Check("files__write", Args("{\"path\":\"report.txt\"}"));
+            Assert.Equal(1, prompt.Calls);
+
+            Assert.Equal(ApprovalDecision.Allow, pol.Check("files__write", Args("{\"path\":\"notes.txt\"}")));
+            Assert.Equal(1, prompt.Calls);
+            // a subdirectory file is also under the root
+            Assert.Equal(ApprovalDecision.Allow, pol.Check("files__write", Args("{\"path\":\"sub/x.txt\"}")));
+            Assert.Equal(1, prompt.Calls);
+        }
+
+        [Fact]
+        public void Empty_path_pattern_matches_any_relative_path()
+        {
+            Assert.True(ToolApprovalPolicy.PrefixMatches("anything.txt", "", true));
+            Assert.True(ToolApprovalPolicy.PrefixMatches("sub/deep/file.txt", "", true));
         }
 
         [Fact]
