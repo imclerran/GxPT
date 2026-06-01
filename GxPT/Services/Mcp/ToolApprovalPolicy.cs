@@ -128,7 +128,14 @@ namespace GxPT
             string val = ArgValue(req.Arguments, req.Policy.ScopeArgPath);
             if (val == null) return string.Empty;
             if (req.Policy.ScopeArgPath == "path")
-                return val; // directory boundary handled by PrefixMatches
+            {
+                // "directory and below": the rule covers the file's PARENT directory, so other files
+                // in the same folder match. PrefixMatches enforces the directory boundary.
+                string dir = null;
+                try { dir = System.IO.Path.GetDirectoryName(val); }
+                catch { dir = null; }
+                return string.IsNullOrEmpty(dir) ? val : dir;
+            }
             // command: base + first subcommand (first two whitespace tokens)
             string trimmed = val.Trim();
             string[] parts = trimmed.Split(new char[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);

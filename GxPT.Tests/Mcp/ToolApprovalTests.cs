@@ -150,6 +150,25 @@ namespace GxPT.Tests.Mcp
         }
 
         [Fact]
+        public void Directory_path_rule_covers_sibling_files_in_the_same_folder()
+        {
+            var prompt = new ScriptedPrompt { Next = ApprovalChoice.RememberPrefixArg };
+            var pol = Policy(prompt, new InMemoryApprovalStore());
+
+            // Approve "directory and below" while writing one file...
+            pol.Check("files__write", Args("{\"path\":\"C:\\\\proj\\\\a.txt\"}"));
+            Assert.Equal(1, prompt.Calls);
+
+            // ...a different file in the SAME directory must match (the bug: it kept prompting).
+            Assert.Equal(ApprovalDecision.Allow, pol.Check("files__write", Args("{\"path\":\"C:\\\\proj\\\\b.txt\"}")));
+            Assert.Equal(1, prompt.Calls);
+
+            // a file in a different directory still prompts
+            pol.Check("files__write", Args("{\"path\":\"C:\\\\other\\\\c.txt\"}"));
+            Assert.Equal(2, prompt.Calls);
+        }
+
+        [Fact]
         public void Prefix_command_boundary_helper()
         {
             Assert.True(ToolApprovalPolicy.PrefixMatches("git status -s", "git status", false));
