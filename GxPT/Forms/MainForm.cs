@@ -1076,12 +1076,20 @@ namespace GxPT
                 }
                 ClearAttachmentsBanner();
 
+                var modelToUse = GetSelectedModel();
+
+                // Tool-enabled turn: tool activity renders as a separate chrome-less message above the
+                // answer bubble. BeginToolSend owns the whole turn; the plain path below is unchanged.
+                if (_mcpRegistry != null && _mcpRegistry.HasTools)
+                {
+                    BeginToolSend(ctx, modelToUse);
+                    return;
+                }
+
                 // Add placeholder assistant message to stream into and capture its index
                 int assistantIndex = ctx.Transcript.AddMessageGetIndex(MessageRole.Assistant, string.Empty);
                 Logger.Log("Send", "Assistant placeholder index=" + assistantIndex);
                 var assistantBuilder = new StringBuilder();
-
-                var modelToUse = GetSelectedModel();
 
                 // Throttle UI updates with a WinForms timer (coalesces rapid deltas)
                 var sbLock = new object();
@@ -1150,13 +1158,6 @@ namespace GxPT
                             catch { providerAllow = true; }
                         }
 
-                        if (_mcpRegistry != null && _mcpRegistry.HasTools)
-                        {
-                            // MCP enabled with tools available: run the tool-call loop.
-                            RunMcpToolTurn(ctx, modelToUse, providerAllow, sbLock, assistantBuilder, assistantIndex, renderTimer);
-                        }
-                        else
-                        {
                         _client.CreateCompletionStream(
                             modelToUse,
                             snapshot,
@@ -1207,7 +1208,6 @@ namespace GxPT
                                 });
                             }
                         );
-                        }
                     }
                     catch (Exception ex)
                     {
@@ -1232,63 +1232,134 @@ namespace GxPT
             }
         }
 
-        // Runs one MCP tool-call turn synchronously (called on the send worker thread). The
-        // orchestrator streams model text + inline tool markers into assistantBuilder (rendered by the
-        // UI timer) and appends the structured assistant/tool messages to the conversation history;
-        // Complete/Error finalize on the UI thread (no extra AddAssistantMessage — already added).
-        private void RunMcpToolTurn(TabManager.ChatTabContext ctx, string model, bool providerAllow, object sbLock,
-                                    StringBuilder assistantBuilder, int assistantIndex,
-                                    System.Windows.Forms.Timer renderTimer)
+        // Owns a tool-enabled chat turn. Tool activity streams into a chrome-less "Tool" message and
+        // the model's answer into a separate Assistant bubble below it. Both bubbles are created
+        // lazily (in the render timer) so they appear in the order content arrives — tool calls
+        // first, then the answer. Runs the orchestrator on a worker thread; it appends the structured
+        // assistant/tool messages to history itself. Called on the UI thread.
+        private void BeginToolSend(TabManager.ChatTabContext ctx, string model)
         {
-            var orch = new McpChatOrchestrator(_client, _mcpRegistry, new AllowAllApprovalPolicy(),
-                                               model, LoggerSink.Instance);
-            orch.ProviderDataCollectionAllowed = providerAllow;
-            orch.RequestMessageTransform = delegate(IList<ChatMessage> h)
-            {
-                List<ChatMessage> asList = h as List<ChatMessage>;
-                if (asList == null) asList = new List<ChatMessage>(h);
-                return BuildMessagesForModel(asList);
-            };
+            var sbLock = new object();
+            var activitySb = new StringBuilder();
+            var answerSb = new StringBuilder();
+            int[] activityIndex = { -1 };
+            int[] answerIndex = { -1 };
+            int lastActivityLen = -1;
+            int lastAnswerLen = -1;
 
-            Action<string> onAppend = delegate(string t)
+            var renderTimer = new System.Windows.Forms.Timer();
+            renderTimer.Interval = 75;
+            renderTimer.Tick += delegate
             {
-                lock (sbLock) { assistantBuilder.Append(t); }
-            };
-            Action onComplete = delegate
-            {
-                string finalText;
-                lock (sbLock) { finalText = assistantBuilder.ToString(); }
-                BeginInvoke((MethodInvoker)delegate
+                string aSnap = null, ansSnap = null;
+                lock (sbLock)
                 {
-                    try { renderTimer.Stop(); renderTimer.Dispose(); }
-                    catch { }
-                    try { ctx.Transcript.StickToBottomDuringStreaming = false; }
-                    catch { }
-                    ctx.Transcript.UpdateMessageAt(assistantIndex, finalText);
-                    // The orchestrator already appended assistant/tool messages to History.
-                    ctx.Conversation.SelectedModel = ctx.SelectedModel;
-                    if (!ctx.NoSaveUntilUserSend) ConversationStore.Save(ctx.Conversation);
-                    ctx.IsSending = false;
-                    if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
-                });
-            };
-            Action<string> onErr = delegate(string err)
-            {
-                if (string.IsNullOrEmpty(err)) err = "Unknown error.";
-                BeginInvoke((MethodInvoker)delegate
+                    if (activitySb.Length != lastActivityLen) { aSnap = activitySb.ToString(); lastActivityLen = activitySb.Length; }
+                    if (answerSb.Length != lastAnswerLen) { ansSnap = answerSb.ToString(); lastAnswerLen = answerSb.Length; }
+                }
+                if (aSnap != null)
                 {
-                    try { renderTimer.Stop(); renderTimer.Dispose(); }
-                    catch { }
-                    try { ctx.Transcript.StickToBottomDuringStreaming = false; }
-                    catch { }
-                    string cur; lock (sbLock) { cur = assistantBuilder.ToString(); }
-                    ctx.Transcript.UpdateMessageAt(assistantIndex,
-                        (cur.Length > 0 ? cur + "\r\n\r\n" : string.Empty) + "Error: " + err);
-                    ctx.IsSending = false;
-                });
+                    if (activityIndex[0] < 0) activityIndex[0] = ctx.Transcript.AddMessageGetIndex(MessageRole.Tool, string.Empty);
+                    ctx.Transcript.UpdateMessageAt(activityIndex[0], aSnap);
+                }
+                if (ansSnap != null)
+                {
+                    if (answerIndex[0] < 0) answerIndex[0] = ctx.Transcript.AddMessageGetIndex(MessageRole.Assistant, string.Empty);
+                    ctx.Transcript.UpdateMessageAt(answerIndex[0], ansSnap);
+                }
             };
+            try { ctx.Transcript.StickToBottomDuringStreaming = true; }
+            catch { }
+            renderTimer.Start();
 
-            orch.RunTurn(ctx.Conversation.History, new DelegateToolLoopUi(onAppend, onComplete, onErr));
+            bool providerAllow = true;
+            try { providerAllow = AppSettings.GetBool("provider_data_collection", true); }
+            catch { providerAllow = true; }
+
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    var orch = new McpChatOrchestrator(_client, _mcpRegistry, new AllowAllApprovalPolicy(),
+                                                       model, LoggerSink.Instance);
+                    orch.ProviderDataCollectionAllowed = providerAllow;
+                    orch.RequestMessageTransform = delegate(IList<ChatMessage> h)
+                    {
+                        List<ChatMessage> asList = h as List<ChatMessage>;
+                        if (asList == null) asList = new List<ChatMessage>(h);
+                        return BuildMessagesForModel(asList);
+                    };
+
+                    Action<string> onAppend = delegate(string t) { lock (sbLock) { answerSb.Append(t); } };
+                    Action<string> onToolCall = delegate(string name)
+                    {
+                        lock (sbLock)
+                        {
+                            if (activitySb.Length > 0) activitySb.Append("\r\n");
+                            activitySb.Append(McpMarkers.Call(name));
+                        }
+                    };
+                    Action onComplete = delegate
+                    {
+                        BeginInvoke((MethodInvoker)delegate
+                        { FinalizeToolSend(ctx, renderTimer, sbLock, activitySb, answerSb, activityIndex, answerIndex, null); });
+                    };
+                    Action<string> onErr = delegate(string err)
+                    {
+                        string e2 = string.IsNullOrEmpty(err) ? "Unknown error." : err;
+                        BeginInvoke((MethodInvoker)delegate
+                        { FinalizeToolSend(ctx, renderTimer, sbLock, activitySb, answerSb, activityIndex, answerIndex, e2); });
+                    };
+
+                    orch.RunTurn(ctx.Conversation.History, new DelegateToolLoopUi(onAppend, onToolCall, onComplete, onErr));
+                }
+                catch (Exception ex)
+                {
+                    string msg = ex.Message;
+                    BeginInvoke((MethodInvoker)delegate
+                    { FinalizeToolSend(ctx, renderTimer, sbLock, activitySb, answerSb, activityIndex, answerIndex, msg); });
+                }
+            });
+        }
+
+        // Finalize a tool turn on the UI thread. error == null means success. The orchestrator has
+        // already appended the structured assistant/tool messages to history, so we only flush the
+        // transcript bubbles and save.
+        private void FinalizeToolSend(TabManager.ChatTabContext ctx, System.Windows.Forms.Timer renderTimer,
+                                      object sbLock, StringBuilder activitySb, StringBuilder answerSb,
+                                      int[] activityIndex, int[] answerIndex, string error)
+        {
+            try { renderTimer.Stop(); renderTimer.Dispose(); }
+            catch { }
+            try { ctx.Transcript.StickToBottomDuringStreaming = false; }
+            catch { }
+
+            string aFinal, ansFinal;
+            lock (sbLock) { aFinal = activitySb.ToString(); ansFinal = answerSb.ToString(); }
+
+            if (aFinal.Trim().Length > 0)
+            {
+                if (activityIndex[0] < 0) activityIndex[0] = ctx.Transcript.AddMessageGetIndex(MessageRole.Tool, string.Empty);
+                ctx.Transcript.UpdateMessageAt(activityIndex[0], aFinal);
+            }
+
+            string answerText = ansFinal;
+            if (error != null)
+                answerText = (ansFinal.Length > 0 ? ansFinal + "\r\n\r\n" : string.Empty) + "Error: " + error;
+
+            if (answerText.Trim().Length > 0)
+            {
+                if (answerIndex[0] < 0) answerIndex[0] = ctx.Transcript.AddMessageGetIndex(MessageRole.Assistant, string.Empty);
+                ctx.Transcript.UpdateMessageAt(answerIndex[0], answerText);
+            }
+
+            if (error == null)
+            {
+                ctx.Conversation.SelectedModel = ctx.SelectedModel;
+                if (!ctx.NoSaveUntilUserSend) ConversationStore.Save(ctx.Conversation);
+            }
+            ctx.IsSending = false;
+            if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
         }
 
         // Build a list of messages for the model, appending any attachments to the user message content
@@ -1898,13 +1969,24 @@ namespace GxPT
         // Markdown is parsed on a background thread and the resulting blocks are appended to the
         // transcript in small batches on a UI timer. System messages are skipped; help templates
         // (NoSaveUntilUserSend) are scrolled to the top, otherwise the view sticks to the bottom.
-        // Emits the accumulated assistant turn (model text + tool markers) as one transcript bubble.
-        private static void FlushAssistantBuffer(List<ChatMessage> items, ref System.Text.StringBuilder asst)
+        // Role marker for the coalesced, chrome-less tool-activity message used on reload.
+        private const string ToolActivityRole = "toolactivity";
+
+        // Emits a coalesced turn: a chrome-less tool-activity message (if any tools were used), then
+        // the assistant's answer bubble.
+        private static void FlushTurn(List<ChatMessage> items, ref System.Text.StringBuilder activity, ref string answer)
         {
-            if (asst == null) return;
-            string text = asst.ToString();
-            asst = null;
-            if (text.Trim().Length > 0) items.Add(new ChatMessage("assistant", text));
+            if (activity != null)
+            {
+                string a = activity.ToString();
+                if (a.Trim().Length > 0) items.Add(new ChatMessage(ToolActivityRole, a));
+                activity = null;
+            }
+            if (answer != null)
+            {
+                if (answer.Trim().Length > 0) items.Add(new ChatMessage("assistant", answer));
+                answer = null;
+            }
         }
 
         private void RebuildTranscriptAsync(TabManager.ChatTabContext ctx, Conversation convo)
@@ -1923,7 +2005,8 @@ namespace GxPT
                 // with the model's text plus compact "using <tool>" markers — never the raw tool
                 // results. This matches the live streamed view.
                 var items = new List<ChatMessage>();
-                System.Text.StringBuilder asst = null;
+                System.Text.StringBuilder activity = null; // tool-use markers (+ any intermediate text)
+                string answer = null;                       // final assistant content for the turn
                 foreach (var m in convo.History)
                 {
                     if (m == null) continue;
@@ -1932,30 +2015,35 @@ namespace GxPT
 
                     if (role == "user")
                     {
-                        FlushAssistantBuffer(items, ref asst);
+                        FlushTurn(items, ref activity, ref answer);
                         items.Add(m);
                         continue;
                     }
 
-                    // assistant (or any unexpected role): accumulate text + tool-call markers
-                    if (asst == null) asst = new System.Text.StringBuilder();
-                    if (!string.IsNullOrEmpty(m.Content))
+                    if (m.ToolCalls != null && m.ToolCalls.Count > 0)
                     {
-                        if (asst.Length > 0) asst.Append("\r\n\r\n");
-                        asst.Append(m.Content);
-                    }
-                    if (m.ToolCalls != null)
-                    {
+                        // tool-calling assistant message -> tool activity (chrome-less)
+                        if (activity == null) activity = new System.Text.StringBuilder();
+                        if (!string.IsNullOrEmpty(m.Content))
+                        {
+                            if (activity.Length > 0) activity.Append("\r\n");
+                            activity.Append(m.Content);
+                        }
                         for (int ti = 0; ti < m.ToolCalls.Count; ti++)
                         {
                             var tc = m.ToolCalls[ti];
                             if (tc == null) continue;
-                            if (asst.Length > 0) asst.Append("\r\n\r\n");
-                            asst.Append(McpMarkers.Call(tc.Name));
+                            if (activity.Length > 0) activity.Append("\r\n");
+                            activity.Append(McpMarkers.Call(tc.Name));
                         }
                     }
+                    else
+                    {
+                        // assistant with no tool calls -> the answer
+                        answer = m.Content;
+                    }
                 }
-                FlushAssistantBuffer(items, ref asst);
+                FlushTurn(items, ref activity, ref answer);
 
                 // Producer-consumer: parse off-UI, consume on UI timer in small chunks
                 var parsed = new List<ParsedMessage>(Math.Max(4, items.Count));
@@ -1977,7 +2065,10 @@ namespace GxPT
                             for (int k = 0; k < count; k++)
                             {
                                 var m = items[i + k];
-                                var role = string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase) ? MessageRole.Assistant : MessageRole.User;
+                                MessageRole role;
+                                if (string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase)) role = MessageRole.Assistant;
+                                else if (string.Equals(m.Role, ToolActivityRole, StringComparison.OrdinalIgnoreCase)) role = MessageRole.Tool;
+                                else role = MessageRole.User;
                                 var text = m.Content ?? string.Empty;
                                 var blocks = MarkdownParser.ParseMarkdown(text);
                                 var att = (m.Attachments != null && m.Attachments.Count > 0) ? new List<AttachedFile>(m.Attachments) : null;

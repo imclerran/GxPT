@@ -19,18 +19,21 @@ namespace GxPT
         }
     }
 
-    // Adapts the orchestrator's IToolLoopUi to simple delegates so MainForm can stream tool-call
-    // turns into the existing transcript: model text and a compact per-call marker go to appendText;
-    // Complete/OnError finalize the turn. Tool results are never shown (the model summarizes them).
+    // Adapts the orchestrator's IToolLoopUi to simple delegates so MainForm can render a tool-call
+    // turn as a chrome-less "tool activity" message plus a separate answer bubble: model text ->
+    // appendText, each tool call -> onToolCall (its own message), Complete/OnError finalize. Tool
+    // results are never shown (the model summarizes them).
     internal sealed class DelegateToolLoopUi : IToolLoopUi
     {
         private readonly Action<string> _appendText;
+        private readonly Action<string> _onToolCall;
         private readonly Action _complete;
         private readonly Action<string> _error;
 
-        public DelegateToolLoopUi(Action<string> appendText, Action complete, Action<string> error)
+        public DelegateToolLoopUi(Action<string> appendText, Action<string> onToolCall, Action complete, Action<string> error)
         {
             _appendText = appendText;
+            _onToolCall = onToolCall;
             _complete = complete;
             _error = error;
         }
@@ -42,7 +45,7 @@ namespace GxPT
 
         public void OnToolCall(string functionName, string argumentsJson)
         {
-            if (_appendText != null) _appendText("\r\n\r\n" + McpMarkers.Call(functionName) + "\r\n\r\n");
+            if (_onToolCall != null) _onToolCall(functionName);
         }
 
         public void OnToolResult(string functionName, string resultText, bool isError)
