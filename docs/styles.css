@@ -5,12 +5,24 @@
 html, body {
   margin: 0;
   padding: 0;
-  /* Bliss-style sky/grass gradient as a lightweight stand-in wallpaper */
-  background:
-    linear-gradient(to bottom,
-      #4d90fe 0%, #5fa8ff 28%, #8fd0ff 46%,
-      #bfe6a8 54%, #7cc24a 78%, #5aa033 100%) fixed;
+  /* Plain neutral-gray desktop */
+  background: #9a9a9e;
   min-height: 100vh;
+}
+
+/* ===== Silver Luna theme =====
+   Retints XP.css's default blue Luna chrome to the silver scheme. */
+body.theme-silver .title-bar {
+  /* Silver caption gradient (mirrors XP.css's blue stop structure) */
+  background: linear-gradient(180deg,
+    #ebebf2, #c7c6d6 8%, #a3a2b8 45%,
+    #8d8ca3 88%, #8d8ca3 93%, #9b9ab0 95%, #76758d 96%, #76758d) !important;
+  border-bottom: 1px solid #6f6e85;
+}
+/* Desaturate the blue min/max glyphs to silver; Close stays red (correct for Silver Luna) */
+body.theme-silver .title-bar-controls button[aria-label="Minimize"],
+body.theme-silver .title-bar-controls button[aria-label="Maximize"] {
+  filter: grayscale(100%);
 }
 
 .page {
@@ -32,14 +44,14 @@ html, body {
   margin: 2px 0 2px;
   font-size: 40px;
   letter-spacing: 1px;
-  color: #1c50c4;
+  color: #33343c;
   text-shadow: 1px 1px 0 #fff;
 }
 .tagline {
   margin: 0 0 12px;
   font-size: 16px;
   font-style: italic;
-  color: #1c3f7a;
+  color: #44454e;
 }
 .hero p.lead {
   margin: 10px auto 2px;
@@ -77,14 +89,14 @@ html, body {
 /* ---- features ---- */
 ul.features { margin: 4px 0; padding-left: 22px; line-height: 1.55; }
 ul.features li { margin-bottom: 6px; }
-ul.features b { color: #1c50c4; }
+ul.features b { color: #33343c; }
 
 /* ---- footer ---- */
 .footer {
   text-align: center;
   margin-top: 4px;
-  color: #11357f;
+  color: #2a2a30;
   font-size: 12px;
-  text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.6);
+  text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.5);
 }
-.footer a { color: #11357f; }
+.footer a { color: #2a2a30; }
