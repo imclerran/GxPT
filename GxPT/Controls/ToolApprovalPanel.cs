@@ -179,6 +179,18 @@ namespace GxPT
                     _previewLabel.Text = "Push to:";
                     handled = true;
                 }
+                else if (req.FunctionName != null && req.FunctionName.StartsWith("git__", StringComparison.Ordinal))
+                {
+                    // Other git tools: show the equivalent command line so a destructive op (reset
+                    // --hard, rm, rebase, ...) is legible before approving.
+                    string summary = GitOpSummary(req);
+                    if (summary.Length > 0)
+                    {
+                        _diffPanel.SetContent(string.Empty, summary, "batch", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                        _previewLabel.Text = "Git command:";
+                        handled = true;
+                    }
+                }
             }
 
             if (handled)
@@ -310,6 +322,76 @@ namespace GxPT
                 return sb.ToString();
             }
             catch { return string.Empty; }
+        }
+
+        // A readable "git <subcommand> ..." line for the approval preview of the extended git tools.
+        // Returns "" for tools handled elsewhere (commit/push) or unknown ones.
+        private static string GitOpSummary(ApprovalRequest req)
+        {
+            Newtonsoft.Json.Linq.JObject a = req.Arguments != null ? req.Arguments : new Newtonsoft.Json.Linq.JObject();
+            var sb = new System.Text.StringBuilder("git ");
+            switch (req.FunctionName)
+            {
+                case "git__fetch":
+                    sb.Append("fetch"); if (Bv(a, "prune")) sb.Append(" --prune"); Append(sb, Sv(a, "remote")); break;
+                case "git__pull":
+                    sb.Append("pull"); if (Bv(a, "rebase")) sb.Append(" --rebase"); Append(sb, Sv(a, "remote")); Append(sb, Sv(a, "branch")); break;
+                case "git__checkout":
+                    sb.Append("checkout"); if (Bv(a, "create")) sb.Append(" -b"); Append(sb, Sv(a, "ref")); Append(sb, Sv(a, "start_point")); break;
+                case "git__restore":
+                    sb.Append("restore"); if (Bv(a, "staged")) sb.Append(" --staged");
+                    if (Sv(a, "source").Length > 0) sb.Append(" --source ").Append(Sv(a, "source"));
+                    Append(sb, PathsOf(a, "paths")); break;
+                case "git__branch":
+                {
+                    string act = Sv(a, "action"); if (act.Length == 0) act = "list";
+                    sb.Append("branch ").Append(act); Append(sb, Sv(a, "name"));
+                    if (Sv(a, "new_name").Length > 0) sb.Append(" -> ").Append(Sv(a, "new_name")); break;
+                }
+                case "git__merge":
+                    sb.Append("merge"); if (Bv(a, "no_ff")) sb.Append(" --no-ff"); Append(sb, Sv(a, "branch")); break;
+                case "git__rebase":
+                {
+                    string act = Sv(a, "action"); if (act.Length == 0) act = "start";
+                    if (act == "start") { sb.Append("rebase"); Append(sb, Sv(a, "onto")); }
+                    else sb.Append("rebase --").Append(act);
+                    break;
+                }
+                case "git__cherry_pick":
+                    sb.Append("cherry-pick"); if (Bv(a, "no_commit")) sb.Append(" -n"); Append(sb, Sv(a, "commit")); break;
+                case "git__add":
+                    sb.Append("add"); if (Bv(a, "all")) sb.Append(" -A"); else Append(sb, PathsOf(a, "paths")); break;
+                case "git__reset":
+                {
+                    string paths = PathsOf(a, "paths");
+                    if (paths.Length > 0) { sb.Append("reset"); Append(sb, Sv(a, "target")); sb.Append(" -- ").Append(paths); }
+                    else { string m = Sv(a, "mode"); if (m.Length == 0) m = "mixed"; sb.Append("reset --").Append(m.ToLowerInvariant()); Append(sb, Sv(a, "target")); }
+                    break;
+                }
+                case "git__rm":
+                    sb.Append("rm"); if (Bv(a, "cached")) sb.Append(" --cached"); if (Bv(a, "recursive")) sb.Append(" -r"); Append(sb, PathsOf(a, "paths")); break;
+                case "git__stash":
+                {
+                    string act = Sv(a, "action"); if (act.Length == 0) act = "push";
+                    sb.Append("stash ").Append(act);
+                    if (Sv(a, "message").Length > 0) sb.Append(" -m ").Append(Sv(a, "message"));
+                    break;
+                }
+                default: return string.Empty;
+            }
+            return sb.ToString();
+        }
+
+        private static void Append(System.Text.StringBuilder sb, string v) { if (!string.IsNullOrEmpty(v)) sb.Append(' ').Append(v); }
+        private static string Sv(Newtonsoft.Json.Linq.JObject a, string n) { var v = a.Value<string>(n); return v ?? string.Empty; }
+        private static bool Bv(Newtonsoft.Json.Linq.JObject a, string n) { var t = a[n]; try { return t != null && (bool)t; } catch { return false; } }
+        private static string PathsOf(Newtonsoft.Json.Linq.JObject a, string n)
+        {
+            var arr = a[n] as Newtonsoft.Json.Linq.JArray;
+            if (arr == null) { string s = a.Value<string>(n); return s ?? string.Empty; }
+            var sb = new System.Text.StringBuilder();
+            foreach (var p in arr) { string s = (string)p; if (string.IsNullOrEmpty(s)) continue; if (sb.Length > 0) sb.Append(' '); sb.Append(s); }
+            return sb.ToString();
         }
 
         private static string BuildPreviewText(ApprovalRequest req)

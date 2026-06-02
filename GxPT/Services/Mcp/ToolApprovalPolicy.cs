@@ -38,6 +38,7 @@ namespace GxPT
             s["git__status"] = true;
             s["git__diff"] = true;
             s["git__log"] = true;
+            s["git__fetch"] = true; // updates remote-tracking refs only; no working-tree change
             s["web__search"] = true;
             return s;
         }
