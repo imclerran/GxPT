@@ -262,8 +262,7 @@ namespace GxPT
                     if (hasGit && hasCommand)
                     {
                         sb.Append("\n\nFor Git operations, prefer the dedicated git__ tools over the ");
-                        sb.Append("command tool: each is a separately approvable tool with finer-grained ");
-                        sb.Append("permissions. Only fall back to the command tool for Git functionality ");
+                        sb.Append("command tool. Only fall back to the command tool for Git functionality ");
                         sb.Append("the git__ tools do not provide.");
                     }
 
