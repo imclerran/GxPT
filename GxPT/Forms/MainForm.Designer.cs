@@ -318,7 +318,7 @@
             // 
             this.pnlButtons.Controls.Add(this.btnSend);
             this.pnlButtons.Controls.Add(this.btnAttach);
-            this.pnlButtons.Dock = System.Windows.Forms.DockStyle.Top;
+            this.pnlButtons.Dock = System.Windows.Forms.DockStyle.Bottom;
             this.pnlButtons.Location = new System.Drawing.Point(0, 0);
             this.pnlButtons.Margin = new System.Windows.Forms.Padding(0);
             this.pnlButtons.Name = "pnlButtons";
@@ -359,7 +359,7 @@
             //
             // cmbModel
             //
-            this.cmbModel.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.cmbModel.Dock = System.Windows.Forms.DockStyle.Left;
             this.cmbModel.DrawMode = System.Windows.Forms.DrawMode.OwnerDrawFixed;
             this.cmbModel.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cmbModel.FormattingEnabled = true;
@@ -373,7 +373,7 @@
             this.cmbModel.Location = new System.Drawing.Point(0, 0);
             this.cmbModel.Margin = new System.Windows.Forms.Padding(0);
             this.cmbModel.Name = "cmbModel";
-            this.cmbModel.Size = new System.Drawing.Size(121, 23);
+            this.cmbModel.Size = new System.Drawing.Size(119, 23);
             this.cmbModel.Sorted = true;
             this.cmbModel.TabIndex = 2;
             //
@@ -382,7 +382,7 @@
             this.chkZdrTab.Dock = System.Windows.Forms.DockStyle.Right;
             this.chkZdrTab.FlatStyle = System.Windows.Forms.FlatStyle.System;
             this.chkZdrTab.Location = new System.Drawing.Point(127, 0);
-            this.chkZdrTab.Margin = new System.Windows.Forms.Padding(6, 0, 0, 0);
+            this.chkZdrTab.Margin = new System.Windows.Forms.Padding(0);
             this.chkZdrTab.Name = "chkZdrTab";
             this.chkZdrTab.Size = new System.Drawing.Size(48, 23);
             this.chkZdrTab.TabIndex = 3;
