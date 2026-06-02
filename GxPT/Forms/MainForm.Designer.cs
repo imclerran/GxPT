@@ -334,7 +334,7 @@
             this.pnlButtons.Location = new System.Drawing.Point(0, 0);
             this.pnlButtons.Margin = new System.Windows.Forms.Padding(0);
             this.pnlButtons.Name = "pnlButtons";
-            this.pnlButtons.Size = new System.Drawing.Size(200, 54);
+            this.pnlButtons.Size = new System.Drawing.Size(200, 52);
             this.pnlButtons.TabIndex = 4;
             //
             // btnSend
@@ -342,7 +342,7 @@
             this.btnSend.Dock = System.Windows.Forms.DockStyle.Fill;
             this.btnSend.Location = new System.Drawing.Point(26, 0);
             this.btnSend.Name = "btnSend";
-            this.btnSend.Size = new System.Drawing.Size(174, 54);
+            this.btnSend.Size = new System.Drawing.Size(174, 52);
             this.btnSend.TabIndex = 0;
             this.btnSend.Text = "Send";
             this.btnSend.UseVisualStyleBackColor = true;
@@ -354,7 +354,7 @@
             this.btnAttach.Image = global::GxPT.Properties.Resources.AttatchGrey;
             this.btnAttach.Location = new System.Drawing.Point(0, 0);
             this.btnAttach.Name = "btnAttach";
-            this.btnAttach.Size = new System.Drawing.Size(26, 54);
+            this.btnAttach.Size = new System.Drawing.Size(26, 52);
             this.btnAttach.TabIndex = 3;
             this.btnAttach.UseVisualStyleBackColor = true;
             //

@@ -1482,8 +1482,9 @@ namespace GxPT
                 DrawZdrTag(g, r, back, border);
         }
 
-        // Draws the small "zdr" badge just inside the bubble's top-right corner, in the bubble's
-        // border color over its background color. Kept inside BubblePadding so it adds no height.
+        // Draws the small "zdr" badge just inside the bubble's bottom-right corner, in the bubble's
+        // border color over its background color. Bottom-right keeps it clear of the (left-aligned,
+        // top-anchored) message text, which the top-right corner could overlap.
         private void DrawZdrTag(Graphics g, Rectangle r, Color back, Color border)
         {
             const string tag = "zdr";
@@ -1493,9 +1494,9 @@ namespace GxPT
                 Size sz = TextRenderer.MeasureText(g, tag, font, new Size(int.MaxValue, int.MaxValue),
                     TextFormatFlags.NoPadding);
                 int pad = 2;
-                // Sit against the top-right border, within the padding gutter.
+                // Sit against the bottom-right border, within the padding gutter.
                 int x = r.Right - BubblePadding / 2 - sz.Width;
-                int y = r.Y + Math.Max(1, (BubblePadding - sz.Height) / 2);
+                int y = r.Bottom - sz.Height - 1;
                 Rectangle chip = new Rectangle(x - pad, y, sz.Width + 2 * pad, sz.Height);
                 using (var bb = new SolidBrush(back))
                     g.FillRectangle(bb, chip);
