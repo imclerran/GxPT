@@ -9,7 +9,7 @@ using System.Text.RegularExpressions;
 namespace GxPT
 {
     // ---------- Markdown model ----------
-    public enum BlockType { Paragraph, Heading, CodeBlock, BulletList, NumberedList, Table, EditDiff }
+    public enum BlockType { Paragraph, Heading, CodeBlock, BulletList, NumberedList, Table, EditDiff, Error }
 
     [Flags]
     public enum RunStyle { Normal = 0, Bold = 1, Italic = 2, Code = 4, Link = 8 }
@@ -44,6 +44,15 @@ namespace GxPT
     public sealed class EditDiffBlock : Block
     {
         public string Key;
+    }
+
+    // A chrome-less, red, user-facing error notice (e.g. a failed/empty model response). Unlike the
+    // edit-diff record, it is self-contained: the message text travels inside the sentinel (Base64-
+    // encoded), so it renders correctly even after the transcript is reloaded, with no side map.
+    // Anchored in the markdown by a content-free sentinel line — see ErrorSentinel/TryParseErrorMessage.
+    public sealed class ErrorBlock : Block
+    {
+        public string Message;
     }
 
     public sealed class BulletListBlock : Block
@@ -107,6 +116,40 @@ namespace GxPT
             if (len <= 0) return false;
             key = t.Substring(start, len);
             return true;
+        }
+
+        // ---------- Error sentinel ----------
+        // A self-contained anchor for a red error notice. The message is Base64-encoded (UTF-8) so it
+        // can carry arbitrary text on a single line without colliding with markdown or the sentinel
+        // brackets. Same mathematical white square brackets as the edit-diff sentinel.
+        public const string ErrorOpen = "⟦error:";
+        public const string ErrorClose = "⟧";
+
+        public static string ErrorSentinel(string message)
+        {
+            string encoded;
+            try { encoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(message ?? string.Empty)); }
+            catch { encoded = string.Empty; }
+            return ErrorOpen + encoded + ErrorClose;
+        }
+
+        public static bool TryParseErrorMessage(string line, out string message)
+        {
+            message = null;
+            if (line == null) return false;
+            string t = line.Trim();
+            if (!t.StartsWith(ErrorOpen, StringComparison.Ordinal) ||
+                !t.EndsWith(ErrorClose, StringComparison.Ordinal)) return false;
+            int start = ErrorOpen.Length;
+            int len = t.Length - start - ErrorClose.Length;
+            if (len < 0) return false;
+            try
+            {
+                byte[] bytes = Convert.FromBase64String(t.Substring(start, len));
+                message = System.Text.Encoding.UTF8.GetString(bytes);
+                return true;
+            }
+            catch { return false; }
         }
 
         // ---------- Public API ----------
@@ -236,6 +279,17 @@ namespace GxPT
                     flushBullets();
                     flushNumbered();
                     blocks.Add(new EditDiffBlock { Type = BlockType.EditDiff, Key = editDiffKey });
+                    continue;
+                }
+
+                // error sentinel → its own chrome-less red notice (message carried inline)
+                string errorMessage;
+                if (TryParseErrorMessage(line, out errorMessage))
+                {
+                    flushParagraph();
+                    flushBullets();
+                    flushNumbered();
+                    blocks.Add(new ErrorBlock { Type = BlockType.Error, Message = errorMessage });
                     continue;
                 }
 

@@ -1375,13 +1375,21 @@ namespace GxPT
                             delegate(string err)
                             {
                                 if (string.IsNullOrEmpty(err)) err = "Unknown error.";
+                                string partial;
+                                lock (sbLock) { partial = assistantBuilder.ToString(); }
                                 BeginInvoke((MethodInvoker)delegate
                                 {
                                     try { renderTimer.Stop(); renderTimer.Dispose(); }
                                     catch { }
                                     try { ctx.Transcript.StickToBottomDuringStreaming = false; }
                                     catch { }
-                                    ctx.Transcript.UpdateMessageAt(assistantIndex, "Error: " + err);
+                                    // Keep any partial text in the assistant bubble; otherwise drop the
+                                    // empty placeholder so only the red error notice shows.
+                                    if (partial.Trim().Length > 0)
+                                        ctx.Transcript.UpdateMessageAt(assistantIndex, partial);
+                                    else if (assistantIndex == ctx.Transcript.MessageCount - 1)
+                                        ctx.Transcript.RemoveLastMessage();
+                                    ShowTranscriptError(ctx.Transcript, err);
                                     Logger.Log("Send", "Stream error at index=" + assistantIndex + ": " + err);
                                     ctx.IsSending = false;
                                     // don't save on failure; no new assistant content
@@ -1391,13 +1399,19 @@ namespace GxPT
                     }
                     catch (Exception ex)
                     {
+                        string partial;
+                        lock (sbLock) { partial = assistantBuilder.ToString(); }
                         BeginInvoke((MethodInvoker)delegate
                         {
                             try { renderTimer.Stop(); renderTimer.Dispose(); }
                             catch { }
                             try { ctx.Transcript.StickToBottomDuringStreaming = false; }
                             catch { }
-                            ctx.Transcript.UpdateMessageAt(assistantIndex, "Error: " + ex.Message);
+                            if (partial.Trim().Length > 0)
+                                ctx.Transcript.UpdateMessageAt(assistantIndex, partial);
+                            else if (assistantIndex == ctx.Transcript.MessageCount - 1)
+                                ctx.Transcript.RemoveLastMessage();
+                            ShowTranscriptError(ctx.Transcript, ex.Message);
                             Logger.Log("Send", "Exception in streaming worker: " + ex.Message);
                             ctx.IsSending = false;
                         });
@@ -1417,37 +1431,31 @@ namespace GxPT
         // lazily (in the render timer) so they appear in the order content arrives — tool calls
         // first, then the answer. Runs the orchestrator on a worker thread; it appends the structured
         // assistant/tool messages to history itself. Called on the UI thread.
+        // One ordered segment of a streaming tool turn: either an assistant-text bubble or a
+        // chrome-less tool-activity block. Text is appended on the orchestrator worker thread (under
+        // the turn's lock); Index/LastLen are assigned on the UI thread when first rendered.
+        private sealed class LiveSeg
+        {
+            public readonly MessageRole Role;
+            public readonly StringBuilder Text = new StringBuilder();
+            public int Index;   // transcript message index, -1 until materialized
+            public int LastLen; // last rendered text length (UI thread only)
+            public LiveSeg(MessageRole role) { Role = role; Index = -1; LastLen = -1; }
+        }
+
         private void BeginToolSend(TabManager.ChatTabContext ctx, string model)
         {
+            // Ordered transcript segments for this turn: assistant-text bubbles and chrome-less
+            // tool-activity blocks, interleaved in arrival order so the view reads chronologically
+            // (text, then the tools it triggered, then the next text, ...). A segment only becomes a
+            // real transcript message once it has content, so a turn that errors before producing any
+            // output never leaves an empty placeholder bubble behind.
             var sbLock = new object();
-            var activitySb = new StringBuilder();
-            var answerSb = new StringBuilder();
-            int[] activityIndex = { -1 };
-            int[] answerIndex = { -1 };
-            int lastActivityLen = -1;
-            int lastAnswerLen = -1;
+            var segs = new List<LiveSeg>();
 
             var renderTimer = new System.Windows.Forms.Timer();
             renderTimer.Interval = 75;
-            renderTimer.Tick += delegate
-            {
-                string aSnap = null, ansSnap = null;
-                lock (sbLock)
-                {
-                    if (activitySb.Length != lastActivityLen) { aSnap = activitySb.ToString(); lastActivityLen = activitySb.Length; }
-                    if (answerSb.Length != lastAnswerLen) { ansSnap = answerSb.ToString(); lastAnswerLen = answerSb.Length; }
-                }
-                if (aSnap != null)
-                {
-                    if (activityIndex[0] < 0) activityIndex[0] = ctx.Transcript.AddMessageGetIndex(MessageRole.Tool, string.Empty);
-                    ctx.Transcript.UpdateMessageAt(activityIndex[0], aSnap);
-                }
-                if (ansSnap != null)
-                {
-                    if (answerIndex[0] < 0) answerIndex[0] = ctx.Transcript.AddMessageGetIndex(MessageRole.Assistant, string.Empty);
-                    ctx.Transcript.UpdateMessageAt(answerIndex[0], ansSnap);
-                }
-            };
+            renderTimer.Tick += delegate { MaterializeLiveSegs(ctx, sbLock, segs); };
             try { ctx.Transcript.StickToBottomDuringStreaming = true; }
             catch { }
             renderTimer.Start();
@@ -1471,31 +1479,57 @@ namespace GxPT
                         return BuildMessagesForModel(asList);
                     };
 
-                    Action<string> onAppend = delegate(string t) { lock (sbLock) { answerSb.Append(t); } };
-                    // argsJson is threaded through for files__edit, which renders a collapsible diff
-                    // record instead of the generic "using" marker (wired in a following change).
+                    // Assistant text appends to the current assistant bubble; a tool call closes it so
+                    // the next run of text starts a fresh bubble below the tool record. Inter-turn
+                    // whitespace (a stray newline some models emit before the next tool call) must NOT
+                    // open a bubble — otherwise it splits two adjacent tool blocks with an empty-looking
+                    // gap instead of letting them merge into one tight block.
+                    Action<string> onAppend = delegate(string t)
+                    {
+                        if (string.IsNullOrEmpty(t)) return;
+                        lock (sbLock)
+                        {
+                            LiveSeg cur = (segs.Count > 0) ? segs[segs.Count - 1] : null;
+                            if (cur != null && cur.Role == MessageRole.Assistant)
+                            {
+                                cur.Text.Append(t); // continuation — keep internal whitespace
+                                return;
+                            }
+                            if (t.Trim().Length == 0) return; // don't open a bubble on whitespace alone
+                            cur = new LiveSeg(MessageRole.Assistant);
+                            segs.Add(cur);
+                            cur.Text.Append(t);
+                        }
+                    };
+                    // argsJson is threaded through for files__edit etc., which render a collapsible
+                    // record instead of the generic "using" marker. Register the record (it has its own
+                    // lock) before taking sbLock. Live keys are per-call GUIDs (ephemeral — the reloaded
+                    // view re-derives under the persisted call id). Consecutive calls share one block.
                     Action<string, string> onToolCall = delegate(string name, string argsJson)
                     {
-                        // Register the diff (if an edit) before appending its sentinel, so the data is
-                        // present by the time the marker text renders. Live keys are per-call GUIDs
-                        // (ephemeral — the reloaded view re-derives under the persisted call id).
                         string marker = EditDiffMarkerOrCall(ctx.Transcript, name, argsJson, Guid.NewGuid().ToString("N"));
                         lock (sbLock)
                         {
-                            if (activitySb.Length > 0) activitySb.Append("\r\n");
-                            activitySb.Append(marker);
+                            LiveSeg cur = (segs.Count > 0) ? segs[segs.Count - 1] : null;
+                            if (cur == null || cur.Role != MessageRole.Tool)
+                            {
+                                cur = new LiveSeg(MessageRole.Tool);
+                                segs.Add(cur);
+                            }
+                            if (cur.Text.Length > 0) cur.Text.Append("\r\n");
+                            cur.Text.Append(marker);
                         }
                     };
                     Action onComplete = delegate
                     {
                         BeginInvoke((MethodInvoker)delegate
-                        { FinalizeToolSend(ctx, renderTimer, sbLock, activitySb, answerSb, activityIndex, answerIndex, null); });
+                        { FinalizeToolSend(ctx, renderTimer, sbLock, segs, null); });
                     };
                     Action<string> onErr = delegate(string err)
                     {
                         string e2 = string.IsNullOrEmpty(err) ? "Unknown error." : err;
                         BeginInvoke((MethodInvoker)delegate
-                        { FinalizeToolSend(ctx, renderTimer, sbLock, activitySb, answerSb, activityIndex, answerIndex, e2); });
+                        { FinalizeToolSend(ctx, renderTimer, sbLock, segs, e2); });
                     };
 
                     orch.RunTurn(ctx.Conversation.History, new DelegateToolLoopUi(onAppend, onToolCall, onComplete, onErr));
@@ -1504,7 +1538,7 @@ namespace GxPT
                 {
                     string msg = ex.Message;
                     BeginInvoke((MethodInvoker)delegate
-                    { FinalizeToolSend(ctx, renderTimer, sbLock, activitySb, answerSb, activityIndex, answerIndex, msg); });
+                    { FinalizeToolSend(ctx, renderTimer, sbLock, segs, msg); });
                 }
             });
         }
@@ -1513,32 +1547,20 @@ namespace GxPT
         // already appended the structured assistant/tool messages to history, so we only flush the
         // transcript bubbles and save.
         private void FinalizeToolSend(TabManager.ChatTabContext ctx, System.Windows.Forms.Timer renderTimer,
-                                      object sbLock, StringBuilder activitySb, StringBuilder answerSb,
-                                      int[] activityIndex, int[] answerIndex, string error)
+                                      object sbLock, List<LiveSeg> segs, string error)
         {
             try { renderTimer.Stop(); renderTimer.Dispose(); }
             catch { }
             try { ctx.Transcript.StickToBottomDuringStreaming = false; }
             catch { }
 
-            string aFinal, ansFinal;
-            lock (sbLock) { aFinal = activitySb.ToString(); ansFinal = answerSb.ToString(); }
+            // Flush any pending segment content (final delta the timer may not have rendered yet).
+            MaterializeLiveSegs(ctx, sbLock, segs);
 
-            if (aFinal.Trim().Length > 0)
-            {
-                if (activityIndex[0] < 0) activityIndex[0] = ctx.Transcript.AddMessageGetIndex(MessageRole.Tool, string.Empty);
-                ctx.Transcript.UpdateMessageAt(activityIndex[0], aFinal);
-            }
-
-            string answerText = ansFinal;
+            // A failed turn surfaces as a chrome-less red notice below whatever (if anything) the model
+            // managed to produce — never baked into a bubble.
             if (error != null)
-                answerText = (ansFinal.Length > 0 ? ansFinal + "\r\n\r\n" : string.Empty) + "Error: " + error;
-
-            if (answerText.Trim().Length > 0)
-            {
-                if (answerIndex[0] < 0) answerIndex[0] = ctx.Transcript.AddMessageGetIndex(MessageRole.Assistant, string.Empty);
-                ctx.Transcript.UpdateMessageAt(answerIndex[0], answerText);
-            }
+                ShowTranscriptError(ctx.Transcript, error);
 
             if (error == null)
             {
@@ -1547,6 +1569,37 @@ namespace GxPT
             }
             ctx.IsSending = false;
             if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
+        }
+
+        // Create/update the transcript messages backing the ordered live segments. Each segment becomes
+        // a real message only once it has content, so empty placeholder bubbles never appear. Runs on
+        // the UI thread (render timer + finalize). Segment text is snapshotted under sbLock; the
+        // transcript index/last-rendered length live on the segment and are only touched here.
+        private void MaterializeLiveSegs(TabManager.ChatTabContext ctx, object sbLock, List<LiveSeg> segs)
+        {
+            LiveSeg[] snap; string[] texts;
+            lock (sbLock)
+            {
+                snap = segs.ToArray();
+                texts = new string[snap.Length];
+                for (int i = 0; i < snap.Length; i++) texts[i] = snap[i].Text.ToString();
+            }
+            for (int i = 0; i < snap.Length; i++)
+            {
+                LiveSeg seg = snap[i];
+                string text = texts[i];
+                if (text.Length == 0) continue; // not materialized until it actually has content
+                if (seg.Index < 0)
+                {
+                    seg.Index = ctx.Transcript.AddMessageGetIndex(seg.Role, text);
+                    seg.LastLen = text.Length;
+                }
+                else if (text.Length != seg.LastLen)
+                {
+                    ctx.Transcript.UpdateMessageAt(seg.Index, text);
+                    seg.LastLen = text.Length;
+                }
+            }
         }
 
         // Build a list of messages for the model, appending any attachments to the user message content
@@ -2156,25 +2209,8 @@ namespace GxPT
         // Markdown is parsed on a background thread and the resulting blocks are appended to the
         // transcript in small batches on a UI timer. System messages are skipped; help templates
         // (NoSaveUntilUserSend) are scrolled to the top, otherwise the view sticks to the bottom.
-        // Role marker for the coalesced, chrome-less tool-activity message used on reload.
+        // Role marker for the chrome-less tool-activity blocks used on reload.
         private const string ToolActivityRole = "toolactivity";
-
-        // Emits a coalesced turn: a chrome-less tool-activity message (if any tools were used), then
-        // the assistant's answer bubble.
-        private static void FlushTurn(List<ChatMessage> items, ref System.Text.StringBuilder activity, ref string answer)
-        {
-            if (activity != null)
-            {
-                string a = activity.ToString();
-                if (a.Trim().Length > 0) items.Add(new ChatMessage(ToolActivityRole, a));
-                activity = null;
-            }
-            if (answer != null)
-            {
-                if (answer.Trim().Length > 0) items.Add(new ChatMessage("assistant", answer));
-                answer = null;
-            }
-        }
 
         // Activity marker for a tool call. If the tool maps to a collapsible/labelled record, register
         // it with the transcript under a stable key and return its sentinel; otherwise (or on any
@@ -2196,6 +2232,25 @@ namespace GxPT
                 catch { /* fall through to the generic marker */ }
             }
             return McpMarkers.Call(name);
+        }
+
+        // Surface a streaming/transport failure as a chrome-less red notice in the transcript, so a
+        // failed turn (e.g. an unavailable model, or a Claude request that returns nothing) is visible
+        // instead of leaving the user staring at an empty/missing bubble.
+        private static void ShowTranscriptError(ChatTranscriptControl transcript, string rawError)
+        {
+            if (transcript == null) return;
+            transcript.AddMessage(MessageRole.Tool, MarkdownParser.ErrorSentinel(FriendlyStreamError(rawError)));
+        }
+
+        // Light humanization of the raw streamer error for display. Provider messages from OpenRouter
+        // are usually already readable, so we mostly pass them through under a clear prefix.
+        private static string FriendlyStreamError(string raw)
+        {
+            string e = raw == null ? string.Empty : raw.Trim();
+            if (e.Length == 0)
+                return "The request failed before the model responded. Please try again or pick a different model.";
+            return "The request failed: " + e;
         }
 
         // Maps a tool call to a transcript record. An empty body yields a one-line label (no expansion);
@@ -2333,14 +2388,24 @@ namespace GxPT
                 try { ctx.Transcript.RefreshTheme(); }
                 catch { }
 
-                // Snapshot messages to process. System and tool messages are not shown. A tool-using
-                // assistant turn is persisted as several messages (assistant-with-tool_calls, tool
-                // result(s), ..., final assistant); coalesce each such run into ONE assistant bubble
-                // with the model's text plus compact "using <tool>" markers — never the raw tool
-                // results. This matches the live streamed view.
+                // Snapshot messages to process. System and tool-result messages are not shown. A
+                // tool-using assistant turn is persisted as several messages (assistant-with-tool_calls,
+                // tool result(s), ..., final assistant). Emit each assistant message's text as its own
+                // bubble and its tool calls as a chrome-less "using <tool>" block, interleaved in
+                // history order — so multi-turn tool use reads chronologically (text, tools, text, ...),
+                // matching the live streamed view. Tool results are never shown (the model summarizes).
                 var items = new List<ChatMessage>();
-                System.Text.StringBuilder activity = null; // tool-use markers (+ any intermediate text)
-                string answer = null;                       // final assistant content for the turn
+                // Consecutive tool-call runs that aren't separated by real assistant text merge into one
+                // chrome-less block (e.g. reveal_tools followed by the call it enabled), so they read as
+                // tightly as a single multi-call turn instead of two blocks with a gap between them. A
+                // real assistant text bubble or a user message flushes the running block.
+                System.Text.StringBuilder pendingTools = null;
+                Action flushTools = delegate
+                {
+                    if (pendingTools != null && pendingTools.Length > 0)
+                        items.Add(new ChatMessage(ToolActivityRole, pendingTools.ToString()));
+                    pendingTools = null;
+                };
                 foreach (var m in convo.History)
                 {
                     if (m == null) continue;
@@ -2349,36 +2414,33 @@ namespace GxPT
 
                     if (role == "user")
                     {
-                        FlushTurn(items, ref activity, ref answer);
+                        flushTools();
                         items.Add(m);
                         continue;
                     }
 
+                    // assistant text (intermediate or final) -> its own bubble, closing any tool run
+                    if (!string.IsNullOrEmpty(m.Content) && m.Content.Trim().Length > 0)
+                    {
+                        flushTools();
+                        items.Add(new ChatMessage("assistant", m.Content));
+                    }
+
+                    // this turn's tool calls -> append to the running chrome-less block
                     if (m.ToolCalls != null && m.ToolCalls.Count > 0)
                     {
-                        // tool-calling assistant message -> tool activity (chrome-less)
-                        if (activity == null) activity = new System.Text.StringBuilder();
-                        if (!string.IsNullOrEmpty(m.Content))
-                        {
-                            if (activity.Length > 0) activity.Append("\r\n");
-                            activity.Append(m.Content);
-                        }
+                        if (pendingTools == null) pendingTools = new System.Text.StringBuilder();
                         for (int ti = 0; ti < m.ToolCalls.Count; ti++)
                         {
                             var tc = m.ToolCalls[ti];
                             if (tc == null) continue;
-                            if (activity.Length > 0) activity.Append("\r\n");
+                            if (pendingTools.Length > 0) pendingTools.Append("\r\n");
                             string key = !string.IsNullOrEmpty(tc.Id) ? tc.Id : ("edit" + ti);
-                            activity.Append(EditDiffMarkerOrCall(ctx.Transcript, tc.Name, tc.ArgumentsJson, key));
+                            pendingTools.Append(EditDiffMarkerOrCall(ctx.Transcript, tc.Name, tc.ArgumentsJson, key));
                         }
                     }
-                    else
-                    {
-                        // assistant with no tool calls -> the answer
-                        answer = m.Content;
-                    }
                 }
-                FlushTurn(items, ref activity, ref answer);
+                flushTools();
 
                 // Producer-consumer: parse off-UI, consume on UI timer in small chunks
                 var parsed = new List<ParsedMessage>(Math.Max(4, items.Count));

@@ -125,6 +125,7 @@ namespace GxPT
         private Color _clrInlineCodeBack = Color.FromArgb(240, 240, 240);
         private Color _clrInlineCodeBorder = Color.FromArgb(200, 200, 200);
         private Color _clrLink = Color.FromArgb(0, 102, 204);
+        private Color _clrError = Color.FromArgb(200, 0, 0); // red error-notice text (theme-adjusted)
         private Color _clrCopyHover = Color.FromArgb(230, 230, 230);
         private Color _clrCopyPressed = Color.FromArgb(210, 210, 210);
         private Color _clrScrollTrack = Color.FromArgb(235, 235, 235);
@@ -508,6 +509,9 @@ namespace GxPT
             _clrInlineCodeBack = t.InlineCodeBack;
             _clrInlineCodeBorder = t.InlineCodeBorder;
             _clrLink = t.Link;
+            // Error-notice red: a deeper red on light themes, a brighter one on dark so it stays
+            // legible against the background. Not part of ThemeColors (no chrome), derived from dark.
+            _clrError = dark ? Color.FromArgb(255, 120, 120) : Color.FromArgb(200, 0, 0);
             _clrCopyHover = t.CopyHover;
             _clrCopyPressed = t.CopyPressed;
             _clrScrollTrack = t.ScrollTrack;
@@ -588,6 +592,9 @@ namespace GxPT
             AddParsedMessage(role, markdown, blocks, attachments);
         }
 
+        // Number of messages currently in the transcript.
+        public int MessageCount { get { return _items.Count; } }
+
         // Add and return the index of the inserted message (to support targeted updates later)
         public int AddMessageGetIndex(MessageRole role, string markdown)
         {
@@ -602,6 +609,16 @@ namespace GxPT
             _scrollOffset = 0;
             UpdateScrollbar();
             Invalidate();
+        }
+
+        // Remove the last message (e.g. an empty assistant placeholder when a stream fails before any
+        // content arrives). Safe no-op when empty.
+        public void RemoveLastMessage()
+        {
+            if (_items.Count == 0) return;
+            _items.RemoveAt(_items.Count - 1);
+            Invalidate();
+            ReflowSoon();
         }
 
         // Replace the content of the last message if it exists
@@ -878,6 +895,8 @@ namespace GxPT
                     h += 2;
                 else if (blk.Type == BlockType.CodeBlock)
                     h += 4;
+                else if (blk.Type == BlockType.Error)
+                    h += 2;
                 // Lists don't add extra spacing after themselves
 
                 wUsed = Math.Max(wUsed, sz.Width);
@@ -1038,6 +1057,11 @@ namespace GxPT
                         }
                         return new Size(Math.Max(24, Math.Min(maxWidth, w)), h);
                     }
+                case BlockType.Error:
+                    {
+                        var er = (ErrorBlock)blk;
+                        return MeasureInlineParagraph(BuildErrorInlines(er.Message), _baseFont, maxWidth, true);
+                    }
                 case BlockType.Table:
                     {
                         var t = (TableBlock)blk;
@@ -1080,6 +1104,14 @@ namespace GxPT
                     }
             }
             return Size.Empty;
+        }
+
+        // Build the inline runs for an error notice. The message is treated as literal text (no
+        // markdown), so error strings containing '*', '_', '`' etc. render verbatim. Word wrapping is
+        // handled by the normal inline layout (it splits the run on spaces).
+        private static List<InlineRun> BuildErrorInlines(string message)
+        {
+            return new List<InlineRun> { new InlineRun { Text = message ?? string.Empty, Style = RunStyle.Normal } };
         }
 
         private Size MeasureInlineParagraph(List<InlineRun> runs, Font baseFont, int maxWidth, bool addBottomGap)
@@ -1597,6 +1629,17 @@ namespace GxPT
                     }
                     numberedCounters.Clear();
                 }
+                else if (blk.Type == BlockType.Error)
+                {
+                    // Chrome-less red notice (the containing message is a Tool-role bubble, so no
+                    // chrome). Drawn as literal wrapped text in the error color.
+                    var er = (ErrorBlock)blk;
+                    y += DrawInlineParagraph(g, x0, y, maxWidth, BuildErrorInlines(er.Message), _baseFont, owner,
+                                             new InlineCopyContext { ForeOverride = _clrError });
+                    y += 2;
+                    if (owner != null) { if (owner.DrawnSegments == null) owner.DrawnSegments = new List<DrawnSeg>(); owner.DrawnSegments.Add(new DrawnSeg { IsNewLine = true, IsHardBreak = true, Rect = new Rectangle(x0, y, 0, 0), Text = null, Font = _baseFont }); }
+                    numberedCounters.Clear();
+                }
                 else if (blk.Type == BlockType.CodeBlock)
                 {
                     var c = (CodeBlock)blk;
@@ -1916,6 +1959,7 @@ namespace GxPT
             public int TableColIndex;     // 0-based column index
             public int TableColumnCount;  // total columns in the table
             public TableAlign TableAlignment; // alignment for this column
+            public Color? ForeOverride;   // non-null forces a foreground color for normal text (e.g. error red)
         }
 
         private int DrawInlineParagraph(Graphics g, int x, int y, int maxWidth, List<InlineRun> runs, Font baseFont, MessageItem owner, InlineCopyContext ctx)
@@ -2068,7 +2112,8 @@ namespace GxPT
                 }
                 else
                 {
-                    using (var brush = new SolidBrush(ForeColor))
+                    Color textColor = ctx.ForeOverride.HasValue ? ctx.ForeOverride.Value : ForeColor;
+                    using (var brush = new SolidBrush(textColor))
                     {
                         using (var fmt = StringFormat.GenericTypographic)
                         {

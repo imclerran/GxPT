@@ -72,10 +72,11 @@ namespace GxPT.Tests.Mcp
             var store = new InMemoryApprovalStore();
             var pol = Policy(prompt, store);
 
-            Assert.Equal(ApprovalDecision.Allow, pol.Check("web__search", Args("{\"query\":\"x\"}")));
+            // web__extract is Tool-scope and gated (not auto-allowed), so it prompts the first time.
+            Assert.Equal(ApprovalDecision.Allow, pol.Check("web__extract", Args("{\"urls\":[\"x\"]}")));
             Assert.Equal(1, prompt.Calls);
             // second call: remembered, no prompt
-            Assert.Equal(ApprovalDecision.Allow, pol.Check("web__search", Args("{\"query\":\"y\"}")));
+            Assert.Equal(ApprovalDecision.Allow, pol.Check("web__extract", Args("{\"urls\":[\"y\"]}")));
             Assert.Equal(1, prompt.Calls);
         }
 
@@ -84,9 +85,21 @@ namespace GxPT.Tests.Mcp
         {
             var prompt = new ScriptedPrompt { Next = ApprovalChoice.AllowOnce };
             var pol = Policy(prompt, new InMemoryApprovalStore());
-            pol.Check("web__search", Args("{\"query\":\"x\"}"));
-            pol.Check("web__search", Args("{\"query\":\"y\"}"));
+            pol.Check("web__extract", Args("{\"urls\":[\"x\"]}"));
+            pol.Check("web__extract", Args("{\"urls\":[\"y\"]}"));
             Assert.Equal(2, prompt.Calls); // prompted both times
+        }
+
+        [Fact]
+        public void Auto_allowed_read_only_tools_never_prompt()
+        {
+            // The read-only built-ins (and web__search) are always allowed without a prompt.
+            var prompt = new ScriptedPrompt { Next = ApprovalChoice.Deny };
+            var pol = Policy(prompt, new InMemoryApprovalStore());
+            Assert.Equal(ApprovalDecision.Allow, pol.Check("web__search", Args("{\"query\":\"x\"}")));
+            Assert.Equal(ApprovalDecision.Allow, pol.Check("files__read", Args("{\"path\":\"a\"}")));
+            Assert.Equal(ApprovalDecision.Allow, pol.Check("git__status", Args("{}")));
+            Assert.Equal(0, prompt.Calls);
         }
 
         [Fact]
