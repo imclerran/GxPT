@@ -300,14 +300,14 @@
             this.txtMessage.MaxLength = 0;
             this.txtMessage.Multiline = true;
             this.txtMessage.Name = "txtMessage";
-            this.txtMessage.Size = new System.Drawing.Size(710, 75);
+            this.txtMessage.Size = new System.Drawing.Size(685, 75);
             this.txtMessage.TabIndex = 1;
             this.txtMessage.KeyDown += new System.Windows.Forms.KeyEventHandler(this.txtMessage_KeyDown);
             this.txtMessage.Leave += new System.EventHandler(this.txtMessage_Leave);
             this.txtMessage.Enter += new System.EventHandler(this.txtMessage_Enter);
             // 
             // pnlInputRight
-            //
+            // 
             this.pnlInputRight.Controls.Add(this.pnlButtonsFill);
             this.pnlInputRight.Controls.Add(this.pnlModelRow);
             this.pnlInputRight.Dock = System.Windows.Forms.DockStyle.Right;
@@ -315,9 +315,9 @@
             this.pnlInputRight.Name = "pnlInputRight";
             this.pnlInputRight.Size = new System.Drawing.Size(200, 75);
             this.pnlInputRight.TabIndex = 3;
-            //
+            // 
             // pnlButtonsFill
-            //
+            // 
             this.pnlButtonsFill.Controls.Add(this.pnlButtons);
             this.pnlButtonsFill.Dock = System.Windows.Forms.DockStyle.Fill;
             this.pnlButtonsFill.Location = new System.Drawing.Point(0, 0);
@@ -325,9 +325,9 @@
             this.pnlButtonsFill.Name = "pnlButtonsFill";
             this.pnlButtonsFill.Size = new System.Drawing.Size(200, 52);
             this.pnlButtonsFill.TabIndex = 6;
-            //
+            // 
             // pnlButtons
-            //
+            // 
             this.pnlButtons.Controls.Add(this.btnSend);
             this.pnlButtons.Controls.Add(this.btnAttach);
             this.pnlButtons.Dock = System.Windows.Forms.DockStyle.Bottom;
@@ -336,9 +336,9 @@
             this.pnlButtons.Name = "pnlButtons";
             this.pnlButtons.Size = new System.Drawing.Size(200, 52);
             this.pnlButtons.TabIndex = 4;
-            //
+            // 
             // btnSend
-            //
+            // 
             this.btnSend.Dock = System.Windows.Forms.DockStyle.Fill;
             this.btnSend.Location = new System.Drawing.Point(26, 0);
             this.btnSend.Name = "btnSend";
@@ -347,9 +347,9 @@
             this.btnSend.Text = "Send";
             this.btnSend.UseVisualStyleBackColor = true;
             this.btnSend.Click += new System.EventHandler(this.btnSend_Click);
-            //
+            // 
             // btnAttach
-            //
+            // 
             this.btnAttach.Dock = System.Windows.Forms.DockStyle.Left;
             this.btnAttach.Image = global::GxPT.Properties.Resources.AttatchGrey;
             this.btnAttach.Location = new System.Drawing.Point(0, 0);
@@ -357,9 +357,9 @@
             this.btnAttach.Size = new System.Drawing.Size(26, 52);
             this.btnAttach.TabIndex = 3;
             this.btnAttach.UseVisualStyleBackColor = true;
-            //
+            // 
             // pnlModelRow
-            //
+            // 
             this.pnlModelRow.Controls.Add(this.cmbModel);
             this.pnlModelRow.Controls.Add(this.chkZdrTab);
             this.pnlModelRow.Dock = System.Windows.Forms.DockStyle.Bottom;
@@ -368,9 +368,9 @@
             this.pnlModelRow.Name = "pnlModelRow";
             this.pnlModelRow.Size = new System.Drawing.Size(200, 23);
             this.pnlModelRow.TabIndex = 5;
-            //
+            // 
             // cmbModel
-            //
+            // 
             this.cmbModel.Dock = System.Windows.Forms.DockStyle.Left;
             this.cmbModel.DrawMode = System.Windows.Forms.DrawMode.OwnerDrawFixed;
             this.cmbModel.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
@@ -385,12 +385,12 @@
             this.cmbModel.Location = new System.Drawing.Point(0, 0);
             this.cmbModel.Margin = new System.Windows.Forms.Padding(0);
             this.cmbModel.Name = "cmbModel";
-            this.cmbModel.Size = new System.Drawing.Size(146, 23);
+            this.cmbModel.Size = new System.Drawing.Size(146, 21);
             this.cmbModel.Sorted = true;
             this.cmbModel.TabIndex = 2;
-            //
+            // 
             // chkZdrTab
-            //
+            // 
             this.chkZdrTab.Dock = System.Windows.Forms.DockStyle.Right;
             this.chkZdrTab.FlatStyle = System.Windows.Forms.FlatStyle.System;
             this.chkZdrTab.Location = new System.Drawing.Point(152, 0);
@@ -399,9 +399,8 @@
             this.chkZdrTab.Size = new System.Drawing.Size(48, 23);
             this.chkZdrTab.TabIndex = 3;
             this.chkZdrTab.Text = "ZDR";
-            this.chkZdrTab.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             this.chkZdrTab.UseVisualStyleBackColor = true;
-            //
+            // 
             // pnlBottom
             // 
             this.pnlBottom.AutoSize = true;
