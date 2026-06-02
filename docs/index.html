@@ -166,7 +166,10 @@
               var msi = findMsi(releases[i]);
               if (msi) {
                 btn.dataset.href = msi.browser_download_url;
-                var ver = releases[i].tag_name ? (' &middot; v' + releases[i].tag_name) : '';
+                // Label it "GxPT vX.Y.Z" so it's clearly the app version, not
+                // another prerequisite. Normalize the tag's leading "v" first.
+                var tag = releases[i].tag_name ? String(releases[i].tag_name).replace(/^v/i, '') : '';
+                var ver = tag ? (' &middot; GxPT v' + tag) : '';
                 note.innerHTML = baseNote + ver;
                 return;
               }

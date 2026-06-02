@@ -12,12 +12,28 @@ html, body {
 
 /* ===== Silver Luna theme =====
    Retints XP.css's default blue Luna chrome to the silver scheme. */
+/* Retint the window frame: XP.css draws the blue beveled border as a stack of
+   inset box-shadows, so we have to restate the whole stack in silver tones
+   (mirrors XP.css's blue stop structure, darkest on the bottom-right edge). */
+body.theme-silver .window {
+  box-shadow:
+    inset -1px -1px #4a4a5a, inset 1px 1px #d6d5e0,
+    inset -2px -2px #6f6e85, inset 2px 2px #b0afc0,
+    inset -3px -3px #8d8ca3, inset 3px 3px #c7c6d6,
+    0 6px 22px rgba(0, 0, 0, 0.45) !important;
+}
 body.theme-silver .title-bar {
   /* Silver caption gradient (mirrors XP.css's blue stop structure) */
   background: linear-gradient(180deg,
     #ebebf2, #c7c6d6 8%, #a3a2b8 45%,
     #8d8ca3 88%, #8d8ca3 93%, #9b9ab0 95%, #76758d 96%, #76758d) !important;
+  /* XP.css gives the caption blue top/left/right borders + a blue text shadow;
+     retint all of them to silver (bottom edge was already handled). */
+  border-top: 1px solid #d6d5e0;
+  border-left: 1px solid #d6d5e0;
+  border-right: 1px solid #8d8ca3;
   border-bottom: 1px solid #6f6e85;
+  text-shadow: 1px 1px #6f6e85;
 }
 /* Desaturate the blue min/max glyphs to silver; Close stays red (correct for Silver Luna) */
 body.theme-silver .title-bar-controls button[aria-label="Minimize"],
