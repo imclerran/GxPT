@@ -408,6 +408,7 @@ namespace GxPT
                     foreach (var it in items)
                     {
                         string text = string.IsNullOrEmpty(it.Name) ? "New Conversation" : it.Name;
+                        if (it.Zdr) text = MainForm.ZdrTitlePrefix + text;
                         var lvi = new ListViewItem(text);
                         lvi.Tag = it;
                         _lvConversations.Items.Add(lvi);
@@ -705,7 +706,7 @@ namespace GxPT
                             TabPage openPage;
                             if (!string.IsNullOrEmpty(info.Id) && _openConversationsById.TryGetValue(info.Id, out openPage))
                             {
-                                openPage.Text = newName;
+                                openPage.Text = MainForm.ZdrTitle(conversation, newName);
                                 _mainForm.UpdateWindowTitle();
                             }
 

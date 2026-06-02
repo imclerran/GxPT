@@ -206,8 +206,8 @@ namespace GxPT
             sb.AppendLine("  \"message_max_width\": " + defaultMessagePercent + ",");
             sb.AppendLine("  \"enable_logging\": false,")
             ;
-            // Default provider data collection allowed (true)
-            sb.AppendLine("  \"provider_data_collection\": true,");
+            // Default zero data retention off (new conversations may use any provider).
+            sb.AppendLine("  \"provider_zdr\": false,");
             // First-party MCP servers enabled by default where no credential is required
             // (files/command; they connect once a working folder is set).
             sb.AppendLine("  \"mcp_files_enabled\": true,");
@@ -252,7 +252,7 @@ namespace GxPT
                 transcript_max_width = 1000,
                 // Percent (50-100) under legacy key name
                 message_max_width = 90,
-                provider_data_collection = true,
+                provider_zdr = false,
                 // First-party MCP servers enabled by default where no credential is required.
                 mcp_files_enabled = true,
                 mcp_command_enabled = true
@@ -820,20 +820,11 @@ namespace GxPT
             }
             catch { s.message_max_width = 90; }
 
-            // Default provider_data_collection to true when missing
-            try { /* no-op if already set */ var _ = s.provider_data_collection; }
-            catch { }
-            if (!HasProviderDataCollectionValue(s)) s.provider_data_collection = true;
-        }
-
-        private static bool HasProviderDataCollectionValue(SettingsData s)
-        {
-            try { return true; }
-            catch { }
-            // JavaScriptSerializer creates bool default false when missing in POCO; treat missing/false both as value not explicitly provided?
-            // We'll check using reflection to see if member exists in raw JSON is not available here; default to true when property false and not specified.
-            // Given constraints, consider false a valid value if explicitly in JSON editor; users can change via UI anyway.
-            return true;
+            // ZDR replaced the old data-collection setting. If a settings file predates ZDR (no
+            // provider_zdr), migrate once from the old preference: data_collection "deny" (false)
+            // means the user already wanted no retention, so default ZDR on.
+            if (!s.provider_zdr.HasValue)
+                s.provider_zdr = !s.provider_data_collection;
         }
 
         // --- Visual controls <-> working settings ---
@@ -922,17 +913,11 @@ namespace GxPT
             }
             catch { }
 
-            // Provider data retention combobox
+            // Global ZDR default (migrated from the old data-collection pref when absent).
             try
             {
-                bool allow = true;
-                try { allow = s.provider_data_collection; }
-                catch { allow = true; }
-                if (this.cmbProviderDataCollection != null)
-                {
-                    // If text contains "Not" then it's deny; otherwise allow
-                    this.cmbProviderDataCollection.SelectedIndex = allow ? 0 : 1;
-                }
+                bool zdr = s.provider_zdr.HasValue ? s.provider_zdr.Value : !s.provider_data_collection;
+                if (this.chkZdr != null) this.chkZdr.Checked = zdr;
             }
             catch { }
 
@@ -1015,23 +1000,12 @@ namespace GxPT
             }
             catch { if (string.IsNullOrEmpty(target.color_theme)) target.color_theme = "blue"; }
 
-            // Provider data collection from combo: if contains "Not" -> false, else true
+            // Global ZDR default from the checkbox.
             try
             {
-                string txt = null;
-                if (this.cmbProviderDataCollection != null)
-                {
-                    txt = this.cmbProviderDataCollection.SelectedItem as string;
-                    if (string.IsNullOrEmpty(txt)) txt = this.cmbProviderDataCollection.Text;
-                }
-                bool allowed = true;
-                if (!string.IsNullOrEmpty(txt))
-                {
-                    allowed = txt.IndexOf("Not", StringComparison.OrdinalIgnoreCase) < 0;
-                }
-                target.provider_data_collection = allowed;
+                if (this.chkZdr != null) target.provider_zdr = this.chkZdr.Checked;
             }
-            catch { if (!target.provider_data_collection) target.provider_data_collection = true; }
+            catch { }
 
             // Transcript width and Message width percent
             try { target.transcript_max_width = (int)this.nudTranscriptMaxWidth.Value; }
@@ -1322,7 +1296,11 @@ namespace GxPT
             public int transcript_max_width { get; set; }
             // Store percent (50-100) using legacy key name
             public int message_max_width { get; set; }
+            // Legacy data-collection pref, retained only so existing files can migrate to provider_zdr.
             public bool provider_data_collection { get; set; }
+            // Global zero-data-retention default for new conversations. Nullable so an absent value in
+            // an older settings file can be detected and migrated from provider_data_collection.
+            public bool? provider_zdr { get; set; }
 
             // MCP built-in server toggles + credentials (read by the host via AppSettings).
             public bool mcp_web_enabled { get; set; }

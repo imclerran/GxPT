@@ -50,7 +50,7 @@
             this.nudFontSize = new System.Windows.Forms.NumericUpDown();
             this.chkEnableLogging = new System.Windows.Forms.CheckBox();
             this.lblProviderDataCollection = new System.Windows.Forms.Label();
-            this.cmbProviderDataCollection = new System.Windows.Forms.ComboBox();
+            this.chkZdr = new System.Windows.Forms.CheckBox();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabVisual = new System.Windows.Forms.TabPage();
             this.tabJson = new System.Windows.Forms.TabPage();
@@ -139,7 +139,7 @@
             this.tblSettings.Controls.Add(this.nudFontSize, 1, 8);
             this.tblSettings.Controls.Add(this.chkEnableLogging, 1, 9);
             this.tblSettings.Controls.Add(this.lblProviderDataCollection, 0, 3);
-            this.tblSettings.Controls.Add(this.cmbProviderDataCollection, 1, 3);
+            this.tblSettings.Controls.Add(this.chkZdr, 1, 3);
             this.tblSettings.Controls.Add(this.lblColor, 0, 5);
             this.tblSettings.Controls.Add(this.cmbColor, 1, 5);
             this.tblSettings.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -359,21 +359,19 @@
             this.lblProviderDataCollection.Name = "lblProviderDataCollection";
             this.lblProviderDataCollection.Size = new System.Drawing.Size(121, 27);
             this.lblProviderDataCollection.TabIndex = 16;
-            this.lblProviderDataCollection.Text = "Provider Data Collection";
+            this.lblProviderDataCollection.Text = "Zero Data Retention";
             this.lblProviderDataCollection.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            // 
-            // cmbProviderDataCollection
-            // 
-            this.cmbProviderDataCollection.Dock = System.Windows.Forms.DockStyle.Left;
-            this.cmbProviderDataCollection.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cmbProviderDataCollection.FormattingEnabled = true;
-            this.cmbProviderDataCollection.Items.AddRange(new object[] {
-            "May Collect (Data may be used for training)",
-            "May Not Collect (May still retain for abuse monitoring)"});
-            this.cmbProviderDataCollection.Location = new System.Drawing.Point(130, 178);
-            this.cmbProviderDataCollection.Name = "cmbProviderDataCollection";
-            this.cmbProviderDataCollection.Size = new System.Drawing.Size(300, 21);
-            this.cmbProviderDataCollection.TabIndex = 17;
+            //
+            // chkZdr
+            //
+            this.chkZdr.AutoSize = true;
+            this.chkZdr.Dock = System.Windows.Forms.DockStyle.Left;
+            this.chkZdr.Location = new System.Drawing.Point(130, 178);
+            this.chkZdr.Name = "chkZdr";
+            this.chkZdr.Size = new System.Drawing.Size(300, 21);
+            this.chkZdr.TabIndex = 17;
+            this.chkZdr.Text = "Default new conversations to zero-retention providers only";
+            this.chkZdr.UseVisualStyleBackColor = true;
             // 
             // tabControl1
             // 
@@ -615,7 +613,7 @@
         private System.Windows.Forms.Label lblMessageMaxWidth;
         private System.Windows.Forms.NumericUpDown nudMessageMaxWidth;
         private System.Windows.Forms.Label lblProviderDataCollection;
-        private System.Windows.Forms.ComboBox cmbProviderDataCollection;
+        private System.Windows.Forms.CheckBox chkZdr;
         private System.Windows.Forms.Label lblColor;
         private System.Windows.Forms.ComboBox cmbColor;
         private System.Windows.Forms.TabPage tabMcp;

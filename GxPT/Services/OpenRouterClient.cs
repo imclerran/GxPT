@@ -100,6 +100,12 @@ namespace GxPT
                     if (props.ProviderDataCollectionAllowed.HasValue)
                         provider["data_collection"] = props.ProviderDataCollectionAllowed.Value ? "allow" : "deny";
 
+                    // zdr (zero data retention): OpenRouter treats the per-request flag as an OR with
+                    // account/guardrail settings — it can only ensure ZDR for this request, never
+                    // disable it. So we emit "zdr": true only when on, and omit it otherwise.
+                    if (props.Zdr.HasValue && props.Zdr.Value)
+                        provider["zdr"] = true;
+
                     // only: include non-empty list
                     if (props.ProviderOnly != null && props.ProviderOnly.Count > 0)
                     {
@@ -495,6 +501,9 @@ namespace GxPT
 
         // Provider options
         public bool? ProviderDataCollectionAllowed { get; set; }
+        // Zero data retention: when true, emits provider.zdr=true so OpenRouter only routes to
+        // endpoints with a zero-retention policy. Null/false omits it (no effect on routing).
+        public bool? Zdr { get; set; }
         public IList<string> ProviderOnly { get; set; }
         public decimal? ProviderMaxPricePrompt { get; set; }
         public decimal? ProviderMaxPriceCompletion { get; set; }

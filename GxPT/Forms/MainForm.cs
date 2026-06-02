@@ -47,6 +47,7 @@ namespace GxPT
             public string Text;
             public List<Block> Blocks;
             public List<AttachedFile> Attachments; // optional
+            public bool Zdr; // tiny zero-retention corner tag (user/assistant only)
         }
 
         public MainForm()
@@ -532,6 +533,20 @@ namespace GxPT
                     // Adjust dropdown width dynamically to fit the widest item
                     this.cmbModel.DropDown -= cmbModel_DropDownAdjustWidth;
                     this.cmbModel.DropDown += cmbModel_DropDownAdjustWidth;
+                    // Owner-draw shows only the model name (after "author/"); the item value stays the
+                    // full "author/model" id, so GetSelectedModel and the request are unchanged.
+                    this.cmbModel.DrawItem -= cmbModel_DrawItem;
+                    this.cmbModel.DrawItem += cmbModel_DrawItem;
+                }
+            }
+            catch { }
+
+            try
+            {
+                if (this.chkZdrTab != null)
+                {
+                    this.chkZdrTab.CheckedChanged -= chkZdrTab_CheckedChanged;
+                    this.chkZdrTab.CheckedChanged += chkZdrTab_CheckedChanged;
                 }
             }
             catch { }
@@ -559,6 +574,7 @@ namespace GxPT
             }
             UpdateWindowTitleFromActiveTab();
             SyncComboModelFromActiveTab();
+            SyncZdrCheckboxFromActiveTab();
             // Refresh the attachments banner to reflect the active tab's pending attachments
             RebuildAttachmentsBanner();
             // Point the MCP host's workdir-scoped servers (files/git/command) at the active tab's folder.
@@ -1059,6 +1075,9 @@ namespace GxPT
                 dlg.ShowDialog(this);
                 // The dialog writes settings.json directly; drop the cached copy so reads are fresh.
                 AppSettings.Reload();
+                // The global ZDR default may have changed: re-sync the per-tab checkbox (checked +
+                // disabled when ZDR is forced globally; existing conversations don't latch until sent).
+                SyncZdrCheckboxFromActiveTab();
                 // Re-init client in case API key changed
                 InitializeClient();
                 UpdateApiKeyBanner();
@@ -1333,16 +1352,22 @@ namespace GxPT
 
                 var modelToUse = GetSelectedModel();
 
+                // Effective ZDR for this send (global default OR the per-conversation toggle); engages
+                // the one-way latch on the first ZDR send and tags the message bubbles just added.
+                bool zdrForSend = ResolveZdrForSend(ctx);
+                if (zdrForSend) MarkActiveTurnZdrBubbles(ctx);
+
                 // Tool-enabled turn: tool activity renders as a separate chrome-less message above the
                 // answer bubble. BeginToolSend owns the whole turn; the plain path below is unchanged.
                 if (_mcpRegistry != null && _mcpRegistry.HasTools)
                 {
-                    BeginToolSend(ctx, modelToUse);
+                    BeginToolSend(ctx, modelToUse, zdrForSend);
                     return;
                 }
 
                 // Add placeholder assistant message to stream into and capture its index
                 int assistantIndex = ctx.Transcript.AddMessageGetIndex(MessageRole.Assistant, string.Empty);
+                if (zdrForSend) ctx.Transcript.SetMessageZdrTag(assistantIndex, true);
                 Logger.Log("Send", "Assistant placeholder index=" + assistantIndex);
                 var assistantBuilder = new StringBuilder();
 
@@ -1394,29 +1419,10 @@ namespace GxPT
                         }
                         catch { }
 
-                        // Determine provider data collection preference from settings: if text contains "Not" then false, else true
-                        bool providerAllow = true;
-                        try
-                        {
-                            // Prefer boolean setting
-                            providerAllow = AppSettings.GetBool("provider_data_collection", true);
-                        }
-                        catch
-                        {
-                            // Fallback to string combobox text semantics if needed
-                            try
-                            {
-                                string pdc = AppSettings.GetString("provider_data_collection");
-                                if (!string.IsNullOrEmpty(pdc))
-                                    providerAllow = pdc.IndexOf("Not", StringComparison.OrdinalIgnoreCase) < 0;
-                            }
-                            catch { providerAllow = true; }
-                        }
-
                         _client.CreateCompletionStream(
                             modelToUse,
                             snapshot,
-                            new ClientProperties { Stream = true, ProviderDataCollectionAllowed = providerAllow },
+                            new ClientProperties { Stream = true, Zdr = zdrForSend ? true : (bool?)null },
                             delegate(string d)
                             {
                                 if (string.IsNullOrEmpty(d)) return;
@@ -1501,6 +1507,142 @@ namespace GxPT
             }
         }
 
+        // ---------------- ZDR (zero data retention) per-conversation plumbing ----------------
+
+        // Effective ZDR for the active conversation's next send: the global default OR the per-tab
+        // toggle. On the first send where ZDR is effective, engages the one-way latch (recording the
+        // history index of the user message being sent) so the checkbox locks on and the tab + every
+        // message from here on are marked ZDR. Returns whether ZDR applies to this send.
+        private bool ResolveZdrForSend(TabManager.ChatTabContext ctx)
+        {
+            if (ctx == null || ctx.Conversation == null) return false;
+            // Latched conversations stay ZDR for good, even if the global default is later turned off.
+            bool zdr;
+            try { zdr = AppSettings.GetGlobalZdrDefault() || ctx.Conversation.Zdr || ConvIsZdrLatched(ctx); }
+            catch { zdr = ctx.Conversation.Zdr || ConvIsZdrLatched(ctx); }
+            if (!zdr) return false;
+
+            if (ctx.Conversation.ZdrFirstMessageIndex < 0)
+            {
+                int idx = LastUserHistoryIndex(ctx.Conversation);
+                ctx.Conversation.ZdrFirstMessageIndex =
+                    idx >= 0 ? idx : Math.Max(0, ctx.Conversation.History.Count - 1);
+                try { if (!ctx.NoSaveUntilUserSend) ConversationStore.Save(ctx.Conversation); }
+                catch { }
+                // Reflect the now-latched state: lock the checkbox and mark the tab + sidebar.
+                try { SyncZdrCheckboxFromActiveTab(); }
+                catch { }
+                try { UpdateTabTitleForZdr(ctx); }
+                catch { }
+                try { if (_sidebarManager != null) _sidebarManager.RefreshSidebarList(); }
+                catch { }
+            }
+            return true;
+        }
+
+        private static int LastUserHistoryIndex(Conversation convo)
+        {
+            var h = convo.History;
+            for (int i = h.Count - 1; i >= 0; i--)
+                if (h[i] != null && string.Equals(h[i].Role, "user", StringComparison.OrdinalIgnoreCase))
+                    return i;
+            return -1;
+        }
+
+        // True once a conversation has latched ZDR: from that point every user/assistant message is a
+        // zero-retention message (the checkbox is locked on and ZDR never turns back off).
+        private static bool ConvIsZdrLatched(TabManager.ChatTabContext ctx)
+        {
+            return ctx != null && ctx.Conversation != null && ctx.Conversation.ZdrFirstMessageIndex >= 0;
+        }
+
+        // Tags the user bubble just added for this turn (assistant bubbles are tagged as they
+        // materialize). No-op when the conversation isn't ZDR-latched.
+        private void MarkActiveTurnZdrBubbles(TabManager.ChatTabContext ctx)
+        {
+            if (ctx == null || ctx.Transcript == null) return;
+            try { ctx.Transcript.MarkLastUserMessageZdr(); }
+            catch { }
+        }
+
+        // Marker prefixed to a tab title / sidebar row once a conversation has latched ZDR.
+        internal const string ZdrTitlePrefix = "[zdr] ";
+
+        // The display title for a conversation: its name, prefixed with the ZDR marker once latched.
+        internal static string ZdrTitle(Conversation convo, string name)
+        {
+            string n = string.IsNullOrEmpty(name) ? "Conversation" : name;
+            return (convo != null && convo.ZdrFirstMessageIndex >= 0) ? ZdrTitlePrefix + n : n;
+        }
+
+        // Recompute the active tab's title to reflect a newly-latched ZDR state.
+        private void UpdateTabTitleForZdr(TabManager.ChatTabContext ctx)
+        {
+            if (ctx == null || ctx.Page == null || ctx.Conversation == null) return;
+            try { ctx.Page.Text = ZdrTitle(ctx.Conversation, ctx.Conversation.Name); }
+            catch { }
+        }
+
+        // Owner-draw the model combo so only the model name shows (after the last "/"), while the item
+        // value stays the full "author/model" id.
+        private void cmbModel_DrawItem(object sender, DrawItemEventArgs e)
+        {
+            e.DrawBackground();
+            if (e.Index >= 0 && this.cmbModel != null && e.Index < this.cmbModel.Items.Count)
+            {
+                string full = Convert.ToString(this.cmbModel.Items[e.Index]);
+                // Clip the name at the edge like a native combo (no ellipsis).
+                TextRenderer.DrawText(e.Graphics, ShortModelName(full), e.Font, e.Bounds, e.ForeColor,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+            }
+            e.DrawFocusRectangle();
+        }
+
+        // "author/model-name" -> "model-name"; passes through anything without a slash.
+        internal static string ShortModelName(string full)
+        {
+            if (string.IsNullOrEmpty(full)) return full ?? string.Empty;
+            int slash = full.LastIndexOf('/');
+            return (slash >= 0 && slash < full.Length - 1) ? full.Substring(slash + 1) : full;
+        }
+
+        // Per-tab ZDR checkbox <-> active conversation. Checked = effective ZDR; disabled (locked on)
+        // when the global default forces it or the conversation has already latched ZDR.
+        private bool _syncingZdr;
+        private void SyncZdrCheckboxFromActiveTab()
+        {
+            if (this.chkZdrTab == null) return;
+            var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            bool globalDefault = false;
+            try { globalDefault = AppSettings.GetGlobalZdrDefault(); }
+            catch { }
+            bool latched = ConvIsZdrLatched(ctx);
+            bool convZdr = ctx != null && ctx.Conversation != null && ctx.Conversation.Zdr;
+            _syncingZdr = true;
+            try
+            {
+                this.chkZdrTab.Checked = globalDefault || convZdr || latched;
+                this.chkZdrTab.Enabled = ctx != null && ctx.Conversation != null && !globalDefault && !latched;
+            }
+            finally { _syncingZdr = false; }
+        }
+
+        private void chkZdrTab_CheckedChanged(object sender, EventArgs e)
+        {
+            if (_syncingZdr) return;
+            var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            if (ctx == null || ctx.Conversation == null) return;
+            ctx.Conversation.Zdr = this.chkZdrTab.Checked;
+            // Persist only for an already-saved conversation; a brand-new empty tab persists the choice
+            // on its first send (the in-memory flag is still honored until then).
+            try
+            {
+                if (!ctx.NoSaveUntilUserSend && ctx.Conversation.History != null && ctx.Conversation.History.Count > 0)
+                    ConversationStore.Save(ctx.Conversation);
+            }
+            catch { }
+        }
+
         // Owns a tool-enabled chat turn. Tool activity streams into a chrome-less "Tool" message and
         // the model's answer into a separate Assistant bubble below it. Both bubbles are created
         // lazily (in the render timer) so they appear in the order content arrives — tool calls
@@ -1518,7 +1660,7 @@ namespace GxPT
             public LiveSeg(MessageRole role) { Role = role; Index = -1; LastLen = -1; }
         }
 
-        private void BeginToolSend(TabManager.ChatTabContext ctx, string model)
+        private void BeginToolSend(TabManager.ChatTabContext ctx, string model, bool zdr)
         {
             // Ordered transcript segments for this turn: assistant-text bubbles and chrome-less
             // tool-activity blocks, interleaved in arrival order so the view reads chronologically
@@ -1534,10 +1676,6 @@ namespace GxPT
             try { ctx.Transcript.StickToBottomDuringStreaming = true; }
             catch { }
             renderTimer.Start();
-
-            bool providerAllow = true;
-            try { providerAllow = AppSettings.GetBool("provider_data_collection", true); }
-            catch { providerAllow = true; }
 
             System.Threading.ThreadPool.QueueUserWorkItem(delegate
             {
@@ -1561,7 +1699,7 @@ namespace GxPT
                     var orch = new McpChatOrchestrator(_client, _mcpRegistry, approval,
                                                        model, LoggerSink.Instance);
                     orch.WorkingDir = ctx.WorkingDir;
-                    orch.ProviderDataCollectionAllowed = providerAllow;
+                    orch.Zdr = zdr ? true : (bool?)null;
                     orch.RequestMessageTransform = delegate(IList<ChatMessage> h)
                     {
                         List<ChatMessage> asList = h as List<ChatMessage>;
@@ -1683,6 +1821,10 @@ namespace GxPT
                 {
                     seg.Index = ctx.Transcript.AddMessageGetIndex(seg.Role, text);
                     seg.LastLen = text.Length;
+                    // Once the conversation has latched ZDR, every assistant bubble it produces is a
+                    // zero-retention message — tag it as it materializes (tool blocks are not tagged).
+                    if (seg.Role == MessageRole.Assistant && ConvIsZdrLatched(ctx))
+                        ctx.Transcript.SetMessageZdrTag(seg.Index, true);
                 }
                 else if (text.Length != seg.LastLen)
                 {
@@ -1886,6 +2028,8 @@ namespace GxPT
                 DialogResult dr = dlg.ShowDialog(this);
                 // The dialog writes settings.json directly; drop the cached copy so reads are fresh.
                 AppSettings.Reload();
+                // Reflect any change to the global ZDR default in the per-tab checkbox.
+                SyncZdrCheckboxFromActiveTab();
                 if (dr == DialogResult.OK)
                 {
                     InitializeClient();
@@ -2603,6 +2747,10 @@ namespace GxPT
                 // history order — so multi-turn tool use reads chronologically (text, tools, text, ...),
                 // matching the live streamed view. Tool results are never shown (the model summarizes).
                 var items = new List<ChatMessage>();
+                // Parallel to items: whether each emitted user/assistant bubble is a zero-retention
+                // message (its source history index is at/after the ZDR latch). Tool blocks are false.
+                var itemZdr = new List<bool>();
+                int zdrLatch = convo.ZdrFirstMessageIndex;
                 // Consecutive tool-call runs that aren't separated by real assistant text merge into one
                 // chrome-less block (e.g. reveal_tools followed by the call it enabled), so they read as
                 // tightly as a single multi-call turn instead of two blocks with a gap between them. A
@@ -2611,19 +2759,27 @@ namespace GxPT
                 Action flushTools = delegate
                 {
                     if (pendingTools != null && pendingTools.Length > 0)
+                    {
                         items.Add(new ChatMessage(ToolActivityRole, pendingTools.ToString()));
+                        itemZdr.Add(false);
+                    }
                     pendingTools = null;
                 };
+                int hi = -1;
                 foreach (var m in convo.History)
                 {
+                    hi++;
                     if (m == null) continue;
                     string role = (m.Role ?? string.Empty).ToLowerInvariant();
                     if (role == "system" || role == "tool") continue; // not shown
+
+                    bool z = zdrLatch >= 0 && hi >= zdrLatch;
 
                     if (role == "user")
                     {
                         flushTools();
                         items.Add(m);
+                        itemZdr.Add(z);
                         continue;
                     }
 
@@ -2632,6 +2788,7 @@ namespace GxPT
                     {
                         flushTools();
                         items.Add(new ChatMessage("assistant", m.Content));
+                        itemZdr.Add(z);
                     }
 
                     // this turn's tool calls -> append to the running chrome-less block
@@ -2677,7 +2834,7 @@ namespace GxPT
                                 var text = m.Content ?? string.Empty;
                                 var blocks = MarkdownParser.ParseMarkdown(text);
                                 var att = (m.Attachments != null && m.Attachments.Count > 0) ? new List<AttachedFile>(m.Attachments) : null;
-                                local[k] = new ParsedMessage { Role = role, Text = text, Blocks = blocks, Attachments = att };
+                                local[k] = new ParsedMessage { Role = role, Text = text, Blocks = blocks, Attachments = att, Zdr = itemZdr[i + k] };
                             }
                             lock (gate)
                             {
@@ -2724,7 +2881,10 @@ namespace GxPT
                             ParsedMessage pm;
                             lock (gate) { pm = parsed[consumed]; consumed++; }
                             if (pm != null)
+                            {
                                 ctx.Transcript.AddParsedMessage(pm.Role, pm.Text, pm.Blocks, pm.Attachments);
+                                if (pm.Zdr) ctx.Transcript.SetMessageZdrTag(ctx.Transcript.MessageCount - 1, true);
+                            }
                         }
                     }
                     finally
@@ -2773,10 +2933,14 @@ namespace GxPT
             // Update tab title and window
             try
             {
-                ctx.Page.Text = string.IsNullOrEmpty(convo.Name) ? "Conversation" : convo.Name;
+                ctx.Page.Text = ZdrTitle(convo, convo.Name);
                 UpdateWindowTitleFromActiveTab();
             }
             catch { }
+
+            // The tab was selected before the conversation was assigned, so re-sync the per-tab ZDR
+            // checkbox now that we know this conversation's ZDR/latched state.
+            SyncZdrCheckboxFromActiveTab();
 
             // Focus input when a new tab opens from history
             if (_inputManager != null) _inputManager.FocusInputSoon();
@@ -2826,7 +2990,7 @@ namespace GxPT
                             {
                                 BeginInvoke((MethodInvoker)delegate
                                 {
-                                    ctx.Page.Text = string.IsNullOrEmpty(name) ? "Conversation" : name;
+                                    ctx.Page.Text = ZdrTitle(ctx.Conversation, name);
                                     UpdateWindowTitleFromActiveTab();
                                 });
                             }
@@ -2839,12 +3003,16 @@ namespace GxPT
                 // Update tab title and window
                 try
                 {
-                    ctx.Page.Text = string.IsNullOrEmpty(convo.Name) ? "Conversation" : convo.Name;
+                    ctx.Page.Text = ZdrTitle(convo, convo.Name);
                     // Select this tab and update window title
                     SelectTab(ctx.Page);
                     UpdateWindowTitleFromActiveTab();
                 }
                 catch { }
+
+                // Reusing the active blank tab won't re-fire OnTabSelected, so sync the ZDR checkbox
+                // to the loaded conversation's state explicitly.
+                SyncZdrCheckboxFromActiveTab();
 
                 if (_inputManager != null) _inputManager.FocusInputSoon();
                 if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();

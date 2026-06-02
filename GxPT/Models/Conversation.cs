@@ -22,6 +22,12 @@ namespace GxPT
         // Whether the user dismissed the (unset) workspace strip for this conversation; persisted so
         // the strip stays hidden on reopen until they set a folder.
         public bool WorkspaceStripDismissed { get; set; }
+        // Zero data retention for this conversation. Zdr is the per-conversation toggle (effective ZDR
+        // for a send is globalDefault OR Zdr). ZdrFirstMessageIndex is a one-way latch: the History
+        // index of the first user message actually sent with ZDR on (-1 until then). Once latched it
+        // never clears, so the checkbox locks on and the tab/messages are marked from that point.
+        public bool Zdr { get; set; }
+        public int ZdrFirstMessageIndex { get; set; }
         public DateTime LastUpdated { get; set; }
         public event Action<string> NameGenerated;
 
@@ -30,6 +36,7 @@ namespace GxPT
             _client = client;
             Name = "New Conversation"; // initialize to generic name
             SelectedModel = null;
+            ZdrFirstMessageIndex = -1; // not latched until a ZDR send occurs
             LastUpdated = DateTime.Now;
         }
 
@@ -65,23 +72,16 @@ namespace GxPT
                         "You generate short, descriptive conversation titles from the conversation so far. If the conversation so far is only a greeting (e.g., 'hi', 'hello', 'hey there') or lacks any clear topical content, return exactly: New Conversation. Otherwise, return only the title: 3 to 6 words, Title Case, no quotes, no trailing punctuation. You only generate conversation titles. Do not answer any user prompts."));
                     msgs.Add(History.Last());
 
-                    // Read provider data collection preference: if setting text contains "Not" => false, else true
-                    bool providerAllow = true;
-                    try { providerAllow = AppSettings.GetBool("provider_data_collection", true); }
-                    catch
-                    {
-                        try
-                        {
-                            string pdc = AppSettings.GetString("provider_data_collection");
-                            if (!string.IsNullOrEmpty(pdc)) providerAllow = pdc.IndexOf("Not", StringComparison.OrdinalIgnoreCase) < 0;
-                        }
-                        catch { providerAllow = true; }
-                    }
+                    // Respect ZDR for the title request too (it sends the user's message): effective
+                    // ZDR is the global default OR this conversation's toggle OR a latched conversation.
+                    bool zdr;
+                    try { zdr = AppSettings.GetGlobalZdrDefault() || this.Zdr || ZdrFirstMessageIndex >= 0; }
+                    catch { zdr = this.Zdr || ZdrFirstMessageIndex >= 0; }
 
                     string json = _client.CreateCompletion(
                         "google/gemma-4-26b-a4b-it",
                         msgs,
-                        new ClientProperties { Stream = false, ProviderDataCollectionAllowed = providerAllow }
+                        new ClientProperties { Stream = false, Zdr = zdr ? true : (bool?)null }
                     );
                     string title = ExtractTitleFromJson(json);
                     title = CleanTitle(title);

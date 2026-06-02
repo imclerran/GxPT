@@ -118,6 +118,30 @@ namespace GxPT.Tests.Mcp
             Assert.Equal(1.5m, (decimal)p["max_price"]["prompt"]);
         }
 
+        [Fact]
+        public void Zdr_true_emits_provider_zdr()
+        {
+            var body = OpenRouterClient.BuildRequestBody("m", new List<ChatMessage>(), null,
+                new ClientProperties { Zdr = true });
+            var p = (JObject)JObject.Parse(body)["provider"];
+            Assert.NotNull(p);
+            Assert.True((bool)p["zdr"]);
+        }
+
+        [Fact]
+        public void Zdr_false_or_unset_omits_provider_zdr()
+        {
+            // false: OpenRouter's per-request flag can only enable ZDR, so we never emit zdr=false.
+            var bodyFalse = OpenRouterClient.BuildRequestBody("m", new List<ChatMessage>(), null,
+                new ClientProperties { Zdr = false });
+            Assert.Null(JObject.Parse(bodyFalse)["provider"]); // no other provider opts -> whole block absent
+
+            // unset: same.
+            var bodyNull = OpenRouterClient.BuildRequestBody("m", new List<ChatMessage>(), null,
+                new ClientProperties());
+            Assert.Null(JObject.Parse(bodyNull)["provider"]);
+        }
+
         // ---- streaming chunk parsing under Newtonsoft ----
 
         [Fact]

@@ -188,18 +188,11 @@ namespace GxPT
             // Add a small padding to avoid clipping last line
             int desired = measured.Height + 8;
 
-            // Ensure the input panel is never shorter than the right column (Send + Model)
-            // Use PreferredSize to respect runtime font/DPI without depending on parent panel quirks.
-            int rightMin = 0;
-            try { if (_btnSend != null && _btnSend.Visible) rightMin += _btnSend.PreferredSize.Height; }
-            catch { }
-            try { if (_cmbModel != null && _cmbModel.Visible) rightMin += _cmbModel.PreferredSize.Height; }
-            catch { }
-
-            // Allow exceeding the original maxHeight when the right column needs more space
-            //int heightCap = Math.Max(maxHeight, rightMin);
-
-            int minHeight = Math.Max(MinInputHeightPx, rightMin);
+            // The right column (button row above the model row) is laid out by docking inside the
+            // panel and clamps to fill it, so the panel only needs the MinInputHeightPx floor. This
+            // previously added btnSend/cmbModel PreferredSize, which over-reported and made the panel
+            // taller than the docked button stack — leaving the gap above Send.
+            int minHeight = MinInputHeightPx;
 
             // Clamp to [MinInputHeightPx, maxHeight]
             int newHeight = Math.Max(minHeight, Math.Min(desired, maxHeight));

@@ -281,5 +281,26 @@ namespace GxPT
                 return defaultValue;
             }
         }
+
+        // True when the settings file actually contains this key (vs. relying on a default).
+        public static bool HasKey(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return false;
+            lock (_gate)
+            {
+                EnsureLoadedLocked();
+                return _cache.ContainsKey(key);
+            }
+        }
+
+        // The effective global ZDR default for new conversations. The ZDR setting (provider_zdr)
+        // replaced the older data-collection setting; when a user's settings predate it, derive the
+        // default from their old preference: data_collection "deny" (false) means they already wanted
+        // their data not retained, so default ZDR on.
+        public static bool GetGlobalZdrDefault()
+        {
+            if (HasKey("provider_zdr")) return GetBool("provider_zdr", false);
+            return !GetBool("provider_data_collection", true);
+        }
     }
 }

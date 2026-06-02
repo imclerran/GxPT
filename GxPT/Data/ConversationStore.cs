@@ -40,6 +40,7 @@ namespace GxPT
             public string Id { get; set; }
             public string Name { get; set; }
             public string SelectedModel { get; set; }
+            public int? ZdrFirstMessageIndex { get; set; }
             public DateTime LastUpdated { get; set; }
         }
 
@@ -102,6 +103,8 @@ namespace GxPT
                 SelectedModel = convo.SelectedModel,
                 WorkingDir = convo.WorkingDir,
                 WorkspaceStripDismissed = convo.WorkspaceStripDismissed,
+                Zdr = convo.Zdr,
+                ZdrFirstMessageIndex = convo.ZdrFirstMessageIndex,
                 LastUpdated = convo.LastUpdated,
                 Messages = convo.History.Select(m => ToMessageDto(m)).ToList()
             };
@@ -163,6 +166,9 @@ namespace GxPT
                 SelectedModel = dto.SelectedModel,
                 WorkingDir = dto.WorkingDir,
                 WorkspaceStripDismissed = dto.WorkspaceStripDismissed,
+                Zdr = dto.Zdr,
+                // Absent in older files -> not latched (-1), never index 0.
+                ZdrFirstMessageIndex = dto.ZdrFirstMessageIndex.HasValue ? dto.ZdrFirstMessageIndex.Value : -1,
                 LastUpdated = dto.LastUpdated == default(DateTime) && !string.IsNullOrEmpty(path)
                     ? File.GetLastWriteTimeUtc(path)
                     : (dto.LastUpdated == default(DateTime) ? DateTime.Now : dto.LastUpdated)
@@ -269,6 +275,7 @@ namespace GxPT
                     Id = dto.Id,
                     Name = string.IsNullOrEmpty(dto.Name) ? "New Conversation" : dto.Name,
                     SelectedModel = dto.SelectedModel,
+                    Zdr = dto.ZdrFirstMessageIndex.HasValue && dto.ZdrFirstMessageIndex.Value >= 0,
                     LastUpdated = dto.LastUpdated,
                     Path = path
                 };
@@ -321,6 +328,9 @@ namespace GxPT
             public string SelectedModel { get; set; }
             public string WorkingDir { get; set; }
             public bool WorkspaceStripDismissed { get; set; }
+            public bool Zdr { get; set; }
+            // Nullable so a missing value in older files maps to "not latched" (-1), not index 0.
+            public int? ZdrFirstMessageIndex { get; set; }
             public DateTime LastUpdated { get; set; }
             public List<MessageDto> Messages { get; set; }
         }
@@ -412,6 +422,7 @@ namespace GxPT
             public string Id { get; set; }
             public string Name { get; set; }
             public string SelectedModel { get; set; }
+            public bool Zdr { get; set; } // conversation has latched ZDR (shown with a marker)
             public DateTime LastUpdated { get; set; }
             public string Path { get; set; }
         }
