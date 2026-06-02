@@ -38,9 +38,13 @@ namespace GxPT
         private Timer _mcpHighlightTimer;
         private bool _isMcpHighlighting = false;
 
+        // Tooltip explaining why the Git toggle is disabled when git isn't on PATH.
+        private readonly ToolTip _mcpTip = new ToolTip();
+
         public SettingsForm()
         {
             InitializeComponent();
+            this.Disposed += delegate { try { _mcpTip.Dispose(); } catch { } };
 
             // Compute settings paths under %AppData%\GxPT
             _settingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GxPT");
@@ -1208,7 +1212,9 @@ namespace GxPT
             if (s == null) return;
             this.chkMcpWeb.Checked = s.mcp_web_enabled;
             this.chkMcpFiles.Checked = s.mcp_files_enabled;
-            this.chkMcpGit.Checked = s.mcp_git_enabled;
+            // Git defaults ON when git is installed and the user hasn't chosen otherwise; OFF (and
+            // disabled below) when git isn't on PATH.
+            this.chkMcpGit.Checked = GitProbe.IsInstalled() && AppSettings.GetBool("mcp_git_enabled", true);
             this.chkMcpCommand.Checked = s.mcp_command_enabled;
             this.chkMcpGithub.Checked = s.mcp_github_enabled;
             this.txtWebSearchKey.Text = s.mcp_websearch_key != null ? s.mcp_websearch_key : string.Empty;
@@ -1239,6 +1245,18 @@ namespace GxPT
             bool patOk = McpConfig.IsValidGitHubPat(this.txtGithubPat.Text != null ? this.txtGithubPat.Text.Trim() : null);
             this.chkMcpGithub.Enabled = patOk;
             if (!patOk) this.chkMcpGithub.Checked = false;
+
+            // Git requires git on the system; if it isn't found, the toggle can't be enabled.
+            bool gitInstalled = GitProbe.IsInstalled();
+            this.chkMcpGit.Enabled = gitInstalled;
+            if (!gitInstalled) this.chkMcpGit.Checked = false;
+            try
+            {
+                this._mcpTip.SetToolTip(this.chkMcpGit, gitInstalled
+                    ? string.Empty
+                    : "Git was not found on your PATH. Install Git to enable these tools.");
+            }
+            catch { }
         }
 
         // Tavily keys look like "tvly-dev-XXXXXXXX" (or "tvly-XXXXXXXX"). Lenient prefix + length check.
