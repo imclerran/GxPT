@@ -318,7 +318,7 @@
             // 
             this.pnlButtons.Controls.Add(this.btnSend);
             this.pnlButtons.Controls.Add(this.btnAttach);
-            this.pnlButtons.Dock = System.Windows.Forms.DockStyle.Bottom;
+            this.pnlButtons.Dock = System.Windows.Forms.DockStyle.Top;
             this.pnlButtons.Location = new System.Drawing.Point(0, 0);
             this.pnlButtons.Margin = new System.Windows.Forms.Padding(0);
             this.pnlButtons.Name = "pnlButtons";
@@ -359,8 +359,7 @@
             //
             // cmbModel
             //
-            this.cmbModel.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
-                        | System.Windows.Forms.AnchorStyles.Right)));
+            this.cmbModel.Dock = System.Windows.Forms.DockStyle.Fill;
             this.cmbModel.DrawMode = System.Windows.Forms.DrawMode.OwnerDrawFixed;
             this.cmbModel.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cmbModel.FormattingEnabled = true;
@@ -371,22 +370,24 @@
             "google/gemini-2.5-pro",
             "openai/gpt-4o",
             "openai/gpt-5"});
-            this.cmbModel.Location = new System.Drawing.Point(0, 1);
+            this.cmbModel.Location = new System.Drawing.Point(0, 0);
+            this.cmbModel.Margin = new System.Windows.Forms.Padding(0);
             this.cmbModel.Name = "cmbModel";
-            this.cmbModel.Size = new System.Drawing.Size(123, 21);
+            this.cmbModel.Size = new System.Drawing.Size(121, 23);
             this.cmbModel.Sorted = true;
             this.cmbModel.TabIndex = 2;
             //
             // chkZdrTab
             //
-            this.chkZdrTab.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.chkZdrTab.AutoSize = true;
+            this.chkZdrTab.Dock = System.Windows.Forms.DockStyle.Right;
             this.chkZdrTab.FlatStyle = System.Windows.Forms.FlatStyle.System;
-            this.chkZdrTab.Location = new System.Drawing.Point(129, 2);
+            this.chkZdrTab.Location = new System.Drawing.Point(127, 0);
+            this.chkZdrTab.Margin = new System.Windows.Forms.Padding(6, 0, 0, 0);
             this.chkZdrTab.Name = "chkZdrTab";
-            this.chkZdrTab.Size = new System.Drawing.Size(46, 17);
+            this.chkZdrTab.Size = new System.Drawing.Size(48, 23);
             this.chkZdrTab.TabIndex = 3;
             this.chkZdrTab.Text = "ZDR";
+            this.chkZdrTab.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             this.chkZdrTab.UseVisualStyleBackColor = true;
             //
             // pnlBottom
