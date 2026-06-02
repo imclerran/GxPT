@@ -24,9 +24,12 @@ namespace CommandMcpServer
             ProcessRunner runner = new ProcessRunner(null);
 
             server.AddTool("run",
-                "Run a command line on Windows via cmd.exe (/c) and capture its stdout, stderr, and exit code.",
+                "Run a command line on Windows via cmd.exe (/c) and capture its stdout, stderr, and exit code. " +
+                "The command already runs in the conversation's working directory (the project folder), so it " +
+                "operates on that folder directly — do NOT cd into it; relative paths resolve against it.",
                 SchemaBuilder.Object()
-                    .Str("command", true, "The exact command line to run, in Windows cmd.exe syntax")
+                    .Str("command", true, "The exact command line to run, in Windows cmd.exe syntax. The working " +
+                        "directory is already set to the project folder, so do not prepend a 'cd'.")
                     .Int("timeout_ms", false, "Kill the command after this many milliseconds (default 60000)")
                     .Build(),
                 delegate(ToolCallContext ctx) { return Run(config, runner, ctx); });
