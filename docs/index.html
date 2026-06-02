@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GxPT — Windows XP goes agentic!</title>
+  <meta name="description" content="GxPT is a native chatbot client and coding agent for Windows XP, with agentic workflows, MCP tool calling, Markdown rendering, and per-conversation privacy controls." />
+  <!-- Genuine XP.css (vendored), then our page-specific overlay -->
+  <link rel="stylesheet" href="vendor/xp.css/XP.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="page">
+
+    <!-- Hero window -->
+    <section class="window hero-window">
+      <div class="title-bar">
+        <div class="title-bar-text">GxPT</div>
+        <div class="title-bar-controls">
+          <button aria-label="Minimize"></button>
+          <button aria-label="Maximize"></button>
+          <button aria-label="Close"></button>
+        </div>
+      </div>
+      <div class="window-body hero">
+        <h1>GxPT</h1>
+        <p class="tagline">Windows XP goes agentic!</p>
+        <p class="lead">
+          A native chatbot client and coding agent for Windows XP. GxPT brings agentic
+          workflows to the era of Luna and Aero &mdash; autonomously chaining tools for
+          agentic coding and web search via the Model Context Protocol (MCP), with
+          per-conversation privacy controls.
+        </p>
+      </div>
+    </section>
+
+    <!-- Download window -->
+    <section class="window download-window">
+      <div class="title-bar">
+        <div class="title-bar-text">Download GxPT</div>
+        <div class="title-bar-controls">
+          <button aria-label="Close"></button>
+        </div>
+      </div>
+      <div class="window-body">
+        <p class="dl-intro">Get the latest installer for Windows XP or later.</p>
+        <div class="dl-actions">
+          <button id="download-btn" class="dl-primary" type="button"
+                  onclick="window.location.href=this.dataset.href"
+                  data-href="https://github.com/imclerran/GxPT/releases/latest">
+            Download Installer (.msi)
+          </button>
+          <button type="button"
+                  onclick="window.location.href='https://github.com/imclerran/GxPT/releases'">
+            All releases
+          </button>
+        </div>
+        <p class="download-note" id="download-note">
+          Windows XP or later &middot; .NET Framework 3.5
+        </p>
+      </div>
+    </section>
+
+    <!-- Primary screenshot -->
+    <section class="window shot-window">
+      <div class="title-bar">
+        <div class="title-bar-text">GxPT &mdash; Light Mode</div>
+        <div class="title-bar-controls">
+          <button aria-label="Minimize"></button>
+          <button aria-label="Maximize"></button>
+          <button aria-label="Close"></button>
+        </div>
+      </div>
+      <div class="window-body shot-body">
+        <img class="shot" src="assets/GxPT-light.png" alt="GxPT running in light mode on Windows XP" />
+      </div>
+    </section>
+
+    <!-- Features window -->
+    <section class="window">
+      <div class="title-bar">
+        <div class="title-bar-text">Features</div>
+        <div class="title-bar-controls">
+          <button aria-label="Minimize"></button>
+          <button aria-label="Maximize"></button>
+          <button aria-label="Close"></button>
+        </div>
+      </div>
+      <div class="window-body">
+        <ul class="features">
+          <li><b>Agentic Workflows</b> &mdash; autonomously chains tool calls until your task is done: agentic coding (file/git/shell), web search, and GitHub access via MCP.</li>
+          <li><b>Tool Approval &amp; Sandboxing</b> &mdash; every tool call is gated by an in-app approval prompt; file/git/command tools stay confined to the working folder you choose.</li>
+          <li><b>Markdown &amp; Syntax Highlighting</b> &mdash; rich Markdown rendering plus code highlighting for 50+ languages.</li>
+          <li><b>Privacy &amp; Local Storage</b> &mdash; conversations stored locally; enforce Zero Data Retention (ZDR) per conversation.</li>
+          <li><b>Frontier Model Support</b> &mdash; a huge range of AI models through the OpenRouter.ai API.</li>
+          <li><b>Legacy Compatibility</b> &mdash; runs on Windows XP and .NET 3.5.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Secondary screenshots -->
+    <div class="shots-grid">
+      <section class="window shot-window">
+        <div class="title-bar">
+          <div class="title-bar-text">Dark Mode</div>
+          <div class="title-bar-controls">
+            <button aria-label="Close"></button>
+          </div>
+        </div>
+        <div class="window-body shot-body">
+          <img class="shot" src="assets/GxPT-dark.png" alt="GxPT running in dark mode" />
+        </div>
+      </section>
+      <section class="window shot-window">
+        <div class="title-bar">
+          <div class="title-bar-text">Windows 7</div>
+          <div class="title-bar-controls">
+            <button aria-label="Close"></button>
+          </div>
+        </div>
+        <div class="window-body shot-body">
+          <img class="shot" src="assets/GxPT-win7.png" alt="GxPT running on Windows 7" />
+        </div>
+      </section>
+    </div>
+
+    <p class="footer">
+      &copy; GxPT &middot;
+      <a href="https://github.com/imclerran/GxPT">View on GitHub</a>
+    </p>
+
+  </div>
+
+  <script>
+    // Point the download button at the newest release that actually has an .msi asset.
+    // Release assets are uploaded manually, so the very latest tag may not have its
+    // installer yet — in that case we walk back to the most recent release that does.
+    // On any failure we keep the default target (the releases/latest page).
+    (function () {
+      var btn = document.getElementById('download-btn');
+      var note = document.getElementById('download-note');
+      var baseNote = 'Windows XP or later &middot; .NET Framework 3.5';
+
+      function findMsi(release) {
+        var assets = (release && release.assets) || [];
+        for (var i = 0; i < assets.length; i++) {
+          if (/\.msi$/i.test(assets[i].name) && assets[i].browser_download_url) {
+            return assets[i];
+          }
+        }
+        return null;
+      }
+
+      try {
+        var xhr = new XMLHttpRequest();
+        // List releases (newest first); scan for the first one carrying an .msi.
+        xhr.open('GET', 'https://api.github.com/repos/imclerran/GxPT/releases?per_page=20', true);
+        xhr.onreadystatechange = function () {
+          if (xhr.readyState !== 4) return;
+          if (xhr.status < 200 || xhr.status >= 300) return; // keep fallback
+          try {
+            var releases = JSON.parse(xhr.responseText);
+            if (!releases || !releases.length) return;
+            for (var i = 0; i < releases.length; i++) {
+              if (releases[i].draft) continue;
+              var msi = findMsi(releases[i]);
+              if (msi) {
+                btn.dataset.href = msi.browser_download_url;
+                var ver = releases[i].tag_name ? (' &middot; v' + releases[i].tag_name) : '';
+                note.innerHTML = baseNote + ver;
+                return;
+              }
+            }
+            // No release has an .msi yet — leave the button on the releases page.
+          } catch (e) { /* keep fallback */ }
+        };
+        xhr.send();
+      } catch (e) { /* keep fallback */ }
+    })();
+  </script>
+</body>
+</html>
