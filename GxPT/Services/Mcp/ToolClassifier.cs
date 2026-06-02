@@ -34,6 +34,21 @@ namespace GxPT
             t["git__log"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
             t["git__commit"] = new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
             t["git__push"] = new ToolPolicy(ToolTier.Destructive, RememberScope.None, null);
+            // fetch only updates remote-tracking refs (no working-tree change) -> ReadOnly/auto-allow.
+            t["git__fetch"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
+            // Stage/branch/stash: mutate the index or refs but don't discard work -> Write (prompt once).
+            t["git__add"] = new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
+            t["git__branch"] = new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
+            t["git__stash"] = new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
+            // Can lose uncommitted work, move HEAD, or rewrite history -> Destructive (prompt every time).
+            t["git__pull"] = new ToolPolicy(ToolTier.Destructive, RememberScope.None, null);
+            t["git__checkout"] = new ToolPolicy(ToolTier.Destructive, RememberScope.None, null);
+            t["git__restore"] = new ToolPolicy(ToolTier.Destructive, RememberScope.None, null);
+            t["git__merge"] = new ToolPolicy(ToolTier.Destructive, RememberScope.None, null);
+            t["git__rebase"] = new ToolPolicy(ToolTier.Destructive, RememberScope.None, null);
+            t["git__reset"] = new ToolPolicy(ToolTier.Destructive, RememberScope.None, null);
+            t["git__rm"] = new ToolPolicy(ToolTier.Destructive, RememberScope.None, null);
+            t["git__cherry_pick"] = new ToolPolicy(ToolTier.Destructive, RememberScope.None, null);
             t["command__run"] = new ToolPolicy(ToolTier.Destructive, RememberScope.Argument, "command");
             t["web__search"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
             t["web__extract"] = new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
