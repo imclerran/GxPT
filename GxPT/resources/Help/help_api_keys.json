@@ -4,7 +4,7 @@
   "SelectedModel": "",
   "LastUpdated": "2024-01-01T00:00:00Z",
   "Messages": [
-    { "Role": "user", "Content": "How do I get an API key?" },
+    { "Role": "user", "Content": "How do I get an OpenRouter API key?" },
     {
       "Role": "assistant",
       "Content": "# How to Get an OpenRouter.ai API Key\n\n1. **Create an account at [openrouter.ai](https://openrouter.ai).**\n   - Visit the site and sign up or sign in to access your dashboard.\n2. **(Optional) Add credits.**\n   - If needed, go to your account page and purchase credits to enable model usage.\n3. **Go to the API Keys section.**\n   - Once logged in, locate the section labeled **API Keys** or **Keys** to manage your keys.\n4. **Create a new key and name it.**\n   - Click **Create Key**, enter a descriptive name, and optionally set a credit limit. Save the key immediately—**it won't be visible again** after navigating away.\n---\n\n## Summary\n\n| Step | Action                                                                                         |\n| ---- | ---------------------------------------------------------------------------------------------- |\n| 1    | Create an account at [openrouter.ai](https://openrouter.ai)                                    |\n| 2    | Optionally, add credits                                                                        |\n| 3    | Visit the **API Keys** section                                                                 |\n| 4    | Click **Create Key**, name it, optionally set a credit limit, and **copy the key immediately** |"
@@ -13,6 +13,11 @@
     {
       "Role": "assistant",
       "Content": "# How to Set the API key in GxPT\n\n1. **Open settings in GxPT**\n   - Click `File` -> `Settings`\n2. **Paste in your API key from OpenRouter.ai**\n   - Paste the key you generated on OpenRouter into the `OpenRouter API Key` field\n3. **Save your settings**\n   - Click the `Save` button in the bottom right corner of the settings window.\n4. **Happy chatting!**"
+    },
+    { "Role": "user", "Content": "How do I enable web search?" },
+    {
+      "Role": "assistant",
+      "Content": "# How to Enable Web Search in GxPT\n\nGxPT's web search is powered by [Tavily](https://tavily.com), a search API built for AI assistants. You'll need a (free) Tavily API key, then enable the web search tool in GxPT.\n\n## Get a Tavily API Key\n\n1. **Create an account at [tavily.com](https://tavily.com).**\n   - Sign up or sign in to reach your dashboard.\n2. **Go to the API Keys section.**\n   - Your dashboard shows an **API Keys** area where your keys are listed.\n3. **Copy your API key.**\n   - Tavily keys start with `tvly-`. Copy the key—you'll paste it into GxPT.\n   - The free tier includes a monthly allowance of searches; add billing only if you need more.\n\n## Turn On Web Search in GxPT\n\n1. **Open settings in GxPT**\n   - Click `File` -> `Settings`, then open the **MCP** tab.\n2. **Check the `Web search` box**\n   - This enables the web search tool for the model.\n3. **Paste in your Tavily key**\n   - Paste your `tvly-...` key into the web search key field.\n4. **Save your settings**\n   - Click the `Save` button. The model can now search the web while answering.\n---\n\n## Summary\n\n| Step | Action                                                            |\n| ---- | ---------------------------------------------------------------- |\n| 1    | Create an account at [tavily.com](https://tavily.com)            |\n| 2    | Copy your API key (it starts with `tvly-`)                       |\n| 3    | In GxPT, open `File` -> `Settings` and select the **MCP** tab    |\n| 4    | Check **Web search** and paste your Tavily key                   |\n| 5    | Click **Save**                                                   |"
     }
   ]
 }
