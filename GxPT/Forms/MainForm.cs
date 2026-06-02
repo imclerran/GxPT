@@ -1480,18 +1480,24 @@ namespace GxPT
                     };
 
                     // Assistant text appends to the current assistant bubble; a tool call closes it so
-                    // the next run of text starts a fresh bubble below the tool record.
+                    // the next run of text starts a fresh bubble below the tool record. Inter-turn
+                    // whitespace (a stray newline some models emit before the next tool call) must NOT
+                    // open a bubble — otherwise it splits two adjacent tool blocks with an empty-looking
+                    // gap instead of letting them merge into one tight block.
                     Action<string> onAppend = delegate(string t)
                     {
                         if (string.IsNullOrEmpty(t)) return;
                         lock (sbLock)
                         {
                             LiveSeg cur = (segs.Count > 0) ? segs[segs.Count - 1] : null;
-                            if (cur == null || cur.Role != MessageRole.Assistant)
+                            if (cur != null && cur.Role == MessageRole.Assistant)
                             {
-                                cur = new LiveSeg(MessageRole.Assistant);
-                                segs.Add(cur);
+                                cur.Text.Append(t); // continuation — keep internal whitespace
+                                return;
                             }
+                            if (t.Trim().Length == 0) return; // don't open a bubble on whitespace alone
+                            cur = new LiveSeg(MessageRole.Assistant);
+                            segs.Add(cur);
                             cur.Text.Append(t);
                         }
                     };
@@ -2389,6 +2395,17 @@ namespace GxPT
                 // history order — so multi-turn tool use reads chronologically (text, tools, text, ...),
                 // matching the live streamed view. Tool results are never shown (the model summarizes).
                 var items = new List<ChatMessage>();
+                // Consecutive tool-call runs that aren't separated by real assistant text merge into one
+                // chrome-less block (e.g. reveal_tools followed by the call it enabled), so they read as
+                // tightly as a single multi-call turn instead of two blocks with a gap between them. A
+                // real assistant text bubble or a user message flushes the running block.
+                System.Text.StringBuilder pendingTools = null;
+                Action flushTools = delegate
+                {
+                    if (pendingTools != null && pendingTools.Length > 0)
+                        items.Add(new ChatMessage(ToolActivityRole, pendingTools.ToString()));
+                    pendingTools = null;
+                };
                 foreach (var m in convo.History)
                 {
                     if (m == null) continue;
@@ -2397,29 +2414,33 @@ namespace GxPT
 
                     if (role == "user")
                     {
+                        flushTools();
                         items.Add(m);
                         continue;
                     }
 
-                    // assistant text (intermediate or final) -> its own bubble
+                    // assistant text (intermediate or final) -> its own bubble, closing any tool run
                     if (!string.IsNullOrEmpty(m.Content) && m.Content.Trim().Length > 0)
+                    {
+                        flushTools();
                         items.Add(new ChatMessage("assistant", m.Content));
+                    }
 
-                    // this turn's tool calls -> a chrome-less activity block below that text
+                    // this turn's tool calls -> append to the running chrome-less block
                     if (m.ToolCalls != null && m.ToolCalls.Count > 0)
                     {
-                        var activity = new System.Text.StringBuilder();
+                        if (pendingTools == null) pendingTools = new System.Text.StringBuilder();
                         for (int ti = 0; ti < m.ToolCalls.Count; ti++)
                         {
                             var tc = m.ToolCalls[ti];
                             if (tc == null) continue;
-                            if (activity.Length > 0) activity.Append("\r\n");
+                            if (pendingTools.Length > 0) pendingTools.Append("\r\n");
                             string key = !string.IsNullOrEmpty(tc.Id) ? tc.Id : ("edit" + ti);
-                            activity.Append(EditDiffMarkerOrCall(ctx.Transcript, tc.Name, tc.ArgumentsJson, key));
+                            pendingTools.Append(EditDiffMarkerOrCall(ctx.Transcript, tc.Name, tc.ArgumentsJson, key));
                         }
-                        if (activity.Length > 0) items.Add(new ChatMessage(ToolActivityRole, activity.ToString()));
                     }
                 }
+                flushTools();
 
                 // Producer-consumer: parse off-UI, consume on UI timer in small chunks
                 var parsed = new List<ParsedMessage>(Math.Max(4, items.Count));
