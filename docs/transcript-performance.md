@@ -49,6 +49,18 @@ highlighting, and calls `MeasureColoredSegmentsNoWrap`. This is the priciest pat
 in layout, and it runs for every code block in the transcript during measurement
 — including code far off screen.
 
+### 2.4 MCP servers launched per folder during restore  *(fixed — see §3)*
+
+With per-working-directory MCP servers, each restored tab's `ApplyLoadedWorkingDir`
+called `SyncMcpWorkingDirFromActiveTab`, which queued `EnsureWorkingDir` for that
+tab's folder. So reopening a session launched a **files/git/command set per
+distinct folder** (3 processes each) up front. Those spawns/handshakes — though
+off the UI thread — saturate the `ThreadPool`, and the visible tab's
+transcript-parse work item queues *behind* them, so the transcript appears late.
+(The earlier single-active-workdir model only ever kept one set, so this was a
+regression introduced with per-workdir servers.) MCP servers aren't needed until
+a message is actually sent.
+
 ---
 
 ## 3. Implemented: lazy per-tab rebuild
@@ -73,6 +85,13 @@ This change is confined to the restore / tab-switch path in `MainForm` and the
 flag on `ChatTabContext`; it does **not** touch the widget's measure/paint
 internals. A hydrated transcript persists for the session (tab switches don't
 tear it down), so a tab is built at most once.
+
+**MCP launch deferral (§2.4).** `SyncMcpWorkingDirFromActiveTab` is a no-op while
+`_restoringTabs` is true, so no servers spawn during restore. After restore it is
+called once to pre-warm the visible tab's folder; every other tab's servers
+launch lazily on first send (`BeginToolSend` already calls `EnsureWorkingDir`) or
+when the tab is first selected. This keeps the thread pool free for the visible
+tab's transcript parse.
 
 Non-goals of this change: it does not speed up a *single* very long transcript,
 and it doesn't reduce work when the user eventually visits every tab.

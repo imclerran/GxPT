@@ -379,6 +379,11 @@ namespace GxPT
                 // Build only the now-visible tab; the rest stay deferred until first selected.
                 try { HydrateTabIfNeeded(_tabManager != null ? _tabManager.GetActiveContext() : null); }
                 catch { }
+
+                // Pre-warm MCP servers for the visible tab only (one reconcile, off the UI thread).
+                // Other tabs' servers launch lazily when they're sent to or first selected.
+                try { SyncMcpWorkingDirFromActiveTab(); }
+                catch { }
             }
             catch { }
         }
@@ -570,6 +575,11 @@ namespace GxPT
         private void SyncMcpWorkingDirFromActiveTab()
         {
             if (_mcpHost == null) return;
+            // Don't launch MCP servers while restoring a session: opening each tab would otherwise
+            // spin up a files/git/command set per distinct folder, and those process spawns/handshakes
+            // saturate the thread pool and delay the visible tab's transcript from rendering. Servers
+            // are launched lazily on first send (BeginToolSend) and pre-warmed once after restore.
+            if (_restoringTabs) return;
             string active = null;
             var inUse = new List<string>();
             try
