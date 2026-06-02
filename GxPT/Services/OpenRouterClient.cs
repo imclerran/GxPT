@@ -263,18 +263,25 @@ namespace GxPT
                 var er = new StreamReader(proc.StandardError.BaseStream, utf8, false);
                 string line;
                 bool sawAnyChunk = false;
+                int chunkCount = 0;
                 var stdoutBuf = new StringBuilder();
                 while ((line = sr.ReadLine()) != null)
                 {
                     line = line.Trim();
-                    // Buffer all stdout; if no chunks are seen, we'll inspect this for a JSON error body.
+                    // Buffer all stdout; if the request failed we'll inspect this for a JSON error body.
                     if (line.Length > 0)
                     {
                         try { stdoutBuf.AppendLine(line); }
                         catch { }
                     }
                     if (line.Length == 0) continue;
-                    if (line.StartsWith("data:")) line = line.Substring(5).Trim();
+                    // SSE events are "data: {...}" lines. Anything else (curl's --fail-with-body HTTP
+                    // error body, SSE ':' heartbeats, etc.) is NOT a content chunk: skip it here so it
+                    // can't be mis-parsed as an empty chunk and silently swallow the failure. It stays
+                    // buffered above for post-loop error extraction.
+                    bool isData = line.StartsWith("data:");
+                    if (!isData) continue;
+                    line = line.Substring(5).Trim();
                     if (line == "[DONE]") break;
 
                     ChatCompletionChunk chunk = null;
@@ -283,40 +290,55 @@ namespace GxPT
                     if (chunk != null)
                     {
                         sawAnyChunk = true;
+                        chunkCount++;
                         if (onChunk != null) onChunk(chunk);
                     }
                 }
+                int exitCode = -1;
                 try { proc.WaitForExit(); }
                 catch { }
+                try { exitCode = proc.ExitCode; }
+                catch { }
 
-                // If the process produced no chunks, surface an error from the body/stderr.
                 string err = null;
                 try { err = er.ReadToEnd(); }
                 catch { }
-                if (!sawAnyChunk)
+                string rawBody = null;
+                try { rawBody = stdoutBuf.ToString().Trim(); }
+                catch { }
+                string extractedMsg = null;
+                if (!string.IsNullOrEmpty(rawBody))
                 {
-                    string rawBody = null;
-                    try { rawBody = stdoutBuf.ToString().Trim(); }
+                    try { extractedMsg = ExtractErrorMessage(SafeParse(rawBody)); }
                     catch { }
+                }
 
-                    string extractedMsg = null;
+                try { Logger.Log("Stream", "curl exit=" + exitCode + " chunks=" + chunkCount + (sawAnyChunk ? string.Empty : " (no chunks)")); }
+                catch { }
+
+                // Treat the request as failed if curl reported a non-zero exit (--fail-with-body makes
+                // it exit non-zero on every HTTP error), if no content chunks arrived at all, or if the
+                // body carried a JSON error payload. Any of these means the user got no real answer.
+                bool failed = !sawAnyChunk || exitCode != 0 || !string.IsNullOrEmpty(extractedMsg);
+                if (failed)
+                {
                     if (!string.IsNullOrEmpty(rawBody))
-                    {
-                        try { extractedMsg = ExtractErrorMessage(SafeParse(rawBody)); }
+                        try { Logger.Log("HTTP", "curl error body: " + rawBody); }
                         catch { }
-                        try { Logger.Log("HTTP", "curl error body (no chunks): " + rawBody); }
+                    if (!string.IsNullOrEmpty(extractedMsg))
+                        try { Logger.Log("HTTP", "error.message: " + extractedMsg); }
                         catch { }
-                        if (!string.IsNullOrEmpty(extractedMsg))
-                            try { Logger.Log("HTTP", "error.message: " + extractedMsg); }
-                            catch { }
-                    }
                     if (!string.IsNullOrEmpty(err))
-                        try { Logger.Log("Stream", "curl stderr (no chunks): " + err); }
+                        try { Logger.Log("Stream", "curl stderr: " + err); }
                         catch { }
 
                     if (onError != null)
                     {
-                        var msg = !string.IsNullOrEmpty(extractedMsg) ? extractedMsg : (!string.IsNullOrEmpty(err) ? err : "Request failed");
+                        string msg = !string.IsNullOrEmpty(extractedMsg)
+                            ? extractedMsg
+                            : (!string.IsNullOrEmpty(err)
+                                ? err
+                                : (exitCode != 0 ? ("Request failed (curl exit " + exitCode + ")") : "Request failed"));
                         onError(msg.Trim());
                     }
                     CleanupTempFiles(tempFiles);

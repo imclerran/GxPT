@@ -1375,13 +1375,21 @@ namespace GxPT
                             delegate(string err)
                             {
                                 if (string.IsNullOrEmpty(err)) err = "Unknown error.";
+                                string partial;
+                                lock (sbLock) { partial = assistantBuilder.ToString(); }
                                 BeginInvoke((MethodInvoker)delegate
                                 {
                                     try { renderTimer.Stop(); renderTimer.Dispose(); }
                                     catch { }
                                     try { ctx.Transcript.StickToBottomDuringStreaming = false; }
                                     catch { }
-                                    ctx.Transcript.UpdateMessageAt(assistantIndex, "Error: " + err);
+                                    // Keep any partial text in the assistant bubble; otherwise drop the
+                                    // empty placeholder so only the red error notice shows.
+                                    if (partial.Trim().Length > 0)
+                                        ctx.Transcript.UpdateMessageAt(assistantIndex, partial);
+                                    else if (assistantIndex == ctx.Transcript.MessageCount - 1)
+                                        ctx.Transcript.RemoveLastMessage();
+                                    ShowTranscriptError(ctx.Transcript, err);
                                     Logger.Log("Send", "Stream error at index=" + assistantIndex + ": " + err);
                                     ctx.IsSending = false;
                                     // don't save on failure; no new assistant content
@@ -1391,13 +1399,19 @@ namespace GxPT
                     }
                     catch (Exception ex)
                     {
+                        string partial;
+                        lock (sbLock) { partial = assistantBuilder.ToString(); }
                         BeginInvoke((MethodInvoker)delegate
                         {
                             try { renderTimer.Stop(); renderTimer.Dispose(); }
                             catch { }
                             try { ctx.Transcript.StickToBottomDuringStreaming = false; }
                             catch { }
-                            ctx.Transcript.UpdateMessageAt(assistantIndex, "Error: " + ex.Message);
+                            if (partial.Trim().Length > 0)
+                                ctx.Transcript.UpdateMessageAt(assistantIndex, partial);
+                            else if (assistantIndex == ctx.Transcript.MessageCount - 1)
+                                ctx.Transcript.RemoveLastMessage();
+                            ShowTranscriptError(ctx.Transcript, ex.Message);
                             Logger.Log("Send", "Exception in streaming worker: " + ex.Message);
                             ctx.IsSending = false;
                         });
@@ -1530,15 +1544,16 @@ namespace GxPT
                 ctx.Transcript.UpdateMessageAt(activityIndex[0], aFinal);
             }
 
-            string answerText = ansFinal;
-            if (error != null)
-                answerText = (ansFinal.Length > 0 ? ansFinal + "\r\n\r\n" : string.Empty) + "Error: " + error;
-
-            if (answerText.Trim().Length > 0)
+            // Any answer text the model did produce stays in its own assistant bubble; the error
+            // renders separately as a chrome-less red notice below it (not baked into the bubble).
+            if (ansFinal.Trim().Length > 0)
             {
                 if (answerIndex[0] < 0) answerIndex[0] = ctx.Transcript.AddMessageGetIndex(MessageRole.Assistant, string.Empty);
-                ctx.Transcript.UpdateMessageAt(answerIndex[0], answerText);
+                ctx.Transcript.UpdateMessageAt(answerIndex[0], ansFinal);
             }
+
+            if (error != null)
+                ShowTranscriptError(ctx.Transcript, error);
 
             if (error == null)
             {
@@ -2196,6 +2211,25 @@ namespace GxPT
                 catch { /* fall through to the generic marker */ }
             }
             return McpMarkers.Call(name);
+        }
+
+        // Surface a streaming/transport failure as a chrome-less red notice in the transcript, so a
+        // failed turn (e.g. an unavailable model, or a Claude request that returns nothing) is visible
+        // instead of leaving the user staring at an empty/missing bubble.
+        private static void ShowTranscriptError(ChatTranscriptControl transcript, string rawError)
+        {
+            if (transcript == null) return;
+            transcript.AddMessage(MessageRole.Tool, MarkdownParser.ErrorSentinel(FriendlyStreamError(rawError)));
+        }
+
+        // Light humanization of the raw streamer error for display. Provider messages from OpenRouter
+        // are usually already readable, so we mostly pass them through under a clear prefix.
+        private static string FriendlyStreamError(string raw)
+        {
+            string e = raw == null ? string.Empty : raw.Trim();
+            if (e.Length == 0)
+                return "The request failed before the model responded. Please try again or pick a different model.";
+            return "The request failed: " + e;
         }
 
         // Maps a tool call to a transcript record. An empty body yields a one-line label (no expansion);
