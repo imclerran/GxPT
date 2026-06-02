@@ -37,6 +37,12 @@ namespace GxPT
         // it unset (provider default).
         public bool? ProviderDataCollectionAllowed { get; set; }
 
+        // The working directory of the conversation running this turn. Resolution of workdir-scoped
+        // tools (files/git/command) is routed to the server bound to THIS folder, so concurrent turns
+        // in different tabs hit their own folders' servers. Null = no workspace (scoped tools won't
+        // resolve); workdir-independent tools (web/github/custom) resolve regardless.
+        public string WorkingDir { get; set; }
+
         public McpChatOrchestrator(IChatStreamer streamer, McpToolRegistry registry,
                                    IToolApprovalPolicy approval, string model, ILogSink log)
             : this(streamer, registry, approval, model, log, DefaultMaxIterations, DefaultCallTimeoutMs)
@@ -156,7 +162,7 @@ namespace GxPT
 
             McpServerConnection conn;
             string toolName;
-            if (_registry == null || !_registry.TryResolve(call.Name, out conn, out toolName))
+            if (_registry == null || !_registry.TryResolve(call.Name, WorkingDir, out conn, out toolName))
             {
                 isError = true;
                 return "[Unknown tool: " + call.Name + "]";

@@ -51,71 +51,117 @@ namespace GxPT.Tests.Mcp
         }
 
         [Fact]
-        public void SetActiveWorkingDir_opens_scoped_servers_with_the_workdir()
+        public void EnsureWorkingDir_opens_scoped_servers_with_the_workdir()
         {
             FakeServerConnector c; McpToolRegistry reg;
             var host = NewHost(out c, out reg);
             host.Start(new[] { Specs.Scoped("files", true), Specs.Scoped("git", true) });
-            Assert.Empty(c.CreatedNames); // nothing opened until a workdir is active
+            Assert.Empty(c.CreatedNames); // nothing opened until a workdir is ensured
 
-            host.SetActiveWorkingDir("C:\\proj");
+            host.EnsureWorkingDir("C:\\proj");
 
             Assert.Equal(new[] { "files", "git" }, c.CreatedNames.ToArray());
             Assert.True(c.Workdirs.All(w => w == "C:\\proj"));
             var m = Manifest(reg);
             Assert.Contains("files__files_tool", m);
             Assert.Contains("git__git_tool", m);
-            Assert.Equal("C:\\proj", host.ActiveWorkingDir);
+            Assert.Contains("C:\\proj", host.ActiveWorkingDirs);
         }
 
         [Fact]
-        public void SetActiveWorkingDir_before_Start_still_launches_scoped_servers()
+        public void EnsureWorkingDir_is_idempotent_for_the_same_folder()
+        {
+            FakeServerConnector c; McpToolRegistry reg;
+            var host = NewHost(out c, out reg);
+            host.Start(new[] { Specs.Scoped("files", true) });
+
+            host.EnsureWorkingDir("C:\\a");
+            host.EnsureWorkingDir("C:\\a"); // second call must NOT spawn another set
+
+            Assert.Equal(new[] { "files" }, c.CreatedNames.ToArray());
+        }
+
+        [Fact]
+        public void EnsureWorkingDir_before_Start_still_launches_scoped_servers()
         {
             // Reproduces the startup race: the working folder is applied before Start() has captured
-            // the scoped specs. Start() must honor the already-set workdir and launch them.
+            // the scoped specs. Start() must honor the already-requested workdir and launch them.
             FakeServerConnector c; McpToolRegistry reg;
             var host = NewHost(out c, out reg);
 
-            host.SetActiveWorkingDir("C:\\proj");        // arrives first; no specs yet
+            host.EnsureWorkingDir("C:\\proj");           // arrives first; no specs yet
             Assert.Empty(c.CreatedNames);
 
             host.Start(new[] { Specs.Scoped("command", true), Specs.Eager("web", true) });
 
             Assert.Contains("command", c.CreatedNames);  // scoped server launched by Start
             Assert.Contains("command__command_tool", Manifest(reg));
-            Assert.Equal("C:\\proj", host.ActiveWorkingDir);
+            Assert.Contains("C:\\proj", host.ActiveWorkingDirs);
         }
 
         [Fact]
-        public void Switching_workdir_tears_down_old_scoped_and_opens_new()
+        public void Different_workdirs_get_independent_scoped_sets_and_route_per_folder()
         {
             FakeServerConnector c; McpToolRegistry reg;
             var host = NewHost(out c, out reg);
             host.Start(new[] { Specs.Scoped("files", true) });
 
-            host.SetActiveWorkingDir("C:\\a");
-            var firstConn = c.Created.Last();
-            host.SetActiveWorkingDir("C:\\b");
+            host.EnsureWorkingDir("C:\\a");
+            var connA = c.Created.Last();
+            host.EnsureWorkingDir("C:\\b");
+            var connB = c.Created.Last();
 
+            // Both folders served by their own process; neither torn down by the other.
             Assert.Equal(new[] { "files", "files" }, c.CreatedNames.ToArray());
             Assert.Equal(new[] { "C:\\a", "C:\\b" }, c.Workdirs.ToArray());
-            Assert.Equal(ConnectionState.Closed, firstConn.State); // old one disposed
-            Assert.Contains("files__files_tool", Manifest(reg)); // new one present
+            Assert.NotSame(connA, connB);
+            Assert.Equal(ConnectionState.Ready, connA.State); // NOT closed by ensuring "C:\b"
+            Assert.Equal(ConnectionState.Ready, connB.State);
+
+            // The same tool name routes to the connection bound to the calling folder.
+            McpServerConnection r; string tool;
+            Assert.True(reg.TryResolve("files__files_tool", "C:\\a", out r, out tool));
+            Assert.Same(connA, r);
+            Assert.True(reg.TryResolve("files__files_tool", "C:\\b", out r, out tool));
+            Assert.Same(connB, r);
         }
 
         [Fact]
-        public void SetActiveWorkingDir_null_tears_down_scoped()
+        public void ReleaseWorkingDir_tears_down_only_that_folder()
         {
             FakeServerConnector c; McpToolRegistry reg;
             var host = NewHost(out c, out reg);
             host.Start(new[] { Specs.Scoped("files", true) });
+            host.EnsureWorkingDir("C:\\a");
+            var connA = c.Created.Last();
+            host.EnsureWorkingDir("C:\\b");
+            var connB = c.Created.Last();
 
-            host.SetActiveWorkingDir("C:\\a");
-            Assert.Contains("files__files_tool", Manifest(reg));
+            host.ReleaseWorkingDir("C:\\a");
 
-            host.SetActiveWorkingDir(null);
-            Assert.Empty(Manifest(reg));
-            Assert.Null(host.ActiveWorkingDir);
+            Assert.Equal(ConnectionState.Closed, connA.State);
+            Assert.Equal(ConnectionState.Ready, connB.State);
+            Assert.DoesNotContain("C:\\a", host.ActiveWorkingDirs);
+            Assert.Contains("C:\\b", host.ActiveWorkingDirs);
+            Assert.Contains("files__files_tool", Manifest(reg)); // still provided by "C:\b"
+        }
+
+        [Fact]
+        public void RetainOnly_tears_down_folders_no_longer_in_use()
+        {
+            FakeServerConnector c; McpToolRegistry reg;
+            var host = NewHost(out c, out reg);
+            host.Start(new[] { Specs.Scoped("files", true) });
+            host.EnsureWorkingDir("C:\\a");
+            var connA = c.Created.Last();
+            host.EnsureWorkingDir("C:\\b");
+            var connB = c.Created.Last();
+
+            host.RetainOnly(new[] { "C:\\b" }); // only the folder with an open tab survives
+
+            Assert.Equal(ConnectionState.Closed, connA.State);
+            Assert.Equal(ConnectionState.Ready, connB.State);
+            Assert.Equal(new[] { "C:\\b" }, host.ActiveWorkingDirs);
         }
 
         [Fact]
@@ -125,7 +171,7 @@ namespace GxPT.Tests.Mcp
             var host = NewHost(out c, out reg);
             host.Start(new[] { Specs.Scoped("files", false) });
 
-            host.SetActiveWorkingDir("C:\\a");
+            host.EnsureWorkingDir("C:\\a");
 
             Assert.Empty(c.CreatedNames);
             Assert.Empty(Manifest(reg));
@@ -150,7 +196,7 @@ namespace GxPT.Tests.Mcp
             FakeServerConnector c; McpToolRegistry reg;
             var host = NewHost(out c, out reg);
             host.Start(new[] { Specs.Eager("web", true), Specs.Scoped("files", true) });
-            host.SetActiveWorkingDir("C:\\a");
+            host.EnsureWorkingDir("C:\\a");
             Assert.Equal(2, Manifest(reg).Count);
 
             host.Dispose();
