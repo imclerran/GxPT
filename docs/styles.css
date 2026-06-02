@@ -147,6 +147,8 @@ h2.bar {
   text-shadow: 1px 1px 1px #234214;
 }
 .dl-btn:hover { background: #4f8a36; }
+/* Keep the primary button label white — outranks the generic .main a/:visited color. */
+.main a.dl-btn, .main a.dl-btn:visited { color: #fff; }
 .dl-alt {
   display: inline-block;
   font-size: 11px;
