@@ -322,7 +322,7 @@
             this.pnlButtons.Location = new System.Drawing.Point(0, 0);
             this.pnlButtons.Margin = new System.Windows.Forms.Padding(0);
             this.pnlButtons.Name = "pnlButtons";
-            this.pnlButtons.Size = new System.Drawing.Size(175, 52);
+            this.pnlButtons.Size = new System.Drawing.Size(175, 60);
             this.pnlButtons.TabIndex = 4;
             // 
             // btnSend
@@ -330,7 +330,7 @@
             this.btnSend.Dock = System.Windows.Forms.DockStyle.Bottom;
             this.btnSend.Location = new System.Drawing.Point(26, 0);
             this.btnSend.Name = "btnSend";
-            this.btnSend.Size = new System.Drawing.Size(149, 52);
+            this.btnSend.Size = new System.Drawing.Size(149, 60);
             this.btnSend.TabIndex = 0;
             this.btnSend.Text = "Send";
             this.btnSend.UseVisualStyleBackColor = true;
