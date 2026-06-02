@@ -2577,6 +2577,16 @@ namespace GxPT
                 timer.Interval = 15; // ~60 fps budget for small bursts
                 timer.Tick += (s2, e2) =>
                 {
+                    // The tab may have been closed (e.g. "Close Others") while this build was still
+                    // running — its transcript is then disposed. Stop touching it, or BeginBatchUpdates/
+                    // EndBatchUpdates would throw ObjectDisposedException.
+                    if (ctx == null || ctx.Transcript == null || ctx.Transcript.IsDisposed)
+                    {
+                        try { timer.Stop(); timer.Dispose(); }
+                        catch { }
+                        return;
+                    }
+
                     int avail;
                     lock (gate) { avail = produced - consumed; }
                     if (avail <= 0)
