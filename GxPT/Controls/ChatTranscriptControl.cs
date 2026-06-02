@@ -787,6 +787,10 @@ namespace GxPT
         // ---------- Layout ----------
         private void Reflow()
         {
+            // A disposed/handle-less control has no graphics surface; CreateGraphics would throw
+            // ObjectDisposedException. This can happen when a deferred async rebuild (or a queued
+            // reflow) runs after the tab was closed.
+            if (!IsHandleCreated || IsDisposed) return;
             using (Graphics g = CreateGraphics())
             {
                 int y = MarginOuter;
@@ -857,6 +861,8 @@ namespace GxPT
         // Assumes earlier items' bounds are already valid and control width hasn't changed significantly mid-batch.
         private void ReflowAppendOnly(int startIndex)
         {
+            // See Reflow: never touch the graphics surface of a disposed/handle-less control.
+            if (!IsHandleCreated || IsDisposed) return;
             if (startIndex < 0) { Reflow(); return; }
             using (Graphics g = CreateGraphics())
             {
