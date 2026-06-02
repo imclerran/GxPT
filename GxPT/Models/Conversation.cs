@@ -22,6 +22,12 @@ namespace GxPT
         // Whether the user dismissed the (unset) workspace strip for this conversation; persisted so
         // the strip stays hidden on reopen until they set a folder.
         public bool WorkspaceStripDismissed { get; set; }
+        // Zero data retention for this conversation. Zdr is the per-conversation toggle (effective ZDR
+        // for a send is globalDefault OR Zdr). ZdrFirstMessageIndex is a one-way latch: the History
+        // index of the first user message actually sent with ZDR on (-1 until then). Once latched it
+        // never clears, so the checkbox locks on and the tab/messages are marked from that point.
+        public bool Zdr { get; set; }
+        public int ZdrFirstMessageIndex { get; set; }
         public DateTime LastUpdated { get; set; }
         public event Action<string> NameGenerated;
 
@@ -30,6 +36,7 @@ namespace GxPT
             _client = client;
             Name = "New Conversation"; // initialize to generic name
             SelectedModel = null;
+            ZdrFirstMessageIndex = -1; // not latched until a ZDR send occurs
             LastUpdated = DateTime.Now;
         }
 

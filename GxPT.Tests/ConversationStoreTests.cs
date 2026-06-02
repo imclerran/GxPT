@@ -147,6 +147,26 @@ namespace GxPT.Tests
         }
 
         [Fact]
+        public void Zdr_fields_round_trip()
+        {
+            var convo = new Conversation(null);
+            convo.Zdr = true;
+            convo.ZdrFirstMessageIndex = 3;
+            var reload = ConversationStore.LoadFromJson(null, ConversationStore.ToJson(convo));
+            Assert.True(reload.Zdr);
+            Assert.Equal(3, reload.ZdrFirstMessageIndex);
+        }
+
+        [Fact]
+        public void Load_legacy_file_defaults_zdr_off_and_unlatched()
+        {
+            // Older files have neither field: ZDR off, and the latch must be -1 (not index 0).
+            var legacy = ConversationStore.LoadFromJson(null, "{\"Name\":\"C\",\"Messages\":[]}");
+            Assert.False(legacy.Zdr);
+            Assert.Equal(-1, legacy.ZdrFirstMessageIndex);
+        }
+
+        [Fact]
         public void Load_legacy_file_without_tool_fields_has_null_tool_data()
         {
             string json = "{\"Name\":\"C\",\"Messages\":[{\"Role\":\"assistant\",\"Content\":\"hi\"}]}";
