@@ -40,6 +40,7 @@ namespace GxPT
             public string Id { get; set; }
             public string Name { get; set; }
             public string SelectedModel { get; set; }
+            public int? ZdrFirstMessageIndex { get; set; }
             public DateTime LastUpdated { get; set; }
         }
 
@@ -274,6 +275,7 @@ namespace GxPT
                     Id = dto.Id,
                     Name = string.IsNullOrEmpty(dto.Name) ? "New Conversation" : dto.Name,
                     SelectedModel = dto.SelectedModel,
+                    Zdr = dto.ZdrFirstMessageIndex.HasValue && dto.ZdrFirstMessageIndex.Value >= 0,
                     LastUpdated = dto.LastUpdated,
                     Path = path
                 };
@@ -420,6 +422,7 @@ namespace GxPT
             public string Id { get; set; }
             public string Name { get; set; }
             public string SelectedModel { get; set; }
+            public bool Zdr { get; set; } // conversation has latched ZDR (shown with a marker)
             public DateTime LastUpdated { get; set; }
             public string Path { get; set; }
         }

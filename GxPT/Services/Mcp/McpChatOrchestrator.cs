@@ -33,9 +33,13 @@ namespace GxPT
         // preserve assistant ToolCalls and tool-role ToolCallId.
         public Func<IList<ChatMessage>, IList<ChatMessage>> RequestMessageTransform { get; set; }
 
-        // Provider data-collection (ZDR) preference applied to every request in the turn. Null leaves
+        // Provider data-collection preference applied to every request in the turn. Null leaves
         // it unset (provider default).
         public bool? ProviderDataCollectionAllowed { get; set; }
+
+        // Zero data retention for every request in this turn. When true, emits provider.zdr=true so
+        // OpenRouter routes only to zero-retention endpoints. Null/false leaves routing unconstrained.
+        public bool? Zdr { get; set; }
 
         // The working directory of the conversation running this turn. Resolution of workdir-scoped
         // tools (files/git/command) is routed to the server bound to THIS folder, so concurrent turns
@@ -97,6 +101,7 @@ namespace GxPT
                 ClientProperties props = new ClientProperties();
                 props.Stream = true;
                 props.ProviderDataCollectionAllowed = ProviderDataCollectionAllowed;
+                props.Zdr = Zdr;
 
                 Action<string> textSink = (ui != null) ? new Action<string>(ui.AppendTextDelta) : null;
                 ToolCallAssembler asm = new ToolCallAssembler(textSink);

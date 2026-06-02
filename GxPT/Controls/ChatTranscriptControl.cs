@@ -216,6 +216,9 @@ namespace GxPT
             public List<DrawnSeg> DrawnSegments;
             // Unique link run id counter per message (increments when a new link run starts)
             public int LinkRunSeq;
+            // When true, a tiny "zdr" tag is drawn in the bubble's top-right corner (zero-retention
+            // message). Only meaningful for User/Assistant bubbles; tool blocks never show it.
+            public bool ShowZdrTag;
 
         }
 
@@ -640,6 +643,30 @@ namespace GxPT
 
         // Number of messages currently in the transcript.
         public int MessageCount { get { return _items.Count; } }
+
+        // Mark (or clear) the tiny "zdr" corner tag on a message by index. Pure paint change — no
+        // reflow needed since the tag is drawn inside the bubble's existing padding.
+        public void SetMessageZdrTag(int index, bool show)
+        {
+            if (index < 0 || index >= _items.Count) return;
+            if (_items[index].ShowZdrTag == show) return;
+            _items[index].ShowZdrTag = show;
+            Invalidate();
+        }
+
+        // Tag the most recently added user message as ZDR (used live, right after a ZDR send appends
+        // the user bubble). No-op if there is no user message.
+        public void MarkLastUserMessageZdr()
+        {
+            for (int i = _items.Count - 1; i >= 0; i--)
+            {
+                if (_items[i].Role == MessageRole.User)
+                {
+                    if (!_items[i].ShowZdrTag) { _items[i].ShowZdrTag = true; Invalidate(); }
+                    return;
+                }
+            }
+        }
 
         // Add and return the index of the inserted message (to support targeted updates later)
         public int AddMessageGetIndex(MessageRole role, string markdown)
@@ -1446,6 +1473,33 @@ namespace GxPT
             if (it.Attachments != null && it.Attachments.Count > 0)
             {
                 DrawAttachmentPills(g, new Rectangle(content.X, r.Bottom - BubblePadding - MeasureAttachmentsHeight(it, content.Width), content.Width, MeasureAttachmentsHeight(it, content.Width)), it);
+            }
+
+            // Tiny "zdr" tag in the top-right corner for zero-retention messages. Drawn last (over the
+            // content) on a small back-filled chip so it stays legible, sized into the existing
+            // BubblePadding gutter so the bubble itself never grows.
+            if (it.ShowZdrTag && it.Role != MessageRole.Tool)
+                DrawZdrTag(g, r, back, border);
+        }
+
+        // Draws the small "zdr" badge just inside the bubble's top-right corner, in the bubble's
+        // border color over its background color. Kept inside BubblePadding so it adds no height.
+        private void DrawZdrTag(Graphics g, Rectangle r, Color back, Color border)
+        {
+            const string tag = "zdr";
+            using (var font = new Font(_baseFont != null ? _baseFont.FontFamily : FontFamily.GenericSansSerif,
+                                       6.5f, FontStyle.Regular, GraphicsUnit.Point))
+            {
+                Size sz = TextRenderer.MeasureText(g, tag, font, new Size(int.MaxValue, int.MaxValue),
+                    TextFormatFlags.NoPadding);
+                int pad = 2;
+                // Sit against the top-right border, within the padding gutter.
+                int x = r.Right - BubblePadding / 2 - sz.Width;
+                int y = r.Y + Math.Max(1, (BubblePadding - sz.Height) / 2);
+                Rectangle chip = new Rectangle(x - pad, y, sz.Width + 2 * pad, sz.Height);
+                using (var bb = new SolidBrush(back))
+                    g.FillRectangle(bb, chip);
+                TextRenderer.DrawText(g, tag, font, new Point(x, y), border, TextFormatFlags.NoPadding);
             }
         }
 

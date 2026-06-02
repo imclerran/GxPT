@@ -59,7 +59,9 @@
             this.pnlButtons = new System.Windows.Forms.Panel();
             this.btnSend = new System.Windows.Forms.Button();
             this.btnAttach = new System.Windows.Forms.Button();
+            this.pnlModelRow = new System.Windows.Forms.Panel();
             this.cmbModel = new System.Windows.Forms.ComboBox();
+            this.chkZdrTab = new System.Windows.Forms.CheckBox();
             this.pnlBottom = new System.Windows.Forms.Panel();
             this.pnlApiKeyBanner = new System.Windows.Forms.Panel();
             this.flowLayoutPanel1 = new System.Windows.Forms.FlowLayoutPanel();
@@ -304,7 +306,7 @@
             // pnlInputRight
             // 
             this.pnlInputRight.Controls.Add(this.pnlButtons);
-            this.pnlInputRight.Controls.Add(this.cmbModel);
+            this.pnlInputRight.Controls.Add(this.pnlModelRow);
             this.pnlInputRight.Dock = System.Windows.Forms.DockStyle.Right;
             this.pnlInputRight.Location = new System.Drawing.Point(710, 0);
             this.pnlInputRight.Name = "pnlInputRight";
@@ -342,10 +344,22 @@
             this.btnAttach.Size = new System.Drawing.Size(26, 54);
             this.btnAttach.TabIndex = 3;
             this.btnAttach.UseVisualStyleBackColor = true;
-            // 
+            //
+            // pnlModelRow
+            //
+            this.pnlModelRow.Controls.Add(this.cmbModel);
+            this.pnlModelRow.Controls.Add(this.chkZdrTab);
+            this.pnlModelRow.Dock = System.Windows.Forms.DockStyle.Bottom;
+            this.pnlModelRow.Location = new System.Drawing.Point(0, 54);
+            this.pnlModelRow.Margin = new System.Windows.Forms.Padding(0);
+            this.pnlModelRow.Name = "pnlModelRow";
+            this.pnlModelRow.Size = new System.Drawing.Size(175, 21);
+            this.pnlModelRow.TabIndex = 5;
+            //
             // cmbModel
-            // 
-            this.cmbModel.Dock = System.Windows.Forms.DockStyle.Bottom;
+            //
+            this.cmbModel.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.cmbModel.DrawMode = System.Windows.Forms.DrawMode.OwnerDrawFixed;
             this.cmbModel.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cmbModel.FormattingEnabled = true;
             this.cmbModel.Items.AddRange(new object[] {
@@ -355,12 +369,24 @@
             "google/gemini-2.5-pro",
             "openai/gpt-4o",
             "openai/gpt-5"});
-            this.cmbModel.Location = new System.Drawing.Point(0, 54);
+            this.cmbModel.Location = new System.Drawing.Point(0, 0);
             this.cmbModel.Name = "cmbModel";
-            this.cmbModel.Size = new System.Drawing.Size(175, 21);
+            this.cmbModel.Size = new System.Drawing.Size(129, 21);
             this.cmbModel.Sorted = true;
             this.cmbModel.TabIndex = 2;
-            // 
+            //
+            // chkZdrTab
+            //
+            this.chkZdrTab.Dock = System.Windows.Forms.DockStyle.Right;
+            this.chkZdrTab.FlatStyle = System.Windows.Forms.FlatStyle.System;
+            this.chkZdrTab.Location = new System.Drawing.Point(129, 0);
+            this.chkZdrTab.Name = "chkZdrTab";
+            this.chkZdrTab.Size = new System.Drawing.Size(46, 21);
+            this.chkZdrTab.TabIndex = 3;
+            this.chkZdrTab.Text = "ZDR";
+            this.chkZdrTab.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.chkZdrTab.UseVisualStyleBackColor = true;
+            //
             // pnlBottom
             // 
             this.pnlBottom.AutoSize = true;
@@ -522,7 +548,9 @@
         private System.Windows.Forms.Button btnSend;
         private System.Windows.Forms.TextBox txtMessage;
         private System.Windows.Forms.Panel pnlInputRight;
+        private System.Windows.Forms.Panel pnlModelRow;
         private System.Windows.Forms.ComboBox cmbModel;
+        private System.Windows.Forms.CheckBox chkZdrTab;
         private System.Windows.Forms.Panel pnlBottom;
         private System.Windows.Forms.Panel pnlApiKeyBanner;
         private System.Windows.Forms.Label lblNoApiKey;
