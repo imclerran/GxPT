@@ -1075,6 +1075,9 @@ namespace GxPT
                 dlg.ShowDialog(this);
                 // The dialog writes settings.json directly; drop the cached copy so reads are fresh.
                 AppSettings.Reload();
+                // The global ZDR default may have changed: re-sync the per-tab checkbox (checked +
+                // disabled when ZDR is forced globally; existing conversations don't latch until sent).
+                SyncZdrCheckboxFromActiveTab();
                 // Re-init client in case API key changed
                 InitializeClient();
                 UpdateApiKeyBanner();
@@ -2025,6 +2028,8 @@ namespace GxPT
                 DialogResult dr = dlg.ShowDialog(this);
                 // The dialog writes settings.json directly; drop the cached copy so reads are fresh.
                 AppSettings.Reload();
+                // Reflect any change to the global ZDR default in the per-tab checkbox.
+                SyncZdrCheckboxFromActiveTab();
                 if (dr == DialogResult.OK)
                 {
                     InitializeClient();
