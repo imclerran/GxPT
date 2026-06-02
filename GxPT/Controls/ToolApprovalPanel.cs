@@ -212,6 +212,24 @@ namespace GxPT
             _onChoose = null;
         }
 
+        // If the panel is torn down (e.g. its tab is closed) while a call still awaits a decision,
+        // resolve the pending request as Deny so the blocked tool-loop worker is released rather than
+        // left waiting on the signal forever.
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                Action<ApprovalChoice> cb = _onChoose;
+                _onChoose = null;
+                if (cb != null)
+                {
+                    try { cb(ApprovalChoice.Deny); }
+                    catch { }
+                }
+            }
+            base.Dispose(disposing);
+        }
+
         private void AddRememberButtons(ApprovalRequest req)
         {
             RememberScope scope = req.Policy != null ? req.Policy.Scope : RememberScope.Tool;

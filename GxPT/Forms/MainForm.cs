@@ -20,8 +20,10 @@ namespace GxPT
         private OpenRouterClient _client;
         private McpHost _mcpHost;
         private McpToolRegistry _mcpRegistry;
-        private IToolApprovalPolicy _mcpApproval;
-        private ToolApprovalPanel _approvalPanel;
+        // Remembered tool approvals are shared across all tabs for the app session (in-memory). The
+        // approval *prompt* is per-tab (each conversation has its own ToolApprovalPanel), but the
+        // remembered choices live in this one store so "remember" applies everywhere.
+        private IApprovalStore _approvalStore;
         private const string HelpApiKeysId = "help:api_keys";
         private const string HelpPrivacyId = "help:privacy";
 
@@ -434,21 +436,13 @@ namespace GxPT
 
         private void InitializeManagers()
         {
-            // The MCP tool-approval prompt: a panel docked at the bottom of the chat area, above the
-            // input. Created in code (not the Designer) and added to pnlBottom so it sits over the
-            // input panel when a tool call awaits approval.
-            try
-            {
-                _approvalPanel = new ToolApprovalPanel();
-                _approvalPanel.WorkingDirProvider = delegate { return _mcpHost != null ? _mcpHost.ActiveWorkingDir : null; };
-                if (this.pnlBottom != null) this.pnlBottom.Controls.Add(_approvalPanel);
-                // Remembered approvals are kept only for the lifetime of the app (in-memory), not
-                // persisted to settings.json — a remembered choice lasts the session, then resets.
-                _mcpApproval = new ToolApprovalPolicy(
-                    new ToolClassifier(),
-                    new TranscriptApprovalPrompt(this, delegate { return _approvalPanel; }),
-                    new InMemoryApprovalStore());
-            }
+            // Remembered approvals are kept only for the lifetime of the app (in-memory), not
+            // persisted to settings.json — a remembered choice lasts the session, then resets. The
+            // approval UI itself is per-tab: each conversation gets its own ToolApprovalPanel (see
+            // AttachApprovalPanel), so a pending approval appears on the tab that requested it rather
+            // than whatever tab happens to be active. The policy is built per turn in BeginToolSend
+            // and bound to that tab's panel, all sharing this one store.
+            try { _approvalStore = new InMemoryApprovalStore(); }
             catch { }
 
             // Initialize managers for UI concerns
@@ -576,11 +570,12 @@ namespace GxPT
                 strip.ChangeRequested += delegate { SetWorkingFolderForContext(ctxRef); };
                 strip.ClearRequested += delegate { ClearWorkingFolderForContext(ctxRef); };
                 strip.DismissRequested += delegate { DismissWorkspaceStripForContext(ctxRef); };
-                // Dock order: the strip is Top and the transcript is Fill. WinForms lays out docked
-                // controls by REVERSE z-order, so the Fill transcript must be the frontmost child for
-                // it to fill the area *below* the Top strip (otherwise the strip overlaps the
-                // transcript's top). Add the strip, then send the transcript to front.
+                // Dock order: the strip is Top, the approval panel is Bottom, and the transcript is
+                // Fill. WinForms lays out docked controls by REVERSE z-order, so the Fill transcript
+                // must be the frontmost child for it to fill the area *between* the Top strip and the
+                // Bottom approval panel. Add the docked siblings, then send the transcript to front.
                 ctx.Page.Controls.Add(strip);
+                AttachApprovalPanel(ctx);
                 if (ctx.Transcript != null) ctx.Transcript.BringToFront();
                 strip.SetWorkingDir(ctx.WorkingDir);
                 // Honor a persisted dismissal (only meaningful when no folder is set; setting one
@@ -588,6 +583,23 @@ namespace GxPT
                 if (string.IsNullOrEmpty(ctx.WorkingDir) && ctx.Conversation != null &&
                     ctx.Conversation.WorkspaceStripDismissed)
                     strip.Visible = false;
+            }
+            catch { }
+        }
+
+        // Create this tab's tool-approval panel (docked at the bottom of its transcript area, hidden
+        // until a tool call awaits a decision). Each conversation gets its own panel so an approval is
+        // shown on the tab that requested it; it reads file context from this tab's working dir.
+        internal void AttachApprovalPanel(TabManager.ChatTabContext ctx)
+        {
+            if (ctx == null || ctx.Page == null) return;
+            try
+            {
+                var panel = new ToolApprovalPanel();
+                ctx.ApprovalPanel = panel;
+                var ctxRef = ctx;
+                panel.WorkingDirProvider = delegate { return ctxRef.WorkingDir; };
+                ctx.Page.Controls.Add(panel); // self-docks Bottom, starts hidden
             }
             catch { }
         }
@@ -1468,7 +1480,15 @@ namespace GxPT
             {
                 try
                 {
-                    var approval = _mcpApproval != null ? _mcpApproval : (IToolApprovalPolicy)new AllowAllApprovalPolicy();
+                    // Per-turn approval policy bound to THIS tab's panel, so the prompt appears on the
+                    // conversation that requested the tool. The remembered-choice store is shared
+                    // across tabs. Falls back to allow-all only if approvals couldn't be set up.
+                    IToolApprovalPolicy approval = (_approvalStore != null && ctx.ApprovalPanel != null)
+                        ? new ToolApprovalPolicy(
+                            new ToolClassifier(),
+                            new TranscriptApprovalPrompt(this, delegate { return ctx.ApprovalPanel; }),
+                            _approvalStore)
+                        : (IToolApprovalPolicy)new AllowAllApprovalPolicy();
                     var orch = new McpChatOrchestrator(_client, _mcpRegistry, approval,
                                                        model, LoggerSink.Instance);
                     orch.ProviderDataCollectionAllowed = providerAllow;
