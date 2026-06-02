@@ -588,7 +588,8 @@ namespace GxPT
                     {
                         _mainForm.BeginInvoke((MethodInvoker)delegate
                         {
-                            ctx.Page.Text = string.IsNullOrEmpty(name) ? "Conversation" : name;
+                            // Keep the ZDR marker when the generated name arrives.
+                            ctx.Page.Text = MainForm.ZdrTitle(ctx.Conversation, name);
                             _mainForm.UpdateWindowTitle();
                         });
                     }

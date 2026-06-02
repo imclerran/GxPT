@@ -2933,6 +2933,10 @@ namespace GxPT
             }
             catch { }
 
+            // The tab was selected before the conversation was assigned, so re-sync the per-tab ZDR
+            // checkbox now that we know this conversation's ZDR/latched state.
+            SyncZdrCheckboxFromActiveTab();
+
             // Focus input when a new tab opens from history
             if (_inputManager != null) _inputManager.FocusInputSoon();
         }
@@ -3000,6 +3004,10 @@ namespace GxPT
                     UpdateWindowTitleFromActiveTab();
                 }
                 catch { }
+
+                // Reusing the active blank tab won't re-fire OnTabSelected, so sync the ZDR checkbox
+                // to the loaded conversation's state explicitly.
+                SyncZdrCheckboxFromActiveTab();
 
                 if (_inputManager != null) _inputManager.FocusInputSoon();
                 if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
