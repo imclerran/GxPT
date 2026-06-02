@@ -2266,10 +2266,10 @@ namespace GxPT
                 try
                 {
                     var args = Newtonsoft.Json.Linq.JObject.Parse(string.IsNullOrEmpty(argsJson) ? "{}" : argsJson);
-                    string header, body, language;
-                    if (TryBuildToolRecord(name, args, out header, out body, out language))
+                    string header, body, language; int added, removed;
+                    if (TryBuildToolRecord(name, args, out header, out body, out language, out added, out removed))
                     {
-                        transcript.RegisterToolRecord(key, header, body, language);
+                        transcript.RegisterToolRecord(key, header, body, language, added, removed);
                         return McpMarkers.EditDiff(key);
                     }
                 }
@@ -2300,17 +2300,19 @@ namespace GxPT
         // Maps a tool call to a transcript record. An empty body yields a one-line label (no expansion);
         // a non-empty body is a collapsible record highlighted in 'language'. Returns false for tools
         // that should keep the generic marker.
-        private static bool TryBuildToolRecord(string name, Newtonsoft.Json.Linq.JObject args, out string header, out string body, out string language)
+        private static bool TryBuildToolRecord(string name, Newtonsoft.Json.Linq.JObject args, out string header, out string body, out string language, out int added, out int removed)
         {
-            header = null; body = string.Empty; language = "text";
+            header = null; body = string.Empty; language = "text"; added = -1; removed = -1;
             switch (name)
             {
                 case "files__edit":
                 {
                     string path = Str(args, "path");
                     LineDiffResult diff = DiffUtil.BuildLineDiff(Str(args, "old_string"), Str(args, "new_string"));
-                    header = "edited " + (path.Length > 0 ? path : "(file)") + "  (+" + diff.Added + " −" + diff.Removed + ")";
-                    body = diff.Body; language = "diff"; return true;
+                    // The +N/-N counts ride alongside (color-coded at draw time), so the header label
+                    // is just the path.
+                    header = "edited " + (path.Length > 0 ? path : "(file)");
+                    body = diff.Body; language = "diff"; added = diff.Added; removed = diff.Removed; return true;
                 }
                 case "files__write":
                 {

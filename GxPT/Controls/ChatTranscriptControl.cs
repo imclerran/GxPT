@@ -126,6 +126,8 @@ namespace GxPT
         private Color _clrInlineCodeBorder = Color.FromArgb(200, 200, 200);
         private Color _clrLink = Color.FromArgb(0, 102, 204);
         private Color _clrError = Color.FromArgb(200, 0, 0); // red error-notice text (theme-adjusted)
+        private Color _clrDiffAdd = Color.FromArgb(0, 128, 0);   // edit-record +N count (theme-adjusted)
+        private Color _clrDiffDel = Color.FromArgb(200, 0, 0);   // edit-record -N count (theme-adjusted)
         private Color _clrCopyHover = Color.FromArgb(230, 230, 230);
         private Color _clrCopyPressed = Color.FromArgb(210, 210, 210);
         private Color _clrScrollTrack = Color.FromArgb(235, 235, 235);
@@ -246,8 +248,16 @@ namespace GxPT
         // Used for files__edit (diff), command__run (batch), web__search (plain), and the other tool
         // records — the caller (MainForm) builds the label/body/language per tool. An empty body makes
         // it a non-collapsible one-line label (e.g. "Deleted <path>"). HeaderText excludes the
-        // disclosure triangle (added at draw time when there is a body).
-        private sealed class EditDiffData { public string HeaderText; public string Body; public string Language; }
+        // disclosure triangle (added at draw time when there is a body) and the +/- line counts (drawn
+        // separately, color-coded, from Added/Removed; -1 means "no counts for this record").
+        private sealed class EditDiffData
+        {
+            public string HeaderText;
+            public string Body;
+            public string Language;
+            public int Added = -1;
+            public int Removed = -1;
+        }
         private readonly object _editDiffLock = new object();
         private readonly Dictionary<string, EditDiffData> _editDiffs = new Dictionary<string, EditDiffData>(StringComparer.Ordinal);
         private readonly Dictionary<string, bool> _editDiffCollapsed = new Dictionary<string, bool>(StringComparer.Ordinal);
@@ -256,10 +266,24 @@ namespace GxPT
         // streaming worker thread and the history reload path, so it is lock-guarded.
         public void RegisterToolRecord(string key, string headerText, string body, string language)
         {
+            RegisterToolRecord(key, headerText, body, language, -1, -1);
+        }
+
+        // Overload carrying +/- line counts (added/removed) for an edit record, drawn color-coded next
+        // to the header. Pass -1 for records without counts.
+        public void RegisterToolRecord(string key, string headerText, string body, string language, int added, int removed)
+        {
             if (string.IsNullOrEmpty(key)) return;
             lock (_editDiffLock)
             {
-                _editDiffs[key] = new EditDiffData { HeaderText = headerText ?? string.Empty, Body = body ?? string.Empty, Language = language ?? "text" };
+                _editDiffs[key] = new EditDiffData
+                {
+                    HeaderText = headerText ?? string.Empty,
+                    Body = body ?? string.Empty,
+                    Language = language ?? "text",
+                    Added = added,
+                    Removed = removed
+                };
             }
         }
 
@@ -283,6 +307,25 @@ namespace GxPT
             string label = (data != null && !string.IsNullOrEmpty(data.HeaderText)) ? data.HeaderText : "(record)";
             if (!hasBody) return label;
             return (collapsed ? "▸" : "▾") + " " + label;
+        }
+
+        // The "  (+12 −3)" suffix for an edit record (empty when the record carries no counts). Kept
+        // separate from the header label so the +N can paint green and the −N red. The leading spaces
+        // separate it from the label.
+        private static string BuildEditDiffCountsText(EditDiffData data)
+        {
+            if (data == null || data.Added < 0 || data.Removed < 0) return string.Empty;
+            return "  (+" + data.Added + " −" + data.Removed + ")";
+        }
+
+        // Draw one run of the edit-record header at x (advancing x by the run's width) in the given
+        // color, so the label and the green/red +N/-N counts can sit on one line.
+        private static void DrawHeaderSeg(Graphics g, ref float x, float y, string text, Font font, Color color, StringFormat fmt)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            using (var b = new SolidBrush(color))
+                g.DrawString(text, font, b, new PointF(x, y), fmt);
+            x += g.MeasureString(text, font, PointF.Empty, fmt).Width;
         }
 
         // ---------- Batch update state ----------
@@ -512,6 +555,9 @@ namespace GxPT
             // Error-notice red: a deeper red on light themes, a brighter one on dark so it stays
             // legible against the background. Not part of ThemeColors (no chrome), derived from dark.
             _clrError = dark ? Color.FromArgb(255, 120, 120) : Color.FromArgb(200, 0, 0);
+            // +N green / -N red for edit-record line counts, brighter on dark so they stay legible.
+            _clrDiffAdd = dark ? Color.FromArgb(120, 200, 120) : Color.FromArgb(0, 128, 0);
+            _clrDiffDel = dark ? Color.FromArgb(255, 120, 120) : Color.FromArgb(200, 0, 0);
             _clrCopyHover = t.CopyHover;
             _clrCopyPressed = t.CopyPressed;
             _clrScrollTrack = t.ScrollTrack;
@@ -1039,7 +1085,9 @@ namespace GxPT
                         bool collapsed = IsEditDiffCollapsed(ed.Key);
                         int headerH = _baseFont.Height + 2 * EditDiffHeaderPad;
                         string headerText = BuildEditDiffHeaderText(data, collapsed, hasBody);
-                        int headerW = TextRenderer.MeasureText(headerText, _baseFont).Width;
+                        string countsText = BuildEditDiffCountsText(data);
+                        int headerW = TextRenderer.MeasureText(headerText, _baseFont).Width
+                                    + (countsText.Length > 0 ? TextRenderer.MeasureText(countsText, _baseFont).Width : 0);
                         int w = headerW;
                         int h = headerH;
                         if (hasBody && !collapsed)
@@ -1553,13 +1601,24 @@ namespace GxPT
                     int headerH = _baseFont.Height + 2 * EditDiffHeaderPad;
 
                     // Header row. With a body it's a clickable disclosure header (captured for the
-                    // collapse hit test); without one it's a plain non-interactive label.
+                    // collapse hit test); without one it's a plain non-interactive label. The label is
+                    // drawn in the normal text color; an edit record's +N/-N line counts follow it,
+                    // color-coded green/red.
                     string headerText = BuildEditDiffHeaderText(data, collapsed, hasBody);
-                    using (var brush = new SolidBrush(ForeColor))
                     using (var fmt = StringFormat.GenericTypographic)
                     {
                         fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
-                        g.DrawString(headerText, _baseFont, brush, new PointF(x0, y + EditDiffHeaderPad), fmt);
+                        float hx = x0;
+                        float hy = y + EditDiffHeaderPad;
+                        DrawHeaderSeg(g, ref hx, hy, headerText, _baseFont, ForeColor, fmt);
+                        if (data != null && data.Added >= 0 && data.Removed >= 0)
+                        {
+                            DrawHeaderSeg(g, ref hx, hy, "  (", _baseFont, ForeColor, fmt);
+                            DrawHeaderSeg(g, ref hx, hy, "+" + data.Added, _baseFont, _clrDiffAdd, fmt);
+                            DrawHeaderSeg(g, ref hx, hy, " ", _baseFont, ForeColor, fmt);
+                            DrawHeaderSeg(g, ref hx, hy, "−" + data.Removed, _baseFont, _clrDiffDel, fmt);
+                            DrawHeaderSeg(g, ref hx, hy, ")", _baseFont, ForeColor, fmt);
+                        }
                     }
                     if (hasBody && owner != null)
                     {
