@@ -136,6 +136,7 @@
     <Compile Include="Services\Mcp\McpChatOrchestrator.cs" />
     <Compile Include="Services\Mcp\McpServerSpec.cs" />
     <Compile Include="Services\Mcp\McpConfig.cs" />
+    <Compile Include="Services\Mcp\GitProbe.cs" />
     <Compile Include="Services\Mcp\IServerConnector.cs" />
     <Compile Include="Services\Mcp\McpHost.cs" />
     <Compile Include="Services\Mcp\DefaultServerConnector.cs" />

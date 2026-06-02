@@ -944,7 +944,10 @@ namespace GxPT
                 var opts = new McpConfig.BuiltInOptions();
                 opts.WebEnabled = AppSettings.GetBool("mcp_web_enabled", false);
                 opts.FilesEnabled = AppSettings.GetBool("mcp_files_enabled", false);
-                opts.GitEnabled = AppSettings.GetBool("mcp_git_enabled", false);
+                // Git defaults ON when git is installed and OFF when it isn't, and is force-disabled
+                // when git is missing regardless of the stored setting — so we never launch a git
+                // server whose tools could only return "git not found".
+                opts.GitEnabled = GitProbe.IsInstalled() && AppSettings.GetBool("mcp_git_enabled", true);
                 opts.CommandEnabled = AppSettings.GetBool("mcp_command_enabled", false);
                 opts.WebSearchKey = AppSettings.GetString("mcp_websearch_key");
                 opts.CurlPath = curlPath;

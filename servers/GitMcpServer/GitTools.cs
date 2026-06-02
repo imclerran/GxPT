@@ -157,6 +157,11 @@ namespace GitMcpServer
             {
                 result = runner.Run(req);
             }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                // The git executable couldn't be launched at all (not installed / not on PATH).
+                return ToolResults.Error("git was not found. Install Git and ensure it is on your PATH (or set GXPT_GIT_PATH).");
+            }
             catch (Exception ex)
             {
                 return ToolResults.Error("failed to run git: " + ex.Message);

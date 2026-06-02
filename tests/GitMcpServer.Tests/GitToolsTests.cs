@@ -191,5 +191,17 @@ namespace GitMcpServer.Tests
             var msgs = Harness.Exchange(server, Harness.ToolsCall(1, "commit", new JObject()));
             Assert.True(Harness.IsError(msgs[0]));
         }
+
+        [Fact]
+        public void Missing_git_executable_returns_clear_error()
+        {
+            // Point GXPT_GIT_PATH at a path that doesn't exist -> Process.Start throws Win32Exception,
+            // which the tool turns into a clear "git was not found" error for the model.
+            string noGit = Path.Combine(_dir, "definitely-not-git" + (IsWindows ? ".exe" : ""));
+            var server = Harness.NewGitServer(noGit, _work);
+            var msgs = Harness.Exchange(server, Harness.ToolsCall(1, "status", new JObject()));
+            Assert.True(Harness.IsError(msgs[0]));
+            Assert.Contains("git was not found", Harness.Text(msgs[0]));
+        }
     }
 }
