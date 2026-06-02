@@ -44,6 +44,9 @@ namespace GxPT
             // The per-tab tool-approval panel docked at the bottom of this tab's transcript (set by
             // MainForm). A pending approval shows only on the conversation that requested it.
             public ToolApprovalPanel ApprovalPanel;
+            // True when this tab's conversation has been opened but its transcript has NOT yet been
+            // built (deferred at startup so only the visible tab pays the cost; built on first view).
+            public bool NeedsTranscriptRebuild;
             public List<AttachedFile> PendingAttachments = new List<AttachedFile>();
             // Pending edit of a prior user message (by transcript/history index)
             public bool PendingEditActive;

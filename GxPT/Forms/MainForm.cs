@@ -24,6 +24,10 @@ namespace GxPT
         // approval *prompt* is per-tab (each conversation has its own ToolApprovalPanel), but the
         // remembered choices live in this one store so "remember" applies everywhere.
         private IApprovalStore _approvalStore;
+        // True only while restoring the previous session's tabs at startup. During restore, opening a
+        // conversation marks its transcript for lazy build instead of building it immediately, so only
+        // the visible tab is rendered up front (the rest hydrate when first selected).
+        private bool _restoringTabs;
         private const string HelpApiKeysId = "help:api_keys";
         private const string HelpPrivacyId = "help:privacy";
 
@@ -305,6 +309,12 @@ namespace GxPT
                 SessionState.LoadOpenTabs(out ids, out activeFromFile);
                 if (ids == null || ids.Count == 0) return;
 
+                // Defer transcript builds while every tab is opened, so reopening a session with many
+                // tabs doesn't render them all up front. Only the tab left visible is built below; the
+                // rest hydrate the first time they're selected (OnTabSelected -> HydrateTabIfNeeded).
+                _restoringTabs = true;
+                try
+                {
                 // We'll reuse the initial blank tab for the first item if suitable
                 bool firstUsed = false;
                 for (int i = 0; i < ids.Count; i++)
@@ -363,8 +373,29 @@ namespace GxPT
                     }
                 }
                 catch { }
+                }
+                finally { _restoringTabs = false; }
+
+                // Build only the now-visible tab; the rest stay deferred until first selected.
+                try { HydrateTabIfNeeded(_tabManager != null ? _tabManager.GetActiveContext() : null); }
+                catch { }
+
+                // Pre-warm MCP servers for the visible tab only (one reconcile, off the UI thread).
+                // Other tabs' servers launch lazily when they're sent to or first selected.
+                try { SyncMcpWorkingDirFromActiveTab(); }
+                catch { }
             }
             catch { }
+        }
+
+        // Build a tab's transcript if it was deferred at session restore. Idempotent and cheap once
+        // hydrated (the flag is cleared before the rebuild). Called for the visible tab after restore
+        // and for each tab the first time it becomes active.
+        private void HydrateTabIfNeeded(TabManager.ChatTabContext ctx)
+        {
+            if (ctx == null || !ctx.NeedsTranscriptRebuild) return;
+            ctx.NeedsTranscriptRebuild = false;
+            if (ctx.Conversation != null) RebuildTranscriptAsync(ctx, ctx.Conversation);
         }
 
         private bool IsHelpConversationId(string id)
@@ -519,6 +550,13 @@ namespace GxPT
         // Event handlers for manager events
         private void OnTabSelected(TabPage selectedTab)
         {
+            // Build this tab's transcript if it was deferred at session restore (first time it's shown).
+            // Skipped while the restore loop is still opening tabs — the visible one is built afterward.
+            if (!_restoringTabs && _tabManager != null && selectedTab != null)
+            {
+                TabManager.ChatTabContext sel;
+                if (_tabManager.TabContexts.TryGetValue(selectedTab, out sel)) HydrateTabIfNeeded(sel);
+            }
             UpdateWindowTitleFromActiveTab();
             SyncComboModelFromActiveTab();
             // Refresh the attachments banner to reflect the active tab's pending attachments
@@ -537,6 +575,11 @@ namespace GxPT
         private void SyncMcpWorkingDirFromActiveTab()
         {
             if (_mcpHost == null) return;
+            // Don't launch MCP servers while restoring a session: opening each tab would otherwise
+            // spin up a files/git/command set per distinct folder, and those process spawns/handshakes
+            // saturate the thread pool and delay the visible tab's transcript from rendering. Servers
+            // are launched lazily on first send (BeginToolSend) and pre-warmed once after restore.
+            if (_restoringTabs) return;
             string active = null;
             var inUse = new List<string>();
             try
@@ -2590,8 +2633,10 @@ namespace GxPT
             if (_sidebarManager != null && ctx.Conversation != null)
                 _sidebarManager.TrackOpenConversation(ctx.Conversation.Id, ctx.Page);
 
-            // Rebuild transcript UI off the UI thread to avoid freezes on large histories
-            RebuildTranscriptAsync(ctx, convo);
+            // Rebuild transcript UI off the UI thread to avoid freezes on large histories. During
+            // session restore this is deferred (see HydrateTabIfNeeded) so only the visible tab renders.
+            if (_restoringTabs) ctx.NeedsTranscriptRebuild = true;
+            else RebuildTranscriptAsync(ctx, convo);
 
             // Adopt the conversation's saved working folder.
             ApplyLoadedWorkingDir(ctx);
@@ -2632,8 +2677,11 @@ namespace GxPT
                 if (_sidebarManager != null && ctx.Conversation != null)
                     _sidebarManager.TrackOpenConversation(ctx.Conversation.Id, ctx.Page);
 
-                // Rebuild transcript UI off the UI thread to avoid freezes on large histories
-                RebuildTranscriptAsync(ctx, convo);
+                // Rebuild transcript UI off the UI thread to avoid freezes on large histories. During
+                // session restore this is deferred (see HydrateTabIfNeeded) so only the visible tab
+                // renders up front; the rest build when first selected.
+                if (_restoringTabs) ctx.NeedsTranscriptRebuild = true;
+                else RebuildTranscriptAsync(ctx, convo);
 
                 // Adopt the conversation's saved working folder.
                 ApplyLoadedWorkingDir(ctx);
