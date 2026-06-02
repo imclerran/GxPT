@@ -324,5 +324,34 @@ namespace GxPT.Tests.Mcp
             Assert.Contains("reveal__tools", ManifestNames(reg)); // double underscore, not "reveal_tools"
             Assert.DoesNotContain("reveal_tools", ManifestNames(reg));
         }
+
+        // ---- git-over-command preference note ----
+
+        private const string GitPreferNote = "prefer the dedicated git__ tools";
+
+        [Fact]
+        public void Manifest_steers_to_git_tools_when_command_also_present()
+        {
+            var reg = NewRegistry(8);
+            reg.AddConnection(FakeConn.Ready("git", new ToolDef("status")));
+            reg.AddConnection(FakeConn.Ready("command", new ToolDef("run")));
+            Assert.Contains(GitPreferNote, reg.NamesManifestSystemMessage());
+        }
+
+        [Fact]
+        public void Manifest_omits_git_preference_note_without_command()
+        {
+            var reg = NewRegistry(8);
+            reg.AddConnection(FakeConn.Ready("git", new ToolDef("status")));
+            Assert.DoesNotContain(GitPreferNote, reg.NamesManifestSystemMessage());
+        }
+
+        [Fact]
+        public void Manifest_omits_git_preference_note_without_git()
+        {
+            var reg = NewRegistry(8);
+            reg.AddConnection(FakeConn.Ready("command", new ToolDef("run")));
+            Assert.DoesNotContain(GitPreferNote, reg.NamesManifestSystemMessage());
+        }
     }
 }

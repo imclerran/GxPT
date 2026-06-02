@@ -2425,6 +2425,95 @@ namespace GxPT
                     header = "Viewed git diff" + (Bool(args, "staged") ? " (staged)" : "") + (path.Length > 0 ? " of " + path : "");
                     return true;
                 }
+                case "git__fetch":
+                {
+                    string remote = Str(args, "remote");
+                    header = remote.Length > 0 ? ("Fetched from " + remote) : "Fetched from remote"; return true;
+                }
+                case "git__pull":
+                {
+                    string remote = Str(args, "remote"); string branch = Str(args, "branch");
+                    string tgt = remote.Length > 0 ? (branch.Length > 0 ? remote + "/" + branch : remote) : branch;
+                    header = (Bool(args, "rebase") ? "Pulled (rebase)" : "Pulled") + (tgt.Length > 0 ? " from " + tgt : ""); return true;
+                }
+                case "git__checkout":
+                {
+                    string r = Str(args, "ref"); if (r.Length == 0) return false;
+                    header = Bool(args, "create") ? ("Created branch " + r) : ("Switched to " + r); return true;
+                }
+                case "git__restore":
+                {
+                    string paths = JoinPaths(args, "paths"); if (paths.Length == 0) return false;
+                    header = (Bool(args, "staged") ? "Unstaged " : "Restored ") + paths; return true;
+                }
+                case "git__branch":
+                {
+                    string action = Str(args, "action"); if (action.Length == 0) action = "list";
+                    string nm = Str(args, "name");
+                    switch (action.ToLowerInvariant())
+                    {
+                        case "create": header = nm.Length > 0 ? ("Created branch " + nm) : "Created branch"; break;
+                        case "delete": header = nm.Length > 0 ? ("Deleted branch " + nm) : "Deleted branch"; break;
+                        case "rename": header = "Renamed branch" + (Str(args, "new_name").Length > 0 ? " to " + Str(args, "new_name") : ""); break;
+                        default: header = "Listed branches"; break;
+                    }
+                    return true;
+                }
+                case "git__merge":
+                {
+                    string b = Str(args, "branch"); if (b.Length == 0) return false;
+                    header = "Merged " + b; return true;
+                }
+                case "git__rebase":
+                {
+                    string action = Str(args, "action"); if (action.Length == 0) action = "start";
+                    string onto = Str(args, "onto");
+                    switch (action.ToLowerInvariant())
+                    {
+                        case "continue": header = "Continued rebase"; break;
+                        case "abort": header = "Aborted rebase"; break;
+                        case "skip": header = "Skipped rebase commit"; break;
+                        default: header = onto.Length > 0 ? ("Rebased onto " + onto) : "Rebased"; break;
+                    }
+                    return true;
+                }
+                case "git__cherry_pick":
+                {
+                    string c = Str(args, "commit"); if (c.Length == 0) return false;
+                    header = "Cherry-picked " + c; return true;
+                }
+                case "git__add":
+                {
+                    if (Bool(args, "all")) { header = "Staged all changes"; return true; }
+                    string paths = JoinPaths(args, "paths"); if (paths.Length == 0) return false;
+                    header = "Staged " + paths; return true;
+                }
+                case "git__reset":
+                {
+                    string paths = JoinPaths(args, "paths");
+                    if (paths.Length > 0) { header = "Unstaged " + paths; return true; }
+                    string mode = Str(args, "mode"); if (mode.Length == 0) mode = "mixed";
+                    string target = Str(args, "target");
+                    header = "Reset (" + mode.ToLowerInvariant() + ")" + (target.Length > 0 ? " to " + target : ""); return true;
+                }
+                case "git__rm":
+                {
+                    string paths = JoinPaths(args, "paths"); if (paths.Length == 0) return false;
+                    header = (Bool(args, "cached") ? "Unstaged (kept) " : "Removed ") + paths; return true;
+                }
+                case "git__stash":
+                {
+                    string action = Str(args, "action"); if (action.Length == 0) action = "push";
+                    switch (action.ToLowerInvariant())
+                    {
+                        case "pop": header = "Popped stash"; break;
+                        case "apply": header = "Applied stash"; break;
+                        case "drop": header = "Dropped stash"; break;
+                        case "list": header = "Listed stashes"; break;
+                        default: header = "Stashed changes"; break;
+                    }
+                    return true;
+                }
                 case "reveal_tools": header = "Checking available tools"; return true;
                 default: return false;
             }
@@ -2464,6 +2553,33 @@ namespace GxPT
                     string s = (string)u; if (string.IsNullOrEmpty(s)) continue;
                     if (sb.Length > 0) sb.Append('\n');
                     sb.Append(s);
+                }
+                return sb.ToString();
+            }
+            catch { return string.Empty; }
+        }
+
+        // Comma-separated summary of a string[] pathspec arg (also accepts a lone string), for a
+        // one-line tool-record header. Empty when absent.
+        private static string JoinPaths(Newtonsoft.Json.Linq.JObject args, string name)
+        {
+            try
+            {
+                var t = args[name];
+                var sb = new System.Text.StringBuilder();
+                var arr = t as Newtonsoft.Json.Linq.JArray;
+                if (arr != null)
+                {
+                    foreach (var p in arr)
+                    {
+                        string s = (string)p; if (string.IsNullOrEmpty(s)) continue;
+                        if (sb.Length > 0) sb.Append(", ");
+                        sb.Append(s);
+                    }
+                }
+                else if (t != null && t.Type == Newtonsoft.Json.Linq.JTokenType.String)
+                {
+                    sb.Append((string)t);
                 }
                 return sb.ToString();
             }
@@ -2580,6 +2696,16 @@ namespace GxPT
                 timer.Interval = 15; // ~60 fps budget for small bursts
                 timer.Tick += (s2, e2) =>
                 {
+                    // The tab may have been closed (e.g. "Close Others") while this build was still
+                    // running — its transcript is then disposed. Stop touching it, or BeginBatchUpdates/
+                    // EndBatchUpdates would throw ObjectDisposedException.
+                    if (ctx == null || ctx.Transcript == null || ctx.Transcript.IsDisposed)
+                    {
+                        try { timer.Stop(); timer.Dispose(); }
+                        catch { }
+                        return;
+                    }
+
                     int avail;
                     lock (gate) { avail = produced - consumed; }
                     if (avail <= 0)
