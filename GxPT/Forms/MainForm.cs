@@ -1588,8 +1588,9 @@ namespace GxPT
             if (e.Index >= 0 && this.cmbModel != null && e.Index < this.cmbModel.Items.Count)
             {
                 string full = Convert.ToString(this.cmbModel.Items[e.Index]);
+                // Clip the name at the edge like a native combo (no ellipsis).
                 TextRenderer.DrawText(e.Graphics, ShortModelName(full), e.Font, e.Bounds, e.ForeColor,
-                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
             }
             e.DrawFocusRectangle();
         }
