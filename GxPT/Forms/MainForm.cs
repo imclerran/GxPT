@@ -459,6 +459,9 @@ namespace GxPT
                     {
                         string json = sr.ReadToEnd();
                         var convo = ConversationStore.LoadFromJson(_client, json);
+                        // Help conversations start with the workspace strip hidden until the user
+                        // explicitly sets a working folder (right-click tab), which re-shows it.
+                        if (convo != null) convo.WorkspaceStripDismissed = true;
                         return convo;
                     }
                 }
@@ -3103,6 +3106,8 @@ namespace GxPT
                 catch { }
                 if (convo != null)
                 {
+                    // Help starts with the workspace strip hidden until a working folder is set.
+                    convo.WorkspaceStripDismissed = true;
                     // Always treat help templates as no-save until user sends a new message
                     ctx.NoSaveUntilUserSend = true;
                     // Keep the specialized help id from the template for restoration
@@ -3184,6 +3189,8 @@ namespace GxPT
                 catch { }
                 if (convo != null)
                 {
+                    // Help starts with the workspace strip hidden until a working folder is set.
+                    convo.WorkspaceStripDismissed = true;
                     ctx.NoSaveUntilUserSend = true;
                     try { ctx.Page.Text = string.IsNullOrEmpty(convo.Name) ? "Privacy" : convo.Name; }
                     catch { }
