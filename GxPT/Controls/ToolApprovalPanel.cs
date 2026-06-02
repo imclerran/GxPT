@@ -203,13 +203,35 @@ namespace GxPT
             AddButton("Allow once", ApprovalChoice.AllowOnce, false);
 
             this.Visible = true;
-            this.BringToFront();
+            // Keep this Bottom-docked panel BEHIND the Fill transcript in z-order. WinForms fills the
+            // remaining space with the front-most Fill control, so the panel must stay back for the
+            // transcript to shrink *above* it (rather than the panel overlaying the transcript's
+            // bottom edge and its right-docked scrollbar). BringToFront would cause exactly that.
+            this.SendToBack();
         }
 
         public void HidePanel()
         {
             this.Visible = false;
             _onChoose = null;
+        }
+
+        // If the panel is torn down (e.g. its tab is closed) while a call still awaits a decision,
+        // resolve the pending request as Deny so the blocked tool-loop worker is released rather than
+        // left waiting on the signal forever.
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                Action<ApprovalChoice> cb = _onChoose;
+                _onChoose = null;
+                if (cb != null)
+                {
+                    try { cb(ApprovalChoice.Deny); }
+                    catch { }
+                }
+            }
+            base.Dispose(disposing);
         }
 
         private void AddRememberButtons(ApprovalRequest req)

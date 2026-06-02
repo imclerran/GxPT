@@ -41,6 +41,9 @@ namespace GxPT
             public string WorkingDir;
             // The per-tab workspace strip docked above this tab's transcript (set by MainForm).
             public WorkspaceContextStrip WorkspaceStrip;
+            // The per-tab tool-approval panel docked at the bottom of this tab's transcript (set by
+            // MainForm). A pending approval shows only on the conversation that requested it.
+            public ToolApprovalPanel ApprovalPanel;
             public List<AttachedFile> PendingAttachments = new List<AttachedFile>();
             // Pending edit of a prior user message (by transcript/history index)
             public bool PendingEditActive;
