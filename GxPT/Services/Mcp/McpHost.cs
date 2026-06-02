@@ -7,10 +7,15 @@ namespace GxPT
 {
     // Owns the host's MCP server connections (D11) and the shared McpToolRegistry. Assembles
     // connections from config specs, wires each connection's lifecycle into the registry, and
-    // manages the lazy, per-conversation lifecycle of workdir-scoped servers:
+    // manages the lifecycle of workdir-scoped servers:
     //   * workdir-independent servers (web + every mcp.json entry) are opened once via Start();
-    //   * workdir-scoped built-ins (files/git/command) are (re)opened by SetActiveWorkingDir with
-    //     GXPT_WORKDIR set to the active conversation's directory, and torn down when it changes.
+    //   * workdir-scoped built-ins (files/git/command) run as ONE process set PER working directory.
+    //     EnsureWorkingDir(dir) lazily launches a folder's set (GXPT_WORKDIR=dir) and keeps it alive;
+    //     several conversation tabs sharing a folder share its set, while tabs on different folders get
+    //     independent sets. Switching tabs never tears anything down — only ReleaseWorkingDir/RetainOnly
+    //     (driven by which folders still have an open tab) and Dispose close scoped servers.
+    // Each scoped connection is registered with its workdir so tool calls resolve to the folder that
+    // requested them (McpToolRegistry.TryResolve(name, workdir)).
     // Transport construction is delegated to an IServerConnector so this logic is testable without
     // spawning processes. Thread-safe via a single lock; event handlers touch only the (separately
     // locked) registry, so they never re-enter this lock.
@@ -25,9 +30,13 @@ namespace GxPT
         private readonly object _lock = new object();
 
         private readonly List<McpServerConnection> _eager = new List<McpServerConnection>();
-        private readonly List<McpServerConnection> _scoped = new List<McpServerConnection>();
+        // One scoped connection set per working directory (key = the directory as supplied).
+        private readonly Dictionary<string, List<McpServerConnection>> _scopedByWorkdir =
+            new Dictionary<string, List<McpServerConnection>>(StringComparer.OrdinalIgnoreCase);
+        // Working dirs requested before Start() knew the scoped specs; launched when Start arrives.
+        private readonly List<string> _pendingWorkdirs = new List<string>();
         private List<McpServerSpec> _scopedSpecs = new List<McpServerSpec>();
-        private string _currentWorkdir;
+        private bool _started;
         private bool _disposed;
 
         public McpHost(IServerConnector connector, McpToolRegistry registry, ILogSink log)
@@ -47,10 +56,24 @@ namespace GxPT
 
         public McpToolRegistry Registry { get { return _registry; } }
 
-        public string ActiveWorkingDir { get { lock (_lock) { return _currentWorkdir; } } }
+        // The working directories that currently have a live (or pending) scoped server set. Snapshot;
+        // safe to enumerate.
+        public string[] ActiveWorkingDirs
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    var keys = new List<string>(_scopedByWorkdir.Keys);
+                    for (int i = 0; i < _pendingWorkdirs.Count; i++)
+                        if (!keys.Contains(_pendingWorkdirs[i])) keys.Add(_pendingWorkdirs[i]);
+                    return keys.ToArray();
+                }
+            }
+        }
 
         // Open all enabled, workdir-independent servers; remember the workdir-scoped specs for
-        // SetActiveWorkingDir. Call once after building specs from config.
+        // EnsureWorkingDir. Call once after building specs from config.
         public void Start(IEnumerable<McpServerSpec> specs)
         {
             lock (_lock)
@@ -69,47 +92,98 @@ namespace GxPT
                     }
                 }
                 _scopedSpecs = scoped;
+                _started = true;
 
-                // If a working directory was already set (e.g. SetActiveWorkingDir raced ahead of
-                // Start on startup), launch the scoped servers for it now.
-                if (_currentWorkdir != null && _scoped.Count == 0)
+                // Launch any working directories requested before Start knew the scoped specs.
+                if (_pendingWorkdirs.Count > 0)
                 {
-                    for (int i = 0; i < _scopedSpecs.Count; i++)
+                    List<string> pending = new List<string>(_pendingWorkdirs);
+                    _pendingWorkdirs.Clear();
+                    for (int i = 0; i < pending.Count; i++) OpenScopedLocked(pending[i]);
+                }
+            }
+        }
+
+        // Ensure the workdir-scoped servers (files/git/command) for `workdir` are running. Idempotent:
+        // a folder already served returns immediately; other folders' sets are left untouched. A
+        // null/empty workdir is a no-op (no scoped tools for a folderless conversation). Safe to call
+        // from a worker thread right before a tool turn; (re)connecting can block.
+        public void EnsureWorkingDir(string workdir)
+        {
+            if (string.IsNullOrEmpty(workdir)) return;
+            lock (_lock)
+            {
+                if (_disposed) return;
+                if (_scopedByWorkdir.ContainsKey(workdir)) return;
+                if (!_started)
+                {
+                    if (!_pendingWorkdirs.Contains(workdir)) _pendingWorkdirs.Add(workdir);
+                    return;
+                }
+                OpenScopedLocked(workdir);
+            }
+        }
+
+        // Tear down the scoped servers for a single working directory (e.g. its last tab closed).
+        public void ReleaseWorkingDir(string workdir)
+        {
+            if (string.IsNullOrEmpty(workdir)) return;
+            lock (_lock)
+            {
+                _pendingWorkdirs.Remove(workdir);
+                List<McpServerConnection> conns;
+                if (_scopedByWorkdir.TryGetValue(workdir, out conns))
+                {
+                    for (int i = 0; i < conns.Count; i++) Teardown(conns[i]);
+                    _scopedByWorkdir.Remove(workdir);
+                }
+            }
+        }
+
+        // Keep only the scoped server sets whose working directory is still in `keep`; tear down the
+        // rest. Called when the set of open tabs (and thus referenced folders) changes, so processes
+        // for closed conversations don't linger.
+        public void RetainOnly(IEnumerable<string> keep)
+        {
+            var keepSet = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            if (keep != null)
+                foreach (string k in keep)
+                    if (!string.IsNullOrEmpty(k)) keepSet[k] = true;
+
+            lock (_lock)
+            {
+                if (_disposed) return;
+                for (int i = _pendingWorkdirs.Count - 1; i >= 0; i--)
+                    if (!keepSet.ContainsKey(_pendingWorkdirs[i])) _pendingWorkdirs.RemoveAt(i);
+
+                List<string> drop = null;
+                foreach (string wd in _scopedByWorkdir.Keys)
+                    if (!keepSet.ContainsKey(wd)) { (drop ?? (drop = new List<string>())).Add(wd); }
+                if (drop != null)
+                {
+                    for (int i = 0; i < drop.Count; i++)
                     {
-                        McpServerSpec spec = _scopedSpecs[i];
-                        if (spec == null || !spec.Enabled) continue;
-                        McpServerConnection conn = ConnectAndAdd(spec, _currentWorkdir);
-                        if (conn != null) _scoped.Add(conn);
+                        List<McpServerConnection> conns = _scopedByWorkdir[drop[i]];
+                        for (int j = 0; j < conns.Count; j++) Teardown(conns[j]);
+                        _scopedByWorkdir.Remove(drop[i]);
                     }
                 }
             }
         }
 
-        // Make `workdir` the active conversation's directory: tear down the previous workdir-scoped
-        // servers and open fresh ones bound to it. null/empty disconnects them (no scoped tools).
-        public void SetActiveWorkingDir(string workdir)
+        // Launch all enabled scoped specs for `workdir` and record the set. Caller holds _lock.
+        private void OpenScopedLocked(string workdir)
         {
-            string wd = string.IsNullOrEmpty(workdir) ? null : workdir;
-            lock (_lock)
+            if (string.IsNullOrEmpty(workdir) || _scopedByWorkdir.ContainsKey(workdir)) return;
+            List<McpServerConnection> conns = new List<McpServerConnection>();
+            for (int i = 0; i < _scopedSpecs.Count; i++)
             {
-                if (_disposed) return;
-                if (_currentWorkdir == wd) return;
-
-                for (int i = 0; i < _scoped.Count; i++) Teardown(_scoped[i]);
-                _scoped.Clear();
-                _currentWorkdir = wd;
-
-                if (wd != null)
-                {
-                    for (int i = 0; i < _scopedSpecs.Count; i++)
-                    {
-                        McpServerSpec spec = _scopedSpecs[i];
-                        if (spec == null || !spec.Enabled) continue;
-                        McpServerConnection conn = ConnectAndAdd(spec, wd);
-                        if (conn != null) _scoped.Add(conn);
-                    }
-                }
+                McpServerSpec spec = _scopedSpecs[i];
+                if (spec == null || !spec.Enabled) continue;
+                McpServerConnection conn = ConnectAndAdd(spec, workdir);
+                if (conn != null) conns.Add(conn);
             }
+            _scopedByWorkdir[workdir] = conns;
         }
 
         private McpServerConnection ConnectAndAdd(McpServerSpec spec, string workdir)
@@ -140,7 +214,8 @@ namespace GxPT
 
             if (conn.State == ConnectionState.Ready)
             {
-                _registry.AddConnection(conn);
+                // Tag the connection with its workdir so tool calls resolve to the right folder.
+                _registry.AddConnection(conn, workdir);
                 return conn;
             }
 
@@ -184,9 +259,11 @@ namespace GxPT
             {
                 if (_disposed) return;
                 _disposed = true;
-                for (int i = 0; i < _scoped.Count; i++) Teardown(_scoped[i]);
+                foreach (List<McpServerConnection> conns in _scopedByWorkdir.Values)
+                    for (int i = 0; i < conns.Count; i++) Teardown(conns[i]);
+                _scopedByWorkdir.Clear();
+                _pendingWorkdirs.Clear();
                 for (int i = 0; i < _eager.Count; i++) Teardown(_eager[i]);
-                _scoped.Clear();
                 _eager.Clear();
             }
         }

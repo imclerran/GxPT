@@ -528,26 +528,40 @@ namespace GxPT
             if (_inputManager != null) _inputManager.FocusInputSoon();
         }
 
-        // Bind the MCP host's workdir-scoped servers to the active conversation's working folder
-        // (re-launches files/git/command against it; null disconnects them). Runs off the UI thread
-        // because (re)connecting can block.
+        // Reconcile the MCP host's workdir-scoped servers (files/git/command) with the open tabs:
+        // pre-warm the active conversation's folder and tear down any folder no longer referenced by an
+        // open tab. Each distinct working directory runs its own server set, kept alive across tab
+        // switches, so a tab is never disconnected by activity in another tab. Snapshots the tab state
+        // on the UI thread, then does the (potentially blocking) connect/teardown off-thread. Called on
+        // tab switch, tab open/close, and working-folder changes.
         private void SyncMcpWorkingDirFromActiveTab()
         {
             if (_mcpHost == null) return;
-            string wd = null;
+            string active = null;
+            var inUse = new List<string>();
             try
             {
-                var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
-                if (ctx != null) wd = ctx.WorkingDir;
+                var act = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                if (act != null) active = act.WorkingDir;
+                if (_tabManager != null)
+                {
+                    foreach (var c in _tabManager.TabContexts.Values)
+                        if (c != null && !string.IsNullOrEmpty(c.WorkingDir)) inUse.Add(c.WorkingDir);
+                }
             }
             catch { }
-            if (_mcpHost.ActiveWorkingDir == wd) return; // no change
+
             McpHost hostRef = _mcpHost;
-            string target = wd;
+            string activeRef = active;
+            string[] inUseArr = inUse.ToArray();
             System.Threading.ThreadPool.QueueUserWorkItem(delegate
             {
-                try { hostRef.SetActiveWorkingDir(target); }
-                catch (Exception ex) { try { Logger.Log("mcp", "SetActiveWorkingDir failed: " + ex.Message); } catch { } }
+                try
+                {
+                    if (!string.IsNullOrEmpty(activeRef)) hostRef.EnsureWorkingDir(activeRef);
+                    hostRef.RetainOnly(inUseArr); // release folders whose last tab closed
+                }
+                catch (Exception ex) { try { Logger.Log("mcp", "MCP workdir reconcile failed: " + ex.Message); } catch { } }
             });
         }
 
@@ -686,6 +700,9 @@ namespace GxPT
         private void OnTabsChanged()
         {
             if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
+            // A tab opening/closing changes which working folders are still in use; release the
+            // scoped servers of any folder whose last tab just closed.
+            SyncMcpWorkingDirFromActiveTab();
         }
 
         private void OnSidebarToggled()
@@ -942,7 +959,7 @@ namespace GxPT
                     {
                         hostRef.Start(specs);
                         // Launch the workdir-scoped servers for the active conversation's folder.
-                        if (!string.IsNullOrEmpty(wd)) hostRef.SetActiveWorkingDir(wd);
+                        if (!string.IsNullOrEmpty(wd)) hostRef.EnsureWorkingDir(wd);
                     }
                     catch (Exception ex) { try { Logger.Log("mcp", "host start failed: " + ex.Message); } catch { } }
                 });
@@ -1480,6 +1497,12 @@ namespace GxPT
             {
                 try
                 {
+                    // Make sure THIS conversation's folder has its own scoped server set before the
+                    // turn runs (idempotent; no-op if already connected), and route the turn's tool
+                    // calls to that folder so a concurrent turn in another tab can't interfere.
+                    if (_mcpHost != null && !string.IsNullOrEmpty(ctx.WorkingDir))
+                        _mcpHost.EnsureWorkingDir(ctx.WorkingDir);
+
                     // Per-turn approval policy bound to THIS tab's panel, so the prompt appears on the
                     // conversation that requested the tool. The remembered-choice store is shared
                     // across tabs. Falls back to allow-all only if approvals couldn't be set up.
@@ -1491,6 +1514,7 @@ namespace GxPT
                         : (IToolApprovalPolicy)new AllowAllApprovalPolicy();
                     var orch = new McpChatOrchestrator(_client, _mcpRegistry, approval,
                                                        model, LoggerSink.Instance);
+                    orch.WorkingDir = ctx.WorkingDir;
                     orch.ProviderDataCollectionAllowed = providerAllow;
                     orch.RequestMessageTransform = delegate(IList<ChatMessage> h)
                     {

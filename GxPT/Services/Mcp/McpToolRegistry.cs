@@ -15,6 +15,13 @@ namespace GxPT
     // (c) reveal_tools, the meta-tool that moves a tool from "known by name" to "callable". Owns the
     // server-qualified function-name bijection so tool_calls resolve back to (connection, toolName).
     //
+    // Workdir-scoped servers (files/git/command) run as one process PER working directory, so several
+    // connections can expose the SAME function name (e.g. files__read) for different folders. The
+    // model-facing surface (manifest / defs / reveal) is therefore deduped by function name — it's
+    // identical across folders — while resolution is workdir-aware: TryResolve(name, workdir) returns
+    // the connection bound to the calling turn's folder. Workdir-independent servers (web/github/
+    // custom) register with a null workdir and resolve for any turn.
+    //
     // Thread-safe: lifecycle methods are driven from connection reader threads (Ready/ToolsChanged/
     // fault), while the orchestrator calls the per-request/resolution methods from its worker thread.
     internal sealed class McpToolRegistry
@@ -29,13 +36,20 @@ namespace GxPT
             public string FunctionName;
             public string Description;
             public JObject Schema;
+            public string Workdir; // null = workdir-independent (web/github/custom)
         }
 
         private readonly object _lock = new object();
-        private readonly Dictionary<string, CatalogEntry> _byFunctionName =
-            new Dictionary<string, CatalogEntry>(StringComparer.Ordinal);
+        // One function name maps to one-or-more candidates: workdir-scoped tools have a candidate per
+        // open working directory (same name, different connection); workdir-independent tools have one.
+        private readonly Dictionary<string, List<CatalogEntry>> _byFunctionName =
+            new Dictionary<string, List<CatalogEntry>>(StringComparer.Ordinal);
         private readonly Dictionary<McpServerConnection, List<string>> _byConnection =
             new Dictionary<McpServerConnection, List<string>>();
+        // Remembers each connection's workdir so RefreshConnection (driven by a ToolsChanged event,
+        // which carries only the connection) can rebuild its entries with the right workdir tag.
+        private readonly Dictionary<McpServerConnection, string> _connWorkdir =
+            new Dictionary<McpServerConnection, string>();
         private readonly Dictionary<string, long> _revealed = new Dictionary<string, long>(StringComparer.Ordinal);
 
         private readonly int _revealCap;
@@ -52,7 +66,15 @@ namespace GxPT
 
         // ---- lifecycle (driven by McpHost from connection events) ----
 
+        // Workdir-independent registration (web/github/custom servers).
         public void AddConnection(McpServerConnection conn)
+        {
+            AddConnection(conn, null);
+        }
+
+        // workdir tags this connection's tools so resolution can pick the folder-specific instance.
+        // null => workdir-independent.
+        public void AddConnection(McpServerConnection conn, string workdir)
         {
             if (conn == null) return;
             // ListTools may hit the transport — call it outside the lock, then merge under it.
@@ -60,6 +82,7 @@ namespace GxPT
 
             lock (_lock)
             {
+                _connWorkdir[conn] = workdir;
                 List<string> fns;
                 if (!_byConnection.TryGetValue(conn, out fns))
                 {
@@ -78,8 +101,8 @@ namespace GxPT
                     e.FunctionName = fn;
                     e.Description = t.Description;
                     e.Schema = t.InputSchema;
-                    _byFunctionName[fn] = e;
-                    if (!fns.Contains(fn)) fns.Add(fn);
+                    e.Workdir = workdir;
+                    AddEntryLocked(fn, e, fns);
                 }
                 _manifestDirty = true;
             }
@@ -92,7 +115,10 @@ namespace GxPT
 
             lock (_lock)
             {
+                string workdir;
+                if (!_connWorkdir.TryGetValue(conn, out workdir)) workdir = null;
                 RemoveConnectionLocked(conn);
+                _connWorkdir[conn] = workdir;
 
                 List<string> fns = new List<string>();
                 _byConnection[conn] = fns;
@@ -108,8 +134,8 @@ namespace GxPT
                     e.FunctionName = fn;
                     e.Description = t.Description;
                     e.Schema = t.InputSchema;
-                    _byFunctionName[fn] = e;
-                    if (!fns.Contains(fn)) fns.Add(fn);
+                    e.Workdir = workdir;
+                    AddEntryLocked(fn, e, fns);
                 }
                 _manifestDirty = true;
             }
@@ -123,6 +149,24 @@ namespace GxPT
                 RemoveConnectionLocked(conn);
                 _manifestDirty = true;
             }
+        }
+
+        // Append (or replace, on refresh) this connection's entry for a function name. Several
+        // connections may legitimately share one name (the same scoped server for different folders).
+        private void AddEntryLocked(string fn, CatalogEntry e, List<string> fns)
+        {
+            List<CatalogEntry> list;
+            if (!_byFunctionName.TryGetValue(fn, out list))
+            {
+                list = new List<CatalogEntry>();
+                _byFunctionName[fn] = list;
+            }
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (ReferenceEquals(list[i].Conn, e.Conn)) { list[i] = e; if (!fns.Contains(fn)) fns.Add(fn); return; }
+            }
+            list.Add(e);
+            if (!fns.Contains(fn)) fns.Add(fn);
         }
 
         // ListTools may hit the transport; call it outside the lock and never let a fault propagate
@@ -139,16 +183,42 @@ namespace GxPT
 
         private void RemoveConnectionLocked(McpServerConnection conn)
         {
+            _connWorkdir.Remove(conn);
             List<string> fns;
             if (_byConnection.TryGetValue(conn, out fns))
             {
                 for (int i = 0; i < fns.Count; i++)
                 {
-                    _byFunctionName.Remove(fns[i]);
-                    _revealed.Remove(fns[i]);
+                    string fn = fns[i];
+                    List<CatalogEntry> list;
+                    if (_byFunctionName.TryGetValue(fn, out list))
+                    {
+                        for (int j = list.Count - 1; j >= 0; j--)
+                            if (ReferenceEquals(list[j].Conn, conn)) list.RemoveAt(j);
+                        // The name disappears from the surface only when no connection provides it.
+                        if (list.Count == 0)
+                        {
+                            _byFunctionName.Remove(fn);
+                            _revealed.Remove(fn);
+                        }
+                    }
                 }
                 _byConnection.Remove(conn);
             }
+        }
+
+        // First candidate for a function name (any will do for surface metadata — name, description and
+        // schema are identical across a scoped tool's per-folder instances).
+        private bool TryFirstEntryLocked(string fn, out CatalogEntry e)
+        {
+            List<CatalogEntry> list;
+            if (fn != null && _byFunctionName.TryGetValue(fn, out list) && list.Count > 0)
+            {
+                e = list[0];
+                return true;
+            }
+            e = null;
+            return false;
         }
 
         // ---- per-request (from the orchestrator) ----
@@ -198,7 +268,7 @@ namespace GxPT
                 for (int i = 0; i < fns.Count; i++)
                 {
                     CatalogEntry e;
-                    if (_byFunctionName.TryGetValue(fns[i], out e))
+                    if (TryFirstEntryLocked(fns[i], out e))
                         result.Add(FunctionDef(e.FunctionName, e.Description, CloneSchema(e.Schema)));
                 }
             }
@@ -225,7 +295,7 @@ namespace GxPT
                     {
                         string n = names[i];
                         CatalogEntry e;
-                        if (n != null && _byFunctionName.TryGetValue(n, out e))
+                        if (n != null && TryFirstEntryLocked(n, out e))
                         {
                             _revealed[n] = ++_tick; // add or bump recency
                             JObject d = new JObject();
@@ -250,18 +320,39 @@ namespace GxPT
             return sb.ToString();
         }
 
+        // Workdir-agnostic resolve (workdir-independent tools only). Kept for callers/tests that don't
+        // run a folder-scoped turn.
         public bool TryResolve(string functionName, out McpServerConnection conn, out string toolName)
+        {
+            return TryResolve(functionName, null, out conn, out toolName);
+        }
+
+        // Resolve a function name to the connection for this turn's working directory. Scoped tools
+        // match on workdir; workdir-independent tools (Workdir == null) match any turn.
+        public bool TryResolve(string functionName, string workdir, out McpServerConnection conn, out string toolName)
         {
             lock (_lock)
             {
-                CatalogEntry e;
-                if (functionName != null && _byFunctionName.TryGetValue(functionName, out e))
+                List<CatalogEntry> list;
+                if (functionName != null && _byFunctionName.TryGetValue(functionName, out list) && list.Count > 0)
                 {
-                    if (_revealed.ContainsKey(functionName))
-                        _revealed[functionName] = ++_tick; // keep an actively-called tool alive
-                    conn = e.Conn;
-                    toolName = e.OriginalName;
-                    return true;
+                    CatalogEntry best = null;
+                    // 1) exact workdir match (covers scoped tools, and null==null for independents).
+                    for (int i = 0; i < list.Count; i++)
+                        if (WorkdirEquals(list[i].Workdir, workdir)) { best = list[i]; break; }
+                    // 2) fall back to a workdir-independent candidate for an independent tool called
+                    //    from within a folder turn (e.g. web__search during a files turn).
+                    if (best == null)
+                        for (int i = 0; i < list.Count; i++)
+                            if (list[i].Workdir == null) { best = list[i]; break; }
+                    if (best != null)
+                    {
+                        if (_revealed.ContainsKey(functionName))
+                            _revealed[functionName] = ++_tick; // keep an actively-called tool alive
+                        conn = best.Conn;
+                        toolName = best.OriginalName;
+                        return true;
+                    }
                 }
             }
             conn = null;
@@ -270,6 +361,13 @@ namespace GxPT
         }
 
         // ---- internals ----
+
+        private static bool WorkdirEquals(string a, string b)
+        {
+            if (a == null) return b == null;
+            if (b == null) return false;
+            return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+        }
 
         private void EnforceCapLocked()
         {
@@ -344,8 +442,9 @@ namespace GxPT
         private bool CollidesWithDifferentLocked(string baseName, string serverName, string toolName)
         {
             CatalogEntry e;
-            if (!_byFunctionName.TryGetValue(baseName, out e)) return false;
-            // Same identity (e.g. a stale entry being re-added) is not a collision.
+            if (!TryFirstEntryLocked(baseName, out e)) return false;
+            // Same identity (a stale entry being re-added, or the same scoped server for another
+            // folder) is not a collision — those legitimately share the function name.
             bool sameServer = (e.Conn != null && e.Conn.Name == serverName);
             return !(sameServer && e.OriginalName == toolName);
         }

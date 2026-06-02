@@ -49,6 +49,61 @@ namespace GxPT.Tests.Mcp
         }
 
         [Fact]
+        public void Scoped_tool_routes_to_the_connection_for_the_calling_workdir()
+        {
+            // Two instances of the same scoped server (one per working directory) expose the SAME
+            // function name. The model sees it once; resolution picks the folder-specific connection.
+            var reg = NewRegistry(8);
+            var connA = FakeConn.Ready("files", new ToolDef("read"));
+            var connB = FakeConn.Ready("files", new ToolDef("read"));
+            reg.AddConnection(connA, "C:\\a");
+            reg.AddConnection(connB, "C:\\b");
+
+            // Surface is deduped: the name appears once regardless of how many folders provide it.
+            Assert.Single(ManifestNames(reg).FindAll(delegate(string n) { return n == "files__read"; }));
+
+            McpServerConnection r; string tool;
+            Assert.True(reg.TryResolve("files__read", "C:\\a", out r, out tool));
+            Assert.Same(connA, r);
+            Assert.True(reg.TryResolve("files__read", "C:\\b", out r, out tool));
+            Assert.Same(connB, r);
+            // A folder with no instance doesn't resolve the scoped tool.
+            Assert.False(reg.TryResolve("files__read", "C:\\other", out r, out tool));
+        }
+
+        [Fact]
+        public void Workdir_independent_tool_resolves_for_any_calling_workdir()
+        {
+            var reg = NewRegistry(8);
+            reg.AddConnection(FakeConn.Ready("web", new ToolDef("search")), null);
+
+            McpServerConnection r; string tool;
+            Assert.True(reg.TryResolve("web__search", "C:\\a", out r, out tool)); // independent of folder
+            Assert.True(reg.TryResolve("web__search", null, out r, out tool));
+        }
+
+        [Fact]
+        public void Removing_one_workdir_instance_keeps_the_tool_while_another_provides_it()
+        {
+            var reg = NewRegistry(8);
+            var connA = FakeConn.Ready("files", new ToolDef("read"));
+            var connB = FakeConn.Ready("files", new ToolDef("read"));
+            reg.AddConnection(connA, "C:\\a");
+            reg.AddConnection(connB, "C:\\b");
+
+            reg.RemoveConnection(connA);
+
+            Assert.Contains("files__read", ManifestNames(reg)); // still provided by C:\b
+            McpServerConnection r; string tool;
+            Assert.False(reg.TryResolve("files__read", "C:\\a", out r, out tool));
+            Assert.True(reg.TryResolve("files__read", "C:\\b", out r, out tool));
+            Assert.Same(connB, r);
+
+            reg.RemoveConnection(connB);
+            Assert.DoesNotContain("files__read", ManifestNames(reg)); // last instance gone
+        }
+
+        [Fact]
         public void Sanitizes_illegal_characters()
         {
             var reg = NewRegistry(8);
