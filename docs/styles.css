@@ -1,0 +1,90 @@
+/* GxPT landing page — page-specific overlay on top of the vendored XP.css.
+   XP.css provides the authentic Luna window/title-bar/button chrome; everything
+   here is layout, wallpaper, hero typography, screenshot framing, and CTA sizing. */
+
+html, body {
+  margin: 0;
+  padding: 0;
+  /* Bliss-style sky/grass gradient as a lightweight stand-in wallpaper */
+  background:
+    linear-gradient(to bottom,
+      #4d90fe 0%, #5fa8ff 28%, #8fd0ff 46%,
+      #bfe6a8 54%, #7cc24a 78%, #5aa033 100%) fixed;
+  min-height: 100vh;
+}
+
+.page {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 32px 16px 56px;
+}
+
+/* Give each window some breathing room and a stronger drop shadow */
+.window {
+  margin: 0 0 24px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
+}
+.shots-grid .window { margin-bottom: 0; }
+
+/* ---- hero ---- */
+.hero { text-align: center; padding: 20px 22px 22px; }
+.hero h1 {
+  margin: 2px 0 2px;
+  font-size: 40px;
+  letter-spacing: 1px;
+  color: #1c50c4;
+  text-shadow: 1px 1px 0 #fff;
+}
+.tagline {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-style: italic;
+  color: #1c3f7a;
+}
+.hero p.lead {
+  margin: 10px auto 2px;
+  max-width: 620px;
+  line-height: 1.5;
+  font-size: 13px;
+}
+
+/* ---- download ---- */
+.download-window { max-width: 440px; margin-left: auto; margin-right: auto; }
+.dl-intro { margin: 2px 0 14px; }
+.dl-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+/* Enlarge XP.css's native buttons into proper call-to-action targets */
+.dl-actions button { min-height: 30px; padding: 4px 16px; font-size: 13px; }
+.dl-actions .dl-primary { font-weight: bold; padding: 6px 20px; }
+.download-note { font-size: 11px; color: #333; margin: 12px 0 2px; }
+
+/* ---- screenshots ---- */
+.shot-body { padding: 3px; background: #fff; }
+.shot { display: block; width: 100%; height: auto; }
+
+.shots-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-bottom: 24px;
+}
+@media (max-width: 620px) { .shots-grid { grid-template-columns: 1fr; } }
+
+/* ---- features ---- */
+ul.features { margin: 4px 0; padding-left: 22px; line-height: 1.55; }
+ul.features li { margin-bottom: 6px; }
+ul.features b { color: #1c50c4; }
+
+/* ---- footer ---- */
+.footer {
+  text-align: center;
+  margin-top: 4px;
+  color: #11357f;
+  font-size: 12px;
+  text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.6);
+}
+.footer a { color: #11357f; }
