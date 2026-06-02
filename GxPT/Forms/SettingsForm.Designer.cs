@@ -430,8 +430,8 @@
             this.tblMcp.Controls.Add(this.chkMcpGithub, 0, 1);
             this.tblMcp.Controls.Add(this.txtGithubPat, 1, 1);
             this.tblMcp.Controls.Add(this.chkMcpFiles, 0, 2);
-            this.tblMcp.Controls.Add(this.chkMcpGit, 0, 3);
-            this.tblMcp.Controls.Add(this.chkMcpCommand, 0, 4);
+            this.tblMcp.Controls.Add(this.chkMcpCommand, 0, 3);
+            this.tblMcp.Controls.Add(this.chkMcpGit, 0, 4);
             this.tblMcp.Controls.Add(this.lblMcpCustom, 0, 5);
             this.tblMcp.Controls.Add(this.rtbMcpJson, 0, 6);
             this.tblMcp.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -447,6 +447,9 @@
             this.tblMcp.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tblMcp.SetColumnSpan(this.lblMcpCustom, 2);
             this.tblMcp.SetColumnSpan(this.rtbMcpJson, 2);
+            // Git's label carries a parenthetical, so let it span both columns rather than widen
+            // column 0 (which would squeeze the web/GitHub credential fields on rows 0-1).
+            this.tblMcp.SetColumnSpan(this.chkMcpGit, 2);
             this.tblMcp.Size = new System.Drawing.Size(590, 357);
             this.tblMcp.TabIndex = 0;
             //
@@ -500,8 +503,8 @@
             this.chkMcpGit.AutoSize = true;
             this.chkMcpGit.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.chkMcpGit.Name = "chkMcpGit";
-            this.chkMcpGit.TabIndex = 5;
-            this.chkMcpGit.Text = "Git";
+            this.chkMcpGit.TabIndex = 6;
+            this.chkMcpGit.Text = "Git  (optional - finer-grained, per-operation permissions than running git via Command)";
             this.chkMcpGit.UseVisualStyleBackColor = true;
             //
             // chkMcpCommand
@@ -510,7 +513,7 @@
             this.chkMcpCommand.AutoSize = true;
             this.chkMcpCommand.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.chkMcpCommand.Name = "chkMcpCommand";
-            this.chkMcpCommand.TabIndex = 6;
+            this.chkMcpCommand.TabIndex = 5;
             this.chkMcpCommand.Text = "Command";
             this.chkMcpCommand.UseVisualStyleBackColor = true;
             //
