@@ -1,6 +1,6 @@
 # GxPT
 
-> *Windows XP goes agentic.*
+> *Windows XP goes agentic!*
 
 A native chatbot client for Windows XP, written in C# and .NET 3.5. GxPT aims to provide a modern and user-friendly chat interface on legacy Windows systems, with robust Markdown and code syntax highlighting support. It also brings agentic workflows to legacy hardware — autonomously chaining tools for agentic coding and web search via the Model Context Protocol (MCP), with per-conversation privacy controls.
 
