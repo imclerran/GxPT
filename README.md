@@ -2,7 +2,7 @@
 
 > *Windows XP goes agentic.*
 
-A native chatbot client for Windows XP, written in C# and .NET 3.5. GxPT aims to provide a modern and user-friendly chat interface on legacy Windows systems, with robust Markdown and code syntax highlighting support — plus agentic workflows and tool calling via the Model Context Protocol (MCP).
+A native chatbot client for Windows XP, written in C# and .NET 3.5. GxPT aims to provide a modern and user-friendly chat interface on legacy Windows systems, with robust Markdown and code syntax highlighting support. It also brings agentic workflows to legacy hardware — autonomously chaining tools for agentic coding and web search via the Model Context Protocol (MCP), with per-conversation privacy controls.
 
 ## Screenshot
 
@@ -20,8 +20,8 @@ A native chatbot client for Windows XP, written in C# and .NET 3.5. GxPT aims to
 - **Code Syntax Highlighting**: Out-of-the-box support for a wide range of languages, including:
    - Ada, ASM, Bash, Basic, Batch, C, Clojure, C++, C#, CSS, CSV, Dart, EBNF, Elixir, Erlang, F#, Fortran, Go, Haskell, HTML, Java, JavaScript, JSON, Kotlin, Lisp (Common, Scheme/Racket, Clojure, Emacs), Lua, OCaml, Pascal, Perl, PHP, PowerShell, Properties, Python, Ruby, Regex, Rust, Scala, SQL, Swift, TypeScript, Visual Basic, XML, YAML, Zig
 - **Conversation Management**: Tabbed conversations and conversation history.
-- **Agentic Workflows**: GxPT autonomously chains multiple tool calls — looping until your task is done — to power **agentic coding** (file, git, and shell tools scoped to a per-conversation working folder) and **web search** (Tavily). Tools connect via the [Model Context Protocol](https://modelcontextprotocol.io/); bundled servers also include **GitHub** access, and custom MCP servers can be added via `mcp.json`.
-- **Tool Approval & Sandboxing**: Every tool call is gated by an in-app approval prompt showing the exact tool and arguments before anything runs; destructive operations (delete, shell commands, `git push`) always confirm. Approvals can be remembered per-tool, per-command, or per-directory for the session. File/git/command tools are confined to the working folder you choose.
+- **Agentic Workflows**: GxPT autonomously chains tool calls until your task is done, powering **agentic coding** (file/git/shell), **web search**, and **GitHub** access. Tools connect via the [Model Context Protocol](https://modelcontextprotocol.io/); add custom servers in `mcp.json`.
+- **Tool Approval & Sandboxing**: Every tool call is gated by an in-app approval prompt showing the exact tool and arguments before it runs, with approvals remembered per session. File/git/command tools are confined to the working folder you choose.
 - **File Attachments**: Add text file attachments to your messages to avoid cluttering up the conversation with long pasted text.
 - **Conversation Editing**: Don't like the response a model gave you? Go back and edit your message and get a new response.
 - **Privacy & Local Storage**: Conversations are stored locally and can be exported/imported to migrate across machines. Enforce **Zero Data Retention (ZDR)** per conversation to route only to providers that won't store your prompts or responses.
