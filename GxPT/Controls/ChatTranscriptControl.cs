@@ -1490,17 +1490,22 @@ namespace GxPT
             const string tag = "zdr";
             using (var font = new Font(_baseFont != null ? _baseFont.FontFamily : FontFamily.GenericSansSerif,
                                        6.5f, FontStyle.Regular, GraphicsUnit.Point))
+            using (var sf = new StringFormat(StringFormat.GenericTypographic))
             {
-                Size sz = TextRenderer.MeasureText(g, tag, font, new Size(int.MaxValue, int.MaxValue),
-                    TextFormatFlags.NoPadding);
+                // GDI+ (g.DrawString) honors the paint-time scroll transform; TextRenderer (GDI) does
+                // not, which would pin the tag in place while the bubble scrolled.
+                SizeF szf = g.MeasureString(tag, font, int.MaxValue, sf);
+                int w = (int)Math.Ceiling(szf.Width);
+                int h = (int)Math.Ceiling(szf.Height);
                 int pad = 2;
                 // Sit against the bottom-right border, within the padding gutter.
-                int x = r.Right - BubblePadding / 2 - sz.Width;
-                int y = r.Bottom - sz.Height - 1;
-                Rectangle chip = new Rectangle(x - pad, y, sz.Width + 2 * pad, sz.Height);
+                int x = r.Right - BubblePadding / 2 - w;
+                int y = r.Bottom - h - 1;
+                Rectangle chip = new Rectangle(x - pad, y, w + 2 * pad, h);
                 using (var bb = new SolidBrush(back))
                     g.FillRectangle(bb, chip);
-                TextRenderer.DrawText(g, tag, font, new Point(x, y), border, TextFormatFlags.NoPadding);
+                using (var fb = new SolidBrush(border))
+                    g.DrawString(tag, font, fb, new PointF(x, y), sf);
             }
         }
 
