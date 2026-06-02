@@ -203,7 +203,11 @@ namespace GxPT
             AddButton("Allow once", ApprovalChoice.AllowOnce, false);
 
             this.Visible = true;
-            this.BringToFront();
+            // Keep this Bottom-docked panel BEHIND the Fill transcript in z-order. WinForms fills the
+            // remaining space with the front-most Fill control, so the panel must stay back for the
+            // transcript to shrink *above* it (rather than the panel overlaying the transcript's
+            // bottom edge and its right-docked scrollbar). BringToFront would cause exactly that.
+            this.SendToBack();
         }
 
         public void HidePanel()
