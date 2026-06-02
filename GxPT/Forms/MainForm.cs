@@ -2176,57 +2176,151 @@ namespace GxPT
             }
         }
 
-        // Activity marker for a tool call. For files__edit and command__run, register a collapsible
-        // record with the transcript under a stable key and return its sentinel in place of the generic
-        // "using" marker. Any failure falls back to the generic marker so an edge-case call still renders.
+        // Activity marker for a tool call. If the tool maps to a collapsible/labelled record, register
+        // it with the transcript under a stable key and return its sentinel; otherwise (or on any
+        // failure) return the generic "using <tool>" marker.
         private static string EditDiffMarkerOrCall(ChatTranscriptControl transcript, string name, string argsJson, string key)
         {
             if (transcript != null && !string.IsNullOrEmpty(key))
             {
-                if (string.Equals(name, "files__edit", StringComparison.Ordinal))
+                try
                 {
-                    try
+                    var args = Newtonsoft.Json.Linq.JObject.Parse(string.IsNullOrEmpty(argsJson) ? "{}" : argsJson);
+                    string header, body, language;
+                    if (TryBuildToolRecord(name, args, out header, out body, out language))
                     {
-                        var args = Newtonsoft.Json.Linq.JObject.Parse(string.IsNullOrEmpty(argsJson) ? "{}" : argsJson);
-                        string path = (string)args["path"] ?? string.Empty;
-                        string oldS = (string)args["old_string"] ?? string.Empty;
-                        string newS = (string)args["new_string"] ?? string.Empty;
-                        LineDiffResult diff = DiffUtil.BuildLineDiff(oldS, newS);
-                        transcript.RegisterEditDiff(key, path, diff.Body, diff.Added, diff.Removed);
+                        transcript.RegisterToolRecord(key, header, body, language);
                         return McpMarkers.EditDiff(key);
                     }
-                    catch { /* fall through to the generic marker */ }
                 }
-                else if (string.Equals(name, "command__run", StringComparison.Ordinal))
-                {
-                    try
-                    {
-                        var args = Newtonsoft.Json.Linq.JObject.Parse(string.IsNullOrEmpty(argsJson) ? "{}" : argsJson);
-                        string cmd = (string)args["command"] ?? string.Empty;
-                        if (cmd.Trim().Length > 0)
-                        {
-                            transcript.RegisterCommandRun(key, cmd);
-                            return McpMarkers.EditDiff(key);
-                        }
-                    }
-                    catch { /* fall through to the generic marker */ }
-                }
-                else if (string.Equals(name, "web__search", StringComparison.Ordinal))
-                {
-                    try
-                    {
-                        var args = Newtonsoft.Json.Linq.JObject.Parse(string.IsNullOrEmpty(argsJson) ? "{}" : argsJson);
-                        string query = (string)args["query"] ?? string.Empty;
-                        if (query.Trim().Length > 0)
-                        {
-                            transcript.RegisterWebSearch(key, query);
-                            return McpMarkers.EditDiff(key);
-                        }
-                    }
-                    catch { /* fall through to the generic marker */ }
-                }
+                catch { /* fall through to the generic marker */ }
             }
             return McpMarkers.Call(name);
+        }
+
+        // Maps a tool call to a transcript record. An empty body yields a one-line label (no expansion);
+        // a non-empty body is a collapsible record highlighted in 'language'. Returns false for tools
+        // that should keep the generic marker.
+        private static bool TryBuildToolRecord(string name, Newtonsoft.Json.Linq.JObject args, out string header, out string body, out string language)
+        {
+            header = null; body = string.Empty; language = "text";
+            switch (name)
+            {
+                case "files__edit":
+                {
+                    string path = Str(args, "path");
+                    LineDiffResult diff = DiffUtil.BuildLineDiff(Str(args, "old_string"), Str(args, "new_string"));
+                    header = "edited " + (path.Length > 0 ? path : "(file)") + "  (+" + diff.Added + " −" + diff.Removed + ")";
+                    body = diff.Body; language = "diff"; return true;
+                }
+                case "files__write":
+                {
+                    string path = Str(args, "path");
+                    header = "Wrote " + (path.Length > 0 ? path : "(file)");
+                    body = Str(args, "content");
+                    language = SyntaxHighlighter.GetLanguageForFileName(path) ?? "text";
+                    return true;
+                }
+                case "files__delete":
+                {
+                    string path = Str(args, "path"); if (path.Length == 0) return false;
+                    header = "Deleted " + path; return true;
+                }
+                case "files__read":
+                {
+                    string path = Str(args, "path"); if (path.Length == 0) return false;
+                    header = "Read " + path + LineRangeSuffix(args); return true;
+                }
+                case "files__list":
+                {
+                    string path = Str(args, "path"); if (path.Length == 0) return false;
+                    header = "Listed " + path + (Bool(args, "recursive") ? " (recursive)" : ""); return true;
+                }
+                case "files__search":
+                {
+                    string query = Str(args, "query"); if (query.Length == 0) return false;
+                    header = "Searched files"; body = query;
+                    language = Bool(args, "regex") ? "regex" : "text"; return true;
+                }
+                case "command__run":
+                {
+                    string cmd = Str(args, "command"); if (cmd.Trim().Length == 0) return false;
+                    header = "Ran a command"; body = cmd; language = "batch"; return true;
+                }
+                case "web__search":
+                {
+                    string query = Str(args, "query"); if (query.Trim().Length == 0) return false;
+                    header = "Searched the web"; body = query; return true;
+                }
+                case "web__extract":
+                {
+                    string urls = JoinUrls(args); if (urls.Length == 0) return false;
+                    int n = urls.Split('\n').Length;
+                    header = n > 1 ? ("Read " + n + " web pages") : "Read a web page";
+                    body = urls; return true;
+                }
+                case "git__commit":
+                {
+                    string msg = Str(args, "message"); if (msg.Trim().Length == 0) return false;
+                    header = "Committed"; body = msg; return true;
+                }
+                case "git__push":
+                {
+                    string remote = Str(args, "remote"); string branch = Str(args, "branch");
+                    string tgt = remote.Length > 0 ? (branch.Length > 0 ? remote + "/" + branch : remote) : branch;
+                    header = tgt.Length > 0 ? ("Pushed to " + tgt) : "Pushed commits"; return true;
+                }
+                case "git__status": header = "Checked git status"; return true;
+                case "git__log": header = "Viewed git log"; return true;
+                case "git__diff":
+                {
+                    string path = Str(args, "path");
+                    header = "Viewed git diff" + (Bool(args, "staged") ? " (staged)" : "") + (path.Length > 0 ? " of " + path : "");
+                    return true;
+                }
+                case "reveal_tools": header = "Checking available tools"; return true;
+                default: return false;
+            }
+        }
+
+        private static string Str(Newtonsoft.Json.Linq.JObject args, string name)
+        {
+            try { var t = args[name]; return t == null ? string.Empty : ((string)t ?? string.Empty); }
+            catch { return string.Empty; }
+        }
+        private static bool Bool(Newtonsoft.Json.Linq.JObject args, string name)
+        {
+            try { var t = args[name]; return t != null && (bool)t; }
+            catch { return false; }
+        }
+        private static string LineRangeSuffix(Newtonsoft.Json.Linq.JObject args)
+        {
+            try
+            {
+                var s = args["start_line"]; var e = args["end_line"];
+                if (s != null && e != null) return " (lines " + (int)s + "–" + (int)e + ")";
+                if (s != null) return " (from line " + (int)s + ")";
+                if (e != null) return " (through line " + (int)e + ")";
+            }
+            catch { }
+            return string.Empty;
+        }
+        private static string JoinUrls(Newtonsoft.Json.Linq.JObject args)
+        {
+            try
+            {
+                var arr = args["urls"] as Newtonsoft.Json.Linq.JArray;
+                if (arr == null) return string.Empty;
+                var sb = new System.Text.StringBuilder();
+                foreach (var u in arr)
+                {
+                    string s = (string)u; if (string.IsNullOrEmpty(s)) continue;
+                    if (sb.Length > 0) sb.Append('\n');
+                    sb.Append(s);
+                }
+                return sb.ToString();
+            }
+            catch { return string.Empty; }
         }
 
         private void RebuildTranscriptAsync(TabManager.ChatTabContext ctx, Conversation convo)

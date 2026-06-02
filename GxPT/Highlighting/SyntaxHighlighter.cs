@@ -371,6 +371,22 @@ namespace GxPT
         }
 
         /// <summary>
+        /// Resolves a highlighter language id from a file name by stripping the extension's dot
+        /// (e.g. "src/a.cs" -> "cs"). Highlighters already register their extensions as aliases, so this
+        /// resolves through the same lookup (GetHighlighter) as a code-fence language name. Returns null
+        /// when there is no extension; an unknown extension simply falls back to plain at lookup time.
+        /// </summary>
+        public static string GetLanguageForFileName(string fileName)
+        {
+            if (string.IsNullOrEmpty(fileName)) return null;
+            string ext;
+            try { ext = System.IO.Path.GetExtension(fileName); }
+            catch { return null; }
+            if (string.IsNullOrEmpty(ext) || ext.Length < 2) return null;
+            return ext.Substring(1).ToLowerInvariant(); // drop the leading dot; the lookup does the rest
+        }
+
+        /// <summary>
         /// Returns a deduplicated set of file dialog patterns (e.g., "*.cs") contributed by
         /// built-in highlighters. This avoids reflection by referencing the known types.
         /// </summary>

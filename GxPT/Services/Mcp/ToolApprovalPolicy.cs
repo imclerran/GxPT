@@ -25,13 +25,19 @@ namespace GxPT
             _store = store != null ? store : new InMemoryApprovalStore();
         }
 
-        // Tools that never require approval (always allowed, no prompt). web__search is read-only and
-        // high-frequency, so prompting adds friction without meaningful risk; web__extract (which
-        // fetches arbitrary pages) deliberately stays gated.
+        // Tools that never require approval (always allowed, no prompt): the read-only built-ins, which
+        // are high-frequency and don't modify anything. Tools that write, delete, run commands, push, or
+        // fetch arbitrary pages (web__extract) deliberately stay gated.
         private static readonly Dictionary<string, bool> _autoAllow = BuildAutoAllowSet();
         private static Dictionary<string, bool> BuildAutoAllowSet()
         {
             var s = new Dictionary<string, bool>(StringComparer.Ordinal);
+            s["files__read"] = true;
+            s["files__list"] = true;
+            s["files__search"] = true;
+            s["git__status"] = true;
+            s["git__diff"] = true;
+            s["git__log"] = true;
             s["web__search"] = true;
             return s;
         }

@@ -158,7 +158,7 @@ namespace GxPT
 
         public override string[] Aliases
         {
-            get { return new string[] { "ada83", "ada95", "ada2005", "ada2012", "ada2022", "gnat", "spark" }; }
+            get { return new string[] { "ada83", "ada95", "ada2005", "ada2012", "ada2022", "gnat", "spark", "adb", "ads", "gpr" }; }
         }
 
         protected override TokenPattern[] GetPatterns()
@@ -366,7 +366,7 @@ namespace GxPT
 
         public override string[] Aliases
         {
-            get { return new string[] { "sh", "shell", "zsh", "ksh" }; }
+            get { return new string[] { "sh", "shell", "zsh", "ksh", "fish", "csh", "tcsh" }; }
         }
 
         protected override TokenPattern[] GetPatterns()
@@ -646,7 +646,7 @@ namespace GxPT
 
         public override string[] Aliases
         {
-            get { return new string[] { "cs", "c#", "dotnet", "c-sharp" }; }
+            get { return new string[] { "cs", "c#", "dotnet", "c-sharp", "csx" }; }
         }
 
         protected override TokenPattern[] GetPatterns()
@@ -699,7 +699,7 @@ namespace GxPT
 
         public override string[] Aliases
         {
-            get { return new string[] { "css3", "stylesheet" }; }
+            get { return new string[] { "css3", "stylesheet", "scss", "sass", "less" }; }
         }
 
         protected override TokenPattern[] GetPatterns()
@@ -1009,7 +1009,7 @@ namespace GxPT
 
         public override string[] Aliases
         {
-            get { return new string[] { "bnf", "abnf", "grammar", "yacc", "bison" }; }
+            get { return new string[] { "bnf", "abnf", "grammar", "yacc", "bison", "y", "yy" }; }
         }
 
         protected override TokenPattern[] GetPatterns()
@@ -1216,7 +1216,7 @@ namespace GxPT
 
         public override string[] Aliases
         {
-            get { return new string[] { "f77", "f90", "f95", "f2003", "f2008", "f2018", "for", "ftn", "f", "fortran77", "fortran90", "fortran95" }; }
+            get { return new string[] { "f77", "f90", "f95", "f2003", "f2008", "f2018", "for", "ftn", "f", "fortran77", "fortran90", "fortran95", "f03", "f08" }; }
         }
 
         protected override TokenPattern[] GetPatterns()
@@ -1440,7 +1440,7 @@ namespace GxPT
 
         public override string[] Aliases
         {
-            get { return new string[] { "gql", "cypher", "opencypher", "neo4j", "pgql", "ngql", "age", "memgraph", "redisgraph" }; }
+            get { return new string[] { "gql", "cypher", "opencypher", "neo4j", "pgql", "ngql", "age", "memgraph", "redisgraph", "cql" }; }
         }
 
         protected override TokenPattern[] GetPatterns()
@@ -1681,7 +1681,7 @@ namespace GxPT
 
         public override string[] Aliases
         {
-            get { return new string[] { "js", "node", "nodejs", "mjs", "cjs" }; }
+            get { return new string[] { "js", "node", "nodejs", "mjs", "cjs", "jsx" }; }
         }
 
         protected override TokenPattern[] GetPatterns()
@@ -1843,7 +1843,7 @@ namespace GxPT
                     "lisp", "commonlisp", "common-lisp", "cl",
                     "scheme", "racket", "guile", 
                     "clojure", "clj", "cljs", "edn",
-                    "elisp", "emacs-lisp", "emacs"
+                    "elisp", "emacs-lisp", "emacs", "lsp", "fasl", "scm", "ss", "sch", "rkt", "cljc", "el"
                 };
             }
         }
@@ -1914,7 +1914,7 @@ namespace GxPT
 
         public override string[] Aliases
         {
-            get { return new string[] { "lua5.1", "lua5.2", "lua5.3", "lua5.4", "luajit", "moonscript" }; }
+            get { return new string[] { "lua5.1", "lua5.2", "lua5.3", "lua5.4", "luajit", "moonscript", "luau" }; }
         }
 
         protected override TokenPattern[] GetPatterns()
@@ -1985,7 +1985,7 @@ namespace GxPT
 
         public override string[] Aliases
         {
-            get { return new string[] { "minecraft", "mcfunction", "datapack", "mc" }; }
+            get { return new string[] { "minecraft", "mcfunction", "datapack", "mc", "mcmeta" }; }
         }
 
         protected override TokenPattern[] GetPatterns()
@@ -2198,7 +2198,7 @@ namespace GxPT
 
         public override string[] Aliases
         {
-            get { return new string[] { "pl", "pm", "perl5", "perl6", "raku" }; }
+            get { return new string[] { "pl", "pm", "perl5", "perl6", "raku", "pod" }; }
         }
 
         protected override TokenPattern[] GetPatterns()
@@ -2260,7 +2260,7 @@ namespace GxPT
 
         public override string[] Aliases
         {
-            get { return new string[] { "php", "phtml" }; }
+            get { return new string[] { "php", "phtml", "php3", "php4", "php5", "phps" }; }
         }
 
         protected override TokenPattern[] GetPatterns()
@@ -2497,7 +2497,7 @@ namespace GxPT
 
         public override string[] Aliases
         {
-            get { return new string[] { "py", "python3", "py3" }; }
+            get { return new string[] { "py", "python3", "py3", "pyw", "pyi", "pyx" }; }
         }
 
         protected override TokenPattern[] GetPatterns()
@@ -2547,7 +2547,7 @@ namespace GxPT
 
         public override string[] Aliases
         {
-            get { return new string[] { "rb" }; }
+            get { return new string[] { "rb", "rbw", "rake", "gemspec" }; }
         }
 
         protected override TokenPattern[] GetPatterns()
