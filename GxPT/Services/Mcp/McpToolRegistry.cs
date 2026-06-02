@@ -247,8 +247,26 @@ namespace GxPT
                     sb.Append("and makes them callable on the next step. You may reveal several at once. ");
                     sb.Append("Only reveal_tools and tools you have already revealed can be called.");
                     sb.Append("\n\nAvailable tools:");
+                    bool hasGit = false, hasCommand = false;
                     for (int i = 0; i < names.Count; i++)
+                    {
                         sb.Append("\n- ").Append(names[i]);
+                        if (!hasGit && names[i].StartsWith("git__", StringComparison.Ordinal)) hasGit = true;
+                        if (!hasCommand && names[i].StartsWith("command__", StringComparison.Ordinal)) hasCommand = true;
+                    }
+
+                    // When both the git and command toolsets are available, steer the model to the
+                    // dedicated git tools: each git operation is a separately approvable tool (finer-
+                    // grained, auditable permissions), whereas the command tool needs a broad "git"
+                    // command approval. Command stays a fallback for git functionality git__ lacks.
+                    if (hasGit && hasCommand)
+                    {
+                        sb.Append("\n\nFor Git operations, prefer the dedicated git__ tools over the ");
+                        sb.Append("command tool: each is a separately approvable tool with finer-grained ");
+                        sb.Append("permissions. Only fall back to the command tool for Git functionality ");
+                        sb.Append("the git__ tools do not provide.");
+                    }
+
                     _manifestCache = sb.ToString();
                     _manifestDirty = false;
                 }
