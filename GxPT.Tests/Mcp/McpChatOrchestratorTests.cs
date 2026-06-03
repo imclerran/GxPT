@@ -128,7 +128,33 @@ namespace GxPT.Tests.Mcp
         }
 
         [Fact]
-        public void Hitting_iteration_cap_returns_a_note()
+        public void Hitting_iteration_cap_wraps_up_with_a_model_message()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            ft.OnCall = delegate(string name, JObject args) { return RegistryFakeTransport.TextResult("x"); };
+
+            var streamer = new ScriptedStreamer();
+            for (int i = 0; i < 3; i++) streamer.Turns.Add(Chunks.OneToolCall("c" + i, "files__read", "{}"));
+            // The tool-less wrap-up call (after the cap) gets this text.
+            streamer.Fallback = delegate(int i) { return Chunks.Text("Summary; how should I proceed?"); };
+
+            // cap 3, no ContinuationDecider => wrap up rather than dead-end.
+            var orch = new McpChatOrchestrator(streamer, reg, null, "m", null, 3, 1000);
+            var history = new List<ChatMessage>();
+            var ui = new RecordingUi();
+            orch.RunTurn(history, "loop forever", ui);
+
+            Assert.True(ui.Completed);
+            Assert.Equal(4, streamer.Calls);                       // 3 tool iterations + 1 tool-less wrap-up
+            Assert.Null(streamer.SeenTools[3]);                    // wrap-up offers no tools
+            Assert.Equal("assistant", history[history.Count - 1].Role);
+            Assert.Equal("Summary; how should I proceed?", history[history.Count - 1].Content);
+            Assert.Contains("how should I proceed", ui.Text.ToString());
+        }
+
+        [Fact]
+        public void Continuing_at_the_cap_grants_another_budget()
         {
             RegistryFakeTransport ft;
             var reg = RegistryWith(out ft, "files", new ToolDef("read"));
@@ -137,16 +163,57 @@ namespace GxPT.Tests.Mcp
             var streamer = new ScriptedStreamer();
             streamer.Fallback = delegate(int i) { return Chunks.OneToolCall("c" + i, "files__read", "{}"); };
 
-            var orch = new McpChatOrchestrator(streamer, reg, null, "m", null, 3, 1000);
+            var orch = new McpChatOrchestrator(streamer, reg, null, "m", null, 2, 1000);
+            int asked = 0;
+            orch.ContinuationDecider = delegate(int n) { asked++; return asked == 1; }; // continue once, then stop
+
+            var ui = new RecordingUi();
+            orch.RunTurn(new List<ChatMessage>(), "go", ui);
+
+            Assert.Equal(2, asked);            // asked at the first cap (granted) and the refreshed cap (stopped)
+            Assert.Equal(5, streamer.Calls);   // (2 + 2) tool iterations + 1 wrap-up
+            Assert.True(ui.Completed);
+        }
+
+        [Fact]
+        public void Empty_response_is_retried_once_then_proceeds()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            ft.OnCall = delegate(string name, JObject args) { return RegistryFakeTransport.TextResult("ok"); };
+
+            var streamer = new ScriptedStreamer();
+            streamer.Turns.Add(new ChatCompletionChunk[0]);                     // empty: no text, no tool calls
+            streamer.Turns.Add(Chunks.OneToolCall("c1", "files__read", "{}"));  // retry yields a tool call
+            streamer.Turns.Add(Chunks.Text("done"));
+
+            var ui = new RecordingUi();
+            New(streamer, reg).RunTurn(new List<ChatMessage>(), "go", ui);
+
+            Assert.Equal(3, streamer.Calls);   // empty + retry(tool call) + final
+            Assert.Equal(new[] { "files__read" }, ui.ToolCalls.ToArray());
+            Assert.Equal("done", ui.Text.ToString());
+            Assert.True(ui.Completed);
+        }
+
+        [Fact]
+        public void Empty_response_twice_surfaces_a_notice()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+
+            var streamer = new ScriptedStreamer();
+            streamer.Turns.Add(new ChatCompletionChunk[0]);
+            streamer.Turns.Add(new ChatCompletionChunk[0]);
+
             var history = new List<ChatMessage>();
             var ui = new RecordingUi();
-            orch.RunTurn(history, "loop forever", ui);
+            New(streamer, reg).RunTurn(history, "go", ui);
 
             Assert.True(ui.Completed);
-            Assert.Equal(3, streamer.Calls);
-            Assert.Equal("[Tool-call limit reached.]", history[history.Count - 1].Content);
-            // user + 3*(assistant+tool) + note
-            Assert.Equal(1 + 6 + 1, history.Count);
+            Assert.Equal(2, streamer.Calls);   // initial + one retry, then surface
+            Assert.Contains("empty response", history[history.Count - 1].Content.ToLowerInvariant());
+            Assert.Contains("empty response", ui.Text.ToString().ToLowerInvariant());
         }
 
         [Fact]

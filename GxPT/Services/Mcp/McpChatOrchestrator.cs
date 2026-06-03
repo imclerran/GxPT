@@ -18,7 +18,7 @@ namespace GxPT
     // tiered policy) and called at the one right point.
     internal sealed class McpChatOrchestrator
     {
-        public const int DefaultMaxIterations = 8;
+        public const int DefaultMaxIterations = 25;
         public const int DefaultCallTimeoutMs = 60000;
 
         private readonly IChatStreamer _streamer;
@@ -41,6 +41,13 @@ namespace GxPT
         // Zero data retention for every request in this turn. When true, emits provider.zdr=true so
         // OpenRouter routes only to zero-retention endpoints. Null/false leaves routing unconstrained.
         public bool? Zdr { get; set; }
+
+        // Called when a turn exhausts its iteration budget with tool calls still pending. The argument
+        // is the number of model iterations completed so far. Return true to grant another full budget
+        // (the user chose to keep going), false to wrap up. Null => wrap up. The host wires this to an
+        // in-transcript confirmation similar to the tool-approval prompt; it blocks the turn until the
+        // user answers, which is correct (the user is present).
+        public Func<int, bool> ContinuationDecider { get; set; }
 
         // The working directory of the conversation running this turn. Resolution of workdir-scoped
         // tools (files/git/command) is routed to the server bound to THIS folder, so concurrent turns
@@ -89,11 +96,32 @@ namespace GxPT
             _log.Log("mcp", "[turn " + turnId + "] start: model=" + _model + ", history=" + history.Count
                 + " msg(s), maxIterations=" + _maxIterations);
 
-            for (int iter = 0; iter < _maxIterations; iter++)
+            // The cap is a budget rather than a fixed loop bound so the user can grant another batch
+            // when it's reached (ContinuationDecider) instead of dead-ending the turn.
+            int budget = _maxIterations;
+            for (int iter = 0; ; iter++)
             {
+                if (iter >= budget)
+                {
+                    bool cont = (ContinuationDecider != null) && ContinuationDecider(iter);
+                    if (cont)
+                    {
+                        budget += _maxIterations;
+                        _log.Log("mcp", "[turn " + turnId + "] iteration cap reached at " + iter
+                            + "; user chose to continue (budget now " + budget + ")");
+                    }
+                    else
+                    {
+                        _log.Log("mcp", "[turn " + turnId + "] iteration cap reached at " + iter
+                            + "; wrapping up");
+                        RunCapWrapUp(history, ui, turnId);
+                        return;
+                    }
+                }
+
                 IList<JObject> tools = _registry != null ? _registry.ExposedFunctionDefs() : null;
                 string manifest = _registry != null ? _registry.NamesManifestSystemMessage() : null;
-                _log.Log("mcp", "[turn " + turnId + "] iteration " + (iter + 1) + "/" + _maxIterations
+                _log.Log("mcp", "[turn " + turnId + "] iteration " + (iter + 1) + "/" + budget
                     + ": requesting model with " + (tools != null ? tools.Count : 0) + " exposed tool(s)");
 
                 // The names manifest rides as an extra system message in front of history; it is not
@@ -107,41 +135,50 @@ namespace GxPT
                     ? RequestMessageTransform(history) : history;
                 requestMessages.AddRange(contextMessages);
 
-                ClientProperties props = new ClientProperties();
-                props.Stream = true;
-                props.ProviderDataCollectionAllowed = ProviderDataCollectionAllowed;
-                props.Zdr = Zdr;
-
-                Action<string> textSink = (ui != null) ? new Action<string>(ui.AppendTextDelta) : null;
-                ToolCallAssembler asm = new ToolCallAssembler(textSink);
-                bool errored = false;
-                string errMessage = null;
-
-                _streamer.StreamChat(_model, requestMessages, tools, props,
-                    asm.OnChunk,
-                    delegate(string err) { errored = true; errMessage = err; });
-                asm.Finish();
-
+                bool errored;
+                string errMessage;
+                ToolCallAssembler asm = StreamOnce(requestMessages, tools, ui, out errored, out errMessage);
                 if (errored)
                 {
-                    // A streaming/transport error already failed this request; surface and stop.
                     _log.Log("mcp", "[turn " + turnId + "] aborted on iteration " + (iter + 1)
                         + ": stream error: " + (errMessage ?? "(none)"));
                     if (ui != null) ui.OnError(errMessage);
                     return;
                 }
+                LogResponse(turnId, iter, asm);
 
-                _log.Log("mcp", "[turn " + turnId + "] response: finish_reason="
-                    + (asm.FinishReason ?? "(none)")
-                    + ", toolCalls=" + (asm.ProducedToolCalls ? asm.Calls.Count : 0)
-                    + ", textLen=" + (asm.Text != null ? asm.Text.Length : 0)
-                    + (asm.Truncated ? " [TRUNCATED: model output cut off by length]" : ""));
+                // Degenerate response (no tool calls AND no text, but no error): some providers emit an
+                // empty completion on a transient hiccup. Retry the same request once before giving up.
+                if (!asm.ProducedToolCalls && IsEmptyText(asm.Text))
+                {
+                    _log.Log("mcp", "[turn " + turnId + "] empty response (no tool calls, no text); retrying once");
+                    asm = StreamOnce(requestMessages, tools, ui, out errored, out errMessage);
+                    if (errored)
+                    {
+                        _log.Log("mcp", "[turn " + turnId + "] aborted on iteration " + (iter + 1)
+                            + " (retry): stream error: " + (errMessage ?? "(none)"));
+                        if (ui != null) ui.OnError(errMessage);
+                        return;
+                    }
+                    LogResponse(turnId, iter, asm);
+                }
 
                 if (!asm.ProducedToolCalls)
                 {
+                    if (IsEmptyText(asm.Text))
+                    {
+                        // Still empty after a retry: surface a clear, resumable notice rather than
+                        // completing with a silent empty bubble.
+                        string emptyNotice = "The model returned an empty response. Please try again.";
+                        history.Add(new ChatMessage("assistant", emptyNotice));
+                        _log.Log("mcp", "[turn " + turnId + "] still empty after retry; surfaced notice");
+                        if (ui != null) { ui.AppendTextDelta(emptyNotice); ui.Complete(); }
+                        return;
+                    }
+
                     history.Add(new ChatMessage("assistant", asm.Text));
                     _log.Log("mcp", "[turn " + turnId + "] complete: final answer after " + (iter + 1)
-                        + " iteration(s), " + (asm.Text != null ? asm.Text.Length : 0) + " chars");
+                        + " iteration(s), " + asm.Text.Length + " chars");
                     if (ui != null) ui.Complete();
                     return;
                 }
@@ -168,12 +205,81 @@ namespace GxPT
                 }
                 // Loop: re-call the model with the tool results in context.
             }
+        }
 
-            // Bounded: hitting the cap returns a note rather than looping unbounded.
-            _log.Log("mcp", "[turn " + turnId + "] stopped: hit max iterations (" + _maxIterations
-                + ") with tool calls still pending; returning [Tool-call limit reached]");
-            history.Add(new ChatMessage("assistant", "[Tool-call limit reached.]"));
+        // One streamed model request into a fresh assembler. Shared by the main loop, the
+        // empty-response retry, and (with tools = null) the cap wrap-up.
+        private ToolCallAssembler StreamOnce(IList<ChatMessage> requestMessages, IList<JObject> tools,
+                                             IToolLoopUi ui, out bool errored, out string errMessage)
+        {
+            ClientProperties props = new ClientProperties();
+            props.Stream = true;
+            props.ProviderDataCollectionAllowed = ProviderDataCollectionAllowed;
+            props.Zdr = Zdr;
+
+            Action<string> textSink = (ui != null) ? new Action<string>(ui.AppendTextDelta) : null;
+            ToolCallAssembler asm = new ToolCallAssembler(textSink);
+            bool err = false;
+            string emsg = null;
+            _streamer.StreamChat(_model, requestMessages, tools, props,
+                asm.OnChunk,
+                delegate(string e) { err = true; emsg = e; });
+            asm.Finish();
+            errored = err;
+            errMessage = emsg;
+            return asm;
+        }
+
+        private void LogResponse(string turnId, int iter, ToolCallAssembler asm)
+        {
+            _log.Log("mcp", "[turn " + turnId + "] iteration " + (iter + 1) + " response: finish_reason="
+                + (asm.FinishReason ?? "(none)")
+                + ", toolCalls=" + (asm.ProducedToolCalls ? asm.Calls.Count : 0)
+                + ", textLen=" + (asm.Text != null ? asm.Text.Length : 0)
+                + (asm.Truncated ? " [TRUNCATED: model output cut off by length]" : ""));
+        }
+
+        // Cap reached and not continued: one final tool-less model call asking it to summarize and
+        // ask how to proceed, so the turn ends with a readable assistant message rather than a
+        // cryptic dead-end. The user can simply reply to keep going (a fresh budget next turn).
+        private void RunCapWrapUp(IList<ChatMessage> history, IToolLoopUi ui, string turnId)
+        {
+            List<ChatMessage> requestMessages = new List<ChatMessage>();
+            IList<ChatMessage> contextMessages = RequestMessageTransform != null
+                ? RequestMessageTransform(history) : history;
+            requestMessages.AddRange(contextMessages);
+            requestMessages.Add(new ChatMessage("system",
+                "You have reached the maximum number of tool calls allowed for this turn. Do not "
+                + "request any more tools now. Briefly summarize what you have done so far and what "
+                + "still remains, then ask the user how they would like to proceed."));
+
+            // No tools offered, so the model must answer with text.
+            bool errored;
+            string errMessage;
+            ToolCallAssembler asm = StreamOnce(requestMessages, null, ui, out errored, out errMessage);
+
+            string text;
+            if (errored || IsEmptyText(asm.Text))
+            {
+                if (errored)
+                    _log.Log("mcp", "[turn " + turnId + "] wrap-up stream error: " + (errMessage ?? "(none)"));
+                text = "I've reached the tool-call limit for this turn. Let me know how you'd like to proceed.";
+                // StreamOnce streamed nothing usable, so emit the fallback to the UI ourselves.
+                if (ui != null) ui.AppendTextDelta(text);
+            }
+            else
+            {
+                text = asm.Text;
+                _log.Log("mcp", "[turn " + turnId + "] wrap-up complete (" + text.Length + " chars)");
+            }
+
+            history.Add(new ChatMessage("assistant", text));
             if (ui != null) ui.Complete();
+        }
+
+        private static bool IsEmptyText(string s)
+        {
+            return s == null || s.Trim().Length == 0;
         }
 
         // Executes one tool call, returning the text to feed back as the tool message content.
