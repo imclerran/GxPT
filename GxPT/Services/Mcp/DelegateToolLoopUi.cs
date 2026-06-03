@@ -46,27 +46,29 @@ namespace GxPT
 
     // Adapts the orchestrator's IToolLoopUi to simple delegates so MainForm can render a tool-call
     // turn as a chrome-less "tool activity" message plus a separate answer bubble: model text ->
-    // appendText, each completed tool call -> onToolActivity (its own message), Complete/OnError
-    // finalize.
+    // appendText, tool calls -> onToolCall/onToolResult, Complete/OnError finalize.
     //
-    // The tool record is rendered on the RESULT, not the call: OnToolCall fires before the approval
-    // gate, so rendering there would show an edit/diff (and persist it) even when the user denies the
-    // call. We stash the arguments at call time and emit the record once the outcome is known, so the
-    // transcript reflects what actually happened (applied / denied / errored).
+    // Tool activity renders in two beats: OnToolCall shows an immediate "using <tool>" placeholder so
+    // there's live feedback while the call runs (and the approval gate waits); OnToolResult replaces
+    // that placeholder once the outcome is known, so the transcript reflects what actually happened
+    // (applied record / denied / errored) rather than the unapproved request. Arguments are stashed at
+    // call time since OnToolResult doesn't carry them.
     internal sealed class DelegateToolLoopUi : IToolLoopUi
     {
         private readonly Action<string> _appendText;
-        // (functionName, argumentsJson, resultText, isError) — emitted once a call's outcome is known.
-        private readonly Action<string, string, string, bool> _onToolActivity;
+        private readonly Action<string> _onToolCall;                         // (functionName) -> show placeholder
+        private readonly Action<string, string, string, bool> _onToolResult; // (fn, argsJson, resultText, isError) -> replace
         private readonly Action _complete;
         private readonly Action<string> _error;
 
         private string _pendingArgs; // arguments of the in-flight call, awaiting its result
 
-        public DelegateToolLoopUi(Action<string> appendText, Action<string, string, string, bool> onToolActivity, Action complete, Action<string> error)
+        public DelegateToolLoopUi(Action<string> appendText, Action<string> onToolCall,
+                                  Action<string, string, string, bool> onToolResult, Action complete, Action<string> error)
         {
             _appendText = appendText;
-            _onToolActivity = onToolActivity;
+            _onToolCall = onToolCall;
+            _onToolResult = onToolResult;
             _complete = complete;
             _error = error;
         }
@@ -78,13 +80,14 @@ namespace GxPT
 
         public void OnToolCall(string functionName, string argumentsJson)
         {
-            // Defer rendering until the result: calls are serial, so a single pending slot suffices.
+            // Stash args for the result; show the placeholder now. Calls are serial, so one slot fits.
             _pendingArgs = argumentsJson;
+            if (_onToolCall != null) _onToolCall(functionName);
         }
 
         public void OnToolResult(string functionName, string resultText, bool isError)
         {
-            if (_onToolActivity != null) _onToolActivity(functionName, _pendingArgs, resultText, isError);
+            if (_onToolResult != null) _onToolResult(functionName, _pendingArgs, resultText, isError);
             _pendingArgs = null;
         }
 

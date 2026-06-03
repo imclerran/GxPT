@@ -1741,17 +1741,16 @@ namespace GxPT
                             cur.Text.Append(t);
                         }
                     };
-                    // Rendered on the call's RESULT (not the request), so a denied call shows as
-                    // "denied" instead of an applied edit/diff. argsJson is threaded through for
-                    // files__edit etc., which render a collapsible record instead of the generic
-                    // "using" marker; register the record (it has its own lock) before taking sbLock.
-                    // Live keys are per-call GUIDs (ephemeral — the reloaded view re-derives under the
-                    // persisted call id). Consecutive calls share one block.
-                    Action<string, string, string, bool> onToolActivity = delegate(string name, string argsJson, string resultText, bool isError)
+                    // Tool activity renders in two beats: an immediate "using <tool>" placeholder on the
+                    // call (live feedback while it runs / the approval gate waits), replaced by the
+                    // outcome marker on the result. So a denied call ends as "denied: <tool>" and an
+                    // approved edit ends as its collapsible record — never an unapproved diff. The
+                    // placeholder sits at the tail of the tool block (calls are serial and no model text
+                    // streams between a call and its result), so we truncate back to it and append.
+                    LiveSeg pendingToolSeg = null;
+                    int pendingToolStart = 0;
+                    Action<string> onToolCall = delegate(string name)
                     {
-                        string marker = McpMarkers.IsDenied(resultText)
-                            ? McpMarkers.Denied(name)
-                            : EditDiffMarkerOrCall(ctx.Transcript, name, argsJson, Guid.NewGuid().ToString("N"));
                         lock (sbLock)
                         {
                             LiveSeg cur = (segs.Count > 0) ? segs[segs.Count - 1] : null;
@@ -1761,7 +1760,41 @@ namespace GxPT
                                 segs.Add(cur);
                             }
                             if (cur.Text.Length > 0) cur.Text.Append("\r\n");
-                            cur.Text.Append(marker);
+                            pendingToolSeg = cur;
+                            pendingToolStart = cur.Text.Length;
+                            cur.Text.Append(McpMarkers.Call(name));
+                        }
+                    };
+                    // argsJson is threaded through for files__edit etc., which render a collapsible
+                    // record instead of the generic "using" marker; register the record (it has its own
+                    // lock) before taking sbLock. Live keys are per-call GUIDs (ephemeral — the reloaded
+                    // view re-derives under the persisted call id).
+                    Action<string, string, string, bool> onToolResult = delegate(string name, string argsJson, string resultText, bool isError)
+                    {
+                        string marker = McpMarkers.IsDenied(resultText)
+                            ? McpMarkers.Denied(name)
+                            : EditDiffMarkerOrCall(ctx.Transcript, name, argsJson, Guid.NewGuid().ToString("N"));
+                        lock (sbLock)
+                        {
+                            if (pendingToolSeg != null)
+                            {
+                                // Replace the placeholder (at the tail) with the outcome marker.
+                                if (pendingToolStart <= pendingToolSeg.Text.Length)
+                                    pendingToolSeg.Text.Length = pendingToolStart;
+                                pendingToolSeg.Text.Append(marker);
+                                pendingToolSeg = null;
+                            }
+                            else
+                            {
+                                LiveSeg cur = (segs.Count > 0) ? segs[segs.Count - 1] : null;
+                                if (cur == null || cur.Role != MessageRole.Tool)
+                                {
+                                    cur = new LiveSeg(MessageRole.Tool);
+                                    segs.Add(cur);
+                                }
+                                if (cur.Text.Length > 0) cur.Text.Append("\r\n");
+                                cur.Text.Append(marker);
+                            }
                         }
                     };
                     Action onComplete = delegate
@@ -1776,7 +1809,7 @@ namespace GxPT
                         { FinalizeToolSend(ctx, renderTimer, sbLock, segs, e2); });
                     };
 
-                    orch.RunTurn(ctx.Conversation.History, new DelegateToolLoopUi(onAppend, onToolActivity, onComplete, onErr));
+                    orch.RunTurn(ctx.Conversation.History, new DelegateToolLoopUi(onAppend, onToolCall, onToolResult, onComplete, onErr));
                 }
                 catch (Exception ex)
                 {
