@@ -37,10 +37,10 @@ namespace CommandMcpServer.Tests
                 : Harness.NewCommandServerWithShell("/bin/sh", _work);
         }
 
-        // The Command server prepends the shell's own switch: on Windows it uses "/c", which cmd
-        // wants; for /bin/sh the server still passes "/c <command>", so on non-Windows we phrase
-        // commands that tolerate that. To keep the suite portable we only assert on Windows-shaped
-        // behavior when running on Windows, and use a sh-friendly form otherwise.
+        // The Command server invokes the shell as `<shell> /s /c "<command>"` so cmd strips just the
+        // outer quote pair and runs the command verbatim (see CommandTools). For /bin/sh that switch
+        // shape is meaningless, so on non-Windows we skip the exec-based asserts and run them only on
+        // Windows, where cmd /c is the real target.
 
         [Fact]
         public void Lists_the_run_tool()
@@ -110,6 +110,29 @@ namespace CommandMcpServer.Tests
             JObject s = Harness.Structured(msgs[0]);
             Assert.Equal(0, (int)s["exitCode"]);
             Assert.Contains("abc", (string)s["stdout"]);
+        }
+
+        [Fact]
+        public void Leading_quoted_path_with_a_quoted_arg_is_not_mangled()
+        {
+            if (!IsWindows) return;
+            // Regression for cmd.exe's quote-stripping quirk. A command that BEGINS with a quoted
+            // path AND carries a further quoted token (>2 quotes) makes bare `cmd /c <line>` strip
+            // the first+last quote of the whole line, corrupting it. The server wraps the command as
+            // `cmd /s /c "<line>"`, which preserves it verbatim. The space in the directory forces
+            // the leading quote to matter (so the bug can't hide behind cmd's two-quotes-only
+            // preservation rule). On the old code this command failed with a nonzero exit.
+            string subdir = Path.Combine(_work, "sub dir");
+            Directory.CreateDirectory(subdir);
+            string bat = Path.Combine(subdir, "say.bat");
+            File.WriteAllText(bat, "@echo off\r\n@echo got=[%~1]\r\n");
+
+            string command = "\"" + bat + "\" \"hello world\"";
+            var msgs = Harness.Exchange(NewServer(),
+                Harness.ToolsCall(1, "run", Harness.Args("command", command)));
+            JObject s = Harness.Structured(msgs[0]);
+            Assert.Equal(0, (int)s["exitCode"]);
+            Assert.Contains("got=[hello world]", (string)s["stdout"]);
         }
 
         [Fact]
