@@ -1703,6 +1703,15 @@ namespace GxPT
                                                        model, LoggerSink.Instance);
                     orch.WorkingDir = ctx.WorkingDir;
                     orch.Zdr = zdr ? true : (bool?)null;
+                    // At the tool-call cap, confirm in-transcript (like a tool-approval prompt) whether
+                    // to continue: Continue grants another batch, Stop has the model wrap up and ask how
+                    // to proceed. Needs this tab's panel to host the prompt; without one the orchestrator
+                    // wraps up by default.
+                    if (ctx.ApprovalPanel != null)
+                    {
+                        var contPrompt = new TranscriptContinuationPrompt(this, delegate { return ctx.ApprovalPanel; });
+                        orch.ContinuationDecider = delegate(int n) { return contPrompt.Ask(n); };
+                    }
                     orch.RequestMessageTransform = delegate(IList<ChatMessage> h)
                     {
                         List<ChatMessage> asList = h as List<ChatMessage>;

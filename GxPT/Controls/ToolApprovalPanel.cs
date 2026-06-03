@@ -23,6 +23,7 @@ namespace GxPT
         private readonly FlowLayoutPanel _buttons;
 
         private Action<ApprovalChoice> _onChoose;
+        private Action<bool> _onContinue;   // set instead of _onChoose for the iteration-cap prompt
 
         // Supplies the active workspace root so an edit approval can show a few lines of real file
         // context around the change. Set by the host (MainForm); null disables context (bare diff).
@@ -222,10 +223,40 @@ namespace GxPT
             this.SendToBack();
         }
 
+        // Iteration-cap confirmation, reusing this docked panel so it reads like the tool-approval
+        // prompt. callback(true) => grant another batch, callback(false) => stop (wrap up). Marshalled
+        // onto the UI thread by TranscriptContinuationPrompt; the click signals the blocked worker.
+        public void ShowContinuation(int iterationsSoFar, Action<bool> callback)
+        {
+            _onChoose = null;
+            _onContinue = callback;
+
+            _header.Text = "Tool-call limit reached";
+            _tierBadge.Text = "Paused after " + iterationsSoFar + " tool iteration(s) this turn";
+            _tierBadge.ForeColor = Color.DarkGoldenrod;
+
+            _previewLabel.Text = "Details:";
+            _preview.Text = "The agent has been working for a long time. Do you want to continue?\r\n\r\n"
+                + "Choose Continue to let it keep working, or Stop to have it summarize progress and "
+                + "ask how you'd like to proceed.";
+            _diffPanel.Visible = false;
+            _preview.Visible = true;
+            this.Height = 150;
+
+            _buttons.Controls.Clear();
+            // Added first => rightmost in the RightToLeft flow.
+            AddContinuationButton("Stop", false, false);
+            AddContinuationButton("Continue", true, true);
+
+            this.Visible = true;
+            this.SendToBack();
+        }
+
         public void HidePanel()
         {
             this.Visible = false;
             _onChoose = null;
+            _onContinue = null;
         }
 
         // If the panel is torn down (e.g. its tab is closed) while a call still awaits a decision,
@@ -240,6 +271,16 @@ namespace GxPT
                 if (cb != null)
                 {
                     try { cb(ApprovalChoice.Deny); }
+                    catch { }
+                }
+
+                // A pending continuation prompt resolves to "stop" so the blocked worker is released
+                // (wraps up) rather than left waiting forever.
+                Action<bool> cc = _onContinue;
+                _onContinue = null;
+                if (cc != null)
+                {
+                    try { cc(false); }
                     catch { }
                 }
             }
@@ -280,6 +321,22 @@ namespace GxPT
                 Action<ApprovalChoice> cb = _onChoose;
                 HidePanel();
                 if (cb != null) cb(choice);
+            };
+            _buttons.Controls.Add(b);
+            if (defaultFocus) { try { b.Select(); } catch { } }
+        }
+
+        private void AddContinuationButton(string text, bool cont, bool defaultFocus)
+        {
+            Button b = new Button();
+            b.Text = text;
+            b.AutoSize = true;
+            b.Margin = new Padding(4, 4, 4, 4);
+            b.Click += delegate
+            {
+                Action<bool> cb = _onContinue;
+                HidePanel();
+                if (cb != null) cb(cont);
             };
             _buttons.Controls.Add(b);
             if (defaultFocus) { try { b.Select(); } catch { } }
