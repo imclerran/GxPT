@@ -21,7 +21,7 @@ namespace GxPT
             "~anthropic/claude-sonnet-latest",
             "~anthropic/claude-haiku-latest",
             "~google/gemini-pro-latest",
-            "google/gemini-3.5-flash",
+            "~google/gemini-flash-latest",
             "google/gemma-4-31b-it",
             "openai/gpt-5.4",
             "openai/gpt-5.1-codex-mini",
