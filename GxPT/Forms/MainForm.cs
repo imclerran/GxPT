@@ -2821,7 +2821,7 @@ namespace GxPT
                 };
                 // Outcome of each tool call (by id) so a denied call renders as "denied" instead of as
                 // an applied record. Tool messages aren't shown directly, but their content is the
-                // result the orchestrator recorded (McpMarkers.DeniedResult on denial).
+                // result the orchestrator recorded (McpChatOrchestrator.DeniedResultText on denial).
                 var toolResultById = new System.Collections.Generic.Dictionary<string, string>(StringComparer.Ordinal);
                 foreach (var rm in convo.History)
                 {

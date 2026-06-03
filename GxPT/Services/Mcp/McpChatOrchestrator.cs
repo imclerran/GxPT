@@ -21,6 +21,11 @@ namespace GxPT
         public const int DefaultMaxIterations = 25;
         public const int DefaultCallTimeoutMs = 60000;
 
+        // Tool-result content returned when the user denies a call. Lives here (this file is linked
+        // into the test project) so the transcript renderer can recognize a denied call; McpMarkers
+        // references it.
+        internal const string DeniedResultText = "[Call denied by user.]";
+
         private readonly IChatStreamer _streamer;
         private readonly McpToolRegistry _registry;
         private readonly IToolApprovalPolicy _approval;
@@ -330,7 +335,7 @@ namespace GxPT
             {
                 isError = true;
                 _log.Log("mcp", "[turn " + turnId + "] '" + call.Name + "' denied by approval policy");
-                return McpMarkers.DeniedResult;
+                return DeniedResultText;
             }
 
             Stopwatch sw = Stopwatch.StartNew();

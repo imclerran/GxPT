@@ -26,14 +26,12 @@ namespace GxPT
             return MarkdownParser.EditDiffSentinel(key);
         }
 
-        // The tool-result content the orchestrator returns when the user denies a call. Centralized
-        // so the transcript can recognize a denied call (live and on reload) and render it as denied
-        // rather than as an applied edit/diff.
-        public const string DeniedResult = "[Call denied by user.]";
-
+        // True when a tool result is the orchestrator's "denied by user" sentinel, so the transcript
+        // renders the call as denied (live and on reload) rather than as an applied edit/diff. The
+        // sentinel lives on McpChatOrchestrator (which the test project links; this file does not).
         public static bool IsDenied(string resultText)
         {
-            return string.Equals(resultText, DeniedResult, StringComparison.Ordinal);
+            return string.Equals(resultText, McpChatOrchestrator.DeniedResultText, StringComparison.Ordinal);
         }
 
         // Shown in place of the edit/diff record when a call was denied, so a denied edit reads as
