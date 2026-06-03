@@ -188,15 +188,16 @@ namespace GxPT
             var sb = new StringBuilder();
             sb.AppendLine("{");
             sb.AppendLine("  \"openrouter_api_key\": \"\",");
+            // Models come from the shared default catalog (ModelDefaults) so this seed, the strongly
+            // typed defaults, and the combo's fresh-install fallback can't drift apart.
             sb.AppendLine("  \"models\": [");
-            sb.AppendLine("    \"anthropic/claude-3.7-sonnet\",");
-            sb.AppendLine("    \"anthropic/claude-sonnet-4\",");
-            sb.AppendLine("    \"google/gemini-2.5-flash\",");
-            sb.AppendLine("    \"google/gemini-2.5-pro\",");
-            sb.AppendLine("    \"openai/gpt-4o\",");
-            sb.AppendLine("    \"openai/gpt-5-chat\"");
+            for (int i = 0; i < ModelDefaults.Models.Length; i++)
+            {
+                bool last = (i == ModelDefaults.Models.Length - 1);
+                sb.AppendLine("    \"" + ModelDefaults.Models[i] + "\"" + (last ? "" : ","));
+            }
             sb.AppendLine("  ],");
-            sb.AppendLine("  \"default_model\": \"openai/gpt-4o\",");
+            sb.AppendLine("  \"default_model\": \"" + ModelDefaults.DefaultModel + "\",");
             sb.AppendLine("  \"theme\": \"light\",");
             // Default UI color theme
             sb.AppendLine("  \"color_theme\": \"blue\",");
@@ -235,16 +236,8 @@ namespace GxPT
             return new SettingsData
             {
                 openrouter_api_key = "",
-                models = new List<string>
-                {
-                    "anthropic/claude-3.7-sonnet",
-                    "anthropic/claude-sonnet-4",
-                    "google/gemini-2.5-flash",
-                    "google/gemini-2.5-pro",
-                    "openai/gpt-4o",
-                    "openai/gpt-5"
-                },
-                default_model = "openai/gpt-4o",
+                models = ModelDefaults.ModelList(),
+                default_model = ModelDefaults.DefaultModel,
                 enable_logging = false,
                 font_size = GetChatDefaultFontSize(),
                 theme = "light",

@@ -375,13 +375,9 @@
             this.cmbModel.DrawMode = System.Windows.Forms.DrawMode.OwnerDrawFixed;
             this.cmbModel.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cmbModel.FormattingEnabled = true;
-            this.cmbModel.Items.AddRange(new object[] {
-            "anthropic/claude-3.7-sonnet",
-            "anthropic/claude-sonnet-4",
-            "google/gemini-2.5-flash",
-            "google/gemini-2.5-pro",
-            "openai/gpt-4o",
-            "openai/gpt-5"});
+            // Items are populated at runtime by MainForm.PopulateModelsFromSettings (from the user's
+            // settings, or ModelDefaults on a fresh install) - not hardcoded here, so the default
+            // catalog lives in one place.
             this.cmbModel.Location = new System.Drawing.Point(0, 0);
             this.cmbModel.Margin = new System.Windows.Forms.Padding(0);
             this.cmbModel.Name = "cmbModel";
