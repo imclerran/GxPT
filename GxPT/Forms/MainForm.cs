@@ -742,6 +742,29 @@ namespace GxPT
             SyncMcpWorkingDirFromActiveTab();
         }
 
+        // Reset the per-tab workspace + ZDR *views* to a blank-slate state when the last tab is closed
+        // and reused as a fresh conversation. The recycle path already swaps in a new Conversation (with
+        // its ZDR and working-dir state cleared), but the tab-level WorkingDir field, the workspace strip,
+        // and the ZDR checkbox are derived views that must be re-synced or they keep the closed tab's
+        // state. No PersistWorkingDir here: the fresh conversation's WorkingDir is already null and the
+        // blank tab shouldn't be saved.
+        internal void ResetRecycledTabWorkspaceState(TabManager.ChatTabContext ctx)
+        {
+            if (ctx == null) return;
+            // Working folder: drop the tab's folder and return the strip to its "no folder" state, shown
+            // like a brand-new tab (the fresh conversation isn't dismissed).
+            ctx.WorkingDir = null;
+            if (ctx.WorkspaceStrip != null)
+            {
+                ctx.WorkspaceStrip.SetWorkingDir(null);
+                ctx.WorkspaceStrip.Visible = true;
+            }
+            SyncMcpWorkingDirFromActiveTab(); // release the closed folder's scoped MCP servers
+            // ZDR: the new conversation is unlatched and not per-tab ZDR, so re-sync the checkbox view
+            // (it reverts to the global default's checked/disabled state).
+            SyncZdrCheckboxFromActiveTab();
+        }
+
         // Opens a fresh conversation tab whose working folder is preset to 'dir'. Mirrors the
         // load flow (create tab -> set working dir -> persist -> adopt onto strip + MCP host),
         // and (via ApplyLoadedWorkingDir) bumps 'dir' to the top of the recent list.
