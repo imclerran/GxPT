@@ -71,6 +71,26 @@ namespace GxPT
             catch { this.AutoScrollMinSize = Size.Empty; }
         }
 
+        // Natural pixel height of the current content (optional header + body + padding), measured
+        // independently of the control's own bounds so the host can size the approval panel to fit.
+        // Uses an offscreen Graphics so it is valid even before the panel is shown.
+        public int GetPreferredContentHeight()
+        {
+            int oneLine = (_monoFont != null ? _monoFont.Height : 14);
+            if (_monoFont == null || string.IsNullOrEmpty(_body)) return HeaderHeight + oneLine + Pad;
+            try
+            {
+                using (var bmp = new Bitmap(1, 1))
+                using (Graphics g = Graphics.FromImage(bmp))
+                {
+                    var colored = SyntaxHighlightingRenderer.GetColoredSegments(_body, _language, _monoFont, _dark);
+                    Size content = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, colored);
+                    return HeaderHeight + Math.Max(_monoFont.Height, content.Height) + Pad;
+                }
+            }
+            catch { return HeaderHeight + oneLine + Pad; }
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);

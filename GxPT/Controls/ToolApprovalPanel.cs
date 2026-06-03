@@ -29,6 +29,18 @@ namespace GxPT
         // context around the change. Set by the host (MainForm); null disables context (bare diff).
         public Func<string> WorkingDirProvider;
 
+        // The details area (diff/preview) is sized to its content between these bounds: short prompts
+        // (e.g. a one-line command) collapse instead of leaving a tall empty box, while long content
+        // is capped here and scrolls. See LayoutToContent.
+        private const int MinDetailsHeight = 24;
+        private const int MaxDetailsHeight = 200;
+
+        // Clamped content height for the current prompt; the panel height is rebuilt from this plus
+        // the (possibly multi-row) button strip whenever the panel resizes. Re-entrancy guard stops
+        // the height we set from recursing through OnSizeChanged.
+        private int _detailsHeight = MinDetailsHeight;
+        private bool _inLayoutToContent;
+
         public ToolApprovalPanel()
         {
             this.Dock = DockStyle.Bottom;
@@ -205,7 +217,6 @@ namespace GxPT
             {
                 _preview.Visible = false;
                 _diffPanel.Visible = true;
-                this.Height = 260;
             }
             else
             {
@@ -213,7 +224,6 @@ namespace GxPT
                 _previewLabel.Text = "Details:";
                 _diffPanel.Visible = false;
                 _preview.Visible = true;
-                this.Height = 150;
             }
 
             _buttons.Controls.Clear();
@@ -221,6 +231,11 @@ namespace GxPT
             AddButton("Deny", ApprovalChoice.Deny, tier == ToolTier.Destructive);
             AddRememberButtons(req);
             AddButton("Allow once", ApprovalChoice.AllowOnce, false);
+
+            // Size to fit the content (buttons built above so their height is counted, including any
+            // wrapping at the current width).
+            _detailsHeight = ClampedDetailsHeight(handled);
+            LayoutToContent();
 
             this.Visible = true;
             // Keep this Bottom-docked panel BEHIND the Fill transcript in z-order. WinForms fills the
@@ -248,12 +263,14 @@ namespace GxPT
                 + "ask how you'd like to proceed.";
             _diffPanel.Visible = false;
             _preview.Visible = true;
-            this.Height = 150;
 
             _buttons.Controls.Clear();
             // Added first => rightmost in the RightToLeft flow.
             AddContinuationButton("Stop", false, false);
             AddContinuationButton("Continue", true, true);
+
+            _detailsHeight = ClampedDetailsHeight(false);
+            LayoutToContent();
 
             this.Visible = true;
             this.SendToBack();
@@ -264,6 +281,70 @@ namespace GxPT
             this.Visible = false;
             _onChoose = null;
             _onContinue = null;
+        }
+
+        // The clamped natural height of the current details control's content, in [Min,Max].
+        private int ClampedDetailsHeight(bool handled)
+        {
+            int detailsContent = handled
+                ? _diffPanel.GetPreferredContentHeight()
+                : MeasurePreviewContentHeight();
+            return Math.Max(MinDetailsHeight, Math.Min(MaxDetailsHeight, detailsContent));
+        }
+
+        // Rebuild the panel height so the Fill details control keeps its clamped content height even
+        // as the button strip wraps to more rows on a narrow window: the panel grows to fit the taller
+        // strip instead of squeezing (and clipping) the details. Capped so it can't swallow the
+        // transcript above it; past the cap the details give way and scroll. Recomputed on every
+        // resize because button wrapping depends on the current width.
+        private void LayoutToContent()
+        {
+            if (_inLayoutToContent) return;
+            _inLayoutToContent = true;
+            try
+            {
+                int avail = this.ClientSize.Width - this.Padding.Horizontal;
+                if (avail < 1) avail = (this.Parent != null ? this.Parent.ClientSize.Width : 400) - this.Padding.Horizontal;
+                if (avail < 1) avail = 400;
+
+                // GetPreferredSize at the real width includes any row wrapping of the buttons.
+                int buttonsH = _buttons.GetPreferredSize(new Size(avail, 0)).Height;
+                if (buttonsH < 28) buttonsH = 34; // guard against a not-yet-measured strip
+
+                int chrome = _header.Height + _tierBadge.Height + _previewLabel.Height;
+                const int border = 2; // FixedSingle: 1px top + 1px bottom
+                int target = this.Padding.Top + this.Padding.Bottom + chrome + _detailsHeight + buttonsH + border;
+
+                // Don't let the docked panel grow tall enough to bury the transcript above it.
+                if (this.Parent != null)
+                {
+                    int cap = this.Parent.ClientSize.Height - 64;
+                    if (cap > 120 && target > cap) target = cap;
+                }
+
+                if (this.Height != target) this.Height = target;
+            }
+            finally { _inLayoutToContent = false; }
+        }
+
+        protected override void OnSizeChanged(EventArgs e)
+        {
+            base.OnSizeChanged(e);
+            // Width changes (parent resize) can re-wrap the buttons; keep the panel tall enough.
+            if (this.Visible) LayoutToContent();
+        }
+
+        // Approximate wrapped height of the raw-JSON preview text at the current width. Best-effort:
+        // the TextBox scrolls if we under-shoot, and the caller clamps the result anyway.
+        private int MeasurePreviewContentHeight()
+        {
+            string text = _preview.Text != null ? _preview.Text : string.Empty;
+            if (text.Length == 0) return MinDetailsHeight;
+            int width = this.ClientSize.Width - this.Padding.Horizontal;
+            if (width < 50 && this.Parent != null) width = this.Parent.ClientSize.Width - this.Padding.Horizontal;
+            if (width < 50) width = 400;
+            Size sz = TextRenderer.MeasureText(text, _preview.Font, new Size(width, int.MaxValue), TextFormatFlags.WordBreak);
+            return sz.Height + 8;
         }
 
         // If the panel is torn down (e.g. its tab is closed) while a call still awaits a decision,
