@@ -236,9 +236,9 @@ namespace GxPT
             _tierBadge.ForeColor = Color.DarkGoldenrod;
 
             _previewLabel.Text = "Details:";
-            _preview.Text = "The assistant has run " + iterationsSoFar + " tool iterations this turn and "
-                + "reached the limit.\r\n\r\nChoose Continue to let it keep working (a fresh batch), or "
-                + "Stop to have it summarize progress and ask how you'd like to proceed.";
+            _preview.Text = "The agent has been working for a long time. Do you want to continue?\r\n\r\n"
+                + "Choose Continue to let it keep working, or Stop to have it summarize progress and "
+                + "ask how you'd like to proceed.";
             _diffPanel.Visible = false;
             _preview.Visible = true;
             this.Height = 150;
