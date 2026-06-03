@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GxPT — FAQ</title>
+  <meta name="description" content="Frequently asked questions about GxPT, the native agentic chatbot client and coding agent for Windows XP." />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="site">
+
+    <div class="banner">
+      <a href="index.html"><h1>GxPT</h1></a>
+      <p class="slogan">Windows XP goes agentic!</p>
+    </div>
+
+    <div class="layout">
+      <div class="sidebar">
+        <div class="navbox">
+          <div class="navhead">Navigation</div>
+          <ul>
+            <li><a href="index.html">Home</a></li>
+            <li><a href="screenshots.html">Screenshots</a></li>
+            <li><a href="faq.html" class="current">FAQ</a></li>
+            <li><a href="https://github.com/imclerran/GxPT">GitHub</a></li>
+          </ul>
+        </div>
+        <div class="sidenote">
+          <b>Latest release</b><br>
+          <span class="ver" id="latest-ver">GxPT</span><br>
+          <a href="https://github.com/imclerran/GxPT/releases/latest">What's new &raquo;</a>
+        </div>
+      </div>
+
+      <div class="main">
+        <h2 class="bar">Frequently Asked Questions</h2>
+        <dl class="faq">
+          <dt>Does it really run on Windows XP?</dt>
+          <dd>Yes. GxPT is a native Windows application targeting .NET Framework 3.5, so it
+            runs on Windows XP and every version of Windows since.</dd>
+
+          <dt>What do I need to run it?</dt>
+          <dd>Windows XP or later and the .NET Framework 3.5 runtime. You'll also need an
+            <a href="https://openrouter.ai">OpenRouter.ai</a> API key to talk to AI models.</dd>
+
+          <dt>Which AI models are supported?</dt>
+          <dd>A huge range of frontier and open models through the OpenRouter.ai API &mdash;
+            you choose which model to use per conversation.</dd>
+
+          <dt>Is my data private?</dt>
+          <dd>Conversations are stored locally on your machine. You can enforce Zero Data
+            Retention (ZDR) on a per-conversation basis so prompts aren't retained upstream.</dd>
+
+          <dt>What is MCP, and what can GxPT do with it?</dt>
+          <dd>The Model Context Protocol lets GxPT call external tools: agentic coding
+            (file, git, and shell operations), web search, and GitHub access. The agent
+            chains these tool calls autonomously until your task is done.</dd>
+
+          <dt>Is it safe to let the agent run tools?</dt>
+          <dd>Every tool call is gated by an in-app approval prompt, and file, git, and
+            command tools stay confined to the working folder you choose.</dd>
+
+          <dt>How much does it cost?</dt>
+          <dd>GxPT itself is free and open source. You pay only for the AI usage billed
+            through your own OpenRouter.ai account.</dd>
+
+          <dt>Where do I report bugs or request features?</dt>
+          <dd>On the <a href="https://github.com/imclerran/GxPT">GitHub repository</a>.</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="footer">
+      &copy; 2026 GxPT &middot; <a href="https://github.com/imclerran/GxPT">View on GitHub</a><br>
+      Best viewed at 1024&times;768 &middot; Made for Windows XP
+    </div>
+
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
