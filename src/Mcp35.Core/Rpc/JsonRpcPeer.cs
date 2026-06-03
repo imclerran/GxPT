@@ -195,20 +195,34 @@ namespace Mcp35.Core.Rpc
 
         private void OnChannelFaulted(Exception ex)
         {
+            lock (_gate)
+            {
+                // Idempotent: ignore a second fault, and ignore a late fault raised while/after we
+                // tear down (disposing the channel can trip its reader's EOF -> Faulted). Without this
+                // a clean shutdown would be reported as, and logged as, a transport fault.
+                if (_faulted || _disposed) return;
+                _faulted = true;
+                _faultEx = ex;
+            }
+            FailPending(ex);
+            _log.Log("mcp", "Transport faulted: " + (ex == null ? "(unknown)" : ex.Message));
+        }
+
+        // Wake every caller parked in SendRequest with the given reason so none hangs. Used by both
+        // a real channel fault and intentional disposal.
+        private void FailPending(Exception reason)
+        {
             List<PendingCall> toFault;
             lock (_gate)
             {
-                _faulted = true;
-                _faultEx = ex;
                 toFault = new List<PendingCall>(_pending.Values);
                 _pending.Clear();
             }
             for (int i = 0; i < toFault.Count; i++)
             {
-                toFault[i].Fault = ex;
+                toFault[i].Fault = reason;
                 toFault[i].Done.Set();
             }
-            _log.Log("mcp", "Transport faulted: " + (ex == null ? "(unknown)" : ex.Message));
         }
 
         private void RaiseInbound(string method, JToken prms, bool isRequest, RequestId id, JObject raw)
@@ -282,11 +296,21 @@ namespace Mcp35.Core.Rpc
                 if (_disposed) return;
                 _disposed = true;
             }
+
+            // Stop inbound callbacks first: disposing the channel can trip its reader's EOF and raise
+            // Faulted, which would otherwise re-enter OnChannelFaulted and log a spurious fault during
+            // an intentional shutdown. Unsubscribing also prevents any late message/fault from running
+            // after we are gone.
+            _channel.MessageReceived -= OnMessage;
+            _channel.Faulted -= OnChannelFaulted;
+
             try { _channel.Dispose(); }
             catch (Exception ex) { _log.Log("mcp", "Channel dispose threw: " + ex.Message); }
 
-            // Fault any callers still blocked in SendRequest so none hang.
-            OnChannelFaulted(_faultEx ?? new ObjectDisposedException("JsonRpcPeer"));
+            // Unblock any callers still parked in SendRequest. This is an intentional shutdown, not a
+            // transport fault, so report it as a disposal rather than synthesizing a fault (which used
+            // to surface as the misleading "Transport faulted: Cannot access a disposed object").
+            FailPending(new McpTransportException("Transport disposed."));
         }
 
         private static JToken IdToToken(RequestId id)
