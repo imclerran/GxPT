@@ -25,23 +25,48 @@ namespace GxPT
         {
             return MarkdownParser.EditDiffSentinel(key);
         }
+
+        // True when a tool result is the orchestrator's "denied by user" sentinel, so the transcript
+        // renders the call as denied (live and on reload) rather than as an applied edit/diff. The
+        // sentinel lives on McpChatOrchestrator (which the test project links; this file does not).
+        public static bool IsDenied(string resultText)
+        {
+            return string.Equals(resultText, McpChatOrchestrator.DeniedResultText, StringComparison.Ordinal);
+        }
+
+        // Shown in place of the edit/diff record when a call was denied, so a denied edit reads as
+        // "denied" instead of looking like it was applied.
+        public static string Denied(string functionName)
+        {
+            return "denied: " + Display(functionName);
+        }
     }
 
     // Adapts the orchestrator's IToolLoopUi to simple delegates so MainForm can render a tool-call
     // turn as a chrome-less "tool activity" message plus a separate answer bubble: model text ->
-    // appendText, each tool call -> onToolCall (its own message), Complete/OnError finalize. Tool
-    // results are never shown (the model summarizes them).
+    // appendText, tool calls -> onToolCall/onToolResult, Complete/OnError finalize.
+    //
+    // Tool activity renders in two beats: OnToolCall shows an immediate "using <tool>" placeholder so
+    // there's live feedback while the call runs (and the approval gate waits); OnToolResult replaces
+    // that placeholder once the outcome is known, so the transcript reflects what actually happened
+    // (applied record / denied / errored) rather than the unapproved request. Arguments are stashed at
+    // call time since OnToolResult doesn't carry them.
     internal sealed class DelegateToolLoopUi : IToolLoopUi
     {
         private readonly Action<string> _appendText;
-        private readonly Action<string, string> _onToolCall; // (functionName, argumentsJson)
+        private readonly Action<string> _onToolCall;                         // (functionName) -> show placeholder
+        private readonly Action<string, string, string, bool> _onToolResult; // (fn, argsJson, resultText, isError) -> replace
         private readonly Action _complete;
         private readonly Action<string> _error;
 
-        public DelegateToolLoopUi(Action<string> appendText, Action<string, string> onToolCall, Action complete, Action<string> error)
+        private string _pendingArgs; // arguments of the in-flight call, awaiting its result
+
+        public DelegateToolLoopUi(Action<string> appendText, Action<string> onToolCall,
+                                  Action<string, string, string, bool> onToolResult, Action complete, Action<string> error)
         {
             _appendText = appendText;
             _onToolCall = onToolCall;
+            _onToolResult = onToolResult;
             _complete = complete;
             _error = error;
         }
@@ -53,12 +78,15 @@ namespace GxPT
 
         public void OnToolCall(string functionName, string argumentsJson)
         {
-            if (_onToolCall != null) _onToolCall(functionName, argumentsJson);
+            // Stash args for the result; show the placeholder now. Calls are serial, so one slot fits.
+            _pendingArgs = argumentsJson;
+            if (_onToolCall != null) _onToolCall(functionName);
         }
 
         public void OnToolResult(string functionName, string resultText, bool isError)
         {
-            // Results are not rendered — the model incorporates them into its next message.
+            if (_onToolResult != null) _onToolResult(functionName, _pendingArgs, resultText, isError);
+            _pendingArgs = null;
         }
 
         public void OnError(string message)
