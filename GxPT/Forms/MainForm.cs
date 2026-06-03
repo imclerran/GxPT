@@ -524,6 +524,15 @@ namespace GxPT
                 }
             }
             catch { }
+            try
+            {
+                if (this.miFile != null)
+                {
+                    this.miFile.DropDownOpening -= miFile_DropDownOpening;
+                    this.miFile.DropDownOpening += miFile_DropDownOpening;
+                }
+            }
+            catch { }
 
             try
             {
@@ -711,6 +720,7 @@ namespace GxPT
                 if (!string.IsNullOrEmpty(ctx.WorkingDir)) dlg.SelectedPath = ctx.WorkingDir;
                 if (dlg.ShowDialog(this) != DialogResult.OK) return;
                 ctx.WorkingDir = dlg.SelectedPath;
+                RecentWorkDirs.Add(ctx.WorkingDir);
             }
             // Setting a folder re-shows the strip, so a prior dismissal no longer applies.
             if (ctx.Conversation != null) ctx.Conversation.WorkspaceStripDismissed = false;
@@ -732,12 +742,31 @@ namespace GxPT
             SyncMcpWorkingDirFromActiveTab();
         }
 
+        // Opens a fresh conversation tab whose working folder is preset to 'dir'. Mirrors the
+        // load flow (create tab -> set working dir -> persist -> adopt onto strip + MCP host),
+        // and (via ApplyLoadedWorkingDir) bumps 'dir' to the top of the recent list.
+        private void OpenNewTabWithWorkingDir(string dir)
+        {
+            if (_tabManager == null || string.IsNullOrEmpty(dir)) return;
+            TabManager.ChatTabContext ctx = _tabManager.CreateConversationTab();
+            if (ctx == null) return;
+            ctx.WorkingDir = dir;
+            if (ctx.Conversation != null)
+            {
+                ctx.Conversation.WorkingDir = dir;
+                ctx.Conversation.WorkspaceStripDismissed = false;
+            }
+            PersistWorkingDir(ctx);
+            ApplyLoadedWorkingDir(ctx); // shows the workspace strip + binds MCP; also re-adds to recents
+        }
+
         // After a conversation is loaded into a tab, adopt its persisted working folder onto the tab
         // context + strip and (re)bind the MCP host to it.
         private void ApplyLoadedWorkingDir(TabManager.ChatTabContext ctx)
         {
             if (ctx == null) return;
             ctx.WorkingDir = (ctx.Conversation != null) ? ctx.Conversation.WorkingDir : null;
+            if (!string.IsNullOrEmpty(ctx.WorkingDir)) RecentWorkDirs.Add(ctx.WorkingDir);
             if (ctx.WorkspaceStrip != null)
             {
                 ctx.WorkspaceStrip.SetWorkingDir(ctx.WorkingDir);
@@ -2016,6 +2045,55 @@ namespace GxPT
         private void miNewConversation_Click(object sender, EventArgs e)
         {
             if (_tabManager != null) _tabManager.CreateConversationTab();
+        }
+
+        // Rebuilds the "Open Recent Work Dir" submenu each time the File menu opens. Lists each
+        // remembered dir (full path) that still exists; silently drops missing ones. Disables the
+        // parent when nothing valid remains.
+        private void PopulateRecentWorkDirsMenu()
+        {
+            if (miOpenRecentWorkDir == null) return;
+
+            for (int i = miOpenRecentWorkDir.DropDownItems.Count - 1; i >= 0; i--)
+            {
+                System.Windows.Forms.ToolStripItem old = miOpenRecentWorkDir.DropDownItems[i];
+                miOpenRecentWorkDir.DropDownItems.RemoveAt(i);
+                old.Dispose();
+            }
+
+            int added = 0;
+            List<string> dirs = RecentWorkDirs.Get();
+            foreach (string dir in dirs)
+            {
+                if (string.IsNullOrEmpty(dir)) continue;
+
+                bool exists;
+                try { exists = Directory.Exists(dir); }
+                catch { exists = false; }
+
+                string captured = dir; // avoid the closure capturing the loop variable
+                System.Windows.Forms.ToolStripMenuItem item =
+                    new System.Windows.Forms.ToolStripMenuItem(captured);
+                if (exists)
+                {
+                    item.Click += delegate(object s, EventArgs e) { OpenNewTabWithWorkingDir(captured); };
+                }
+                else
+                {
+                    // Keep missing dirs visible but unselectable so the user can see them.
+                    item.Enabled = false;
+                    item.ToolTipText = "Folder not found";
+                }
+                miOpenRecentWorkDir.DropDownItems.Add(item);
+                added++;
+            }
+
+            miOpenRecentWorkDir.Enabled = added > 0;
+        }
+
+        private void miFile_DropDownOpening(object sender, EventArgs e)
+        {
+            PopulateRecentWorkDirsMenu();
         }
 
         // File > Close Conversation
