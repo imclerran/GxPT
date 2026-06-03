@@ -34,6 +34,7 @@
             this.miSettings = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripSeparator2 = new System.Windows.Forms.ToolStripSeparator();
             this.miNewConversation = new System.Windows.Forms.ToolStripMenuItem();
+            this.miOpenRecentWorkDir = new System.Windows.Forms.ToolStripMenuItem();
             this.miCloseConversation = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripSeparator4 = new System.Windows.Forms.ToolStripSeparator();
             this.miImport = new System.Windows.Forms.ToolStripMenuItem();
@@ -106,6 +107,7 @@
             this.miSettings,
             this.toolStripSeparator2,
             this.miNewConversation,
+            this.miOpenRecentWorkDir,
             this.miCloseConversation,
             this.toolStripSeparator4,
             this.miImport,
@@ -138,9 +140,15 @@
             this.miNewConversation.Size = new System.Drawing.Size(221, 22);
             this.miNewConversation.Text = "&New Conversation";
             this.miNewConversation.Click += new System.EventHandler(this.miNewConversation_Click);
-            // 
+            //
+            // miOpenRecentWorkDir
+            //
+            this.miOpenRecentWorkDir.Name = "miOpenRecentWorkDir";
+            this.miOpenRecentWorkDir.Size = new System.Drawing.Size(221, 22);
+            this.miOpenRecentWorkDir.Text = "Open Recent Work &Dir";
+            //
             // miCloseConversation
-            // 
+            //
             this.miCloseConversation.Name = "miCloseConversation";
             this.miCloseConversation.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.W)));
             this.miCloseConversation.Size = new System.Drawing.Size(221, 22);
@@ -569,6 +577,7 @@
         private System.Windows.Forms.Label lblNoApiKey;
         private System.Windows.Forms.LinkLabel lnkOpenSettings;
         private System.Windows.Forms.ToolStripMenuItem miNewConversation;
+        private System.Windows.Forms.ToolStripMenuItem miOpenRecentWorkDir;
         private System.Windows.Forms.TabControl tabControl1;
         private System.Windows.Forms.TabPage tabPage1;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator2;
