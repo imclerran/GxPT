@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text;
 using Mcp35.Client;
 using Mcp35.Core.Diagnostics;
@@ -82,10 +83,18 @@ namespace GxPT
         {
             if (history == null) throw new ArgumentNullException("history");
 
+            // Short id so a turn's lines can be followed in the log even when tabs run concurrently
+            // (the ThreadPool thread id is reused across turns and can't be relied on for this).
+            string turnId = Guid.NewGuid().ToString("N").Substring(0, 6);
+            _log.Log("mcp", "[turn " + turnId + "] start: model=" + _model + ", history=" + history.Count
+                + " msg(s), maxIterations=" + _maxIterations);
+
             for (int iter = 0; iter < _maxIterations; iter++)
             {
                 IList<JObject> tools = _registry != null ? _registry.ExposedFunctionDefs() : null;
                 string manifest = _registry != null ? _registry.NamesManifestSystemMessage() : null;
+                _log.Log("mcp", "[turn " + turnId + "] iteration " + (iter + 1) + "/" + _maxIterations
+                    + ": requesting model with " + (tools != null ? tools.Count : 0) + " exposed tool(s)");
 
                 // The names manifest rides as an extra system message in front of history; it is not
                 // persisted (rebuilt each request from the live catalog).
@@ -116,13 +125,23 @@ namespace GxPT
                 if (errored)
                 {
                     // A streaming/transport error already failed this request; surface and stop.
+                    _log.Log("mcp", "[turn " + turnId + "] aborted on iteration " + (iter + 1)
+                        + ": stream error: " + (errMessage ?? "(none)"));
                     if (ui != null) ui.OnError(errMessage);
                     return;
                 }
 
+                _log.Log("mcp", "[turn " + turnId + "] response: finish_reason="
+                    + (asm.FinishReason ?? "(none)")
+                    + ", toolCalls=" + (asm.ProducedToolCalls ? asm.Calls.Count : 0)
+                    + ", textLen=" + (asm.Text != null ? asm.Text.Length : 0)
+                    + (asm.Truncated ? " [TRUNCATED: model output cut off by length]" : ""));
+
                 if (!asm.ProducedToolCalls)
                 {
                     history.Add(new ChatMessage("assistant", asm.Text));
+                    _log.Log("mcp", "[turn " + turnId + "] complete: final answer after " + (iter + 1)
+                        + " iteration(s), " + (asm.Text != null ? asm.Text.Length : 0) + " chars");
                     if (ui != null) ui.Complete();
                     return;
                 }
@@ -140,7 +159,7 @@ namespace GxPT
                     if (ui != null) ui.OnToolCall(call.Name, call.ArgumentsJson);
 
                     bool isError;
-                    string result = ExecuteCall(call, out isError);
+                    string result = ExecuteCall(call, turnId, out isError);
 
                     if (ui != null) ui.OnToolResult(call.Name, result, isError);
                     ChatMessage toolMsg = new ChatMessage("tool", result);
@@ -151,6 +170,8 @@ namespace GxPT
             }
 
             // Bounded: hitting the cap returns a note rather than looping unbounded.
+            _log.Log("mcp", "[turn " + turnId + "] stopped: hit max iterations (" + _maxIterations
+                + ") with tool calls still pending; returning [Tool-call limit reached]");
             history.Add(new ChatMessage("assistant", "[Tool-call limit reached.]"));
             if (ui != null) ui.Complete();
         }
@@ -158,18 +179,24 @@ namespace GxPT
         // Executes one tool call, returning the text to feed back as the tool message content.
         // Failures are returned as content (not thrown) so the model can recover; isError flags the
         // UI marker. reveal_tools is handled locally without an MCP round-trip.
-        private string ExecuteCall(ToolCall call, out bool isError)
+        private string ExecuteCall(ToolCall call, string turnId, out bool isError)
         {
             isError = false;
 
             if (_registry != null && _registry.IsRevealTools(call.Name))
-                return _registry.Reveal(ParseRevealNames(call.ArgumentsJson));
+            {
+                string[] names = ParseRevealNames(call.ArgumentsJson);
+                _log.Log("mcp", "[turn " + turnId + "] reveal_tools: " + names.Length + " name(s)");
+                return _registry.Reveal(names);
+            }
 
             McpServerConnection conn;
             string toolName;
             if (_registry == null || !_registry.TryResolve(call.Name, WorkingDir, out conn, out toolName))
             {
                 isError = true;
+                _log.Log("mcp", "[turn " + turnId + "] unresolved tool '" + call.Name + "' (workdir="
+                    + (string.IsNullOrEmpty(WorkingDir) ? "(none)" : WorkingDir) + ")");
                 return "[Unknown tool: " + call.Name + "]";
             }
 
@@ -177,36 +204,57 @@ namespace GxPT
             if (!TryParseArgs(call.ArgumentsJson, out args))
             {
                 isError = true;
+                _log.Log("mcp", "[turn " + turnId + "] invalid arguments for '" + call.Name
+                    + "' (not valid JSON)");
                 return "[Invalid tool arguments: not valid JSON.]";
             }
+
+            // Logged before the approval check: if the next line for this call is far behind in
+            // wall-clock time but reports a small tool 'ms', the gap was the user's approval prompt.
+            _log.Log("mcp", "[turn " + turnId + "] dispatch '" + call.Name + "' (args "
+                + (call.ArgumentsJson != null ? call.ArgumentsJson.Length : 0) + " bytes)");
 
             ApprovalDecision decision = _approval.Check(call.Name, args);
             if (decision == ApprovalDecision.Deny)
             {
                 isError = true;
+                _log.Log("mcp", "[turn " + turnId + "] '" + call.Name + "' denied by approval policy");
                 return "[Call denied by user.]";
             }
 
+            Stopwatch sw = Stopwatch.StartNew();
             try
             {
                 CallToolResult res = conn.CallTool(toolName, args, _callTimeoutMs);
+                sw.Stop();
                 isError = (res != null && res.IsError);
-                return FormatResult(res);
+                string formatted = FormatResult(res);
+                _log.Log("mcp", "[turn " + turnId + "] '" + call.Name + "' -> "
+                    + (isError ? "isError" : "ok") + " (" + (formatted != null ? formatted.Length : 0)
+                    + " chars, " + sw.ElapsedMilliseconds + "ms)");
+                return formatted;
             }
             catch (McpTransportException ex)
             {
-                _log.Log("mcp", "transport fault calling '" + call.Name + "': " + ex.Message);
+                sw.Stop();
+                _log.Log("mcp", "[turn " + turnId + "] transport fault calling '" + call.Name + "' after "
+                    + sw.ElapsedMilliseconds + "ms: " + ex.Message);
                 isError = true;
                 return "[Server unavailable.]";
             }
             catch (McpTimeoutException ex)
             {
-                _log.Log("mcp", "timeout calling '" + call.Name + "': " + ex.Message);
+                sw.Stop();
+                _log.Log("mcp", "[turn " + turnId + "] timeout calling '" + call.Name + "' after "
+                    + sw.ElapsedMilliseconds + "ms: " + ex.Message);
                 isError = true;
                 return "[Tool timed out.]";
             }
             catch (McpException ex)
             {
+                sw.Stop();
+                _log.Log("mcp", "[turn " + turnId + "] tool error calling '" + call.Name + "' after "
+                    + sw.ElapsedMilliseconds + "ms: " + ex.Message);
                 isError = true;
                 return "[Tool error: " + ex.Message + "]";
             }

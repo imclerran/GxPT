@@ -216,6 +216,8 @@ namespace GxPT
             {
                 // Tag the connection with its workdir so tool calls resolve to the right folder.
                 _registry.AddConnection(conn, workdir);
+                _log.Log("mcp", "server '" + spec.Name + "' ready"
+                    + (string.IsNullOrEmpty(workdir) ? " (eager)" : " (workdir=" + workdir + ")"));
                 return conn;
             }
 
