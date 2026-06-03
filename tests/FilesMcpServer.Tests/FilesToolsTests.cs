@@ -354,6 +354,71 @@ namespace FilesMcpServer.Tests
             Assert.Equal("one\r\nTWO\r\nthree", File.ReadAllText(Abs("crlf.txt")));
         }
 
+        [Fact]
+        public void Edit_matches_lf_old_string_against_crlf_file()
+        {
+            // The reported bug: the read tools hand back LF-normalized text, so a multi-line
+            // old_string copied from a read is LF-only — but the file on disk is CRLF. The match
+            // must still succeed (and surrounding CRLFs are preserved).
+            File.WriteAllText(Abs("crlf.txt"), "alpha\r\nbeta\r\ngamma\r\ndelta");
+            var msgs = Harness.Exchange(Harness.NewFilesServer(_root),
+                Harness.ToolsCall(1, "edit", Harness.Args("path", "crlf.txt",
+                    "old_string", "beta\ngamma", "new_string", "BETA\nGAMMA")));
+            Assert.False(Harness.IsError(msgs[0]));
+            Assert.Equal(1, (int)msgs[0]["result"]["structuredContent"]["replacements"]);
+            Assert.Equal("alpha\r\nBETA\r\nGAMMA\r\ndelta", File.ReadAllText(Abs("crlf.txt")));
+        }
+
+        [Fact]
+        public void Edit_normalizes_new_string_newlines_to_a_crlf_file()
+        {
+            // new_string's LFs are rewritten to the file's CRLF so the edit doesn't leave the file
+            // with mixed line endings (which is what plain single-line edits used to do).
+            File.WriteAllText(Abs("crlf.txt"), "head\r\ntail");
+            var msgs = Harness.Exchange(Harness.NewFilesServer(_root),
+                Harness.ToolsCall(1, "edit", Harness.Args("path", "crlf.txt",
+                    "old_string", "tail", "new_string", "x\ny\nz")));
+            Assert.False(Harness.IsError(msgs[0]));
+            string after = File.ReadAllText(Abs("crlf.txt"));
+            Assert.Equal("head\r\nx\r\ny\r\nz", after);
+            Assert.DoesNotContain("\n", after.Replace("\r\n", "")); // every LF is part of a CRLF — no bare LFs
+        }
+
+        [Fact]
+        public void Edit_keeps_lf_endings_in_an_lf_file()
+        {
+            // No regression for the common LF case: a CRLF detection must not inject CRLFs into an
+            // LF file, and an LF old_string keeps matching.
+            File.WriteAllText(Abs("lf.txt"), "a\nb\nc\nd");
+            var msgs = Harness.Exchange(Harness.NewFilesServer(_root),
+                Harness.ToolsCall(1, "edit", Harness.Args("path", "lf.txt",
+                    "old_string", "b\nc", "new_string", "B\nC")));
+            Assert.False(Harness.IsError(msgs[0]));
+            string after = File.ReadAllText(Abs("lf.txt"));
+            Assert.Equal("a\nB\nC\nd", after);
+            Assert.DoesNotContain("\r", after);
+        }
+
+        [Fact]
+        public void Edit_matches_lf_old_string_spanning_a_chunk_boundary_in_crlf_file()
+        {
+            // Combine the two hard cases: a CRLF file, an LF-authored multi-line old_string, AND a
+            // match whose internal CRLF straddles the 64K read boundary. This exercises the carry
+            // buffer using the post-normalization (CRLF-expanded) old_string length.
+            const int chunk = 64 * 1024;          // EditChunkChars
+            string filler = string.Concat(System.Linq.Enumerable.Repeat("ab\r\n", 16383)); // 65532 chars
+            string prefix = filler + "c";         // 65533 chars: the marker's '\r' lands at index 65535
+            File.WriteAllText(Abs("span.txt"), prefix + "AA\r\nBB" + "tail");
+            Assert.True(prefix.Length + 2 == chunk - 1); // '\r' is the last char of chunk 1
+
+            var msgs = Harness.Exchange(Harness.NewFilesServer(_root),
+                Harness.ToolsCall(1, "edit", Harness.Args("path", "span.txt",
+                    "old_string", "AA\nBB", "new_string", "CC")));
+            Assert.False(Harness.IsError(msgs[0]));
+            Assert.Equal(1, (int)msgs[0]["result"]["structuredContent"]["replacements"]);
+            Assert.Equal(prefix + "CC" + "tail", File.ReadAllText(Abs("span.txt")));
+        }
+
         // ---- search ----
 
         [Fact]
