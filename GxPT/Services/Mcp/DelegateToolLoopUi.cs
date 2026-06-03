@@ -25,23 +25,48 @@ namespace GxPT
         {
             return MarkdownParser.EditDiffSentinel(key);
         }
+
+        // The tool-result content the orchestrator returns when the user denies a call. Centralized
+        // so the transcript can recognize a denied call (live and on reload) and render it as denied
+        // rather than as an applied edit/diff.
+        public const string DeniedResult = "[Call denied by user.]";
+
+        public static bool IsDenied(string resultText)
+        {
+            return string.Equals(resultText, DeniedResult, StringComparison.Ordinal);
+        }
+
+        // Shown in place of the edit/diff record when a call was denied, so a denied edit reads as
+        // "denied" instead of looking like it was applied.
+        public static string Denied(string functionName)
+        {
+            return "denied: " + Display(functionName);
+        }
     }
 
     // Adapts the orchestrator's IToolLoopUi to simple delegates so MainForm can render a tool-call
     // turn as a chrome-less "tool activity" message plus a separate answer bubble: model text ->
-    // appendText, each tool call -> onToolCall (its own message), Complete/OnError finalize. Tool
-    // results are never shown (the model summarizes them).
+    // appendText, each completed tool call -> onToolActivity (its own message), Complete/OnError
+    // finalize.
+    //
+    // The tool record is rendered on the RESULT, not the call: OnToolCall fires before the approval
+    // gate, so rendering there would show an edit/diff (and persist it) even when the user denies the
+    // call. We stash the arguments at call time and emit the record once the outcome is known, so the
+    // transcript reflects what actually happened (applied / denied / errored).
     internal sealed class DelegateToolLoopUi : IToolLoopUi
     {
         private readonly Action<string> _appendText;
-        private readonly Action<string, string> _onToolCall; // (functionName, argumentsJson)
+        // (functionName, argumentsJson, resultText, isError) — emitted once a call's outcome is known.
+        private readonly Action<string, string, string, bool> _onToolActivity;
         private readonly Action _complete;
         private readonly Action<string> _error;
 
-        public DelegateToolLoopUi(Action<string> appendText, Action<string, string> onToolCall, Action complete, Action<string> error)
+        private string _pendingArgs; // arguments of the in-flight call, awaiting its result
+
+        public DelegateToolLoopUi(Action<string> appendText, Action<string, string, string, bool> onToolActivity, Action complete, Action<string> error)
         {
             _appendText = appendText;
-            _onToolCall = onToolCall;
+            _onToolActivity = onToolActivity;
             _complete = complete;
             _error = error;
         }
@@ -53,12 +78,14 @@ namespace GxPT
 
         public void OnToolCall(string functionName, string argumentsJson)
         {
-            if (_onToolCall != null) _onToolCall(functionName, argumentsJson);
+            // Defer rendering until the result: calls are serial, so a single pending slot suffices.
+            _pendingArgs = argumentsJson;
         }
 
         public void OnToolResult(string functionName, string resultText, bool isError)
         {
-            // Results are not rendered — the model incorporates them into its next message.
+            if (_onToolActivity != null) _onToolActivity(functionName, _pendingArgs, resultText, isError);
+            _pendingArgs = null;
         }
 
         public void OnError(string message)

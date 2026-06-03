@@ -330,7 +330,7 @@ namespace GxPT
             {
                 isError = true;
                 _log.Log("mcp", "[turn " + turnId + "] '" + call.Name + "' denied by approval policy");
-                return "[Call denied by user.]";
+                return McpMarkers.DeniedResult;
             }
 
             Stopwatch sw = Stopwatch.StartNew();

@@ -1741,13 +1741,17 @@ namespace GxPT
                             cur.Text.Append(t);
                         }
                     };
-                    // argsJson is threaded through for files__edit etc., which render a collapsible
-                    // record instead of the generic "using" marker. Register the record (it has its own
-                    // lock) before taking sbLock. Live keys are per-call GUIDs (ephemeral — the reloaded
-                    // view re-derives under the persisted call id). Consecutive calls share one block.
-                    Action<string, string> onToolCall = delegate(string name, string argsJson)
+                    // Rendered on the call's RESULT (not the request), so a denied call shows as
+                    // "denied" instead of an applied edit/diff. argsJson is threaded through for
+                    // files__edit etc., which render a collapsible record instead of the generic
+                    // "using" marker; register the record (it has its own lock) before taking sbLock.
+                    // Live keys are per-call GUIDs (ephemeral — the reloaded view re-derives under the
+                    // persisted call id). Consecutive calls share one block.
+                    Action<string, string, string, bool> onToolActivity = delegate(string name, string argsJson, string resultText, bool isError)
                     {
-                        string marker = EditDiffMarkerOrCall(ctx.Transcript, name, argsJson, Guid.NewGuid().ToString("N"));
+                        string marker = McpMarkers.IsDenied(resultText)
+                            ? McpMarkers.Denied(name)
+                            : EditDiffMarkerOrCall(ctx.Transcript, name, argsJson, Guid.NewGuid().ToString("N"));
                         lock (sbLock)
                         {
                             LiveSeg cur = (segs.Count > 0) ? segs[segs.Count - 1] : null;
@@ -1772,7 +1776,7 @@ namespace GxPT
                         { FinalizeToolSend(ctx, renderTimer, sbLock, segs, e2); });
                     };
 
-                    orch.RunTurn(ctx.Conversation.History, new DelegateToolLoopUi(onAppend, onToolCall, onComplete, onErr));
+                    orch.RunTurn(ctx.Conversation.History, new DelegateToolLoopUi(onAppend, onToolActivity, onComplete, onErr));
                 }
                 catch (Exception ex)
                 {
@@ -2782,6 +2786,16 @@ namespace GxPT
                     }
                     pendingTools = null;
                 };
+                // Outcome of each tool call (by id) so a denied call renders as "denied" instead of as
+                // an applied record. Tool messages aren't shown directly, but their content is the
+                // result the orchestrator recorded (McpMarkers.DeniedResult on denial).
+                var toolResultById = new System.Collections.Generic.Dictionary<string, string>(StringComparer.Ordinal);
+                foreach (var rm in convo.History)
+                {
+                    if (rm == null) continue;
+                    if (string.Equals(rm.Role, "tool", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(rm.ToolCallId))
+                        toolResultById[rm.ToolCallId] = rm.Content;
+                }
                 int hi = -1;
                 foreach (var m in convo.History)
                 {
@@ -2817,8 +2831,18 @@ namespace GxPT
                             var tc = m.ToolCalls[ti];
                             if (tc == null) continue;
                             if (pendingTools.Length > 0) pendingTools.Append("\r\n");
-                            string key = !string.IsNullOrEmpty(tc.Id) ? tc.Id : ("edit" + ti);
-                            pendingTools.Append(EditDiffMarkerOrCall(ctx.Transcript, tc.Name, tc.ArgumentsJson, key));
+                            string res;
+                            bool denied = !string.IsNullOrEmpty(tc.Id)
+                                && toolResultById.TryGetValue(tc.Id, out res) && McpMarkers.IsDenied(res);
+                            if (denied)
+                            {
+                                pendingTools.Append(McpMarkers.Denied(tc.Name));
+                            }
+                            else
+                            {
+                                string key = !string.IsNullOrEmpty(tc.Id) ? tc.Id : ("edit" + ti);
+                                pendingTools.Append(EditDiffMarkerOrCall(ctx.Transcript, tc.Name, tc.ArgumentsJson, key));
+                            }
                         }
                     }
                 }
