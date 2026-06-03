@@ -1767,6 +1767,11 @@ namespace GxPT
                 }
                 catch (Exception ex)
                 {
+                    // The turn worker crashed (e.g. in EnsureWorkingDir / BuildMessagesForModel /
+                    // RunTurn). The user sees ex.Message in the transcript, but log the full exception
+                    // (type + stack) too — otherwise a worker crash leaves no trace in the log.
+                    try { LoggerSink.Instance.Log("mcp", "turn worker failed: " + ex); }
+                    catch { }
                     string msg = ex.Message;
                     BeginInvoke((MethodInvoker)delegate
                     { FinalizeToolSend(ctx, renderTimer, sbLock, segs, msg); });
