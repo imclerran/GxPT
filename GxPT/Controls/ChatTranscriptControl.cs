@@ -1,4 +1,4 @@
-﻿// ChatTranscriptControl.cs
+// ChatTranscriptControl.cs
 // WinForms owner-drawn chat transcript with basic Markdown rendering
 // Target: .NET 3.5, Windows XP compatible
 
@@ -309,7 +309,9 @@ namespace GxPT
         {
             string label = (data != null && !string.IsNullOrEmpty(data.HeaderText)) ? data.HeaderText : "(record)";
             if (!hasBody) return label;
-            return (collapsed ? "▸" : "▾") + " " + label;
+            // ASCII "+"/"-" toggle: the Unicode disclosure triangles (U+25B8/U+25BE) are absent from
+            // Tahoma on Windows XP and render as missing-glyph boxes; "+"/"-" exists in every font.
+            return (collapsed ? "+" : "-") + " " + label;
         }
 
         // The "  (+12 −3)" suffix for an edit record (empty when the record carries no counts). Kept
@@ -318,7 +320,8 @@ namespace GxPT
         private static string BuildEditDiffCountsText(EditDiffData data)
         {
             if (data == null || data.Added < 0 || data.Removed < 0) return string.Empty;
-            return "  (+" + data.Added + " −" + data.Removed + ")";
+            // ASCII "-" (U+002D), not the Unicode minus sign U+2212 which is missing from Tahoma on XP.
+            return "  (+" + data.Added + " -" + data.Removed + ")";
         }
 
         // Draw one run of the edit-record header at x (advancing x by the run's width) in the given
@@ -1682,7 +1685,8 @@ namespace GxPT
                             DrawHeaderSeg(g, ref hx, hy, "  (", _baseFont, ForeColor, fmt);
                             DrawHeaderSeg(g, ref hx, hy, "+" + data.Added, _baseFont, _clrDiffAdd, fmt);
                             DrawHeaderSeg(g, ref hx, hy, " ", _baseFont, ForeColor, fmt);
-                            DrawHeaderSeg(g, ref hx, hy, "−" + data.Removed, _baseFont, _clrDiffDel, fmt);
+                            // ASCII "-" (U+002D), not the Unicode minus sign U+2212 which is missing from Tahoma on XP.
+                            DrawHeaderSeg(g, ref hx, hy, "-" + data.Removed, _baseFont, _clrDiffDel, fmt);
                             DrawHeaderSeg(g, ref hx, hy, ")", _baseFont, ForeColor, fmt);
                         }
                     }
