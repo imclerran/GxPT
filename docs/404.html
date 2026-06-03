@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="robots" content="noindex">
+  <title>Redirecting...</title>
+  <script>
+    (function () {
+      var path = window.location.pathname;
+      // If the first path segment is some case-variant of "GxPT" (but not the
+      // canonical casing), normalize it and redirect to the correct URL.
+      var m = path.match(/^\/([^\/]+)(\/.*)?$/);
+      if (m && m[1].toLowerCase() === 'gxpt' && m[1] !== 'GxPT') {
+        var rest = m[2] || '';
+        window.location.replace('/GxPT' + rest + window.location.search + window.location.hash);
+      }
+    })();
+  </script>
+</head>
+<body>
+  <p>Redirecting to <a href="/GxPT/">/GxPT/</a>...</p>
+</body>
+</html>
