@@ -248,7 +248,12 @@ namespace GxPT
             IList<ChatMessage> contextMessages = RequestMessageTransform != null
                 ? RequestMessageTransform(history) : history;
             requestMessages.AddRange(contextMessages);
-            requestMessages.Add(new ChatMessage("system",
+            // Sent as a user message, not system: Anthropic (via OpenRouter) hoists in-array system
+            // messages to the top-level system parameter, which would leave the conversation ending
+            // on a tool result and the model with nothing in-position to answer (it replies with a
+            // near-empty acknowledgment). A trailing user turn keeps the instruction in place so the
+            // model actually summarizes.
+            requestMessages.Add(new ChatMessage("user",
                 "You have reached the maximum number of tool calls allowed for this turn. Do not "
                 + "request any more tools now. Briefly summarize what you have done so far and what "
                 + "still remains, then ask the user how they would like to proceed."));

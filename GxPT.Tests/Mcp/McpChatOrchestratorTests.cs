@@ -148,6 +148,12 @@ namespace GxPT.Tests.Mcp
             Assert.True(ui.Completed);
             Assert.Equal(4, streamer.Calls);                       // 3 tool iterations + 1 tool-less wrap-up
             Assert.Null(streamer.SeenTools[3]);                    // wrap-up offers no tools
+            // The wrap-up instruction must be a trailing user turn, not a system message: Anthropic
+            // hoists in-array system messages out of position, leaving nothing for the model to answer.
+            var wrapMsgs = streamer.SeenMessages[3];
+            var lastSent = wrapMsgs[wrapMsgs.Count - 1];
+            Assert.Equal("user", lastSent.Role);
+            Assert.Contains("maximum number of tool calls", lastSent.Content);
             Assert.Equal("assistant", history[history.Count - 1].Role);
             Assert.Equal("Summary; how should I proceed?", history[history.Count - 1].Content);
             Assert.Contains("how should I proceed", ui.Text.ToString());
