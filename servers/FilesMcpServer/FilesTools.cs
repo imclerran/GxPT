@@ -74,7 +74,9 @@ namespace FilesMcpServer
                 delegate(ToolCallContext ctx) { return Edit(sandbox, ctx); });
 
             server.AddTool("search", "Search file contents for a string or regex under the workspace root, "
-                + "returning matching {path, line, text}. Recursive, streamed (any file size), skips binary files.",
+                + "returning matching {path, line, text}. Recursive, skips binary files. Line-oriented by "
+                + "default (each line is matched with its terminator stripped, so a pattern cannot match a "
+                + "newline or span lines); set multiline to match across line boundaries (grep -U style).",
                 SchemaBuilder.Object()
                     .Str("query", true, "Text or regex to search for")
                     .Str("path", false, "Directory (or file) to search under; defaults to the workspace root")
@@ -82,6 +84,10 @@ namespace FilesMcpServer
                     .Bool("ignore_case", false, "Case-insensitive match")
                     .Str("glob", false, "Only search files whose name matches this wildcard (e.g. *.cs)")
                     .Int("max_results", false, "Maximum matches to return (default 100, max 1000)")
+                    .Bool("multiline", false, "Match against whole-file text with line endings intact, so the "
+                        + "query/pattern may contain or span newlines (grep -U). In regex mode ^/$ become line "
+                        + "anchors. 'line' is where each match starts. Bounded by the read cap; line-mode streams "
+                        + "files of any size, multiline skips files over the cap.")
                     .Build(),
                 delegate(ToolCallContext ctx) { return Search(sandbox, ctx); });
         }
@@ -460,6 +466,7 @@ namespace FilesMcpServer
 
             bool useRegex = BoolArg(ctx, "regex", false);
             bool ignoreCase = BoolArg(ctx, "ignore_case", false);
+            bool multiline = BoolArg(ctx, "multiline", false);
             int maxResults = IntArg(ctx, "max_results", DefaultSearchMax, 1, MaxSearchMax);
             string glob = ctx.Arguments.Value<string>("glob");
 
@@ -470,6 +477,11 @@ namespace FilesMcpServer
                 {
                     RegexOptions opts = RegexOptions.CultureInvariant;
                     if (ignoreCase) opts |= RegexOptions.IgnoreCase;
+                    // Multiline mode matches the whole file text, so make ^/$ line anchors (the grep/
+                    // ripgrep -U convention). '.' still does not cross newlines unless the pattern opts
+                    // in with (?s). NOTE (.NET): $ matches before a '\n', so on CRLF text a trailing '\r'
+                    // sits between content and $ — use \r?$ to match line ends regardless of CRLF/LF.
+                    if (multiline) opts |= RegexOptions.Multiline;
                     rx = new Regex(query, opts);
                 }
                 catch (ArgumentException ex)
@@ -483,7 +495,7 @@ namespace FilesMcpServer
             List<JObject> matches = new List<JObject>();
             int[] scanned = new int[1];
             bool truncated = SearchWalk(sandbox, root, MaxRecursiveDepth, rx, query, cmp, globRx,
-                maxResults, matches, scanned);
+                maxResults, multiline, matches, scanned);
 
             JObject result = new JObject();
             JArray arr = new JArray();
@@ -496,16 +508,16 @@ namespace FilesMcpServer
 
         // Returns true if results were truncated (hit a cap before scanning everything).
         private static bool SearchWalk(PathSandbox sandbox, string path, int depthLeft, Regex rx,
-            string query, StringComparison cmp, Regex globRx, int maxResults,
+            string query, StringComparison cmp, Regex globRx, int maxResults, bool multiline,
             List<JObject> matches, int[] scanned)
         {
             if (File.Exists(path))
-                return SearchFile(sandbox, path, rx, query, cmp, globRx, maxResults, matches, scanned);
+                return SearchFile(sandbox, path, rx, query, cmp, globRx, maxResults, multiline, matches, scanned);
 
             string[] files = Directory.GetFiles(path);
             foreach (string f in files)
             {
-                if (SearchFile(sandbox, f, rx, query, cmp, globRx, maxResults, matches, scanned))
+                if (SearchFile(sandbox, f, rx, query, cmp, globRx, maxResults, multiline, matches, scanned))
                     return true;
             }
             if (depthLeft > 0)
@@ -513,7 +525,7 @@ namespace FilesMcpServer
                 string[] dirs = Directory.GetDirectories(path);
                 foreach (string d in dirs)
                 {
-                    if (SearchWalk(sandbox, d, depthLeft - 1, rx, query, cmp, globRx, maxResults, matches, scanned))
+                    if (SearchWalk(sandbox, d, depthLeft - 1, rx, query, cmp, globRx, maxResults, multiline, matches, scanned))
                         return true;
                 }
             }
@@ -521,12 +533,15 @@ namespace FilesMcpServer
         }
 
         private static bool SearchFile(PathSandbox sandbox, string file, Regex rx, string query,
-            StringComparison cmp, Regex globRx, int maxResults, List<JObject> matches, int[] scanned)
+            StringComparison cmp, Regex globRx, int maxResults, bool multiline, List<JObject> matches, int[] scanned)
         {
             if (globRx != null && !globRx.IsMatch(Path.GetFileName(file))) return false;
 
             if (scanned[0] >= MaxSearchScanFiles) return true; // scanned-file cap -> truncated
             scanned[0]++;
+
+            if (multiline)
+                return SearchFileMultiline(sandbox, file, rx, query, cmp, maxResults, matches);
 
             // Stream line-by-line: file size is not a limit (output is bounded by maxResults), so
             // large files — exactly where grep matters most — are searchable. Binary/unreadable skip.
@@ -553,6 +568,61 @@ namespace FilesMcpServer
                     matches.Add(m);
                     if (matches.Count >= maxResults) return true; // result cap -> truncated
                 }
+            }
+            return false;
+        }
+
+        // Multiline search: match the whole file text with its line endings intact, so a pattern can
+        // span lines and can match \r/\n directly (the grep/ripgrep -U analog). Bounded by the read
+        // cap — files over it are skipped (line-mode search still streams them). Reports the 1-based
+        // line where each match starts; 'text' is the (capped) matched span, which may contain newlines.
+        private static bool SearchFileMultiline(PathSandbox sandbox, string file, Regex rx, string query,
+            StringComparison cmp, int maxResults, List<JObject> matches)
+        {
+            try { if (new FileInfo(file).Length > MaxReadBytes) return false; }
+            catch { return false; }
+
+            StreamReader sr;
+            try { sr = OpenTextReaderOrNull(file); }
+            catch { return false; } // unreadable -> skip silently
+            if (sr == null) return false; // binary -> skip silently
+            string text;
+            using (sr) { text = sr.ReadToEnd(); }
+
+            string relPath = sandbox.ToRelative(file);
+
+            // Matches arrive in non-decreasing index order, so carry a running line counter (count the
+            // newlines only between the previous and current match start) to stay O(file length).
+            int line = 1;
+            int counted = 0;
+            int pos = 0;
+            while (pos <= text.Length)
+            {
+                int idx, matchLen;
+                string value;
+                if (rx != null)
+                {
+                    Match mm = rx.Match(text, pos);
+                    if (!mm.Success) break;
+                    idx = mm.Index; matchLen = mm.Length; value = mm.Value;
+                }
+                else
+                {
+                    idx = text.IndexOf(query, pos, cmp);
+                    if (idx < 0) break;
+                    matchLen = query.Length; value = query;
+                }
+
+                while (counted < idx) { if (text[counted] == '\n') line++; counted++; }
+
+                JObject m = new JObject();
+                m["path"] = relPath;
+                m["line"] = line;
+                m["text"] = CapText(value);
+                matches.Add(m);
+                if (matches.Count >= maxResults) return true; // result cap -> truncated
+
+                pos = idx + (matchLen > 0 ? matchLen : 1); // ensure progress on zero-length matches
             }
             return false;
         }
