@@ -376,12 +376,21 @@
             this.cmbModel.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cmbModel.FormattingEnabled = true;
             this.cmbModel.Items.AddRange(new object[] {
-            "anthropic/claude-3.7-sonnet",
-            "anthropic/claude-sonnet-4",
-            "google/gemini-2.5-flash",
-            "google/gemini-2.5-pro",
+            "anthropic/claude-opus-4.8",
+            "anthropic/claude-sonnet-4.6",
+            "anthropic/claude-haiku-4.5",
+            "google/gemini-pro-latest",
+            "google/gemini-3.5-flash",
+            "google/gemma-4-31b-it",
+            "openai/gpt-5.4",
+            "openai/gpt-5.1-codex-mini",
+            "openai/gpt-chat-latest",
+            "openai/gpt-5.4-mini",
             "openai/gpt-4o",
-            "openai/gpt-5"});
+            "deepseek/deepseek-v4-pro",
+            "deepseek/deepseek-v4-flash",
+            "moonshotai/kimi-k2.6",
+            "qwen/qwen3.7-max"});
             this.cmbModel.Location = new System.Drawing.Point(0, 0);
             this.cmbModel.Margin = new System.Windows.Forms.Padding(0);
             this.cmbModel.Name = "cmbModel";

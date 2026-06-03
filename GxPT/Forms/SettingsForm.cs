@@ -189,14 +189,23 @@ namespace GxPT
             sb.AppendLine("{");
             sb.AppendLine("  \"openrouter_api_key\": \"\",");
             sb.AppendLine("  \"models\": [");
-            sb.AppendLine("    \"anthropic/claude-3.7-sonnet\",");
-            sb.AppendLine("    \"anthropic/claude-sonnet-4\",");
-            sb.AppendLine("    \"google/gemini-2.5-flash\",");
-            sb.AppendLine("    \"google/gemini-2.5-pro\",");
+            sb.AppendLine("    \"anthropic/claude-opus-4.8\",");
+            sb.AppendLine("    \"anthropic/claude-sonnet-4.6\",");
+            sb.AppendLine("    \"anthropic/claude-haiku-4.5\",");
+            sb.AppendLine("    \"google/gemini-pro-latest\",");
+            sb.AppendLine("    \"google/gemini-3.5-flash\",");
+            sb.AppendLine("    \"google/gemma-4-31b-it\",");
+            sb.AppendLine("    \"openai/gpt-5.4\",");
+            sb.AppendLine("    \"openai/gpt-5.1-codex-mini\",");
+            sb.AppendLine("    \"openai/gpt-chat-latest\",");
+            sb.AppendLine("    \"openai/gpt-5.4-mini\",");
             sb.AppendLine("    \"openai/gpt-4o\",");
-            sb.AppendLine("    \"openai/gpt-5-chat\"");
+            sb.AppendLine("    \"deepseek/deepseek-v4-pro\",");
+            sb.AppendLine("    \"deepseek/deepseek-v4-flash\",");
+            sb.AppendLine("    \"moonshotai/kimi-k2.6\",");
+            sb.AppendLine("    \"qwen/qwen3.7-max\"");
             sb.AppendLine("  ],");
-            sb.AppendLine("  \"default_model\": \"openai/gpt-4o\",");
+            sb.AppendLine("  \"default_model\": \"anthropic/claude-sonnet-4.6\",");
             sb.AppendLine("  \"theme\": \"light\",");
             // Default UI color theme
             sb.AppendLine("  \"color_theme\": \"blue\",");
@@ -237,14 +246,23 @@ namespace GxPT
                 openrouter_api_key = "",
                 models = new List<string>
                 {
-                    "anthropic/claude-3.7-sonnet",
-                    "anthropic/claude-sonnet-4",
-                    "google/gemini-2.5-flash",
-                    "google/gemini-2.5-pro",
+                    "anthropic/claude-opus-4.8",
+                    "anthropic/claude-sonnet-4.6",
+                    "anthropic/claude-haiku-4.5",
+                    "google/gemini-pro-latest",
+                    "google/gemini-3.5-flash",
+                    "google/gemma-4-31b-it",
+                    "openai/gpt-5.4",
+                    "openai/gpt-5.1-codex-mini",
+                    "openai/gpt-chat-latest",
+                    "openai/gpt-5.4-mini",
                     "openai/gpt-4o",
-                    "openai/gpt-5"
+                    "deepseek/deepseek-v4-pro",
+                    "deepseek/deepseek-v4-flash",
+                    "moonshotai/kimi-k2.6",
+                    "qwen/qwen3.7-max"
                 },
-                default_model = "openai/gpt-4o",
+                default_model = "anthropic/claude-sonnet-4.6",
                 enable_logging = false,
                 font_size = GetChatDefaultFontSize(),
                 theme = "light",
