@@ -18,9 +18,10 @@ body {
   color: #000;
 }
 
-/* Centered fixed-width column — the classic "fits 1024x768" layout. */
+/* Centered column — caps on wide screens, shrinks to fit narrower ones. */
 .site {
-  width: 780px;
+  width: auto;
+  max-width: 1280px;
   margin: 0 auto;
   background: #ffffff;
   border-left: 1px solid #2d3a4d;
@@ -173,8 +174,10 @@ ul.features li {
   line-height: 1.5;
 }
 
-/* ---- Screenshot (home hero) ---- */
-.shot { display: block; width: 100%; border: 1px solid #8a93a3; margin: 4px 0 6px; }
+/* ---- Screenshot (home hero) ----
+   Cap the hero at the width it would fill in the narrower 960px layout
+   (~762px of main content) and center it, so it doesn't blow up on wide screens. */
+.shot { display: block; width: 100%; max-width: 762px; border: 1px solid #8a93a3; margin: 4px auto 6px; }
 .shot-cap { font-size: 11px; color: #555; margin: 0 0 8px; text-align: center; }
 
 /* ---- Screenshots gallery (float grid) ---- */
