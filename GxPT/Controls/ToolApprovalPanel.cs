@@ -68,10 +68,17 @@ namespace GxPT
 
             _buttons = new FlowLayoutPanel();
             _buttons.Dock = DockStyle.Bottom;
-            _buttons.Height = 34;
             _buttons.FlowDirection = FlowDirection.RightToLeft;
-            _buttons.WrapContents = false;
-            _buttons.AutoScroll = true;
+            // Wrap onto extra rows when the window is too narrow to fit every button on one line, and
+            // AutoSize so the strip grows upward (shrinking the preview above) to keep them all
+            // visible. The old fixed-height, no-wrap, AutoScroll setup let a horizontal scrollbar
+            // appear on resize and slice the buttons' bottoms off — and the scroll offset persisted,
+            // so they stayed cut off after the resize.
+            _buttons.WrapContents = true;
+            _buttons.AutoScroll = false;
+            _buttons.AutoSize = true;
+            _buttons.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            _buttons.MinimumSize = new Size(0, 34);
 
             // Order added (Fill must be added before docked siblings to lay out correctly):
             this.Controls.Add(_diffPanel);
