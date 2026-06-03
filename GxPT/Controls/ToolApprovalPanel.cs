@@ -36,9 +36,12 @@ namespace GxPT
         private const int MaxDetailsHeight = 200;
 
         // Clamped content height for the current prompt; the panel height is rebuilt from this plus
-        // the (possibly multi-row) button strip whenever the panel resizes. Re-entrancy guard stops
-        // the height we set from recursing through OnSizeChanged.
+        // the (possibly multi-row) button strip whenever the panel resizes. _handledDetails records
+        // whether the active prompt uses the diff panel (vs the raw preview) so the height can be
+        // re-measured at the new width on resize. Re-entrancy guard stops the height we set from
+        // recursing through OnSizeChanged.
         private int _detailsHeight = MinDetailsHeight;
+        private bool _handledDetails;
         private bool _inLayoutToContent;
 
         public ToolApprovalPanel()
@@ -233,8 +236,8 @@ namespace GxPT
             AddButton("Allow once", ApprovalChoice.AllowOnce, false);
 
             // Size to fit the content (buttons built above so their height is counted, including any
-            // wrapping at the current width).
-            _detailsHeight = ClampedDetailsHeight(handled);
+            // wrapping at the current width; LayoutToContent measures the details at the live width).
+            _handledDetails = handled;
             LayoutToContent();
 
             this.Visible = true;
@@ -269,7 +272,7 @@ namespace GxPT
             AddContinuationButton("Stop", false, false);
             AddContinuationButton("Continue", true, true);
 
-            _detailsHeight = ClampedDetailsHeight(false);
+            _handledDetails = false;
             LayoutToContent();
 
             this.Visible = true;
@@ -287,9 +290,22 @@ namespace GxPT
         private int ClampedDetailsHeight(bool handled)
         {
             int detailsContent = handled
-                ? _diffPanel.GetPreferredContentHeight()
+                ? _diffPanel.GetPreferredContentHeight(DiffAvailableWidth())
                 : MeasurePreviewContentHeight();
             return Math.Max(MinDetailsHeight, Math.Min(MaxDetailsHeight, detailsContent));
+        }
+
+        // Width the diff panel has for its content, used to predict whether a horizontal scrollbar
+        // will appear (so its height can be reserved). The diff panel fills this panel minus padding;
+        // prefer its actual width, with fallbacks for when it hasn't been laid out yet.
+        private int DiffAvailableWidth()
+        {
+            // The approval panel's own client width is authoritative and current (even mid-resize,
+            // when the Fill child's width may lag); the diff panel fills it minus padding.
+            int w = this.ClientSize.Width - this.Padding.Horizontal;
+            if (w <= 0 && _diffPanel != null) w = _diffPanel.ClientSize.Width;
+            if (w <= 0 && this.Parent != null) w = this.Parent.ClientSize.Width - this.Padding.Horizontal;
+            return w > 0 ? w : 400;
         }
 
         // Rebuild the panel height so the Fill details control keeps its clamped content height even
@@ -303,6 +319,10 @@ namespace GxPT
             _inLayoutToContent = true;
             try
             {
+                // Re-measure the details at the current width: a horizontal scrollbar (long command)
+                // appears/disappears as the panel widens or narrows, and that changes the height needed.
+                _detailsHeight = ClampedDetailsHeight(_handledDetails);
+
                 int avail = this.ClientSize.Width - this.Padding.Horizontal;
                 if (avail < 1) avail = (this.Parent != null ? this.Parent.ClientSize.Width : 400) - this.Padding.Horizontal;
                 if (avail < 1) avail = 400;
