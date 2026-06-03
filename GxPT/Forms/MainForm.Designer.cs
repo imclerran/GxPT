@@ -140,15 +140,15 @@
             this.miNewConversation.Size = new System.Drawing.Size(221, 22);
             this.miNewConversation.Text = "&New Conversation";
             this.miNewConversation.Click += new System.EventHandler(this.miNewConversation_Click);
-            //
+            // 
             // miOpenRecentWorkDir
-            //
+            // 
             this.miOpenRecentWorkDir.Name = "miOpenRecentWorkDir";
             this.miOpenRecentWorkDir.Size = new System.Drawing.Size(221, 22);
             this.miOpenRecentWorkDir.Text = "Open Recent Work &Dir";
-            //
+            // 
             // miCloseConversation
-            //
+            // 
             this.miCloseConversation.Name = "miCloseConversation";
             this.miCloseConversation.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.W)));
             this.miCloseConversation.Size = new System.Drawing.Size(221, 22);
