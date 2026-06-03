@@ -45,7 +45,15 @@ namespace CommandMcpServer
             req.FileName = config.Shell;
             // Hand the command to the shell as written; the shell (not this server) parses it.
             // The host already showed the user this exact string at the approval gate.
-            req.Arguments = "/c " + command;
+            //
+            // Wrap as: cmd.exe /s /c "<command>". The /S flag plus a single outer quote pair makes
+            // cmd strip exactly those outer quotes and pass everything between them through verbatim.
+            // Without it, bare `cmd /c <command>` hits cmd's legacy quoting rule: when the line
+            // starts with a quote and carries more than one quoted token (e.g. a quoted program path
+            // AND a quoted argument), cmd strips the FIRST and LAST quote of the whole line,
+            // corrupting it (the "quote stripping" failure on commands like
+            // `"C:\Program Files\...\ssh-keygen.exe" -f "C:\path" -N ""`).
+            req.Arguments = "/s /c \"" + command + "\"";
             req.WorkingDirectory = config.WorkDir;
             req.TimeoutMs = timeout;
 
