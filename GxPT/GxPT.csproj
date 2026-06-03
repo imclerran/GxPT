@@ -100,6 +100,7 @@
     </Compile>
     <Compile Include="Managers\ImportExportManager.cs" />
     <Compile Include="Services\AppSettings.cs" />
+    <Compile Include="Services\RecentWorkDirs.cs" />
     <Compile Include="Models\ChatModels.cs" />
     <Compile Include="Models\Conversation.cs" />
     <Compile Include="Models\ModelDefaults.cs" />
