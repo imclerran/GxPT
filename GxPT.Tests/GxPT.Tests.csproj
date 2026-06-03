@@ -53,6 +53,7 @@
     <Compile Include="..\GxPT\Services\Mcp\DefaultServerConnector.cs" Link="Linked\Mcp\DefaultServerConnector.cs" />
     <Compile Include="..\GxPT\Services\Logger.cs" Link="Linked\Logger.cs" />
     <Compile Include="..\GxPT\Services\AppSettings.cs" Link="Linked\AppSettings.cs" />
+    <Compile Include="..\GxPT\Services\RecentWorkDirs.cs" Link="Linked\RecentWorkDirs.cs" />
   </ItemGroup>
 
   <!-- MCP library sources (Core + Client) linked in so the host's Services/Mcp/ code (registry,
