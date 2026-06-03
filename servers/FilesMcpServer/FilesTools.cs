@@ -333,8 +333,7 @@ namespace FilesMcpServer
 
             string parent = Path.GetDirectoryName(full);
             string tmp = Path.Combine(parent, "." + Guid.NewGuid().ToString("N") + ".tmp");
-            int oldLen = oldString.Length;
-            int keep = oldLen - 1;
+            int keep = oldString.Length - 1;
             int replacements = 0;
             bool tooMany = false;
             bool committed = false;
@@ -347,10 +346,28 @@ namespace FilesMcpServer
                 {
                     char[] buf = new char[EditChunkChars];
                     string carry = string.Empty;
+                    bool eolResolved = false;
                     int read;
                     while (!tooMany && (read = sr.Read(buf, 0, buf.Length)) > 0)
                     {
-                        string window = carry + new string(buf, 0, read);
+                        string chunk = new string(buf, 0, read);
+
+                        // Match against the file's OWN line endings. The read tools (numbered/ranged
+                        // reads, search) normalize CRLF/CR to LF before the caller sees them, so an
+                        // old_string copied from a read is LF-only even when the file on disk is CRLF.
+                        // A byte-exact Ordinal match would then never find a multi-line span. Sniff the
+                        // file's dominant newline from the first chunk and translate old/new to it (which
+                        // also keeps new_string consistent with the file instead of injecting bare LFs).
+                        if (!eolResolved)
+                        {
+                            string fileNewline = DetectDominantNewline(chunk);
+                            oldString = NormalizeNewlines(oldString, fileNewline);
+                            newString = NormalizeNewlines(newString, fileNewline);
+                            keep = oldString.Length - 1;
+                            eolResolved = true;
+                        }
+
+                        string window = carry + chunk;
                         carry = ProcessEditWindow(window, oldString, newString, replaceAll, keep,
                             sw, ref replacements, ref tooMany);
                     }
@@ -621,6 +638,31 @@ namespace FilesMcpServer
             if (normalized.Length > 0 && normalized[normalized.Length - 1] == '\n')
                 normalized = normalized.Substring(0, normalized.Length - 1);
             return normalized.Split('\n');
+        }
+
+        // The file's dominant line-ending style, used by Edit to match against the file's own
+        // endings rather than the LF-normalized form the read tools expose. CRLF wins ties (a file
+        // with any CRLF is treated as CRLF) since mixed files are almost always CRLF-with-stray-LFs.
+        // Returns "\n" when there are no newlines (translation is then a no-op).
+        private static string DetectDominantNewline(string sample)
+        {
+            int crlf = 0;
+            int loneLf = 0;
+            for (int i = 0; i < sample.Length; i++)
+            {
+                if (sample[i] != '\n') continue;
+                if (i > 0 && sample[i - 1] == '\r') crlf++;
+                else loneLf++;
+            }
+            return (crlf > 0 && crlf >= loneLf) ? "\r\n" : "\n";
+        }
+
+        // Rewrite all line endings in s to `target` (first collapse CRLF/CR to LF, then expand).
+        private static string NormalizeNewlines(string s, string target)
+        {
+            if (string.IsNullOrEmpty(s)) return s;
+            string lf = s.Replace("\r\n", "\n").Replace('\r', '\n');
+            return target == "\r\n" ? lf.Replace("\n", "\r\n") : lf;
         }
 
         // Number of decimal digits in a non-negative line number (matches its rendered width).
