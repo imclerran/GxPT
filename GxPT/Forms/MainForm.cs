@@ -886,11 +886,11 @@ namespace GxPT
             {
                 string m = (cmbModel != null ? cmbModel.Text : null) ?? string.Empty;
                 m = m.Trim();
-                return string.IsNullOrEmpty(m) ? "openai/gpt-4o" : m;
+                return string.IsNullOrEmpty(m) ? ModelDefaults.DefaultModel : m;
             }
             catch
             {
-                return "openai/gpt-4o";
+                return ModelDefaults.DefaultModel;
             }
         }
 
@@ -1929,7 +1929,12 @@ namespace GxPT
                 var list = AppSettings.GetList("models");
                 string def = AppSettings.GetString("default_model");
 
-                if (list != null && list.Count > 0 && this.cmbModel != null)
+                // Fresh install (no models configured yet): fall back to the shared default catalog so
+                // the combo is never empty and matches what the Settings seed will write.
+                if (list == null || list.Count == 0) list = ModelDefaults.ModelList();
+                if (string.IsNullOrEmpty(def)) def = ModelDefaults.DefaultModel;
+
+                if (this.cmbModel != null)
                 {
                     // Preserve the active tab's chosen model if possible
                     string currentTabModel = null;
@@ -2427,7 +2432,7 @@ namespace GxPT
                 if (list != null && list.Count > 0) return list[0];
             }
             catch { }
-            return "openai/gpt-4o";
+            return ModelDefaults.DefaultModel;
         }
 
         // Sync the model combo box to the active tab's SelectedModel

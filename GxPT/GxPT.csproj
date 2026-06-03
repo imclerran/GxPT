@@ -102,6 +102,7 @@
     <Compile Include="Services\AppSettings.cs" />
     <Compile Include="Models\ChatModels.cs" />
     <Compile Include="Models\Conversation.cs" />
+    <Compile Include="Models\ModelDefaults.cs" />
     <Compile Include="Data\ConversationStore.cs" />
     <Compile Include="Forms\FileViewerForm.cs">
       <SubType>Form</SubType>
