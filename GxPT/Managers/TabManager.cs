@@ -275,6 +275,11 @@ namespace GxPT
                         catch { }
                         // re-hook name event for the fresh conversation on this reused tab
                         HookNameGenerated(ctx);
+                        // The fresh conversation cleared its ZDR + working-dir state, but the per-tab
+                        // ZDR checkbox and workspace strip are views that must be re-synced so the
+                        // recycled tab starts as a true blank slate.
+                        try { _mainForm.ResetRecycledTabWorkspaceState(ctx); }
+                        catch { }
                         page.Text = "New Conversation";
                         _mainForm.UpdateWindowTitle();
                     }
