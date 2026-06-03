@@ -457,6 +457,67 @@ namespace FilesMcpServer.Tests
         }
 
         [Fact]
+        public void Search_multiline_regex_spans_lines()
+        {
+            File.WriteAllText(Abs("a.txt"), "alpha\nbeta\ngamma");
+            var msgs = Harness.Exchange(Harness.NewFilesServer(_root),
+                Harness.ToolsCall(1, "search", Harness.Args("query", "beta\ngamma",
+                    "regex", true, "multiline", true)));
+            Assert.Equal(1, (int)msgs[0]["result"]["structuredContent"]["count"]);
+            JArray m = (JArray)msgs[0]["result"]["structuredContent"]["matches"];
+            Assert.Equal(2, (int)m[0]["line"]); // match starts on line 2 (beta)
+        }
+
+        [Fact]
+        public void Search_without_multiline_cannot_span_lines()
+        {
+            // Default line-oriented behavior: a pattern containing a newline never matches because
+            // ReadLine strips the terminator before matching. This guards the default.
+            File.WriteAllText(Abs("a.txt"), "alpha\nbeta\ngamma");
+            var msgs = Harness.Exchange(Harness.NewFilesServer(_root),
+                Harness.ToolsCall(1, "search", Harness.Args("query", "beta\ngamma", "regex", true)));
+            Assert.Equal(0, (int)msgs[0]["result"]["structuredContent"]["count"]);
+        }
+
+        [Fact]
+        public void Search_multiline_literal_matches_across_crlf()
+        {
+            // Literal (non-regex) multiline: the query's own newline matches the file's CRLF region.
+            File.WriteAllText(Abs("a.txt"), "a\r\nb\r\nc");
+            var msgs = Harness.Exchange(Harness.NewFilesServer(_root),
+                Harness.ToolsCall(1, "search", Harness.Args("query", "a\r\nb", "multiline", true)));
+            Assert.Equal(1, (int)msgs[0]["result"]["structuredContent"]["count"]);
+            JArray m = (JArray)msgs[0]["result"]["structuredContent"]["matches"];
+            Assert.Equal(1, (int)m[0]["line"]);
+        }
+
+        [Fact]
+        public void Search_multiline_can_match_crlf_line_terminators()
+        {
+            // The CRLF diagnostic that line-oriented search can never do: \r$ in multiline mode finds
+            // the carriage return before each LF (^/$ are line anchors under RegexOptions.Multiline).
+            File.WriteAllText(Abs("crlf.txt"), "a\r\nb\r\nc");
+            var msgs = Harness.Exchange(Harness.NewFilesServer(_root),
+                Harness.ToolsCall(1, "search", Harness.Args("query", "\r$",
+                    "regex", true, "multiline", true)));
+            Assert.Equal(2, (int)msgs[0]["result"]["structuredContent"]["count"]);
+        }
+
+        [Fact]
+        public void Search_multiline_reports_match_start_line()
+        {
+            // '.' does not cross newlines by default, so [\s\S] is used to span; the reported line is
+            // where the match starts, not where it ends.
+            File.WriteAllText(Abs("a.txt"), "x\nALPHA\nmid\nBETA\ny");
+            var msgs = Harness.Exchange(Harness.NewFilesServer(_root),
+                Harness.ToolsCall(1, "search", Harness.Args("query", "ALPHA[\\s\\S]*BETA",
+                    "regex", true, "multiline", true)));
+            Assert.Equal(1, (int)msgs[0]["result"]["structuredContent"]["count"]);
+            JArray m = (JArray)msgs[0]["result"]["structuredContent"]["matches"];
+            Assert.Equal(2, (int)m[0]["line"]);
+        }
+
+        [Fact]
         public void Search_invalid_regex_is_error()
         {
             File.WriteAllText(Abs("a.txt"), "x");
