@@ -9,6 +9,12 @@
 
 * { box-sizing: border-box; }
 
+/* Always show the vertical scrollbar track so the layout doesn't shift
+   sideways when navigating from a short (no-scrollbar) page to a tall one.
+   overflow-y:scroll is supported everywhere, including the period browsers
+   this site targets; a short page just gets an inert track (on-theme anyway). */
+html { overflow-y: scroll; }
+
 body {
   margin: 0;
   padding: 0;
@@ -18,7 +24,10 @@ body {
   color: #000;
 }
 
-/* Centered column — caps on wide screens, shrinks to fit narrower ones. */
+/* Centered column — caps on wide screens, shrinks to fit narrower ones.
+   Flex column with a min-height of the viewport so short pages still push the
+   footer to the bottom of the screen. Old browsers ignore display:flex / vh and
+   fall back to normal block flow (footer follows content), which is fine. */
 .site {
   width: auto;
   max-width: 1280px;
@@ -26,6 +35,9 @@ body {
   background: #ffffff;
   border-left: 1px solid #2d3a4d;
   border-right: 1px solid #2d3a4d;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
 /* ---- Header banner (dark blue) ---- */
@@ -35,7 +47,12 @@ body {
   border-bottom: 3px solid #b0b8c4;
   padding: 14px 16px;
 }
+.banner:after { content: ""; display: block; clear: both; }  /* clearfix */
 .banner a { text-decoration: none; }
+/* Logo floats left of the title block; text sits in its own BFC beside it. */
+.banner .logo-link { float: left; display: block; margin-right: 14px; }
+.banner .logo { display: block; width: 56px; height: 56px; border: 0; }
+.banner-text { overflow: hidden; }
 .banner h1 {
   margin: 0;
   font-family: "Trebuchet MS", Verdana, sans-serif;
@@ -60,6 +77,7 @@ body {
     #e7eaf0 0, #e7eaf0 158px, #aab3c2 158px, #aab3c2 159px, #fff 159px);
 }
 .layout:after { content: ""; display: block; clear: both; }  /* clearfix */
+.layout { flex: 1 0 auto; }   /* grow to fill, pushing the footer down */
 
 .sidebar { float: left; width: 158px; }
 .main {
@@ -207,5 +225,6 @@ ul.features li {
   color: #666;
   text-align: center;
   line-height: 1.6;
+  flex-shrink: 0;
 }
 .footer a { color: #0000cc; }
