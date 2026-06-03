@@ -14,9 +14,9 @@ working folder.
 
 - **Capture point:** A directory is recorded as "recent" both when the user explicitly
   picks a folder *and* whenever a loaded conversation's working dir becomes active.
-- **Stale dirs:** Directories that no longer exist on disk are silently dropped when the
-  submenu is built. Stored entries are left untouched (a dir that reappears can show up
-  again).
+- **Stale dirs:** Directories that no longer exist on disk are shown but **disabled**
+  (grayed, unclickable, with a "Folder not found" tooltip) when the submenu is built.
+  Stored entries are left untouched (a dir that reappears becomes clickable again).
 - **Label:** Each entry shows the **full path**.
 - **Storage location:** A dedicated JSON file, **not** `settings.json`.
 - **Cap:** 5 entries, most-recent-first.
@@ -81,14 +81,15 @@ Handle the File menu's `DropDownOpening` (wire `miFile.DropDownOpening` in the f
 designer) to rebuild the submenu each time it is shown:
 
 - Clear existing child items (disposing them).
-- For each path from `RecentWorkDirs.Get()` where `Directory.Exists(path)` is true, add a
-  child `ToolStripMenuItem` whose `Text` is the full path and whose `Click` calls
-  `OpenNewTabWithWorkingDir(path)`. Capture `path` in a local to avoid the closure-capture
-  pitfall.
-- If no valid entries remain, set `miOpenRecentWorkDir.Enabled = false`; otherwise
-  `Enabled = true`.
+- For each path from `RecentWorkDirs.Get()`, add a child `ToolStripMenuItem` whose `Text`
+  is the full path. If `Directory.Exists(path)` is true, wire its `Click` to
+  `OpenNewTabWithWorkingDir(path)` (capture `path` in a local to avoid the closure-capture
+  pitfall). If the path is missing, leave it **disabled** (`item.Enabled = false`) with a
+  "Folder not found" tooltip — visible but unselectable.
+- If there are no remembered entries at all, set `miOpenRecentWorkDir.Enabled = false`;
+  otherwise `Enabled = true` (so the submenu opens to show the entries, grayed ones included).
 
-Rebuilding on every open keeps the list current and naturally drops stale dirs without a
+Rebuilding on every open keeps the list current and reflects stale dirs without a
 separate refresh mechanism.
 
 ### 5. Opening helper — `GxPT/Forms/MainForm.cs`
@@ -115,9 +116,9 @@ conversation opened with a saved working folder.
 
 1. User sets / loads / opens-recent a working dir → `RecentWorkDirs.Add(dir)` →
    `recent-workdirs.json` updated.
-2. User opens the File menu → `DropDownOpening` → `RecentWorkDirs.Get()` → filter by
-   `Directory.Exists` → submenu rebuilt.
-3. User clicks an entry → `OpenNewTabWithWorkingDir(path)` → new tab with working dir set,
+2. User opens the File menu → `DropDownOpening` → `RecentWorkDirs.Get()` → submenu rebuilt,
+   each entry enabled/disabled by `Directory.Exists`.
+3. User clicks an enabled entry → `OpenNewTabWithWorkingDir(path)` → new tab with working dir set,
    workspace strip shown, MCP bound, and the dir bumped to the top of the recents.
 
 ## Error handling

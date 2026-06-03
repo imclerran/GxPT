@@ -389,8 +389,8 @@ Add this method to `MainForm.cs` (near the other menu handlers, e.g. after `miNe
 
 ```csharp
         // Rebuilds the "Open Recent Work Dir" submenu each time the File menu opens. Lists each
-        // remembered dir (full path) that still exists; silently drops missing ones. Disables the
-        // parent when nothing valid remains.
+        // remembered dir (full path); missing dirs are shown disabled (grayed, "Folder not found"
+        // tooltip) rather than dropped. Disables the parent only when there are no entries at all.
         private void PopulateRecentWorkDirsMenu()
         {
             if (miOpenRecentWorkDir == null) return;
@@ -408,13 +408,24 @@ Add this method to `MainForm.cs` (near the other menu handlers, e.g. after `miNe
             foreach (string dir in dirs)
             {
                 if (string.IsNullOrEmpty(dir)) continue;
-                try { if (!System.IO.Directory.Exists(dir)) continue; }
-                catch { continue; }
+
+                bool exists;
+                try { exists = System.IO.Directory.Exists(dir); }
+                catch { exists = false; }
 
                 string captured = dir; // avoid closure capturing the loop variable
                 System.Windows.Forms.ToolStripMenuItem item =
                     new System.Windows.Forms.ToolStripMenuItem(captured);
-                item.Click += delegate(object s, EventArgs e) { OpenNewTabWithWorkingDir(captured); };
+                if (exists)
+                {
+                    item.Click += delegate(object s, EventArgs e) { OpenNewTabWithWorkingDir(captured); };
+                }
+                else
+                {
+                    // Keep missing dirs visible but unselectable so the user can see them.
+                    item.Enabled = false;
+                    item.ToolTipText = "Folder not found";
+                }
                 miOpenRecentWorkDir.DropDownItems.Add(item);
                 added++;
             }
@@ -455,7 +466,7 @@ Build `GxPT.sln` (VS2008 or msbuild v3.5) and run `GxPT.exe`. Verify:
 2. Set a working folder on a conversation (workspace strip "Set working folder", or the existing menu/route), then reopen File — the dir now appears under the submenu as a full path.
 3. Click the entry → a new tab opens with the workspace strip showing that folder.
 4. Set 6+ different folders → only the latest 5 appear, newest first; re-selecting an existing one moves it to the top without duplicating.
-5. Delete one of the remembered folders on disk, reopen the menu → it no longer appears.
+5. Delete one of the remembered folders on disk, reopen the menu → it still appears but is grayed/disabled (tooltip "Folder not found").
 
 Run the unit suite to confirm nothing regressed:
 Run: `dotnet test GxPT.Tests/GxPT.Tests.csproj`

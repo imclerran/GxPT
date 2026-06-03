@@ -2066,13 +2066,24 @@ namespace GxPT
             foreach (string dir in dirs)
             {
                 if (string.IsNullOrEmpty(dir)) continue;
-                try { if (!Directory.Exists(dir)) continue; }
-                catch { continue; }
+
+                bool exists;
+                try { exists = Directory.Exists(dir); }
+                catch { exists = false; }
 
                 string captured = dir; // avoid the closure capturing the loop variable
                 System.Windows.Forms.ToolStripMenuItem item =
                     new System.Windows.Forms.ToolStripMenuItem(captured);
-                item.Click += delegate(object s, EventArgs e) { OpenNewTabWithWorkingDir(captured); };
+                if (exists)
+                {
+                    item.Click += delegate(object s, EventArgs e) { OpenNewTabWithWorkingDir(captured); };
+                }
+                else
+                {
+                    // Keep missing dirs visible but unselectable so the user can see them.
+                    item.Enabled = false;
+                    item.ToolTipText = "Folder not found";
+                }
                 miOpenRecentWorkDir.DropDownItems.Add(item);
                 added++;
             }
