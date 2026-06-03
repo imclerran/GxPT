@@ -73,8 +73,11 @@ namespace GxPT
 
         // Natural pixel height of the current content (optional header + body + padding), measured
         // independently of the control's own bounds so the host can size the approval panel to fit.
-        // Uses an offscreen Graphics so it is valid even before the panel is shown.
-        public int GetPreferredContentHeight()
+        // Uses an offscreen Graphics so it is valid even before the panel is shown. When the content
+        // is wider than availableWidth (>0), it will get a horizontal scrollbar that eats vertical
+        // space, so room for that scrollbar is included — otherwise a single wide line (e.g. a long
+        // command) gets clipped behind the scrollbar. Pass availableWidth <= 0 to skip that.
+        public int GetPreferredContentHeight(int availableWidth)
         {
             int oneLine = (_monoFont != null ? _monoFont.Height : 14);
             if (_monoFont == null || string.IsNullOrEmpty(_body)) return HeaderHeight + oneLine + Pad;
@@ -85,7 +88,10 @@ namespace GxPT
                 {
                     var colored = SyntaxHighlightingRenderer.GetColoredSegments(_body, _language, _monoFont, _dark);
                     Size content = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, colored);
-                    return HeaderHeight + Math.Max(_monoFont.Height, content.Height) + Pad;
+                    int h = HeaderHeight + Math.Max(_monoFont.Height, content.Height) + Pad;
+                    if (availableWidth > 0 && content.Width + 2 * Pad > availableWidth)
+                        h += SystemInformation.HorizontalScrollBarHeight;
+                    return h;
                 }
             }
             catch { return HeaderHeight + oneLine + Pad; }
