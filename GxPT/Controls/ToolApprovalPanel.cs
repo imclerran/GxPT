@@ -31,9 +31,15 @@ namespace GxPT
 
         // The details area (diff/preview) is sized to its content between these bounds: short prompts
         // (e.g. a one-line command) collapse instead of leaving a tall empty box, while long content
-        // is capped here and scrolls. See ComputePanelHeight.
+        // is capped here and scrolls. See LayoutToContent.
         private const int MinDetailsHeight = 24;
         private const int MaxDetailsHeight = 200;
+
+        // Clamped content height for the current prompt; the panel height is rebuilt from this plus
+        // the (possibly multi-row) button strip whenever the panel resizes. Re-entrancy guard stops
+        // the height we set from recursing through OnSizeChanged.
+        private int _detailsHeight = MinDetailsHeight;
+        private bool _inLayoutToContent;
 
         public ToolApprovalPanel()
         {
@@ -226,8 +232,10 @@ namespace GxPT
             AddRememberButtons(req);
             AddButton("Allow once", ApprovalChoice.AllowOnce, false);
 
-            // Size to fit the content (buttons built above so their height is counted).
-            this.Height = ComputePanelHeight(handled);
+            // Size to fit the content (buttons built above so their height is counted, including any
+            // wrapping at the current width).
+            _detailsHeight = ClampedDetailsHeight(handled);
+            LayoutToContent();
 
             this.Visible = true;
             // Keep this Bottom-docked panel BEHIND the Fill transcript in z-order. WinForms fills the
@@ -261,7 +269,8 @@ namespace GxPT
             AddContinuationButton("Stop", false, false);
             AddContinuationButton("Continue", true, true);
 
-            this.Height = ComputePanelHeight(false);
+            _detailsHeight = ClampedDetailsHeight(false);
+            LayoutToContent();
 
             this.Visible = true;
             this.SendToBack();
@@ -274,23 +283,55 @@ namespace GxPT
             _onContinue = null;
         }
 
-        // Total panel height that makes the Fill details control exactly fit its content, clamped to
-        // [Min,Max]. The chrome rows (header/tier/label) are their fixed docked heights; the button
-        // strip is measured after it's populated. The leftover docked space (the Fill control) then
-        // equals the clamped content height — so short prompts collapse and long ones cap + scroll.
-        private int ComputePanelHeight(bool handled)
+        // The clamped natural height of the current details control's content, in [Min,Max].
+        private int ClampedDetailsHeight(bool handled)
         {
             int detailsContent = handled
                 ? _diffPanel.GetPreferredContentHeight()
                 : MeasurePreviewContentHeight();
-            int detailsH = Math.Max(MinDetailsHeight, Math.Min(MaxDetailsHeight, detailsContent));
+            return Math.Max(MinDetailsHeight, Math.Min(MaxDetailsHeight, detailsContent));
+        }
 
-            int chrome = _header.Height + _tierBadge.Height + _previewLabel.Height;
-            int buttonsH = _buttons.PreferredSize.Height;
-            if (buttonsH < 28) buttonsH = 34; // guard against a not-yet-measured strip
-            const int border = 2; // FixedSingle: 1px top + 1px bottom
+        // Rebuild the panel height so the Fill details control keeps its clamped content height even
+        // as the button strip wraps to more rows on a narrow window: the panel grows to fit the taller
+        // strip instead of squeezing (and clipping) the details. Capped so it can't swallow the
+        // transcript above it; past the cap the details give way and scroll. Recomputed on every
+        // resize because button wrapping depends on the current width.
+        private void LayoutToContent()
+        {
+            if (_inLayoutToContent) return;
+            _inLayoutToContent = true;
+            try
+            {
+                int avail = this.ClientSize.Width - this.Padding.Horizontal;
+                if (avail < 1) avail = (this.Parent != null ? this.Parent.ClientSize.Width : 400) - this.Padding.Horizontal;
+                if (avail < 1) avail = 400;
 
-            return this.Padding.Top + this.Padding.Bottom + chrome + detailsH + buttonsH + border;
+                // GetPreferredSize at the real width includes any row wrapping of the buttons.
+                int buttonsH = _buttons.GetPreferredSize(new Size(avail, 0)).Height;
+                if (buttonsH < 28) buttonsH = 34; // guard against a not-yet-measured strip
+
+                int chrome = _header.Height + _tierBadge.Height + _previewLabel.Height;
+                const int border = 2; // FixedSingle: 1px top + 1px bottom
+                int target = this.Padding.Top + this.Padding.Bottom + chrome + _detailsHeight + buttonsH + border;
+
+                // Don't let the docked panel grow tall enough to bury the transcript above it.
+                if (this.Parent != null)
+                {
+                    int cap = this.Parent.ClientSize.Height - 64;
+                    if (cap > 120 && target > cap) target = cap;
+                }
+
+                if (this.Height != target) this.Height = target;
+            }
+            finally { _inLayoutToContent = false; }
+        }
+
+        protected override void OnSizeChanged(EventArgs e)
+        {
+            base.OnSizeChanged(e);
+            // Width changes (parent resize) can re-wrap the buttons; keep the panel tall enough.
+            if (this.Visible) LayoutToContent();
         }
 
         // Approximate wrapped height of the raw-JSON preview text at the current width. Best-effort:
