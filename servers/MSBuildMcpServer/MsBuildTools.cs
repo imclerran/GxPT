@@ -38,6 +38,17 @@ namespace MSBuildMcpServer
                 server.AddTool(toolName, BuildDescription(inst), BuildSchema(inst),
                     delegate(ToolCallContext ctx) { return Run(config, runner, inst, ctx); });
             }
+
+            // devenv.com (full Visual Studio) builds whole solutions, including project types MSBuild
+            // can't — notably .vdproj setup/deployment projects. One build_solution_<year> tool per IDE.
+            IList<DevenvInstall> ides = MsBuildDiscovery.DiscoverDevenv(new StdErrLogSink());
+            foreach (DevenvInstall ide in ides)
+            {
+                DevenvInstall vs = ide; // capture a per-iteration copy for the closure
+                string toolName = "build_solution_" + vs.Year;
+                server.AddTool(toolName, BuildDevenvDescription(vs), BuildDevenvSchema(),
+                    delegate(ToolCallContext ctx) { return RunDevenv(config, runner, vs, ctx); });
+            }
         }
 
         private static string BuildDescription(MsBuildInstall inst)
@@ -179,6 +190,150 @@ namespace MSBuildMcpServer
 
             args.Add("/nologo");
             return args;
+        }
+
+        // ---- devenv.com (Visual Studio IDE) build — handles whole solutions incl. .vdproj ----
+
+        private static string BuildDevenvDescription(DevenvInstall vs)
+        {
+            return "Build an entire solution with " + vs.Label + " (devenv.com). Unlike the MSBuild "
+                + "tools, this drives the Visual Studio IDE, so it builds EVERY project type in the "
+                + "solution - including Visual Studio setup/deployment (.vdproj) projects, which MSBuild "
+                + "cannot build. If 'solution' is omitted, the lone .sln in the working directory is used. "
+                + "'configuration' defaults to Release.";
+        }
+
+        private static JObject BuildDevenvSchema()
+        {
+            return SchemaBuilder.Object()
+                .Str("solution", false, "Path to the .sln (relative to the working directory, or absolute). Omit to use the lone .sln in the working directory.")
+                .Raw("action", EnumSchema("What to do: Build (default), Rebuild, Clean, or Deploy.", new string[] { "Build", "Rebuild", "Clean", "Deploy" }), false)
+                .Str("configuration", false, "Solution configuration name, e.g. Debug or Release. Default: Release.")
+                .Str("platform", false, "Solution platform, e.g. \"Any CPU\", x86. Combined with configuration as \"Config|Platform\".")
+                .Str("project", false, "Build only this project within the solution (devenv /Project).")
+                .Str("project_config", false, "Project-specific configuration for the single-project build (devenv /ProjectConfig).")
+                .Int("timeout_ms", false, "Kill the build after this many milliseconds (default 600000, max 1800000).")
+                .Build();
+        }
+
+        private static CallToolResult RunDevenv(MsBuildConfig config, ProcessRunner runner, DevenvInstall vs, ToolCallContext ctx)
+        {
+            JObject a = ctx.Arguments;
+            string solutionFull, solutionRel, resolveError;
+            if (!ResolveSolution(config.WorkDir, a.Value<string>("solution"), out solutionFull, out solutionRel, out resolveError))
+                return ToolResults.Error(resolveError);
+
+            int timeout = IntArg(a, "timeout_ms", DefaultTimeoutMs, 1000, MaxTimeoutMs);
+            List<string> args = BuildDevenvArgs(a, solutionFull);
+
+            ProcessRequest req = new ProcessRequest();
+            req.FileName = vs.Path;
+            req.Arguments = ArgvQuoter.Join(args);
+            req.WorkingDirectory = config.WorkDir;
+            req.TimeoutMs = timeout;
+
+            ProcessResult result;
+            try
+            {
+                result = runner.Run(req);
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                return ToolResults.Error("Visual Studio (devenv.com) could not be launched (" + vs.Path + ").");
+            }
+            catch (Exception ex)
+            {
+                return ToolResults.Error("failed to run devenv: " + ex.Message);
+            }
+
+            bool outTrunc, errTrunc;
+            JObject outp = new JObject();
+            outp["ide"] = vs.Label;
+            outp["solution"] = solutionRel;
+            outp["action"] = ActionName(a);
+            outp["exitCode"] = result.ExitCode;
+            outp["succeeded"] = (!result.TimedOut && result.ExitCode == 0);
+            outp["timedOut"] = result.TimedOut;
+            outp["stdout"] = Cap(result.StdOut, out outTrunc);
+            outp["stderr"] = Cap(result.StdErr, out errTrunc);
+            if (outTrunc || errTrunc) outp["truncated"] = true;
+            return ToolResults.Json(outp);
+        }
+
+        // Build the devenv argument token list:
+        //   <solution> /Build|/Rebuild|/Clean|/Deploy "<Config>[|<Platform>]" [/Project p [/ProjectConfig pc]]
+        // Pure (operates on the parsed arguments only) so it is unit-testable.
+        internal static List<string> BuildDevenvArgs(JObject a, string solutionFull)
+        {
+            List<string> args = new List<string>();
+            args.Add(solutionFull);
+            args.Add(ActionSwitch(a.Value<string>("action")));
+
+            // devenv requires a solution configuration name for Build/Rebuild/Clean/Deploy.
+            string config = a.Value<string>("configuration");
+            if (string.IsNullOrEmpty(config)) config = "Release";
+            string platform = a.Value<string>("platform");
+            args.Add(string.IsNullOrEmpty(platform) ? config : (config + "|" + platform));
+
+            string project = a.Value<string>("project");
+            if (!string.IsNullOrEmpty(project)) { args.Add("/Project"); args.Add(project); }
+            string projectConfig = a.Value<string>("project_config");
+            if (!string.IsNullOrEmpty(projectConfig)) { args.Add("/ProjectConfig"); args.Add(projectConfig); }
+            return args;
+        }
+
+        private static string ActionSwitch(string action)
+        {
+            if (string.IsNullOrEmpty(action)) return "/Build";
+            switch (action.ToLowerInvariant())
+            {
+                case "rebuild": return "/Rebuild";
+                case "clean": return "/Clean";
+                case "deploy": return "/Deploy";
+                default: return "/Build";
+            }
+        }
+
+        private static string ActionName(JObject a)
+        {
+            string s = a.Value<string>("action");
+            if (string.IsNullOrEmpty(s)) return "Build";
+            switch (s.ToLowerInvariant())
+            {
+                case "rebuild": return "Rebuild";
+                case "clean": return "Clean";
+                case "deploy": return "Deploy";
+                default: return "Build";
+            }
+        }
+
+        // Resolve the .sln to build via devenv. Provided path is validated; otherwise a lone .sln in the
+        // working directory is used.
+        internal static bool ResolveSolution(string workDir, string solution, out string full, out string rel, out string error)
+        {
+            full = null; rel = null; error = null;
+            try
+            {
+                if (!string.IsNullOrEmpty(solution))
+                {
+                    string candidate = Path.IsPathRooted(solution) ? solution : Path.Combine(workDir, solution);
+                    candidate = Path.GetFullPath(candidate);
+                    if (!File.Exists(candidate)) { error = "solution not found: " + solution; return false; }
+                    full = candidate; rel = solution; return true;
+                }
+                string picked = PickSingle(workDir, ".sln");
+                if (picked == null)
+                {
+                    error = "no 'solution' given and could not find a single .sln in the working directory; specify 'solution'.";
+                    return false;
+                }
+                full = Path.GetFullPath(picked); rel = Path.GetFileName(picked); return true;
+            }
+            catch (Exception ex)
+            {
+                error = "failed to resolve solution: " + ex.Message;
+                return false;
+            }
         }
 
         // Resolve the project/solution to build. Returns the full path to run and a workdir-relative

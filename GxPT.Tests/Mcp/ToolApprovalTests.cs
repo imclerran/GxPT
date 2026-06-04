@@ -57,6 +57,12 @@ namespace GxPT.Tests.Mcp
             Assert.Equal(ToolTier.Destructive, build.Tier);
             Assert.Equal(RememberScope.Argument, build.Scope);
             Assert.Equal("project", build.ScopeArgPath);
+
+            // devenv solution builds are likewise Destructive, but scoped on the 'solution' argument.
+            var sln = c.Classify("msbuild__build_solution_2022", null, true);
+            Assert.Equal(ToolTier.Destructive, sln.Tier);
+            Assert.Equal(RememberScope.Argument, sln.Scope);
+            Assert.Equal("solution", sln.ScopeArgPath);
         }
 
         [Fact]

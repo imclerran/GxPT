@@ -2657,8 +2657,12 @@ namespace GxPT
         {
             header = null; body = string.Empty; language = "text"; added = -1; removed = -1;
 
-            // MSBuild tools are named per discovered engine (msbuild__build_4_0, msbuild__build_17_0, ...),
-            // so they can't be cased in the switch below; render them from the name + args here.
+            // MSBuild tools are named per discovered engine/IDE (msbuild__build_4_0,
+            // msbuild__build_solution_2022, ...), so they can't be cased in the switch below; render them
+            // from the name + args here. Solution (devenv) builds are checked first - the more specific
+            // prefix - then the per-engine MSBuild builds.
+            if (name != null && name.StartsWith("msbuild__build_solution_", StringComparison.Ordinal))
+                return BuildDevenvRecord(name, args, out header, out body, out language);
             if (name != null && name.StartsWith("msbuild__build_", StringComparison.Ordinal))
                 return BuildMsBuildRecord(name, args, out header, out body, out language);
 
@@ -2942,6 +2946,48 @@ namespace GxPT
             if (props != null)
                 foreach (var kv in props)
                     lines.Add("property: " + kv.Key + "=" + (kv.Value != null ? kv.Value.ToString() : string.Empty));
+            body = string.Join("\n", lines.ToArray());
+            return true;
+        }
+
+        // Renders a devenv solution-build call (msbuild__build_solution_<year>) into a transcript record:
+        // a header like "Built MyApp.sln (Release · Visual Studio 2022)" with the options as a body. The
+        // VS year comes from the tool-name suffix (build_solution_2022 -> 2022).
+        private static bool BuildDevenvRecord(string name, Newtonsoft.Json.Linq.JObject args, out string header, out string body, out string language)
+        {
+            header = null; body = string.Empty; language = "text";
+
+            string year = name.Substring("msbuild__build_solution_".Length);
+            string solution = Str(args, "solution");
+            string solutionLabel = solution.Length > 0
+                ? System.IO.Path.GetFileName(solution.Replace('\\', '/')) : "solution";
+
+            // Verb from the action (Rebuild/Clean/Deploy), defaulting to "Built".
+            string action = Str(args, "action");
+            string verb = "Built";
+            switch (action.ToLowerInvariant())
+            {
+                case "rebuild": verb = "Rebuilt"; break;
+                case "clean": verb = "Cleaned"; break;
+                case "deploy": verb = "Deployed"; break;
+            }
+
+            // Parenthetical: configuration (default Release), then "Visual Studio <year>".
+            var bits = new List<string>();
+            string config = Str(args, "configuration");
+            if (config.Length == 0) config = "Release";
+            string platform = Str(args, "platform");
+            bits.Add(platform.Length > 0 ? config + "|" + platform : config);
+            bits.Add("Visual Studio " + year);
+            header = verb + " " + solutionLabel + " (" + string.Join(" · ", bits.ToArray()) + ")";
+
+            // Body: the build options, for the collapsible record.
+            var lines = new List<string>();
+            if (solution.Length > 0) lines.Add("solution: " + solution);
+            if (action.Length > 0) lines.Add("action: " + action);
+            lines.Add("configuration: " + (platform.Length > 0 ? config + "|" + platform : config));
+            string project = Str(args, "project");
+            if (project.Length > 0) lines.Add("project: " + project);
             body = string.Join("\n", lines.ToArray());
             return true;
         }

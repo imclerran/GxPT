@@ -35,6 +35,18 @@ namespace MSBuildMcpServer
     }
 
     /// <summary>
+    /// One discovered Visual Studio IDE (devenv.com), keyed by VS year. devenv builds whole solutions
+    /// — including project types MSBuild can't, notably .vdproj setup/deployment projects. Only *full*
+    /// VS installs ship devenv (Build Tools SKUs do not), so this set can be smaller than the MSBuild set.
+    /// </summary>
+    internal sealed class DevenvInstall
+    {
+        public string Year;    // "2008", "2015", "2022"
+        public string Label;   // "Visual Studio 2022"
+        public string Path;    // full path to devenv.com
+    }
+
+    /// <summary>
     /// Probes the system for installed MSBuild engines. Covers the whole XP-32 → Win11-64 range:
     ///   - .NET Framework MSBuild bundled with the OS (v2.0/v3.5/v4.0, under %WINDIR%\Microsoft.NET);
     ///   - standalone MSBuild from VS2013/2015 (12.0/14.0, under %ProgramFiles(x86)%\MSBuild);
@@ -112,24 +124,8 @@ namespace MSBuildMcpServer
 
         private static void DiscoverViaVsWhere(IDictionary<string, MsBuildInstall> into, ILogSink log)
         {
-            string pf = ProgramFilesX86();
-            if (string.IsNullOrEmpty(pf)) return;
-            string vswhere = Path.Combine(Path.Combine(Path.Combine(pf, "Microsoft Visual Studio"), "Installer"), "vswhere.exe");
-            if (!Exists(vswhere)) return;
-
-            ProcessRequest req = new ProcessRequest();
-            req.FileName = vswhere;
-            // JSON is the cleanest machine-readable form and Newtonsoft is already referenced.
-            req.Arguments = "-products * -requires Microsoft.Component.MSBuild -format json -utf8";
-            req.WorkingDirectory = pf;
-            req.TimeoutMs = 15000;
-
-            ProcessResult res = new ProcessRunner(null).Run(req);
-            if (res.TimedOut || res.ExitCode != 0 || string.IsNullOrEmpty(res.StdOut)) return;
-
-            JArray arr;
-            try { arr = JArray.Parse(res.StdOut); }
-            catch { return; }
+            JArray arr = QueryVsWhere(log);
+            if (arr == null) return;
 
             foreach (JToken tok in arr)
             {
@@ -151,8 +147,44 @@ namespace MSBuildMcpServer
                     Path.Combine(Path.Combine(Path.Combine(installPath, "MSBuild"), "Current"), Path.Combine(Path.Combine("Bin", "amd64"), "MSBuild.exe")),
                     Path.Combine(Path.Combine(Path.Combine(installPath, "MSBuild"), "15.0"), Path.Combine(Path.Combine("Bin", "amd64"), "MSBuild.exe")));
 
+                // Build Tools SKUs are included here too (they ship MSBuild under the same layout);
+                // the file-existence check is the real gate. Only devenv discovery excludes them.
                 AddPaths(into, ver, "MSBuild " + ver + " (" + VsName(major) + ")", x86, x64);
             }
+        }
+
+        // vswhere is run at most once per process; both the MSBuild and devenv probes share the result.
+        private static bool _vsWhereDone;
+        private static JArray _vsWhereCache;
+
+        private static JArray QueryVsWhere(ILogSink log)
+        {
+            if (_vsWhereDone) return _vsWhereCache;
+            _vsWhereDone = true;
+            try
+            {
+                string pf = ProgramFilesX86();
+                if (string.IsNullOrEmpty(pf)) return null;
+                string vswhere = Path.Combine(Path.Combine(Path.Combine(pf, "Microsoft Visual Studio"), "Installer"), "vswhere.exe");
+                if (!Exists(vswhere)) return null;
+
+                ProcessRequest req = new ProcessRequest();
+                req.FileName = vswhere;
+                // All products; JSON is the cleanest machine-readable form (Newtonsoft is referenced).
+                req.Arguments = "-products * -format json -utf8";
+                req.WorkingDirectory = pf;
+                req.TimeoutMs = 15000;
+
+                ProcessResult res = new ProcessRunner(null).Run(req);
+                if (res.TimedOut || res.ExitCode != 0 || string.IsNullOrEmpty(res.StdOut)) return null;
+                _vsWhereCache = JArray.Parse(res.StdOut);
+            }
+            catch (Exception ex)
+            {
+                Note(log, "vswhere query failed: " + ex.Message);
+                _vsWhereCache = null;
+            }
+            return _vsWhereCache;
         }
 
         // ---- Fallback when vswhere is absent: probe the well-known VS2017/2019/2022 install roots ----
@@ -186,6 +218,86 @@ namespace MSBuildMcpServer
                         break; // first edition found wins for this year
                     }
                 }
+            }
+        }
+
+        // ---- devenv.com (Visual Studio IDE) discovery ----
+
+        public static IList<DevenvInstall> DiscoverDevenv(ILogSink log)
+        {
+            Dictionary<string, DevenvInstall> byYear =
+                new Dictionary<string, DevenvInstall>(StringComparer.OrdinalIgnoreCase);
+
+            try { DevenvLegacy(byYear); } catch (Exception ex) { Note(log, "devenv legacy probe failed: " + ex.Message); }
+            try { DevenvViaVsWhere(byYear, log); } catch (Exception ex) { Note(log, "devenv vswhere probe failed: " + ex.Message); }
+
+            List<DevenvInstall> result = new List<DevenvInstall>(byYear.Values);
+            result.Sort(delegate(DevenvInstall a, DevenvInstall b) { return string.Compare(a.Year, b.Year, StringComparison.OrdinalIgnoreCase); });
+            return result;
+        }
+
+        // VS2008-2015: devenv.com under %ProgramFiles(x86)%\Microsoft Visual Studio <ver>\Common7\IDE.
+        private static void DevenvLegacy(IDictionary<string, DevenvInstall> into)
+        {
+            string pf = ProgramFilesX86();
+            if (string.IsNullOrEmpty(pf)) return;
+
+            // (version folder, VS year)
+            string[][] table = new string[][]
+            {
+                new string[] { "9.0",  "2008" },
+                new string[] { "10.0", "2010" },
+                new string[] { "11.0", "2012" },
+                new string[] { "12.0", "2013" },
+                new string[] { "14.0", "2015" },
+            };
+            foreach (string[] row in table)
+            {
+                string verDir = row[0], year = row[1];
+                string devenv = Path.Combine(Path.Combine(Path.Combine(Path.Combine(pf, "Microsoft Visual Studio " + verDir), "Common7"), "IDE"), "devenv.com");
+                AddDevenv(into, year, devenv);
+            }
+        }
+
+        // VS2017+: devenv.com at <installationPath>\Common7\IDE (full installs only; Build Tools lacks it).
+        private static void DevenvViaVsWhere(IDictionary<string, DevenvInstall> into, ILogSink log)
+        {
+            JArray arr = QueryVsWhere(log);
+            if (arr == null) return;
+
+            foreach (JToken tok in arr)
+            {
+                JObject o = tok as JObject;
+                if (o == null) continue;
+                string installPath = (string)o["installationPath"];
+                string installVer = (string)o["installationVersion"];
+                if (string.IsNullOrEmpty(installPath)) continue;
+                string year = YearOfMajor(MajorOf(installVer));
+                if (year == null) continue;
+                string devenv = Path.Combine(Path.Combine(Path.Combine(installPath, "Common7"), "IDE"), "devenv.com");
+                AddDevenv(into, year, devenv);
+            }
+        }
+
+        private static void AddDevenv(IDictionary<string, DevenvInstall> into, string year, string devenvPath)
+        {
+            if (into.ContainsKey(year) || !Exists(devenvPath)) return;
+            into[year] = new DevenvInstall { Year = year, Label = "Visual Studio " + year, Path = devenvPath };
+        }
+
+        private static string YearOfMajor(int major)
+        {
+            switch (major)
+            {
+                case 9: return "2008";
+                case 10: return "2010";
+                case 11: return "2012";
+                case 12: return "2013";
+                case 14: return "2015";
+                case 15: return "2017";
+                case 16: return "2019";
+                case 17: return "2022";
+                default: return null;
             }
         }
 
