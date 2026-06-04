@@ -37,6 +37,7 @@ MCP server for the tool surface, plus host-side injection of a light index.
 | M4 | **Name = handle, summary = description** | Each index entry is `name: summary` (+ optional `→ detail.md`). The caller supplies the **name** (a handle, max 5 words; slugified to `[A-Za-z0-9]`, spaces → hyphens, which is also the detail filename); the **summary** is a single line of prose and never a key. |
 | M5 | **Single enable flag, surfaced in the main settings tab** | Memory is a feature (with context cost), not server plumbing. One `MemoryEnabled` bool gates **both** server launch and injection, so they can't desync. |
 | M6 | **No memory text in the constant `AgentSystemPrompt`** | All memory framing lives inside the omittable injected block, so the OFF state leaves zero trace — no phantom capability. |
+| M7 | **Compaction is model-driven; `consolidate` is a mechanical, no-LLM atomic replace** | The cap bounds the index, not detail files. The model prunes/consolidates; the server only nudges. `consolidate` just does the all-or-nothing file ops — keeping the server provider-free (M1/M2) and the merged content visible at approval. |
 
 ---
 
@@ -82,6 +83,10 @@ exceed the server nudges the model to compact (it never compacts on its own).
   complete new contents, not a fragment). Omitted fields are left unchanged; other
   entries are untouched. *(Write.)*
 - `forget(name)` — remove an entry and its detail file. *(Write.)*
+- `consolidate(names[], new_name, summary, detail)` — **atomic multi-entry replace**:
+  writes the new `new_name` entry + `<slug>.md`, then removes every entry in `names[]`,
+  all-or-nothing. Purely mechanical — it makes **no LLM calls**; the model composes
+  `summary`/`detail` and passes them in (see §7). *(Write.)*
 
 The append-vs-replace distinction between `remember` and `update_memory` must be
 spelled out in each tool's `description` (what the model sees), so it never
@@ -129,7 +134,46 @@ desync-prone switch); at most a read-only "managed in Settings" indicator.
 
 ---
 
-## 7. Resolved
+## 7. Compaction
+
+The 40-line cap constrains the **index** (`memory.md`), not the detail files
+(read on demand, uncounted). So compaction reduces the number of index *lines*
+while preserving as much information as possible. It is **model-driven**; the
+server only **nudges** — when `memory.md` exceeds the cap it returns a notice
+(e.g. on the next write) telling the model to compact. The server never compacts
+on its own.
+
+The model has two complementary moves:
+
+- **Prune.** `forget` entries that are stale, superseded, or no longer earning
+  their line. Often enough on its own, and intentionally lossy.
+- **Consolidate.** Collapse several *related* entries into one. The new entry's
+  **detail file holds the sub-memories as sections** (keyed by the original
+  names as headings); the new index line is a single **rolled-up** summary. The
+  enumeration of what was merged lives in the detail file's headings, **not** in
+  the index line — that keeps the always-injected index light. Same
+  progressive-disclosure pattern as index→detail, one level deeper.
+
+Consolidation is the `consolidate(...)` tool: an **atomic multi-entry replace**
+(write the merged entry, delete the originals, all-or-nothing). Its only value
+over `remember` + N×`forget` is atomicity — it prevents the failure where the
+model writes the merged entry but forgets to remove the originals, leaving the
+index *larger*. It is **purely mechanical and makes no LLM calls**: the
+orchestrating model — already in the loop, with the index in context and able to
+`read_memory` the details — composes the rolled-up `summary` and merged `detail`
+and passes them as arguments. Keeping the server free of provider coupling
+(no API key, no network egress) preserves the M1/M2 sandbox boundary and keeps
+the consolidated content visible in the approval prompt. *Tools are
+deterministic effects; the model in the loop is the only thing that thinks.*
+
+**Tradeoff:** consolidation trades per-fact addressability for index space — an
+absorbed memory is no longer its own entry (edit it by rewriting the detail via
+`update_memory`). That suits cold, related facts; leave hot, frequently-revised
+memories as standalone entries.
+
+---
+
+## 8. Resolved
 
 - **`forget` is Write tier** (remember-eligible), not Destructive.
 - **Compaction is a server nudge** — the server warns when `memory.md` exceeds the
