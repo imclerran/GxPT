@@ -171,8 +171,18 @@ namespace GxPT
                     err = errReader.ReadToEnd();
                 }
                 p.WaitForExit();
+                int exitCode = -1;
+                try { exitCode = p.ExitCode; }
+                catch { }
                 // Clean up temp files (request body and auth config)
                 CleanupTempFiles(tempFiles);
+
+                // Log a response summary so non-stream calls (e.g. conversation naming) leave a
+                // diagnostic trail. The streaming path logs "curl exit=...", but this path was silent
+                // after the request, making a failed/empty completion invisible in the log.
+                try { Logger.Log("HTTP", "completion exit=" + exitCode + " outLen=" + (output != null ? output.Length : 0) + (string.IsNullOrEmpty(err) ? string.Empty : " stderrLen=" + err.Length)); }
+                catch { }
+
                 // If curl signaled an HTTP error but kept the body (with --fail-with-body), log the body and any extracted message for debugging
                 try
                 {
