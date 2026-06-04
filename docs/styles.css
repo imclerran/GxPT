@@ -150,6 +150,11 @@ h2.bar {
   background: #f4f6f9;
   padding: 14px;
   text-align: center;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
 }
 .dl-btn {
   display: inline-block;
@@ -172,7 +177,6 @@ h2.bar {
   display: inline-block;
   font-size: 11px;
   padding: 6px 12px;
-  margin-left: 6px;
   color: #1a3358;
   text-decoration: none;
   background: #e3e7ee;
@@ -181,7 +185,7 @@ h2.bar {
   vertical-align: middle;
 }
 .dl-alt:hover { background: #eef1f6; }
-.dl-note { font-size: 11px; color: #555; margin: 12px 0 0; }
+.dl-note { font-size: 11px; color: #555; margin: 4px 0 0; flex-basis: 100%; }
 
 /* ---- Features list ---- */
 ul.features { margin: 0; padding: 0; list-style: none; }
