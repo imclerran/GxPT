@@ -527,7 +527,7 @@
             this.chkMcpMsBuild.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.chkMcpMsBuild.Name = "chkMcpMsBuild";
             this.chkMcpMsBuild.TabIndex = 7;
-            this.chkMcpMsBuild.Text = "MSBuild  (build .NET projects/solutions; surfaces each installed MSBuild version as a tool)";
+            this.chkMcpMsBuild.Text = "MSBuild";
             this.chkMcpMsBuild.UseVisualStyleBackColor = true;
             //
             // lblMcpCustom
