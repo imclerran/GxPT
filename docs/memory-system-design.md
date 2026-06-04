@@ -46,7 +46,7 @@ MCP server for the tool surface, plus host-side injection of a light index.
 .gxpt/
   memory.md        # primary index: light, injected every request
   <name>.md        # detail files, read on demand
-  .gitignore       # default "*" — personal memory not committed unless opted in
+  .gitignore       # seeded automatically ("*") — personal memory not committed unless opted in
 ```
 
 `memory.md` is a flat list of entries:
@@ -65,13 +65,22 @@ suggests compaction when exceeded.
 
 ## 4. Tool surface (`MemoryMcpServer`)
 
-- `remember(name, summary, detail?)` — appends an index entry; if `detail` given,
-  writes `<name>.md` and links it. `name` is **required** (max 5 words), `summary`
-  is a **single line**; the server validates both and rejects a name that collides
-  with an existing entry. *(Write tier — remember-eligible.)*
+- `remember(name, summary, detail?)` — **adds a new entry.** Appends a `name: summary`
+  line to `memory.md`; if `detail` given, writes `<name>.md` and links it. `name` is
+  **required** (max 5 words), `summary` is a **single line**; the server validates
+  both and **rejects a name that collides** with an existing entry (use
+  `update_memory` to change one). *(Write tier — remember-eligible.)*
 - `read_memory(name)` — returns a detail file's contents. *(ReadOnly.)*
-- `update_memory(name, summary?, detail?)` — revise an entry/detail. *(Write.)*
+- `update_memory(name, summary?, detail?)` — **replaces** the named entry's fields,
+  it does **not** append. The provided `summary` overwrites that entry's line; the
+  provided `detail` **fully overwrites** `<name>.md` (the caller must pass the
+  complete new contents, not a fragment). Omitted fields are left unchanged; other
+  entries are untouched. *(Write.)*
 - `forget(name)` — remove an entry and its detail file. *(Write.)*
+
+The append-vs-replace distinction between `remember` and `update_memory` must be
+spelled out in each tool's `description` (what the model sees), so it never
+overwrites when it means to add or vice versa.
 
 Because `memory.md` is in context every turn, the names are always in front of
 the model — it addresses entries by reading the name beside the summary it
@@ -115,10 +124,15 @@ desync-prone switch); at most a read-only "managed in Settings" indicator.
 
 ---
 
-## 7. Open questions
+## 7. Resolved
 
-- Tier of `forget` — keep as Write, or treat deletion as Destructive (always
-  confirm)?
-- Soft cap value for `memory.md`, and whether compaction is model-driven or a
-  server nudge.
-- Whether to seed `.gxpt/.gitignore` automatically or prompt on first write.
+- **`forget` is Write tier** (remember-eligible), not Destructive.
+- **Compaction is a server nudge** — the server warns when `memory.md` exceeds the
+  soft cap; it never compacts on its own.
+- **`.gxpt/.gitignore` is seeded automatically** (`*`) on first write.
+
+### Still open
+
+- Soft cap value for `memory.md`.
+- Mapping a multi-word `name` to a filesystem-safe `<name>.md` (or storing a
+  name→file map in the index).
