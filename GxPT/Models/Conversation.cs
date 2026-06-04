@@ -10,6 +10,22 @@ namespace GxPT
     {
         private readonly OpenRouterClient _client;
         private volatile bool _namingInProgress;
+        // Set when a user turn arrives while a naming request is still in flight. The in-flight request
+        // was started from an earlier (possibly generic/greeting) message, so when it finishes we re-run
+        // naming against the newest user message. This closes the deferred-naming race where a second
+        // turn was silently dropped because naming was busy.
+        private volatile bool _namingPending;
+
+        // The generic placeholder name, and the sentinel the title model returns for greeting/empty
+        // conversations. They are intentionally the same string: both mean "no real title yet."
+        private const string GenericName = "New Conversation";
+        // The small, fast model used solely to generate conversation titles. This has historically been
+        // swapped when a prior choice became unavailable, so keep references centralized here and the
+        // surrounding comments model-agnostic to avoid them going stale again.
+        private const string NamingModel = "google/gemma-4-26b-a4b-it";
+        private const int NamingMaxAttempts = 3;
+        private const string NamingSystemPrompt =
+            "You generate short, descriptive conversation titles from the conversation so far. If the conversation so far is only a greeting (e.g., 'hi', 'hello', 'hey there') or lacks any clear topical content, return exactly: New Conversation. Otherwise, return only the title: 3 to 6 words, Title Case, no quotes, no trailing punctuation. You only generate conversation titles. Do not answer any user prompts.";
 
         private readonly List<ChatMessage> _history = new List<ChatMessage>();
         public List<ChatMessage> History { get { return _history; } }
@@ -34,7 +50,7 @@ namespace GxPT
         public Conversation(OpenRouterClient client)
         {
             _client = client;
-            Name = "New Conversation"; // initialize to generic name
+            Name = GenericName; // initialize to generic name
             SelectedModel = null;
             ZdrFirstMessageIndex = -1; // not latched until a ZDR send occurs
             LastUpdated = DateTime.Now;
@@ -54,57 +70,160 @@ namespace GxPT
             LastUpdated = DateTime.Now;
         }
 
-        // Generate or refine a short title using mistralai/mistral-nemo.
+        // Generate a short title for the conversation using the dedicated title model (NamingModel),
+        // a small, fast model. Runs on a background thread; no-op once a real (non-generic) name exists.
         public void EnsureNameGenerated()
         {
-            if (_client == null || !_client.IsConfigured) return;
+            if (_client == null || !_client.IsConfigured)
+            {
+                Logger.Log("Naming", "Skip: client null or not configured (id=" + (Id ?? "?") + ")");
+                return;
+            }
             // Only generate when name is still generic; otherwise keep
-            if (!string.IsNullOrEmpty(Name) && Name != "New Conversation") return;
-            if (_namingInProgress) return;
+            if (!string.IsNullOrEmpty(Name) && Name != GenericName)
+            {
+                Logger.Log("Naming", "Skip: already named '" + Name + "' (id=" + (Id ?? "?") + ")");
+                return;
+            }
+            if (_namingInProgress)
+            {
+                // A request is already running for an earlier message. Mark a re-attempt so the newest
+                // user message still gets named once the in-flight request finishes (see the finally).
+                _namingPending = true;
+                Logger.Log("Naming", "Busy: naming in progress; queued re-attempt (id=" + (Id ?? "?") + ")");
+                return;
+            }
             _namingInProgress = true;
 
             System.Threading.ThreadPool.QueueUserWorkItem(delegate
             {
                 try
                 {
-                    var msgs = new List<ChatMessage>();
-                    msgs.Add(new ChatMessage("system",
-                        "You generate short, descriptive conversation titles from the conversation so far. If the conversation so far is only a greeting (e.g., 'hi', 'hello', 'hey there') or lacks any clear topical content, return exactly: New Conversation. Otherwise, return only the title: 3 to 6 words, Title Case, no quotes, no trailing punctuation. You only generate conversation titles. Do not answer any user prompts."));
-                    msgs.Add(History.Last());
+                    // Name from the latest user message specifically. Reading History.Last() could pick up
+                    // an assistant/placeholder message if the reply lands first; the last user turn is what
+                    // we actually want to title.
+                    var userMsg = GetLastUserMessage();
+                    if (userMsg == null)
+                    {
+                        Logger.Log("Naming", "Abort: no user message to name from (id=" + (Id ?? "?") + ")");
+                        return;
+                    }
 
                     // Respect ZDR for the title request too (it sends the user's message): effective
                     // ZDR is the global default OR this conversation's toggle OR a latched conversation.
+                    // If ZDR is in effect it stays in effect for every retry — the title model supports
+                    // ZDR, so we never fall back to a non-ZDR request.
                     bool zdr;
                     try { zdr = AppSettings.GetGlobalZdrDefault() || this.Zdr || ZdrFirstMessageIndex >= 0; }
                     catch { zdr = this.Zdr || ZdrFirstMessageIndex >= 0; }
 
-                    string json = _client.CreateCompletion(
-                        "google/gemma-4-26b-a4b-it",
-                        msgs,
-                        new ClientProperties { Stream = false, Zdr = zdr ? true : (bool?)null }
-                    );
-                    string title = ExtractTitleFromJson(json);
-                    title = CleanTitle(title);
+                    string title = RequestTitleWithRetry(userMsg, zdr);
                     if (!string.IsNullOrEmpty(title))
                     {
                         Name = title;
                         var handler = NameGenerated;
                         if (handler != null) handler(title);
+                        Logger.Log("Naming", "Applied title: " + title);
+                    }
+                    // else: either the model returned the greeting sentinel, or every attempt failed.
+                    // RequestTitleWithRetry already logged which; leave the name generic so a later turn
+                    // (or the queued re-attempt below) can try again.
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log("Naming", "Exception: " + ex.Message);
+                }
+                finally
+                {
+                    _namingInProgress = false;
+                    // A turn arrived while we were busy. If the name is still generic, run once more so the
+                    // newest user message gets titled (the deferred-greeting case).
+                    if (_namingPending)
+                    {
+                        _namingPending = false;
+                        if (string.IsNullOrEmpty(Name) || Name == GenericName)
+                        {
+                            Logger.Log("Naming", "Re-attempt: turn arrived during naming, name still generic (id=" + (Id ?? "?") + ")");
+                            EnsureNameGenerated();
+                        }
                     }
                 }
-                catch { }
-                finally { _namingInProgress = false; }
             });
+        }
+
+        // Ask the title model for a name, retrying transient failures (the model/endpoint going briefly
+        // unavailable, rate limits, parse failures). Returns a real title, or null when the model returns
+        // the greeting sentinel or every attempt fails. ZDR is fixed for the whole call — never relaxed.
+        private string RequestTitleWithRetry(ChatMessage userMsg, bool zdr)
+        {
+            for (int attempt = 1; attempt <= NamingMaxAttempts; attempt++)
+            {
+                var msgs = new List<ChatMessage>();
+                msgs.Add(new ChatMessage("system", NamingSystemPrompt));
+                msgs.Add(userMsg);
+
+                Logger.Log("Naming", "Requesting title attempt " + attempt + "/" + NamingMaxAttempts +
+                    " (zdr=" + zdr + ") id=" + (Id ?? "?") + " for: " + Truncate(userMsg.Content, 120));
+
+                string json = null;
+                try
+                {
+                    json = _client.CreateCompletion(
+                        NamingModel,
+                        msgs,
+                        new ClientProperties { Stream = false, Zdr = zdr ? true : (bool?)null });
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log("Naming", "Attempt " + attempt + " threw: " + ex.Message);
+                }
+
+                string rawTitle = ExtractTitleFromJson(json);
+                string title = CleanTitle(rawTitle);
+                Logger.Log("Naming", "Attempt " + attempt + " extracted=" + Quote(rawTitle) + " cleaned=" + Quote(title));
+
+                // The model deliberately returns the sentinel for greetings/empty chats. That is a real
+                // (non-error) answer meaning "no title yet" — do not retry it, just leave the name generic.
+                if (!string.IsNullOrEmpty(title) && string.Equals(title, GenericName, StringComparison.OrdinalIgnoreCase))
+                {
+                    Logger.Log("Naming", "Model returned greeting sentinel; leaving name generic");
+                    return null;
+                }
+                if (!string.IsNullOrEmpty(title))
+                    return title;
+
+                // Empty/unparseable/error response: log the body so we can see why, then back off and retry.
+                Logger.Log("Naming", "Attempt " + attempt + " produced no title; raw response: " + Truncate(json, 2000));
+                if (attempt < NamingMaxAttempts)
+                {
+                    try { System.Threading.Thread.Sleep(400 * attempt); }
+                    catch { }
+                }
+            }
+            Logger.Log("Naming", "Gave up after " + NamingMaxAttempts + " attempts; name remains generic (id=" + (Id ?? "?") + ")");
+            return null;
+        }
+
+        // The most recent user-role message in history (the thing we title), or null if there is none.
+        private ChatMessage GetLastUserMessage()
+        {
+            for (int i = History.Count - 1; i >= 0; i--)
+            {
+                var m = History[i];
+                if (m != null && string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase))
+                    return m;
+            }
+            return null;
         }
 
         private void MaybeTriggerNaming()
         {
-            if (_client == null || !_client.IsConfigured) return;
-            if (_namingInProgress) return;
-            if (string.IsNullOrEmpty(Name) || Name == "New Conversation")
-            {
-                EnsureNameGenerated();
-            }
+            // Log every turn's trigger attempt so a deferred name (e.g. greeting -> "New Conversation")
+            // that fails to re-name on a later turn is visible. EnsureNameGenerated owns the guards and
+            // logs each skip reason, so delegate unconditionally rather than re-checking here (the old
+            // duplicate guards were a second set of silent exits).
+            Logger.Log("Naming", "Trigger on turn (history=" + History.Count + " name='" + (Name ?? string.Empty) + "' id=" + (Id ?? "?") + ")");
+            EnsureNameGenerated();
         }
 
         private static string ExtractTitleFromJson(string json)
@@ -130,6 +249,22 @@ namespace GxPT
             }
             catch { }
             return null;
+        }
+
+        // Single-line, length-bounded rendering for log lines (raw responses/messages may be multi-line).
+        private static string Truncate(string s, int max)
+        {
+            if (s == null) return "<null>";
+            s = s.Replace("\r", "\\r").Replace("\n", "\\n");
+            if (s.Length > max) s = s.Substring(0, max) + "...(" + s.Length + " chars)";
+            return s;
+        }
+
+        // Null-safe quoting so an empty extracted/cleaned title is visually distinct from <null> in logs.
+        private static string Quote(string s)
+        {
+            if (s == null) return "<null>";
+            return "'" + s.Replace("\r", "\\r").Replace("\n", "\\n") + "'";
         }
 
         private static string CleanTitle(string s)
