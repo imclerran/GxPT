@@ -26,6 +26,23 @@ namespace GxPT
         // references it.
         internal const string DeniedResultText = "[Call denied by user.]";
 
+        // Agentic behavior guidance, prepended as a system message on tool-enabled turns only
+        // (this orchestrator runs solely when at least one tool is available). Kept short to
+        // limit token cost. Reinforces three things: act through the tools, treat a denial as
+        // scoped to that one call rather than a permanent ban, and don't volunteer a rundown of
+        // tools/capabilities unasked.
+        internal const string AgentSystemPrompt =
+            "You are operating as an agent with access to tools. Use them proactively to "
+            + "accomplish the user's request instead of asking the user to do what you can do "
+            + "yourself.\n\n"
+            + "When a tool call is denied or cancelled, treat it as a refusal of that specific "
+            + "call in that specific moment, not a permanent ban on the tool. You may try the same "
+            + "tool again later with adjusted arguments, additional context, or once the situation "
+            + "changes; explain why it is needed if that helps.\n\n"
+            + "Do not list or describe your tools or capabilities unless the user asks. Reply to "
+            + "greetings and casual messages naturally and briefly, and bring up what you can do "
+            + "only when it is relevant to the user's request.";
+
         private readonly IChatStreamer _streamer;
         private readonly McpToolRegistry _registry;
         private readonly IToolApprovalPolicy _approval;
@@ -132,6 +149,7 @@ namespace GxPT
                 // The names manifest rides as an extra system message in front of history; it is not
                 // persisted (rebuilt each request from the live catalog).
                 List<ChatMessage> requestMessages = new List<ChatMessage>();
+                requestMessages.Add(new ChatMessage("system", AgentSystemPrompt));
                 if (!string.IsNullOrEmpty(manifest))
                     requestMessages.Add(new ChatMessage("system", manifest));
                 // Build the sent messages from history, optionally transformed (e.g. attachments
