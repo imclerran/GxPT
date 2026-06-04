@@ -34,7 +34,7 @@ MCP server for the tool surface, plus host-side injection of a light index.
 | M1 | **Standalone `MemoryMcpServer`** (stdio, workdir-scoped), not a loopback/in-process server | Reuses the tested `StdioTransport` + `McpServer` loop; process isolation + per-call timeout; just one more `NewBuiltIn(...)`. Disk is the source of truth, so in-process state sharing buys nothing. |
 | M2 | **Host owns injection; server owns writes** | One-way contract over a known path (`.gxpt/`), exactly like the `GXPT_WORKDIR` convention. Host reads the primary file each request; the server is the only writer. |
 | M3 | **Memory-semantic tools, not raw file I/O** | The server keeps the primary index consistent; the model supplies content, not file edits. Raw read/write would just re-skin `FilesMcpServer`. |
-| M4 | **Name = handle, summary = description** | Each index entry is `name — summary` (+ optional `→ detail.md`). Address entries by the server-assigned name (slug); the summary is prose and never a key. |
+| M4 | **Name = handle, summary = description** | Each index entry is `name — summary` (+ optional `→ detail.md`). The caller supplies the **name** (a handle, max 5 words); the **summary** is a single line of prose and never a key. |
 | M5 | **Single enable flag, surfaced in the main settings tab** | Memory is a feature (with context cost), not server plumbing. One `MemoryEnabled` bool gates **both** server launch and injection, so they can't desync. |
 | M6 | **No memory text in the constant `AgentSystemPrompt`** | All memory framing lives inside the omittable injected block, so the OFF state leaves zero trace — no phantom capability. |
 
@@ -57,15 +57,18 @@ MCP server for the tool surface, plus host-side injection of a light index.
 - build-quirks — net35 servers built by the solution, deployed beside GxPT.exe
 ```
 
-Soft size cap on `memory.md`; the server warns / suggests compaction when exceeded.
+Each entry is one line: a `name` (caller-supplied handle, **max 5 words**) and a
+**single-line** `summary`. Soft size cap on `memory.md`; the server warns /
+suggests compaction when exceeded.
 
 ---
 
 ## 4. Tool surface (`MemoryMcpServer`)
 
-- `remember(summary, detail?, name?)` — appends an index entry; if `detail` given,
-  writes `<name>.md` and links it. Server slugifies `summary` (or uses `name`),
-  de-dupes, and **returns the assigned name**. *(Write tier — remember-eligible.)*
+- `remember(name, summary, detail?)` — appends an index entry; if `detail` given,
+  writes `<name>.md` and links it. `name` is **required** (max 5 words), `summary`
+  is a **single line**; the server validates both and rejects a name that collides
+  with an existing entry. *(Write tier — remember-eligible.)*
 - `read_memory(name)` — returns a detail file's contents. *(ReadOnly.)*
 - `update_memory(name, summary?, detail?)` — revise an entry/detail. *(Write.)*
 - `forget(name)` — remove an entry and its detail file. *(Write.)*
