@@ -344,6 +344,7 @@ namespace GxPT
                 _lvConversations.HideSelection = false;
                 _lvConversations.HeaderStyle = ColumnHeaderStyle.None;
                 _lvConversations.BorderStyle = BorderStyle.None;
+                _lvConversations.ShowItemToolTips = true;
                 _lvConversations.Dock = DockStyle.Left;
                 _lvConversations.Columns.Add("Conversation", 200, HorizontalAlignment.Left);
                 _lvConversations.MultiSelect = false;
@@ -733,6 +734,28 @@ namespace GxPT
                 // Make the column fill the ListView's client width to avoid right-side gaps
                 int target = Math.Max(20, _lvConversations.ClientSize.Width);
                 _lvConversations.Columns[0].Width = target;
+                UpdateSidebarTooltips();
+            }
+            catch { }
+        }
+
+        // Show a hover tooltip with the full conversation name, but only for items
+        // whose name is too long to fit and is therefore truncated with an ellipsis.
+        private void UpdateSidebarTooltips()
+        {
+            try
+            {
+                if (_lvConversations == null || _lvConversations.Columns.Count == 0) return;
+                // Available text width inside the column, leaving room for the
+                // padding/indent the ListView reserves on each row.
+                int available = _lvConversations.Columns[0].Width - 8;
+                foreach (ListViewItem lvi in _lvConversations.Items)
+                {
+                    if (lvi == null) continue;
+                    int textWidth = TextRenderer.MeasureText(lvi.Text, _lvConversations.Font).Width;
+                    string tip = (textWidth > available) ? lvi.Text : string.Empty;
+                    if (lvi.ToolTipText != tip) lvi.ToolTipText = tip;
+                }
             }
             catch { }
         }
