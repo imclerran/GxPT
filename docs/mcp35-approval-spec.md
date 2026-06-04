@@ -92,7 +92,7 @@ public interface IToolClassifier {
    | `git__push`, `git__pull`, `git__checkout`, `git__restore`, `git__merge`, `git__rebase`, `git__reset`, `git__rm`, `git__cherry_pick` | Destructive | None |
    | `command__run` | Destructive | **Argument(`command`)** |
    | `web__search` | ReadOnly | Tool |
-   | `web__extract` | Write | Tool |
+   | `web__extract` | ReadOnly | Tool |
 3. **Third-party → annotations** (advisory): `destructiveHint:true` →
    Destructive/None; `readOnlyHint:true` → ReadOnly/Tool; otherwise → Write/Tool.
    We can't infer a third-party server's argument semantics, so third-party

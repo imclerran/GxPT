@@ -26,8 +26,8 @@ namespace GxPT
         }
 
         // Tools that never require approval (always allowed, no prompt): the read-only built-ins, which
-        // are high-frequency and don't modify anything. Tools that write, delete, run commands, push, or
-        // fetch arbitrary pages (web__extract) deliberately stay gated.
+        // are high-frequency and don't modify anything. Tools that write, delete, run commands, or push
+        // deliberately stay gated.
         private static readonly Dictionary<string, bool> _autoAllow = BuildAutoAllowSet();
         private static Dictionary<string, bool> BuildAutoAllowSet()
         {
@@ -40,6 +40,7 @@ namespace GxPT
             s["git__log"] = true;
             s["git__fetch"] = true; // updates remote-tracking refs only; no working-tree change
             s["web__search"] = true;
+            s["web__extract"] = true; // only fetches and returns page content; no state change
             return s;
         }
 
