@@ -27,22 +27,26 @@ namespace GxPT
             string index = ReadIndex(workingDir);
 
             StringBuilder sb = new StringBuilder();
-            sb.Append("# Persistent project memory\n\n");
-            sb.Append("You have a persistent memory for this workspace, stored under .gxpt/. Use it to ");
-            sb.Append("record durable, reusable facts (conventions, architecture, decisions, gotchas) ");
-            sb.Append("worth recalling in future conversations. Record a new fact with `remember`; read ");
-            sb.Append("the detail behind an index line with `read_memory`; revise with `update_memory`; ");
-            sb.Append("remove with `forget`; and merge related entries with `consolidate` to keep the ");
-            sb.Append("index small. Prefer updating or consolidating over piling on near-duplicate ");
-            sb.Append("entries. Do not mention this memory unless it is relevant.\n\n");
+            sb.Append("# Persistent memory\n\n");
+            sb.Append("You have a persistent memory for this workspace that you manage ONLY through the ");
+            sb.Append("memory tools (remember / read_memory / update_memory / forget / consolidate). Do ");
+            sb.Append("NOT read or write memory by editing files directly, and do not use the file tools ");
+            sb.Append("for it — always go through the memory tools, which keep the index consistent.\n\n");
+            sb.Append("Use it to record durable, reusable facts (conventions, architecture, decisions, ");
+            sb.Append("gotchas) worth recalling in future conversations. Record a new fact with ");
+            sb.Append("`remember`; read the detail behind an index line with `read_memory`; revise with ");
+            sb.Append("`update_memory`; remove with `forget`; and merge related entries with ");
+            sb.Append("`consolidate` to keep the index small. Prefer updating or consolidating over ");
+            sb.Append("piling on near-duplicate entries. Do not mention this memory unless it is ");
+            sb.Append("relevant.\n\n");
 
             if (string.IsNullOrEmpty(index))
             {
-                sb.Append("Current memory index (.gxpt/memory.md): (empty - nothing recorded yet)");
+                sb.Append("Current memories: (none recorded yet)");
             }
             else
             {
-                sb.Append("Current memory index (.gxpt/memory.md):\n");
+                sb.Append("Current memories:\n");
                 sb.Append(index);
             }
             return sb.ToString();
