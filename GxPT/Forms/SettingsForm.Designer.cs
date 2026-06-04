@@ -418,7 +418,7 @@
             this.tabMcp.Padding = new System.Windows.Forms.Padding(3);
             this.tabMcp.Size = new System.Drawing.Size(596, 363);
             this.tabMcp.TabIndex = 2;
-            this.tabMcp.Text = "MCP";
+            this.tabMcp.Text = "Tools";
             this.tabMcp.UseVisualStyleBackColor = true;
             //
             // tblMcp
