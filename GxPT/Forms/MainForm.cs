@@ -1023,6 +1023,11 @@ namespace GxPT
                 // force-disabled when none is present regardless of the stored setting — so we never launch
                 // an MSBuild server whose tools would be an empty set.
                 opts.MsBuildEnabled = MsBuildProbe.IsInstalled() && AppSettings.GetBool("mcp_msbuild_enabled", true);
+                // Memory is a feature toggle (off by default); its soft index cap is user-configurable
+                // (design sec.3/sec.6). Both the server launch and the system-prompt injection read this one
+                // setting, so they can never desync.
+                opts.MemoryEnabled = AppSettings.GetBool("mcp_memory_enabled", false);
+                opts.MemoryMaxLines = (int)AppSettings.GetDouble("mcp_memory_max_lines", 40);
                 opts.WebSearchKey = AppSettings.GetString("mcp_websearch_key");
                 opts.CurlPath = curlPath;
                 // Server exes: dev builds deploy them to a 'mcp-servers' subfolder (AfterBuild copy);
@@ -1773,6 +1778,13 @@ namespace GxPT
                         if (asList == null) asList = new List<ChatMessage>(h);
                         return BuildMessagesForModel(asList);
                     };
+                    // Inject the workspace's persistent memory index (rebuilt from .gxpt/memory.md each
+                    // request) only when memory is enabled and this conversation has a workspace.
+                    if (AppSettings.GetBool("mcp_memory_enabled", false) && !string.IsNullOrEmpty(ctx.WorkingDir))
+                    {
+                        string memWorkdir = ctx.WorkingDir;
+                        orch.MemorySystemMessageProvider = delegate { return MemoryInjection.Build(memWorkdir); };
+                    }
 
                     // Assistant text appends to the current assistant bubble; a tool call closes it so
                     // the next run of text starts a fresh bubble below the tool record. Inter-turn

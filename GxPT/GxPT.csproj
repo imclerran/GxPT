@@ -140,6 +140,7 @@
     <Compile Include="Services\Mcp\McpChatOrchestrator.cs" />
     <Compile Include="Services\Mcp\McpServerSpec.cs" />
     <Compile Include="Services\Mcp\McpConfig.cs" />
+    <Compile Include="Services\Mcp\MemoryInjection.cs" />
     <Compile Include="Services\Mcp\GitProbe.cs" />
     <Compile Include="Services\Mcp\MsBuildProbe.cs" />
     <Compile Include="Services\Mcp\IServerConnector.cs" />
@@ -341,6 +342,7 @@
       <McpServerFiles Include="..\servers\CommandMcpServer\bin\$(Configuration)\**\*.*" Exclude="..\servers\CommandMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\CommandMcpServer\bin\$(Configuration)\**\*.xml" />
       <McpServerFiles Include="..\servers\WebSearchMcpServer\bin\$(Configuration)\**\*.*" Exclude="..\servers\WebSearchMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\WebSearchMcpServer\bin\$(Configuration)\**\*.xml" />
       <McpServerFiles Include="..\servers\MSBuildMcpServer\bin\$(Configuration)\**\*.*" Exclude="..\servers\MSBuildMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\MSBuildMcpServer\bin\$(Configuration)\**\*.xml" />
+      <McpServerFiles Include="..\servers\MemoryMcpServer\bin\$(Configuration)\**\*.*" Exclude="..\servers\MemoryMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\MemoryMcpServer\bin\$(Configuration)\**\*.xml" />
     </ItemGroup>
     <Copy SourceFiles="@(McpServerFiles)" DestinationFiles="@(McpServerFiles->'$(OutDir)mcp-servers\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" ContinueOnError="true" />
   </Target>

@@ -20,6 +20,7 @@ namespace GxPT
         public const string GitName = "git";
         public const string CommandName = "command";
         public const string MsBuildName = "msbuild";
+        public const string MemoryName = "memory";
         public const string GitHubName = "github";
         public const string GitHubUrl = "https://api.githubcopilot.com/mcp/";
 
@@ -29,6 +30,7 @@ namespace GxPT
         public const string EnvCurlPath = "GXPT_CURL_PATH";
         public const string EnvGitPath = "GXPT_GIT_PATH";
         public const string EnvCmdShell = "GXPT_CMD_SHELL";
+        public const string EnvMemoryMaxLines = "GXPT_MEMORY_MAX_LINES";
 
         // Seeded into a fresh mcp.json so GitHub is discoverable; the user pastes a real PAT.
         public const string SeedJson =
@@ -50,17 +52,20 @@ namespace GxPT
             public bool GitEnabled { get; set; }
             public bool CommandEnabled { get; set; }
             public bool MsBuildEnabled { get; set; }
+            public bool MemoryEnabled { get; set; }
 
             public string WebSearchKey { get; set; }   // GXPT_WEB_SEARCH_KEY (web)
             public string CurlPath { get; set; }        // GXPT_CURL_PATH (web)
             public string GitPath { get; set; }         // GXPT_GIT_PATH (git)
             public string CmdShell { get; set; }        // GXPT_CMD_SHELL (command)
+            public int MemoryMaxLines { get; set; }     // GXPT_MEMORY_MAX_LINES (memory)
             public string ServerDir { get; set; }       // directory holding the built server exes
 
             public BuiltInOptions()
             {
                 GitPath = "git";
                 CmdShell = "cmd.exe";
+                MemoryMaxLines = 40;
             }
         }
 
@@ -107,6 +112,14 @@ namespace GxPT
             // msbuild — discovers installed MSBuild versions and builds the project at GXPT_WORKDIR.
             // No extra env beyond the working directory: engines are discovered, not configured.
             list.Add(NewBuiltIn(MsBuildName, "MSBuildMcpServer.exe", o.ServerDir, true, o.MsBuildEnabled));
+
+            // memory - persistent project memory under GXPT_WORKDIR/.gxpt; workdir-scoped (each
+            // folder has its own store). The soft index line cap is injected so the server's
+            // over-cap nudge matches the user's configured value.
+            McpServerSpec mem = NewBuiltIn(MemoryName, "MemoryMcpServer.exe", o.ServerDir, true, o.MemoryEnabled);
+            if (o.MemoryMaxLines > 0)
+                mem.Env[EnvMemoryMaxLines] = o.MemoryMaxLines.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            list.Add(mem);
 
             return list;
         }
