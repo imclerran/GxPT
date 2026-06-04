@@ -18,6 +18,7 @@ namespace GxPT
         private ToolStripMenuItem _miTabClose;
         private ToolStripMenuItem _miTabCloseOthers;
         private ToolStripMenuItem _miTabWorkdir;
+        private ToolStripMenuItem _miTabDelete;
         private TabPage _tabCtxTarget;
 
         // Custom toolbar buttons
@@ -100,13 +101,16 @@ namespace GxPT
                 _miTabClose = new ToolStripMenuItem("Close");
                 _miTabCloseOthers = new ToolStripMenuItem("Close Others");
                 _miTabWorkdir = new ToolStripMenuItem("Set Working Folder...");
+                _miTabDelete = new ToolStripMenuItem("Delete");
+                _miTabDelete.Image = ResourceManager.TryGetAssemblyImage("ExplorerDelete.png");
 
                 _miTabNew.Click += delegate { CreateConversationTab(); };
                 _miTabClose.Click += delegate { if (_tabCtxTarget != null) CloseConversationTab(_tabCtxTarget); };
                 _miTabCloseOthers.Click += delegate { if (_tabCtxTarget != null) CloseOtherTabs(_tabCtxTarget); };
                 _miTabWorkdir.Click += delegate { if (_tabCtxTarget != null) _mainForm.SetWorkingFolderForTab(_tabCtxTarget); };
+                _miTabDelete.Click += delegate { if (_tabCtxTarget != null) DeleteConversationTab(_tabCtxTarget); };
 
-                _tabCtxMenu.Items.AddRange(new ToolStripItem[] { _miTabNew, new ToolStripSeparator(), _miTabWorkdir, new ToolStripSeparator(), _miTabClose, _miTabCloseOthers });
+                _tabCtxMenu.Items.AddRange(new ToolStripItem[] { _miTabNew, new ToolStripSeparator(), _miTabWorkdir, new ToolStripSeparator(), _miTabClose, _miTabCloseOthers, new ToolStripSeparator(), _miTabDelete });
             }
             catch { }
         }
@@ -242,6 +246,43 @@ namespace GxPT
                 var page = _tabControl.SelectedTab;
                 if (page == null) return;
                 CloseConversationTab(page);
+            }
+            catch { }
+        }
+
+        // True when the tab's conversation has a saved file on disk (and thus appears in the
+        // sidebar). Used to gate the tab context menu's Delete entry.
+        private bool ConversationHasSavedFile(TabPage page)
+        {
+            try
+            {
+                ChatTabContext ctx;
+                if (page == null || !_tabContexts.TryGetValue(page, out ctx) || ctx == null || ctx.Conversation == null)
+                    return false;
+                string path = ConversationStore.GetPathForId(ctx.Conversation.Id);
+                return !string.IsNullOrEmpty(path) && System.IO.File.Exists(path);
+            }
+            catch { return false; }
+        }
+
+        // Delete the conversation backing a tab: remove its saved file, close the tab, and
+        // refresh the sidebar. Mirrors the sidebar's Delete action from the tab side.
+        public void DeleteConversationTab(TabPage page)
+        {
+            if (page == null) return;
+            try
+            {
+                ChatTabContext ctx;
+                if (_tabContexts.TryGetValue(page, out ctx) && ctx != null && ctx.Conversation != null)
+                {
+                    string path = ConversationStore.GetPathForId(ctx.Conversation.Id);
+                    ConversationStore.DeletePath(path);
+                }
+
+                CloseConversationTab(page);
+
+                var sidebar = _mainForm.GetSidebarManager();
+                if (sidebar != null) sidebar.RefreshSidebarList();
             }
             catch { }
         }
@@ -397,6 +438,9 @@ namespace GxPT
                 bool hasTarget = (_tabCtxTarget != null);
                 _miTabClose.Enabled = hasTarget;
                 _miTabCloseOthers.Enabled = hasTarget && _tabControl.TabPages.Count > 1;
+                // Only allow Delete once the conversation has been saved (i.e. it actually
+                // shows in the sidebar). A brand-new, message-less tab has nothing to delete.
+                _miTabDelete.Enabled = hasTarget && ConversationHasSavedFile(_tabCtxTarget);
 
                 _tabCtxMenu.Show(_tabControl, e.Location);
             }
