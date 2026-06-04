@@ -10,9 +10,11 @@ namespace GxPT
     // reusing the .NET Framework's OWN Vista file-dialog COM interop (the internal
     // System.Windows.Forms.FileDialogNative types that WinForms uses for its Vista
     // file dialogs) and flipping on the "pick folders" option via reflection. This
-    // avoids hand-rolled COM interface declarations entirely. On Windows XP, or if
-    // the reflection path fails for any reason, it falls back to the classic
-    // FolderBrowserDialog tree. XP / .NET 3.5 compatible.
+    // avoids hand-rolled COM interface declarations entirely. On Windows XP (which
+    // has no native folder picker) it coerces a standard Explorer-style
+    // OpenFileDialog into returning a folder, preserving the grid/double-click feel.
+    // If either modern path fails, it falls back to the classic FolderBrowserDialog
+    // tree. XP / .NET 3.5 compatible.
     internal static class FolderPicker
     {
         // FILEOPENDIALOGOPTIONS we OR into the dialog's existing options.
@@ -39,8 +41,51 @@ namespace GxPT
                     // Surface the real cause, then degrade to the classic tree dialog.
                     Logger.Log("FolderPicker", "Vista folder dialog failed, using FolderBrowserDialog: " + ex);
                 }
+                return TryClassicDialog(owner, initialDir, title, out selectedPath);
+            }
+
+            // Pre-Vista (Windows XP): there is no native folder picker, but we can coerce a
+            // standard Explorer-style OpenFileDialog into returning a folder, which gives the
+            // grid/double-click experience. Cancel returns false (no tree fallback); only an
+            // unexpected error degrades to the classic tree.
+            try
+            {
+                return TryOpenFileDialogTrick(owner, initialDir, title, out selectedPath);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("FolderPicker", "OpenFileDialog folder trick failed, using FolderBrowserDialog: " + ex);
             }
             return TryClassicDialog(owner, initialDir, title, out selectedPath);
+        }
+
+        // Windows XP grid-style folder picker: a standard OpenFileDialog with the file list
+        // hidden, coerced into returning a folder. The user navigates INTO the target folder
+        // and clicks Open; we derive the folder from the (non-existent) placeholder file name.
+        private static bool TryOpenFileDialogTrick(IWin32Window owner, string initialDir, string title, out string selectedPath)
+        {
+            selectedPath = null;
+            using (OpenFileDialog ofd = new OpenFileDialog())
+            {
+                ofd.Title = string.IsNullOrEmpty(title) ? "Select Folder" : title;
+                ofd.CheckFileExists = false; // the placeholder "file" never exists
+                ofd.CheckPathExists = true;  // but the containing folder must
+                ofd.ValidateNames = false;   // allow the placeholder name through
+                ofd.Multiselect = false;
+                ofd.AddExtension = false;
+                // A filter that matches no real file hides the file list, leaving only folders.
+                ofd.Filter = "Folders|*.__gxpt_select_folder__";
+                ofd.FileName = "Select this folder";
+                if (!string.IsNullOrEmpty(initialDir) && Directory.Exists(initialDir))
+                    ofd.InitialDirectory = initialDir;
+
+                if (ofd.ShowDialog(owner) != DialogResult.OK) return false;
+
+                string dir = Path.GetDirectoryName(ofd.FileName);
+                if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return false;
+                selectedPath = dir;
+                return true;
+            }
         }
 
         // Modern Explorer-style folder picker, driven through WinForms' own COM interop.
