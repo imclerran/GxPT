@@ -58,6 +58,7 @@
             this.cmbColor = new System.Windows.Forms.ComboBox();
             this.tabMcp = new System.Windows.Forms.TabPage();
             this.tblMcp = new System.Windows.Forms.TableLayoutPanel();
+            this.tblMcpKeyless = new System.Windows.Forms.TableLayoutPanel();
             this.chkMcpWeb = new System.Windows.Forms.CheckBox();
             this.txtWebSearchKey = new System.Windows.Forms.TextBox();
             this.chkMcpGithub = new System.Windows.Forms.CheckBox();
@@ -78,6 +79,7 @@
             this.tabJson.SuspendLayout();
             this.tabMcp.SuspendLayout();
             this.tblMcp.SuspendLayout();
+            this.tblMcpKeyless.SuspendLayout();
             this.SuspendLayout();
             // 
             // flowLayoutPanel1
@@ -428,33 +430,41 @@
             this.tblMcp.Controls.Add(this.txtWebSearchKey, 1, 0);
             this.tblMcp.Controls.Add(this.chkMcpGithub, 0, 1);
             this.tblMcp.Controls.Add(this.txtGithubPat, 1, 1);
-            this.tblMcp.Controls.Add(this.chkMcpFiles, 0, 2);
-            this.tblMcp.Controls.Add(this.chkMcpCommand, 0, 3);
-            this.tblMcp.Controls.Add(this.chkMcpGit, 0, 4);
-            this.tblMcp.Controls.Add(this.chkMcpMsBuild, 0, 5);
-            this.tblMcp.Controls.Add(this.lblMcpCustom, 0, 6);
-            this.tblMcp.Controls.Add(this.rtbMcpJson, 0, 7);
+            // The four key-free servers sit in a compact grid rather than one full-width row each.
+            this.tblMcp.Controls.Add(this.tblMcpKeyless, 0, 2);
+            this.tblMcp.Controls.Add(this.lblMcpCustom, 0, 3);
+            this.tblMcp.Controls.Add(this.rtbMcpJson, 0, 4);
             this.tblMcp.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tblMcp.Location = new System.Drawing.Point(3, 3);
             this.tblMcp.Name = "tblMcp";
-            this.tblMcp.RowCount = 8;
-            this.tblMcp.RowStyles.Add(new System.Windows.Forms.RowStyle());
-            this.tblMcp.RowStyles.Add(new System.Windows.Forms.RowStyle());
-            this.tblMcp.RowStyles.Add(new System.Windows.Forms.RowStyle());
+            this.tblMcp.RowCount = 5;
             this.tblMcp.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblMcp.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblMcp.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblMcp.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblMcp.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            this.tblMcp.SetColumnSpan(this.tblMcpKeyless, 2);
             this.tblMcp.SetColumnSpan(this.lblMcpCustom, 2);
             this.tblMcp.SetColumnSpan(this.rtbMcpJson, 2);
-            // Git's label carries a parenthetical, so let it span both columns rather than widen
-            // column 0 (which would squeeze the web/GitHub credential fields on rows 0-1).
-            this.tblMcp.SetColumnSpan(this.chkMcpGit, 2);
-            // MSBuild's label also carries a parenthetical; span both columns for the same reason.
-            this.tblMcp.SetColumnSpan(this.chkMcpMsBuild, 2);
             this.tblMcp.Size = new System.Drawing.Size(590, 357);
             this.tblMcp.TabIndex = 0;
+            //
+            // tblMcpKeyless
+            //
+            this.tblMcpKeyless.AutoSize = true;
+            this.tblMcpKeyless.ColumnCount = 2;
+            this.tblMcpKeyless.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
+            this.tblMcpKeyless.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
+            this.tblMcpKeyless.Controls.Add(this.chkMcpFiles, 0, 0);
+            this.tblMcpKeyless.Controls.Add(this.chkMcpCommand, 1, 0);
+            this.tblMcpKeyless.Controls.Add(this.chkMcpGit, 0, 1);
+            this.tblMcpKeyless.Controls.Add(this.chkMcpMsBuild, 1, 1);
+            this.tblMcpKeyless.Margin = new System.Windows.Forms.Padding(0);
+            this.tblMcpKeyless.Name = "tblMcpKeyless";
+            this.tblMcpKeyless.RowCount = 2;
+            this.tblMcpKeyless.RowStyles.Add(new System.Windows.Forms.RowStyle());
+            this.tblMcpKeyless.RowStyles.Add(new System.Windows.Forms.RowStyle());
+            this.tblMcpKeyless.TabIndex = 4;
             //
             // chkMcpWeb
             //
@@ -507,7 +517,7 @@
             this.chkMcpGit.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.chkMcpGit.Name = "chkMcpGit";
             this.chkMcpGit.TabIndex = 6;
-            this.chkMcpGit.Text = "Git  (optional - finer-grained, per-operation permissions than running git via Command)";
+            this.chkMcpGit.Text = "Git";
             this.chkMcpGit.UseVisualStyleBackColor = true;
             //
             // chkMcpCommand
@@ -597,6 +607,8 @@
             this.tabMcp.PerformLayout();
             this.tblMcp.ResumeLayout(false);
             this.tblMcp.PerformLayout();
+            this.tblMcpKeyless.ResumeLayout(false);
+            this.tblMcpKeyless.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -633,6 +645,7 @@
         private System.Windows.Forms.ComboBox cmbColor;
         private System.Windows.Forms.TabPage tabMcp;
         private System.Windows.Forms.TableLayoutPanel tblMcp;
+        private System.Windows.Forms.TableLayoutPanel tblMcpKeyless;
         private System.Windows.Forms.CheckBox chkMcpWeb;
         private System.Windows.Forms.TextBox txtWebSearchKey;
         private System.Windows.Forms.CheckBox chkMcpGithub;
