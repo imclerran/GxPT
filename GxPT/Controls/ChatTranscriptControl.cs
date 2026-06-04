@@ -107,6 +107,38 @@ namespace GxPT
             return Math.Max(CodeCopyButtonHeight, textH + CodeCopyButtonPad * 2);
         }
 
+        // Minimum width a code block needs so its header (left-aligned language label + right-aligned
+        // Copy button) never overlaps. Matches the layout in DrawBlocks: the label sits at
+        // Left + CodeCopyButtonPad, the Copy button ends at Right - CodeCopyButtonPad.
+        private int GetCodeMinHeaderWidth(Graphics g, string language)
+        {
+            int copyTextW, langW = 0;
+            using (var fmt = StringFormat.GenericTypographic)
+            {
+                fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+                copyTextW = (int)Math.Ceiling(g.MeasureString("Copy", _baseFont, PointF.Empty, fmt).Width);
+                if (!string.IsNullOrEmpty(language))
+                {
+                    Font labelFont = _boldFont ?? _baseFont;
+                    langW = (int)Math.Ceiling(g.MeasureString(language, labelFont, PointF.Empty, fmt).Width);
+                }
+            }
+            int copyW = copyTextW + CodeCopyButtonPad * 2;
+            // Gap between label and button so they read as separate items (only when a label is shown).
+            int gap = (langW > 0) ? CodeBlockPadding * 2 : 0;
+            return 2 * CodeCopyButtonPad + langW + gap + copyW;
+        }
+
+        // The on-screen width of a code block: the content width (plus padding), but never narrower
+        // than the header needs, and never wider than the available width. Used by the measure, draw,
+        // and hit-test passes so all three agree.
+        private int GetCodeBoxWidth(Graphics g, int contentNoWrapWidth, int maxWidth, string language)
+        {
+            int boxW = Math.Min(maxWidth, Math.Max(0, contentNoWrapWidth + 2 * CodeBlockPadding));
+            int minHeaderW = GetCodeMinHeaderWidth(g, language);
+            return Math.Min(maxWidth, Math.Max(boxW, minHeaderW));
+        }
+
         // Colors (theme-aware); default to light
         private Color _clrAppBack = SystemColors.Window;
         private Color _clrAppText = SystemColors.WindowText;
@@ -1106,7 +1138,7 @@ namespace GxPT
                             Size content = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, colored);
                             int viewportW = Math.Max(0, maxWidth - 2 * CodeBlockPadding);
                             bool needH = content.Width > viewportW;
-                            int boxW = Math.Min(maxWidth, Math.Max(0, Math.Min(content.Width + 2 * CodeBlockPadding, maxWidth)));
+                            int boxW = GetCodeBoxWidth(g, content.Width, maxWidth, c.Language);
                             int textH = Math.Max(_monoFont.Height, content.Height);
                             int headerH = GetCodeHeaderHeight();
                             int boxH = textH + 2 * CodeBlockPadding + headerH + (needH ? CodeHScrollHeight : 0);
@@ -1778,7 +1810,7 @@ namespace GxPT
                     Size contentNoWrap = SyntaxHighlightingRenderer.MeasureColoredSegmentsNoWrap(g, coloredSegments);
                     int viewportW = Math.Max(0, maxWidth - 2 * CodeBlockPadding);
                     bool needH = contentNoWrap.Width > viewportW;
-                    int boxW = Math.Min(maxWidth, Math.Max(0, Math.Min(contentNoWrap.Width + 2 * CodeBlockPadding, maxWidth)));
+                    int boxW = GetCodeBoxWidth(g, contentNoWrap.Width, maxWidth, c.Language);
                     int textHeight = Math.Max(_monoFont.Height, contentNoWrap.Height);
                     int headerH = GetCodeHeaderHeight();
                     int boxH = textHeight + 2 * CodeBlockPadding + headerH + (needH ? CodeHScrollHeight : 0);
@@ -3294,7 +3326,7 @@ namespace GxPT
                             int textH = Math.Max(_monoFont.Height, content.Height);
                             int headerH = GetCodeHeaderHeight();
                             int boxH = textH + 2 * CodeBlockPadding + headerH + (needH ? CodeHScrollHeight : 0);
-                            Rectangle box = new Rectangle(contentX, y, Math.Min(contentW, Math.Max(0, Math.Min(content.Width + 2 * CodeBlockPadding, contentW))), boxH);
+                            Rectangle box = new Rectangle(contentX, y, GetCodeBoxWidth(g, content.Width, contentW, cb.Language), boxH);
 
                             // Copy button rect
                             SizeF copySizeF = g.MeasureString("Copy", _baseFont, PointF.Empty, StringFormat.GenericTypographic);
