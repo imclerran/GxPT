@@ -430,7 +430,7 @@
             this.tblMcp.Controls.Add(this.txtWebSearchKey, 1, 0);
             this.tblMcp.Controls.Add(this.chkMcpGithub, 0, 1);
             this.tblMcp.Controls.Add(this.txtGithubPat, 1, 1);
-            // The four key-free servers sit in a compact grid rather than one full-width row each.
+            // The four key-free servers share one row, side by side.
             this.tblMcp.Controls.Add(this.tblMcpKeyless, 0, 2);
             this.tblMcp.Controls.Add(this.lblMcpCustom, 0, 3);
             this.tblMcp.Controls.Add(this.rtbMcpJson, 0, 4);
@@ -452,17 +452,18 @@
             // tblMcpKeyless
             //
             this.tblMcpKeyless.AutoSize = true;
-            this.tblMcpKeyless.ColumnCount = 2;
+            this.tblMcpKeyless.ColumnCount = 4;
+            this.tblMcpKeyless.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
+            this.tblMcpKeyless.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
             this.tblMcpKeyless.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
             this.tblMcpKeyless.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
             this.tblMcpKeyless.Controls.Add(this.chkMcpFiles, 0, 0);
             this.tblMcpKeyless.Controls.Add(this.chkMcpCommand, 1, 0);
-            this.tblMcpKeyless.Controls.Add(this.chkMcpGit, 0, 1);
-            this.tblMcpKeyless.Controls.Add(this.chkMcpMsBuild, 1, 1);
+            this.tblMcpKeyless.Controls.Add(this.chkMcpGit, 2, 0);
+            this.tblMcpKeyless.Controls.Add(this.chkMcpMsBuild, 3, 0);
             this.tblMcpKeyless.Margin = new System.Windows.Forms.Padding(0);
             this.tblMcpKeyless.Name = "tblMcpKeyless";
-            this.tblMcpKeyless.RowCount = 2;
-            this.tblMcpKeyless.RowStyles.Add(new System.Windows.Forms.RowStyle());
+            this.tblMcpKeyless.RowCount = 1;
             this.tblMcpKeyless.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblMcpKeyless.TabIndex = 4;
             //
