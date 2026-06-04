@@ -212,6 +212,9 @@ namespace GxPT
             // First-party MCP servers enabled by default where no credential is required
             // (files/command; they connect once a working folder is set).
             sb.AppendLine("  \"mcp_files_enabled\": true,");
+            // Persistent project memory: off by default; soft index cap (lines) configurable.
+            sb.AppendLine("  \"mcp_memory_enabled\": false,");
+            sb.AppendLine("  \"mcp_memory_max_lines\": 40,");
             sb.AppendLine("  \"mcp_command_enabled\": true");
             sb.AppendLine("}");
             return sb.ToString();
@@ -248,7 +251,10 @@ namespace GxPT
                 provider_zdr = false,
                 // First-party MCP servers enabled by default where no credential is required.
                 mcp_files_enabled = true,
-                mcp_command_enabled = true
+                mcp_command_enabled = true,
+                // Persistent project memory: off by default; soft index cap (lines).
+                mcp_memory_enabled = false,
+                mcp_memory_max_lines = 40
             };
         }
 
@@ -1318,6 +1324,8 @@ namespace GxPT
             public bool mcp_command_enabled { get; set; }
             public bool mcp_msbuild_enabled { get; set; }
             public bool mcp_github_enabled { get; set; }
+            public bool mcp_memory_enabled { get; set; }
+            public int mcp_memory_max_lines { get; set; }
             public string mcp_websearch_key { get; set; }
             public string mcp_github_pat { get; set; }
         }

@@ -183,3 +183,28 @@ memories as standalone entries.
 - **`.gxpt/.gitignore` is seeded automatically** (`*`) on first write.
 - **Names are slugified to `[A-Za-z0-9]`** (spaces → hyphens); the slug is the index
   handle and the `<slug>.md` filename, so no name→file map is needed.
+
+---
+
+## 9. Implementation status
+
+Built (branch `claude/sleepy-pascal-7Tiuo`):
+
+- **`servers/MemoryMcpServer/`** — standalone stdio server: `Slug`, `MemoryStore`
+  (canonical rewrite, atomic temp+replace writes, auto-seeded `.gitignore`),
+  `MemoryTools` (the five tools), reads `GXPT_WORKDIR` + `GXPT_MEMORY_MAX_LINES`.
+- **Host wiring** — `McpConfig` (`MemoryName`, `MemoryEnabled`, `MemoryMaxLines`,
+  workdir-scoped spec + cap env), `ToolClassifier` (read = ReadOnly, the rest =
+  Write), `McpChatOrchestrator.MemorySystemMessageProvider` injected stable→volatile,
+  `MemoryInjection` (host-side read of `memory.md`), `MainForm` wiring.
+- **Build/deploy** — added to `GxPT.sln`, the `AfterBuild` copy, and the setup
+  `.vdproj`.
+
+Configured via `settings.json` keys **`mcp_memory_enabled`** (default `false`) and
+**`mcp_memory_max_lines`** (default `40`), persisted in `SettingsData`. Editable now
+through the Settings dialog's JSON editor.
+
+**Remaining:** a visual toggle + cap field in the **main settings tab** (Designer
+work; placement/labels TBD). **Not yet built/compiled** — these projects target
+.NET 3.5 / WinForms and must be built in Visual Studio on Windows; the source here
+is convention-matched but unverified by a compiler.

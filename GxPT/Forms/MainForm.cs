@@ -1027,7 +1027,8 @@ namespace GxPT
                 // (design sec.3/sec.6). Both the server launch and the system-prompt injection read this one
                 // setting, so they can never desync.
                 opts.MemoryEnabled = AppSettings.GetBool("mcp_memory_enabled", false);
-                opts.MemoryMaxLines = (int)AppSettings.GetDouble("mcp_memory_max_lines", 40);
+                int memMaxLines = (int)AppSettings.GetDouble("mcp_memory_max_lines", 40);
+                opts.MemoryMaxLines = memMaxLines > 0 ? memMaxLines : 40;
                 opts.WebSearchKey = AppSettings.GetString("mcp_websearch_key");
                 opts.CurlPath = curlPath;
                 // Server exes: dev builds deploy them to a 'mcp-servers' subfolder (AfterBuild copy);
