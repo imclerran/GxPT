@@ -51,7 +51,8 @@ namespace GxPT
             t["git__cherry_pick"] = new ToolPolicy(ToolTier.Destructive, RememberScope.None, null);
             t["command__run"] = new ToolPolicy(ToolTier.Destructive, RememberScope.Argument, "command");
             t["web__search"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
-            t["web__extract"] = new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
+            // extract only fetches and returns page content (no state change) -> ReadOnly/auto-allow.
+            t["web__extract"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
             return t;
         }
 

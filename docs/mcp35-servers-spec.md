@@ -149,11 +149,11 @@ architecture §3).
 | Tool | Approval | Schema (required *) | Behavior |
 |------|----------|---------------------|----------|
 | `search` (→ `web__search`) | ReadOnly | `query*`, `max_results?` (default 5, cap 20), `topic?`, `search_depth?`, `chunks_per_source?`, `include_answer?`, `include_raw_content?`, `time_range?`, `start_date?`, `end_date?`, `country?`, `include_domains?`, `exclude_domains?` | `POST /search`; condensed results + optional answer. |
-| `extract` (→ `web__extract`) | **Write (confirm each call)** | `urls*` (string or array), `extract_depth?`, `format?`, `include_images?` | `POST /extract`; fetch and return full page content for the given URLs. |
+| `extract` (→ `web__extract`) | ReadOnly | `urls*` (string or array), `extract_depth?`, `format?`, `include_images?` | `POST /extract`; fetch and return full page content for the given URLs. |
 
-`extract` is gated as **Write** (not ReadOnly): it fetches arbitrary external
-pages — more network/token cost, and it pulls in whatever content the page
-serves — so each call is confirmed (`mcp35-approval-spec.md`).
+`extract` is classified **ReadOnly** (auto-allowed, like `web__search`): it only
+fetches and returns page content for URLs the model already has, without changing
+any local or remote state (`mcp35-approval-spec.md`).
 
 - Auth: `Authorization: Bearer <GXPT_WEB_SEARCH_KEY>`, passed to curl via a
   **`-K` config file**, never the command line (same discipline as

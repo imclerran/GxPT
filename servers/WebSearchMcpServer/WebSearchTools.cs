@@ -7,8 +7,8 @@ namespace WebSearchMcpServer
 {
     /// <summary>
     /// The web server's two tools over the Tavily API:
-    ///   web__search  (ReadOnly)    — query the web, condensed results + optional answer.
-    ///   web__extract (Write/confirm) — fetch and return full page content for given URLs.
+    ///   web__search  (ReadOnly) — query the web, condensed results + optional answer.
+    ///   web__extract (ReadOnly) — fetch and return full page content for given URLs.
     /// Request builders and response condensers are pure functions (unit-tested directly); the
     /// handlers add the network call. Failures are Error values; the API key never appears in output.
     /// See servers-spec §3.
