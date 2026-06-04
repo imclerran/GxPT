@@ -714,14 +714,13 @@ namespace GxPT
         private void SetWorkingFolderForContext(TabManager.ChatTabContext ctx)
         {
             if (ctx == null) return;
-            using (var dlg = new FolderBrowserDialog())
-            {
-                dlg.Description = "Select a working folder for file, git, and command tools in this conversation.";
-                if (!string.IsNullOrEmpty(ctx.WorkingDir)) dlg.SelectedPath = ctx.WorkingDir;
-                if (dlg.ShowDialog(this) != DialogResult.OK) return;
-                ctx.WorkingDir = dlg.SelectedPath;
-                RecentWorkDirs.Add(ctx.WorkingDir);
-            }
+            string selectedDir;
+            if (!FolderPicker.TrySelectFolder(this, ctx.WorkingDir,
+                    "Select a working folder for file, git, and command tools in this conversation.",
+                    out selectedDir))
+                return;
+            ctx.WorkingDir = selectedDir;
+            RecentWorkDirs.Add(ctx.WorkingDir);
             // Setting a folder re-shows the strip, so a prior dismissal no longer applies.
             if (ctx.Conversation != null) ctx.Conversation.WorkspaceStripDismissed = false;
             PersistWorkingDir(ctx);
