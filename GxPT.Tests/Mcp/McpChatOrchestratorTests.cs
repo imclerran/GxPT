@@ -65,12 +65,14 @@ namespace GxPT.Tests.Mcp
 
             New(streamer, reg).RunTurn(new List<ChatMessage>(), "hello", new RecordingUi());
 
-            // first request: leading system message is the names manifest, history follows
+            // first request: agentic guidance leads, then the names manifest, then history
             var msgs = streamer.SeenMessages[0];
             Assert.Equal("system", msgs[0].Role);
-            Assert.Contains("reveal_tools", msgs[0].Content);   // manifest instructs reveal-before-call
-            Assert.Contains("files__read", msgs[0].Content);     // and lists tool names
-            Assert.Equal("user", msgs[1].Role);
+            Assert.Contains("operating as an agent", msgs[0].Content); // agentic behavior guidance
+            Assert.Equal("system", msgs[1].Role);
+            Assert.Contains("reveal_tools", msgs[1].Content);   // manifest instructs reveal-before-call
+            Assert.Contains("files__read", msgs[1].Content);     // and lists tool names
+            Assert.Equal("user", msgs[2].Role);
             // exposed tools always lead with reveal_tools
             Assert.Equal("reveal_tools", (string)streamer.SeenTools[0][0]["function"]["name"]);
         }
