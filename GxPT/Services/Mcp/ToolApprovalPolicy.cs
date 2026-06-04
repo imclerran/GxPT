@@ -229,6 +229,7 @@ namespace GxPT
             s[McpConfig.FilesName] = true;
             s[McpConfig.GitName] = true;
             s[McpConfig.CommandName] = true;
+            s[McpConfig.MsBuildName] = true;
             // GitHub is a first-party-managed HTTP server but a third-party tool surface; classify
             // its tools via annotations (not the hardcoded table).
             return s;

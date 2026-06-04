@@ -19,6 +19,7 @@ namespace GxPT
         public const string FilesName = "files";
         public const string GitName = "git";
         public const string CommandName = "command";
+        public const string MsBuildName = "msbuild";
         public const string GitHubName = "github";
         public const string GitHubUrl = "https://api.githubcopilot.com/mcp/";
 
@@ -48,6 +49,7 @@ namespace GxPT
             public bool FilesEnabled { get; set; }
             public bool GitEnabled { get; set; }
             public bool CommandEnabled { get; set; }
+            public bool MsBuildEnabled { get; set; }
 
             public string WebSearchKey { get; set; }   // GXPT_WEB_SEARCH_KEY (web)
             public string CurlPath { get; set; }        // GXPT_CURL_PATH (web)
@@ -101,6 +103,10 @@ namespace GxPT
             McpServerSpec cmd = NewBuiltIn(CommandName, "CommandMcpServer.exe", o.ServerDir, true, o.CommandEnabled);
             if (!string.IsNullOrEmpty(o.CmdShell)) cmd.Env[EnvCmdShell] = o.CmdShell;
             list.Add(cmd);
+
+            // msbuild — discovers installed MSBuild versions and builds the project at GXPT_WORKDIR.
+            // No extra env beyond the working directory: engines are discovered, not configured.
+            list.Add(NewBuiltIn(MsBuildName, "MSBuildMcpServer.exe", o.ServerDir, true, o.MsBuildEnabled));
 
             return list;
         }

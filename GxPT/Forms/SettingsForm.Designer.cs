@@ -65,6 +65,7 @@
             this.chkMcpFiles = new System.Windows.Forms.CheckBox();
             this.chkMcpGit = new System.Windows.Forms.CheckBox();
             this.chkMcpCommand = new System.Windows.Forms.CheckBox();
+            this.chkMcpMsBuild = new System.Windows.Forms.CheckBox();
             this.lblMcpCustom = new System.Windows.Forms.Label();
             this.rtbMcpJson = new System.Windows.Forms.RichTextBox();
             this.flowLayoutPanel1.SuspendLayout();
@@ -430,12 +431,14 @@
             this.tblMcp.Controls.Add(this.chkMcpFiles, 0, 2);
             this.tblMcp.Controls.Add(this.chkMcpCommand, 0, 3);
             this.tblMcp.Controls.Add(this.chkMcpGit, 0, 4);
-            this.tblMcp.Controls.Add(this.lblMcpCustom, 0, 5);
-            this.tblMcp.Controls.Add(this.rtbMcpJson, 0, 6);
+            this.tblMcp.Controls.Add(this.chkMcpMsBuild, 0, 5);
+            this.tblMcp.Controls.Add(this.lblMcpCustom, 0, 6);
+            this.tblMcp.Controls.Add(this.rtbMcpJson, 0, 7);
             this.tblMcp.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tblMcp.Location = new System.Drawing.Point(3, 3);
             this.tblMcp.Name = "tblMcp";
-            this.tblMcp.RowCount = 7;
+            this.tblMcp.RowCount = 8;
+            this.tblMcp.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblMcp.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblMcp.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblMcp.RowStyles.Add(new System.Windows.Forms.RowStyle());
@@ -448,6 +451,8 @@
             // Git's label carries a parenthetical, so let it span both columns rather than widen
             // column 0 (which would squeeze the web/GitHub credential fields on rows 0-1).
             this.tblMcp.SetColumnSpan(this.chkMcpGit, 2);
+            // MSBuild's label also carries a parenthetical; span both columns for the same reason.
+            this.tblMcp.SetColumnSpan(this.chkMcpMsBuild, 2);
             this.tblMcp.Size = new System.Drawing.Size(590, 357);
             this.tblMcp.TabIndex = 0;
             //
@@ -515,12 +520,22 @@
             this.chkMcpCommand.Text = "Command";
             this.chkMcpCommand.UseVisualStyleBackColor = true;
             //
+            // chkMcpMsBuild
+            //
+            this.chkMcpMsBuild.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            this.chkMcpMsBuild.AutoSize = true;
+            this.chkMcpMsBuild.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
+            this.chkMcpMsBuild.Name = "chkMcpMsBuild";
+            this.chkMcpMsBuild.TabIndex = 7;
+            this.chkMcpMsBuild.Text = "MSBuild  (build .NET projects/solutions; surfaces each installed MSBuild version as a tool)";
+            this.chkMcpMsBuild.UseVisualStyleBackColor = true;
+            //
             // lblMcpCustom
             //
             this.lblMcpCustom.AutoSize = true;
             this.lblMcpCustom.Margin = new System.Windows.Forms.Padding(3, 8, 3, 3);
             this.lblMcpCustom.Name = "lblMcpCustom";
-            this.lblMcpCustom.TabIndex = 7;
+            this.lblMcpCustom.TabIndex = 8;
             this.lblMcpCustom.Text = "Custom servers (mcp.json):";
             //
             // rtbMcpJson
@@ -625,6 +640,7 @@
         private System.Windows.Forms.CheckBox chkMcpFiles;
         private System.Windows.Forms.CheckBox chkMcpGit;
         private System.Windows.Forms.CheckBox chkMcpCommand;
+        private System.Windows.Forms.CheckBox chkMcpMsBuild;
         private System.Windows.Forms.Label lblMcpCustom;
         private System.Windows.Forms.RichTextBox rtbMcpJson;
     }

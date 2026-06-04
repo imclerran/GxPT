@@ -1183,6 +1183,9 @@ namespace GxPT
             // disabled below) when git isn't on PATH.
             this.chkMcpGit.Checked = GitProbe.IsInstalled() && AppSettings.GetBool("mcp_git_enabled", true);
             this.chkMcpCommand.Checked = s.mcp_command_enabled;
+            // MSBuild, like Git, defaults ON when a build engine is found and the user hasn't chosen
+            // otherwise; OFF (and disabled below) when no MSBuild is present.
+            this.chkMcpMsBuild.Checked = MsBuildProbe.IsInstalled() && AppSettings.GetBool("mcp_msbuild_enabled", true);
             this.chkMcpGithub.Checked = s.mcp_github_enabled;
             this.txtWebSearchKey.Text = s.mcp_websearch_key != null ? s.mcp_websearch_key : string.Empty;
             this.txtGithubPat.Text = s.mcp_github_pat != null ? s.mcp_github_pat : string.Empty;
@@ -1196,6 +1199,7 @@ namespace GxPT
             target.mcp_files_enabled = this.chkMcpFiles.Checked;
             target.mcp_git_enabled = this.chkMcpGit.Checked;
             target.mcp_command_enabled = this.chkMcpCommand.Checked;
+            target.mcp_msbuild_enabled = this.chkMcpMsBuild.Checked;
             target.mcp_github_enabled = this.chkMcpGithub.Checked;
             target.mcp_websearch_key = this.txtWebSearchKey.Text != null ? this.txtWebSearchKey.Text.Trim() : string.Empty;
             target.mcp_github_pat = this.txtGithubPat.Text != null ? this.txtGithubPat.Text.Trim() : string.Empty;
@@ -1222,6 +1226,18 @@ namespace GxPT
                 this._mcpTip.SetToolTip(this.chkMcpGit, gitInstalled
                     ? string.Empty
                     : "Git was not found on your PATH. Install Git to enable these tools.");
+            }
+            catch { }
+
+            // MSBuild requires an MSBuild engine on the system; if none is found, the toggle is disabled.
+            bool msbuildInstalled = MsBuildProbe.IsInstalled();
+            this.chkMcpMsBuild.Enabled = msbuildInstalled;
+            if (!msbuildInstalled) this.chkMcpMsBuild.Checked = false;
+            try
+            {
+                this._mcpTip.SetToolTip(this.chkMcpMsBuild, msbuildInstalled
+                    ? string.Empty
+                    : "No MSBuild was found on this system. Install the .NET Framework or Visual Studio/Build Tools to enable these tools.");
             }
             catch { }
         }
@@ -1300,6 +1316,7 @@ namespace GxPT
             public bool mcp_files_enabled { get; set; }
             public bool mcp_git_enabled { get; set; }
             public bool mcp_command_enabled { get; set; }
+            public bool mcp_msbuild_enabled { get; set; }
             public bool mcp_github_enabled { get; set; }
             public string mcp_websearch_key { get; set; }
             public string mcp_github_pat { get; set; }

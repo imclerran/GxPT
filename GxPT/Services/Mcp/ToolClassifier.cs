@@ -63,6 +63,13 @@ namespace GxPT
                 ToolPolicy fp;
                 if (_firstParty.TryGetValue(functionName, out fp))
                     return new ToolPolicy(fp.Tier, fp.Scope, fp.ScopeArgPath);
+                // The MSBuild server surfaces one build tool per installed engine, so its tool names are
+                // discovered at runtime (msbuild__build_4_0, msbuild__build_17_0, ...) and can't be listed
+                // in the static table. A build runs arbitrary build logic (targets, Exec tasks, pre/post
+                // build events), so it is Destructive and argument-scoped on the project being built -
+                // "always allow building this project/solution", never a blanket "always allow MSBuild".
+                if (functionName.StartsWith(McpConfig.MsBuildName + "__", StringComparison.Ordinal))
+                    return new ToolPolicy(ToolTier.Destructive, RememberScope.Argument, "project");
                 // First-party but not in the table (shouldn't happen) -> conservative Write/Tool.
                 return new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
             }

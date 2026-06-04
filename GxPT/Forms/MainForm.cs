@@ -1019,6 +1019,10 @@ namespace GxPT
                 // server whose tools could only return "git not found".
                 opts.GitEnabled = GitProbe.IsInstalled() && AppSettings.GetBool("mcp_git_enabled", true);
                 opts.CommandEnabled = AppSettings.GetBool("mcp_command_enabled", false);
+                // MSBuild defaults ON when at least one MSBuild engine is found, OFF when none is, and is
+                // force-disabled when none is present regardless of the stored setting — so we never launch
+                // an MSBuild server whose tools would be an empty set.
+                opts.MsBuildEnabled = MsBuildProbe.IsInstalled() && AppSettings.GetBool("mcp_msbuild_enabled", true);
                 opts.WebSearchKey = AppSettings.GetString("mcp_websearch_key");
                 opts.CurlPath = curlPath;
                 // Server exes: dev builds deploy them to a 'mcp-servers' subfolder (AfterBuild copy);
@@ -2652,6 +2656,12 @@ namespace GxPT
         private static bool TryBuildToolRecord(string name, Newtonsoft.Json.Linq.JObject args, out string header, out string body, out string language, out int added, out int removed)
         {
             header = null; body = string.Empty; language = "text"; added = -1; removed = -1;
+
+            // MSBuild tools are named per discovered engine (msbuild__build_4_0, msbuild__build_17_0, ...),
+            // so they can't be cased in the switch below; render them from the name + args here.
+            if (name != null && name.StartsWith("msbuild__build_", StringComparison.Ordinal))
+                return BuildMsBuildRecord(name, args, out header, out body, out language);
+
             switch (name)
             {
                 case "files__edit":
@@ -2887,6 +2897,53 @@ namespace GxPT
                 return sb.ToString();
             }
             catch { return string.Empty; }
+        }
+
+        // Renders an MSBuild build-tool call (msbuild__build_<ver>) into a transcript record: a one-line
+        // header like "Built MyApp.sln (Release · MSBuild 17.0 x64)" with the build options as a
+        // collapsible body. The engine version comes from the tool-name suffix (build_17_0 -> 17.0).
+        private static bool BuildMsBuildRecord(string name, Newtonsoft.Json.Linq.JObject args, out string header, out string body, out string language)
+        {
+            header = null; body = string.Empty; language = "text";
+
+            string ver = name.Substring("msbuild__build_".Length).Replace('_', '.');
+            string project = Str(args, "project");
+            string projectLabel = project.Length > 0
+                ? System.IO.Path.GetFileName(project.Replace('\\', '/')) : "solution";
+
+            // Verb from the requested targets (Clean/Rebuild/Restore), defaulting to "Built".
+            string targets = JoinPaths(args, "targets");
+            string verb = "Built";
+            switch (targets.ToLowerInvariant())
+            {
+                case "clean": verb = "Cleaned"; break;
+                case "rebuild": verb = "Rebuilt"; break;
+                case "restore": verb = "Restored"; break;
+            }
+
+            // Parenthetical: configuration, then "MSBuild <ver>[ <bitness>]".
+            var bits = new List<string>();
+            string config = Str(args, "configuration");
+            if (config.Length > 0) bits.Add(config);
+            string engine = "MSBuild " + ver;
+            string bitness = Str(args, "bitness");
+            if (bitness.Length > 0) engine += " " + bitness;
+            bits.Add(engine);
+            header = verb + " " + projectLabel + " (" + string.Join(" · ", bits.ToArray()) + ")";
+
+            // Body: the build options, for the collapsible record (omitted when there's nothing extra).
+            var lines = new List<string>();
+            if (project.Length > 0) lines.Add("project: " + project);
+            if (targets.Length > 0) lines.Add("targets: " + targets);
+            if (config.Length > 0) lines.Add("configuration: " + config);
+            string platform = Str(args, "platform");
+            if (platform.Length > 0) lines.Add("platform: " + platform);
+            var props = args["properties"] as Newtonsoft.Json.Linq.JObject;
+            if (props != null)
+                foreach (var kv in props)
+                    lines.Add("property: " + kv.Key + "=" + (kv.Value != null ? kv.Value.ToString() : string.Empty));
+            body = string.Join("\n", lines.ToArray());
+            return true;
         }
 
         private void RebuildTranscriptAsync(TabManager.ChatTabContext ctx, Conversation convo)

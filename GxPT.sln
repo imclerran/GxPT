@@ -19,6 +19,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GitMcpServer", "servers\Git
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CommandMcpServer", "servers\CommandMcpServer\CommandMcpServer.csproj", "{8B1149E6-9C3E-4860-A946-95989D4FD4D2}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MSBuildMcpServer", "servers\MSBuildMcpServer\MSBuildMcpServer.csproj", "{C7E1B2A4-3D5F-4A6B-8E9C-1F2A3B4C5D6E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -59,6 +61,10 @@ Global
 		{8B1149E6-9C3E-4860-A946-95989D4FD4D2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8B1149E6-9C3E-4860-A946-95989D4FD4D2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8B1149E6-9C3E-4860-A946-95989D4FD4D2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C7E1B2A4-3D5F-4A6B-8E9C-1F2A3B4C5D6E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C7E1B2A4-3D5F-4A6B-8E9C-1F2A3B4C5D6E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C7E1B2A4-3D5F-4A6B-8E9C-1F2A3B4C5D6E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C7E1B2A4-3D5F-4A6B-8E9C-1F2A3B4C5D6E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
