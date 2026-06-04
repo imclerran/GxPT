@@ -34,7 +34,7 @@ MCP server for the tool surface, plus host-side injection of a light index.
 | M1 | **Standalone `MemoryMcpServer`** (stdio, workdir-scoped), not a loopback/in-process server | Reuses the tested `StdioTransport` + `McpServer` loop; process isolation + per-call timeout; just one more `NewBuiltIn(...)`. Disk is the source of truth, so in-process state sharing buys nothing. |
 | M2 | **Host owns injection; server owns writes** | One-way contract over a known path (`.gxpt/`), exactly like the `GXPT_WORKDIR` convention. Host reads the primary file each request; the server is the only writer. |
 | M3 | **Memory-semantic tools, not raw file I/O** | The server keeps the primary index consistent; the model supplies content, not file edits. Raw read/write would just re-skin `FilesMcpServer`. |
-| M4 | **Name = handle, summary = description** | Each index entry is `name — summary` (+ optional `→ detail.md`). The caller supplies the **name** (a handle, max 5 words); the **summary** is a single line of prose and never a key. |
+| M4 | **Name = handle, summary = description** | Each index entry is `name: summary` (+ optional `→ detail.md`). The caller supplies the **name** (a handle, max 5 words); the **summary** is a single line of prose and never a key. |
 | M5 | **Single enable flag, surfaced in the main settings tab** | Memory is a feature (with context cost), not server plumbing. One `MemoryEnabled` bool gates **both** server launch and injection, so they can't desync. |
 | M6 | **No memory text in the constant `AgentSystemPrompt`** | All memory framing lives inside the omittable injected block, so the OFF state leaves zero trace — no phantom capability. |
 
@@ -52,9 +52,9 @@ MCP server for the tool surface, plus host-side injection of a light index.
 `memory.md` is a flat list of entries:
 
 ```
-- auth-flow — JWT in httpOnly cookies; refresh via POST /auth/refresh  → auth-flow.md
-- db-conventions — snake_case tables, soft-delete via deleted_at
-- build-quirks — net35 servers built by the solution, deployed beside GxPT.exe
+- auth-flow: JWT in httpOnly cookies; refresh via POST /auth/refresh  → auth-flow.md
+- db-conventions: snake_case tables, soft-delete via deleted_at
+- build-quirks: net35 servers built by the solution, deployed beside GxPT.exe
 ```
 
 Each entry is one line: a `name` (caller-supplied handle, **max 5 words**) and a
