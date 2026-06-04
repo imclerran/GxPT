@@ -50,6 +50,19 @@ namespace GxPT.Tests.Mcp
             var extract = c.Classify("web__extract", null, true);
             Assert.Equal(ToolTier.ReadOnly, extract.Tier);
             Assert.Equal(RememberScope.Tool, extract.Scope);
+
+            // MSBuild tools are named per discovered engine, so they're matched by the msbuild__ prefix
+            // (not a static table entry) and gated as Destructive, argument-scoped on the project built.
+            var build = c.Classify("msbuild__build_17_0", null, true);
+            Assert.Equal(ToolTier.Destructive, build.Tier);
+            Assert.Equal(RememberScope.Argument, build.Scope);
+            Assert.Equal("project", build.ScopeArgPath);
+
+            // devenv solution builds are likewise Destructive, but scoped on the 'solution' argument.
+            var sln = c.Classify("msbuild__build_solution_2022", null, true);
+            Assert.Equal(ToolTier.Destructive, sln.Tier);
+            Assert.Equal(RememberScope.Argument, sln.Scope);
+            Assert.Equal("solution", sln.ScopeArgPath);
         }
 
         [Fact]

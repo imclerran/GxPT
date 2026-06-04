@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="3.5" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
@@ -141,6 +141,7 @@
     <Compile Include="Services\Mcp\McpServerSpec.cs" />
     <Compile Include="Services\Mcp\McpConfig.cs" />
     <Compile Include="Services\Mcp\GitProbe.cs" />
+    <Compile Include="Services\Mcp\MsBuildProbe.cs" />
     <Compile Include="Services\Mcp\IServerConnector.cs" />
     <Compile Include="Services\Mcp\McpHost.cs" />
     <Compile Include="Services\Mcp\DefaultServerConnector.cs" />
@@ -339,6 +340,7 @@
       <McpServerFiles Include="..\servers\GitMcpServer\bin\$(Configuration)\**\*.*" Exclude="..\servers\GitMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\GitMcpServer\bin\$(Configuration)\**\*.xml" />
       <McpServerFiles Include="..\servers\CommandMcpServer\bin\$(Configuration)\**\*.*" Exclude="..\servers\CommandMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\CommandMcpServer\bin\$(Configuration)\**\*.xml" />
       <McpServerFiles Include="..\servers\WebSearchMcpServer\bin\$(Configuration)\**\*.*" Exclude="..\servers\WebSearchMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\WebSearchMcpServer\bin\$(Configuration)\**\*.xml" />
+      <McpServerFiles Include="..\servers\MSBuildMcpServer\bin\$(Configuration)\**\*.*" Exclude="..\servers\MSBuildMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\MSBuildMcpServer\bin\$(Configuration)\**\*.xml" />
     </ItemGroup>
     <Copy SourceFiles="@(McpServerFiles)" DestinationFiles="@(McpServerFiles->'$(OutDir)mcp-servers\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" ContinueOnError="true" />
   </Target>
