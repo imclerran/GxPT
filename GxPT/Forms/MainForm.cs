@@ -40,6 +40,11 @@ namespace GxPT
 
         private bool _syncingModelCombo; // avoid event feedback loops when syncing combo text
 
+        // Slim cream notice at the top of the chat area, shown when the shipped recommended model list
+        // has changed since the user last acknowledged it. Built programmatically (see
+        // InitModelUpdateBanner); persists until the user reviews settings or dismisses it.
+        private System.Windows.Forms.Panel _modelUpdateBanner;
+
         // Helper DTO for background-parsed messages
         private sealed class ParsedMessage
         {
@@ -67,9 +72,14 @@ namespace GxPT
                 this.lnkOpenSettings.LinkClicked += lnkOpenSettings_LinkClicked;
             if (this.pnlApiKeyBanner != null)
                 this.pnlApiKeyBanner.Resize += (s, e) => LayoutApiKeyBanner();
+
+            // Build the "updated recommended models" banner (hidden until Load decides whether to show it).
+            InitModelUpdateBanner();
+
             this.Load += (s, e) =>
             {
                 UpdateApiKeyBanner();
+                MaybeShowModelUpdateBanner();
                 try { RestoreOpenTabsOnStartup(); }
                 catch { }
                 // After restoring tabs, if no API key is configured, open the API Keys Help tab and focus it
@@ -2139,6 +2149,102 @@ namespace GxPT
         private void closeConversationToolStripMenuItem_Click(object sender, EventArgs e)
         {
             if (_tabManager != null) _tabManager.CloseActiveConversationTab();
+        }
+
+        // Build the cream notice strip and dock it at the top of the chat area (inside Panel2, above the
+        // transcript and input). Styling mirrors WorkspaceContextStrip - fixed, un-themed system chrome.
+        private void InitModelUpdateBanner()
+        {
+            try
+            {
+                if (this.splitContainer1 == null) return;
+
+                _modelUpdateBanner = new System.Windows.Forms.Panel();
+                _modelUpdateBanner.Dock = DockStyle.Top;
+                _modelUpdateBanner.Height = 26;
+                _modelUpdateBanner.Padding = new Padding(8, 0, 8, 0);
+                _modelUpdateBanner.BackColor = Color.FromArgb(252, 246, 220); // cream / warning
+                _modelUpdateBanner.Visible = false;
+
+                var links = new FlowLayoutPanel();
+                links.Dock = DockStyle.Right;
+                links.FlowDirection = FlowDirection.LeftToRight;
+                links.WrapContents = false;
+                links.AutoSize = true;
+                links.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+                links.Margin = new Padding(0);
+
+                var review = MakeBannerLink("Review in Settings");
+                review.LinkClicked += delegate { OnModelBannerReview(); };
+                var dismiss = MakeBannerLink("Dismiss");
+                dismiss.LinkClicked += delegate { OnModelBannerDismiss(); };
+                links.Controls.Add(review);
+                links.Controls.Add(dismiss);
+
+                var text = new Label();
+                text.Dock = DockStyle.Fill;
+                text.AutoEllipsis = true;
+                text.TextAlign = ContentAlignment.MiddleLeft;
+                text.ForeColor = Color.FromArgb(55, 55, 55);
+                text.Text = "Updated recommended models are available.";
+
+                // Fill first, edge-docked links after (matches the working docking order elsewhere).
+                _modelUpdateBanner.Controls.Add(text);
+                _modelUpdateBanner.Controls.Add(links);
+
+                this.splitContainer1.Panel2.Controls.Add(_modelUpdateBanner);
+                _modelUpdateBanner.BringToFront(); // Top dock sits above the Fill tab control
+            }
+            catch { }
+        }
+
+        private static LinkLabel MakeBannerLink(string text)
+        {
+            var lnk = new LinkLabel();
+            lnk.AutoSize = true;
+            lnk.Text = text;
+            lnk.TextAlign = ContentAlignment.MiddleLeft;
+            lnk.LinkColor = Color.FromArgb(0, 90, 158);
+            lnk.ActiveLinkColor = Color.FromArgb(0, 90, 158);
+            lnk.VisitedLinkColor = Color.FromArgb(0, 90, 158);
+            lnk.LinkBehavior = LinkBehavior.HoverUnderline;
+            lnk.Margin = new Padding(12, 0, 0, 0);
+            lnk.Anchor = AnchorStyles.None; // vertically centered in the flow panel
+            return lnk;
+        }
+
+        // Show the banner when the shipped recommended list differs from what the user last acknowledged
+        // (or has never acknowledged one). The acknowledged fingerprint is only written when the user acts
+        // (reviews or dismisses), so the banner persists across launches until then.
+        private void MaybeShowModelUpdateBanner()
+        {
+            try
+            {
+                if (_modelUpdateBanner == null) return;
+                string seen = AppSettings.GetString("recommended_hash_seen");
+                string current = ModelDefaults.RecommendedHash();
+                bool show = string.IsNullOrEmpty(seen) || !string.Equals(seen, current, StringComparison.Ordinal);
+                _modelUpdateBanner.Visible = show;
+            }
+            catch { }
+        }
+
+        private void MarkRecommendedSeen()
+        {
+            try { AppSettings.SetString("recommended_hash_seen", ModelDefaults.RecommendedHash()); }
+            catch { }
+            if (_modelUpdateBanner != null) _modelUpdateBanner.Visible = false;
+        }
+
+        private void OnModelBannerDismiss()
+        {
+            MarkRecommendedSeen();
+        }
+
+        private void OnModelBannerReview()
+        {
+            MarkRecommendedSeen();
+            miSettings_Click(this, EventArgs.Empty);
         }
 
         // Center the label and link vertically within the banner panel

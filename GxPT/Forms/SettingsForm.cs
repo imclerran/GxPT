@@ -105,6 +105,23 @@ namespace GxPT
             // Keep default model list updated as models are typed
             this.txtModels.TextChanged += TxtModels_TextChanged;
 
+            // "Recommended models" group: bring the user's list in line with the shipped catalog.
+            // Both buttons edit the textbox only; nothing persists until Save (so the user can review
+            // or back out). Tooltips carry the "why" (append vs. replace, and the deprecated-model cleanup).
+            if (this.btnAddRecommended != null)
+                this.btnAddRecommended.Click += BtnAddRecommended_Click;
+            if (this.btnReplaceRecommended != null)
+                this.btnReplaceRecommended.Click += BtnReplaceRecommended_Click;
+            try
+            {
+                _mcpTip.SetToolTip(this.btnAddRecommended,
+                    "Add GxPT's recommended models that aren't already in your list. Keeps everything you have.");
+                _mcpTip.SetToolTip(this.btnReplaceRecommended,
+                    "Replace your list with GxPT's latest recommended models, removing any that are no longer "
+                    + "available. Nothing is saved until you click Save.");
+            }
+            catch { }
+
             // JSON editor changed -> debounce highlight
             _jsonHighlightTimer = new Timer();
             _jsonHighlightTimer.Interval = 200; // ms
@@ -210,6 +227,9 @@ namespace GxPT
             }
             sb.AppendLine("  ],");
             sb.AppendLine("  \"default_model\": \"" + ModelDefaults.DefaultModel + "\",");
+            // Seed the acknowledged-recommendations fingerprint so a fresh install (which already ships
+            // with the current catalog) doesn't immediately show the "updated models" banner.
+            sb.AppendLine("  \"recommended_hash_seen\": \"" + ModelDefaults.RecommendedHash() + "\",");
             sb.AppendLine("  \"theme\": \"light\",");
             // Default UI color theme
             sb.AppendLine("  \"color_theme\": \"blue\",");
@@ -253,6 +273,7 @@ namespace GxPT
                 openrouter_api_key = "",
                 models = ModelDefaults.ModelList(),
                 default_model = ModelDefaults.DefaultModel,
+                recommended_hash_seen = ModelDefaults.RecommendedHash(),
                 enable_logging = false,
                 font_size = GetChatDefaultFontSize(),
                 theme = "light",
@@ -1057,6 +1078,54 @@ namespace GxPT
             catch { if (target.message_max_width <= 0) target.message_max_width = 90; }
         }
 
+        // Append any recommended models the user doesn't already have, preserving their existing list
+        // and order. Case-insensitive de-dupe mirrors PostProcess so the textbox stays clean.
+        private void BtnAddRecommended_Click(object sender, EventArgs e)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var result = new List<string>();
+            if (this.txtModels.Lines != null)
+            {
+                foreach (var line in this.txtModels.Lines)
+                {
+                    if (line == null) continue;
+                    var t = line.Trim();
+                    if (t.Length == 0) continue;
+                    if (seen.Add(t)) result.Add(t);
+                }
+            }
+
+            bool added = false;
+            foreach (var m in ModelDefaults.Models)
+            {
+                if (seen.Add(m)) { result.Add(m); added = true; }
+            }
+
+            if (!added)
+            {
+                MessageBox.Show(this, "Your list already includes all of GxPT's recommended models.",
+                    "Recommended models", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // Setting Lines fires TxtModels_TextChanged, which refreshes the default-model combo.
+            this.txtModels.Lines = result.ToArray();
+        }
+
+        // Replace the entire list with the shipped catalog. Confirmed because it discards the user's
+        // customizations; the actual write still waits for Save.
+        private void BtnReplaceRecommended_Click(object sender, EventArgs e)
+        {
+            var answer = MessageBox.Show(this,
+                "Replace your entire model list with GxPT's latest recommended models?\r\n\r\n"
+                + "This removes any models you've added, including ones that may no longer be available. "
+                + "Nothing is saved until you click Save.",
+                "Replace model list", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
+            if (answer != DialogResult.OK) return;
+
+            this.txtModels.Lines = (string[])ModelDefaults.Models.Clone();
+        }
+
         // When the models textbox changes, add any new non-empty lines to the default model combo box
         private void TxtModels_TextChanged(object sender, EventArgs e)
         {
@@ -1343,6 +1412,10 @@ namespace GxPT
             public string openrouter_api_key { get; set; }
             public List<string> models { get; set; }
             public string default_model { get; set; }
+            // Fingerprint (ModelDefaults.RecommendedHash) of the recommended catalog the user has
+            // acknowledged. Carried through here so saving settings doesn't drop the key the
+            // "updated recommended models" banner relies on. Not surfaced in the visual editor.
+            public string recommended_hash_seen { get; set; }
             public bool enable_logging { get; set; }
             public double font_size { get; set; }
             public string theme { get; set; }
