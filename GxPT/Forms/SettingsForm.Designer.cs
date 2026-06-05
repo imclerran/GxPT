@@ -44,6 +44,7 @@
             this.txtApiKey = new System.Windows.Forms.TextBox();
             this.txtModels = new System.Windows.Forms.TextBox();
             this.pnlModelsRow = new System.Windows.Forms.Panel();
+            this.pnlModelsRight = new System.Windows.Forms.Panel();
             this.grpRecommended = new System.Windows.Forms.GroupBox();
             this.btnAddRecommended = new System.Windows.Forms.Button();
             this.btnReplaceRecommended = new System.Windows.Forms.Button();
@@ -80,6 +81,7 @@
             this.flowLayoutPanel1.SuspendLayout();
             this.tblSettings.SuspendLayout();
             this.pnlModelsRow.SuspendLayout();
+            this.pnlModelsRight.SuspendLayout();
             this.grpRecommended.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.nudTranscriptMaxWidth)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudMessageMaxWidth)).BeginInit();
@@ -285,23 +287,32 @@
             //
             // pnlModelsRow
             //
-            // Hosts the models textbox (fills the left space) with the "Recommended models" group docked
-            // to its right. txtModels is added first so it fills the area the right-docked group leaves.
+            // Hosts the models textbox (fills the left space) with pnlModelsRight docked to its right.
+            // txtModels is added first so it fills the area the right-docked panel leaves.
             this.pnlModelsRow.Controls.Add(this.txtModels);
-            this.pnlModelsRow.Controls.Add(this.grpRecommended);
+            this.pnlModelsRow.Controls.Add(this.pnlModelsRight);
             this.pnlModelsRow.Dock = System.Windows.Forms.DockStyle.Fill;
             this.pnlModelsRow.Margin = new System.Windows.Forms.Padding(0);
             this.pnlModelsRow.Name = "pnlModelsRow";
             this.pnlModelsRow.TabIndex = 20;
             //
+            // pnlModelsRight
+            //
+            // Thin right column hosting the group docked to its top, so the group collapses to its own
+            // height instead of stretching to the full row height (the space below it stays empty).
+            this.pnlModelsRight.Controls.Add(this.grpRecommended);
+            this.pnlModelsRight.Dock = System.Windows.Forms.DockStyle.Right;
+            this.pnlModelsRight.Name = "pnlModelsRight";
+            this.pnlModelsRight.Size = new System.Drawing.Size(181, 116);
+            this.pnlModelsRight.TabIndex = 20;
+            //
             // grpRecommended
             //
             this.grpRecommended.Controls.Add(this.btnAddRecommended);
             this.grpRecommended.Controls.Add(this.btnReplaceRecommended);
-            this.grpRecommended.Dock = System.Windows.Forms.DockStyle.Right;
-            this.grpRecommended.Margin = new System.Windows.Forms.Padding(3, 0, 0, 0);
+            this.grpRecommended.Dock = System.Windows.Forms.DockStyle.Top;
             this.grpRecommended.Name = "grpRecommended";
-            this.grpRecommended.Size = new System.Drawing.Size(178, 116);
+            this.grpRecommended.Size = new System.Drawing.Size(181, 96);
             this.grpRecommended.TabIndex = 21;
             this.grpRecommended.TabStop = false;
             this.grpRecommended.Text = "Recommended models";
@@ -715,6 +726,7 @@
             this.Text = "Settings";
             this.flowLayoutPanel1.ResumeLayout(false);
             this.grpRecommended.ResumeLayout(false);
+            this.pnlModelsRight.ResumeLayout(false);
             this.pnlModelsRow.ResumeLayout(false);
             this.pnlModelsRow.PerformLayout();
             this.tblSettings.ResumeLayout(false);
@@ -751,6 +763,7 @@
         private System.Windows.Forms.ComboBox cmbDefaultModel;
         private System.Windows.Forms.TextBox txtModels;
         private System.Windows.Forms.Panel pnlModelsRow;
+        private System.Windows.Forms.Panel pnlModelsRight;
         private System.Windows.Forms.GroupBox grpRecommended;
         private System.Windows.Forms.Button btnAddRecommended;
         private System.Windows.Forms.Button btnReplaceRecommended;
