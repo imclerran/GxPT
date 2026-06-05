@@ -40,6 +40,11 @@ namespace GxPT
 
         private bool _syncingModelCombo; // avoid event feedback loops when syncing combo text
 
+        // Slim cream notice at the top of the chat area, shown when the shipped recommended model list
+        // has changed since the user last acknowledged it. Built programmatically (see
+        // InitModelUpdateBanner); persists until the user reviews settings or dismisses it.
+        private System.Windows.Forms.Panel _modelUpdateBanner;
+
         // Helper DTO for background-parsed messages
         private sealed class ParsedMessage
         {
@@ -67,9 +72,14 @@ namespace GxPT
                 this.lnkOpenSettings.LinkClicked += lnkOpenSettings_LinkClicked;
             if (this.pnlApiKeyBanner != null)
                 this.pnlApiKeyBanner.Resize += (s, e) => LayoutApiKeyBanner();
+
+            // Build the "updated recommended models" banner (hidden until Load decides whether to show it).
+            InitModelUpdateBanner();
+
             this.Load += (s, e) =>
             {
                 UpdateApiKeyBanner();
+                MaybeShowModelUpdateBanner();
                 try { RestoreOpenTabsOnStartup(); }
                 catch { }
                 // After restoring tabs, if no API key is configured, open the API Keys Help tab and focus it
@@ -2139,6 +2149,118 @@ namespace GxPT
         private void closeConversationToolStripMenuItem_Click(object sender, EventArgs e)
         {
             if (_tabManager != null) _tabManager.CloseActiveConversationTab();
+        }
+
+        // Build the cream notice strip and dock it at the bottom of the chat area (in pnlBottom, just
+        // above the input - the same slot as the API-key banner). Styling mirrors WorkspaceContextStrip;
+        // the font size is matched to the rest of the UI (ThemeManager scales the API-key banner the same way).
+        private void InitModelUpdateBanner()
+        {
+            try
+            {
+                if (this.pnlBottom == null) return;
+
+                _modelUpdateBanner = new System.Windows.Forms.Panel();
+                _modelUpdateBanner.AutoSize = true;
+                _modelUpdateBanner.Dock = DockStyle.Top;
+                _modelUpdateBanner.Padding = new Padding(6, 4, 6, 4);
+                _modelUpdateBanner.BackColor = Color.FromArgb(252, 246, 220); // cream / warning
+                _modelUpdateBanner.Visible = false;
+
+                // The default control font is noticeably small; match the configured chat font size so this
+                // reads like the rest of the UI (and the API-key banner, which ThemeManager scales likewise).
+                try
+                {
+                    double fs = AppSettings.GetDouble("font_size", 0);
+                    float size = (fs > 0) ? (float)Math.Max(6, Math.Min(48, fs)) : 9f;
+                    _modelUpdateBanner.Font = new Font(_modelUpdateBanner.Font.FontFamily, size, _modelUpdateBanner.Font.Style);
+                }
+                catch { }
+
+                var flow = new FlowLayoutPanel();
+                flow.AutoSize = true;
+                flow.Dock = DockStyle.Fill;
+                flow.FlowDirection = FlowDirection.LeftToRight;
+                flow.WrapContents = false;
+                flow.Margin = new Padding(0);
+
+                var text = new Label();
+                text.AutoSize = true;
+                text.TextAlign = ContentAlignment.MiddleLeft;
+                text.ForeColor = Color.FromArgb(55, 55, 55);
+                text.Margin = new Padding(3, 0, 3, 0);
+                text.Anchor = AnchorStyles.None; // vertically centered in the flow row
+                text.Text = "Updated recommended models are available.";
+
+                var review = MakeBannerLink("Review in Settings");
+                review.LinkClicked += delegate { OnModelBannerReview(); };
+                var dismiss = MakeBannerLink("Dismiss");
+                dismiss.LinkClicked += delegate { OnModelBannerDismiss(); };
+
+                flow.Controls.Add(text);
+                flow.Controls.Add(review);
+                flow.Controls.Add(dismiss);
+                _modelUpdateBanner.Controls.Add(flow);
+
+                // Host in pnlBottom. The input box (and other banners) are docked Bottom, so docking this
+                // Top pins it to the top of pnlBottom - i.e. the bottom of the transcript, directly above
+                // the input area - regardless of child add order. BringToFront so the Top dock wins.
+                this.pnlBottom.Controls.Add(_modelUpdateBanner);
+                _modelUpdateBanner.BringToFront();
+
+                // Let the input-height math account for this banner's footprint, like the other banners.
+                if (_inputManager != null) _inputManager.SetModelUpdateBanner(_modelUpdateBanner);
+            }
+            catch { }
+        }
+
+        private static LinkLabel MakeBannerLink(string text)
+        {
+            var lnk = new LinkLabel();
+            lnk.AutoSize = true;
+            lnk.Text = text;
+            lnk.TextAlign = ContentAlignment.MiddleLeft;
+            lnk.LinkColor = Color.FromArgb(0, 90, 158);
+            lnk.ActiveLinkColor = Color.FromArgb(0, 90, 158);
+            lnk.VisitedLinkColor = Color.FromArgb(0, 90, 158);
+            lnk.LinkBehavior = LinkBehavior.HoverUnderline;
+            lnk.Margin = new Padding(12, 0, 3, 0);
+            lnk.Anchor = AnchorStyles.None; // vertically centered in the flow row
+            return lnk;
+        }
+
+        // Show the banner when the shipped recommended list differs from what the user last acknowledged
+        // (or has never acknowledged one). The acknowledged fingerprint is only written when the user acts
+        // (reviews or dismisses), so the banner persists across launches until then.
+        private void MaybeShowModelUpdateBanner()
+        {
+            try
+            {
+                if (_modelUpdateBanner == null) return;
+                string seen = AppSettings.GetString("recommended_hash_seen");
+                string current = ModelDefaults.RecommendedHash();
+                bool show = string.IsNullOrEmpty(seen) || !string.Equals(seen, current, StringComparison.Ordinal);
+                _modelUpdateBanner.Visible = show;
+            }
+            catch { }
+        }
+
+        private void MarkRecommendedSeen()
+        {
+            try { AppSettings.SetString("recommended_hash_seen", ModelDefaults.RecommendedHash()); }
+            catch { }
+            if (_modelUpdateBanner != null) _modelUpdateBanner.Visible = false;
+        }
+
+        private void OnModelBannerDismiss()
+        {
+            MarkRecommendedSeen();
+        }
+
+        private void OnModelBannerReview()
+        {
+            MarkRecommendedSeen();
+            miSettings_Click(this, EventArgs.Empty);
         }
 
         // Center the label and link vertically within the banner panel

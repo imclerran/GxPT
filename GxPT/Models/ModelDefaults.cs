@@ -1,4 +1,7 @@
+using System;
 using System.Collections.Generic;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace GxPT
 {
@@ -38,6 +41,25 @@ namespace GxPT
         public static List<string> ModelList()
         {
             return new List<string>(Models);
+        }
+
+        // Content-derived fingerprint of the recommended catalog. The list is sorted before hashing
+        // so that cosmetic reordering doesn't change the result - only a genuine add/remove does. This
+        // is what drives the "updated recommended models" banner: callers compare it to the last value
+        // the user acknowledged (recommended_hash_seen). Editing Models above changes this automatically,
+        // so there is no version number to bump by hand.
+        public static string RecommendedHash()
+        {
+            var sorted = (string[])Models.Clone();
+            Array.Sort(sorted, StringComparer.Ordinal);
+            string joined = string.Join("\n", sorted);
+            using (var sha = SHA256.Create())
+            {
+                byte[] hash = sha.ComputeHash(Encoding.UTF8.GetBytes(joined));
+                var sb = new StringBuilder(16);
+                for (int i = 0; i < 8 && i < hash.Length; i++) sb.Append(hash[i].ToString("x2"));
+                return sb.ToString();
+            }
         }
     }
 }
