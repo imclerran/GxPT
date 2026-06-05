@@ -2162,7 +2162,7 @@ namespace GxPT
 
                 _modelUpdateBanner = new System.Windows.Forms.Panel();
                 _modelUpdateBanner.AutoSize = true;
-                _modelUpdateBanner.Dock = DockStyle.Bottom;
+                _modelUpdateBanner.Dock = DockStyle.Top;
                 _modelUpdateBanner.Padding = new Padding(6, 4, 6, 4);
                 _modelUpdateBanner.BackColor = Color.FromArgb(252, 246, 220); // cream / warning
                 _modelUpdateBanner.Visible = false;
@@ -2202,9 +2202,11 @@ namespace GxPT
                 flow.Controls.Add(dismiss);
                 _modelUpdateBanner.Controls.Add(flow);
 
-                // Host in pnlBottom; SendToBack keeps the input box bottom-most so the banner sits above it.
+                // Host in pnlBottom. The input box (and other banners) are docked Bottom, so docking this
+                // Top pins it to the top of pnlBottom - i.e. the bottom of the transcript, directly above
+                // the input area - regardless of child add order. BringToFront so the Top dock wins.
                 this.pnlBottom.Controls.Add(_modelUpdateBanner);
-                _modelUpdateBanner.SendToBack();
+                _modelUpdateBanner.BringToFront();
 
                 // Let the input-height math account for this banner's footprint, like the other banners.
                 if (_inputManager != null) _inputManager.SetModelUpdateBanner(_modelUpdateBanner);
