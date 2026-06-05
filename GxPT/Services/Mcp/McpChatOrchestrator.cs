@@ -55,6 +55,13 @@ namespace GxPT
         // preserve assistant ToolCalls and tool-role ToolCallId.
         public Func<IList<ChatMessage>, IList<ChatMessage>> RequestMessageTransform { get; set; }
 
+        // Optional provider of the persistent-memory system block (the current .gxpt/memory.md index
+        // plus its framing), rebuilt from disk each request and injected as an ephemeral, non-persisted
+        // system message - the same treatment as the names manifest. Returns null/empty when memory is
+        // disabled or there is no workspace. All memory framing lives here (never in AgentSystemPrompt)
+        // so a disabled memory system leaves no trace in context (design M5/M6).
+        public Func<string> MemorySystemMessageProvider { get; set; }
+
         // Provider data-collection preference applied to every request in the turn. Null leaves
         // it unset (provider default).
         public bool? ProviderDataCollectionAllowed { get; set; }
@@ -147,8 +154,17 @@ namespace GxPT
 
                 // The names manifest rides as an extra system message in front of history; it is not
                 // persisted (rebuilt each request from the live catalog).
+                // Ephemeral system messages, ordered stable -> volatile for prompt-cache reuse:
+                // constant agent prompt, then memory (changes rarely within a turn), then the
+                // names manifest (rebuilt every request). None are persisted into history.
                 List<ChatMessage> requestMessages = new List<ChatMessage>();
                 requestMessages.Add(new ChatMessage("system", AgentSystemPrompt));
+                if (MemorySystemMessageProvider != null)
+                {
+                    string memoryBlock = MemorySystemMessageProvider();
+                    if (!string.IsNullOrEmpty(memoryBlock))
+                        requestMessages.Add(new ChatMessage("system", memoryBlock));
+                }
                 if (!string.IsNullOrEmpty(manifest))
                     requestMessages.Add(new ChatMessage("system", manifest));
                 // Build the sent messages from history, optionally transformed (e.g. attachments

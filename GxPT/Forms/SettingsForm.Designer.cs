@@ -51,6 +51,10 @@
             this.chkEnableLogging = new System.Windows.Forms.CheckBox();
             this.lblProviderDataCollection = new System.Windows.Forms.Label();
             this.chkZdr = new System.Windows.Forms.CheckBox();
+            this.lblMemoryEnabled = new System.Windows.Forms.Label();
+            this.chkMemoryEnabled = new System.Windows.Forms.CheckBox();
+            this.lblMemoryMaxLines = new System.Windows.Forms.Label();
+            this.nudMemoryMaxLines = new System.Windows.Forms.NumericUpDown();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabVisual = new System.Windows.Forms.TabPage();
             this.tabJson = new System.Windows.Forms.TabPage();
@@ -74,6 +78,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.nudTranscriptMaxWidth)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudMessageMaxWidth)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudFontSize)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudMemoryMaxLines)).BeginInit();
             this.tabControl1.SuspendLayout();
             this.tabVisual.SuspendLayout();
             this.tabJson.SuspendLayout();
@@ -132,7 +137,7 @@
             this.tblSettings.Controls.Add(this.lblTranscriptMaxWidth, 0, 6);
             this.tblSettings.Controls.Add(this.lblMessageMaxWidth, 0, 7);
             this.tblSettings.Controls.Add(this.lblFontSize, 0, 8);
-            this.tblSettings.Controls.Add(this.lblEnableLogging, 0, 9);
+            this.tblSettings.Controls.Add(this.lblEnableLogging, 0, 11);
             this.tblSettings.Controls.Add(this.txtApiKey, 1, 0);
             this.tblSettings.Controls.Add(this.txtModels, 1, 1);
             this.tblSettings.Controls.Add(this.cmbDefaultModel, 1, 2);
@@ -140,17 +145,23 @@
             this.tblSettings.Controls.Add(this.nudTranscriptMaxWidth, 1, 6);
             this.tblSettings.Controls.Add(this.nudMessageMaxWidth, 1, 7);
             this.tblSettings.Controls.Add(this.nudFontSize, 1, 8);
-            this.tblSettings.Controls.Add(this.chkEnableLogging, 1, 9);
+            this.tblSettings.Controls.Add(this.chkEnableLogging, 1, 11);
             this.tblSettings.Controls.Add(this.lblProviderDataCollection, 0, 3);
             this.tblSettings.Controls.Add(this.chkZdr, 1, 3);
             this.tblSettings.Controls.Add(this.lblColor, 0, 5);
             this.tblSettings.Controls.Add(this.cmbColor, 1, 5);
+            this.tblSettings.Controls.Add(this.lblMemoryEnabled, 0, 9);
+            this.tblSettings.Controls.Add(this.chkMemoryEnabled, 1, 9);
+            this.tblSettings.Controls.Add(this.lblMemoryMaxLines, 0, 10);
+            this.tblSettings.Controls.Add(this.nudMemoryMaxLines, 1, 10);
             this.tblSettings.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tblSettings.Location = new System.Drawing.Point(3, 3);
             this.tblSettings.Name = "tblSettings";
-            this.tblSettings.RowCount = 10;
+            this.tblSettings.RowCount = 12;
             this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle());
+            this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle());
@@ -353,7 +364,64 @@
             this.chkEnableLogging.Size = new System.Drawing.Size(457, 14);
             this.chkEnableLogging.TabIndex = 4;
             this.chkEnableLogging.UseVisualStyleBackColor = true;
-            // 
+            //
+            // lblMemoryEnabled
+            //
+            this.lblMemoryEnabled.AutoSize = true;
+            this.lblMemoryEnabled.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblMemoryEnabled.Name = "lblMemoryEnabled";
+            this.lblMemoryEnabled.Size = new System.Drawing.Size(121, 23);
+            this.lblMemoryEnabled.TabIndex = 20;
+            this.lblMemoryEnabled.Text = "Memory";
+            this.lblMemoryEnabled.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            //
+            // chkMemoryEnabled
+            //
+            this.chkMemoryEnabled.AutoSize = true;
+            this.chkMemoryEnabled.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.chkMemoryEnabled.Margin = new System.Windows.Forms.Padding(3, 6, 3, 3);
+            this.chkMemoryEnabled.Name = "chkMemoryEnabled";
+            this.chkMemoryEnabled.Size = new System.Drawing.Size(457, 14);
+            this.chkMemoryEnabled.TabIndex = 21;
+            this.chkMemoryEnabled.Text = "Remember facts about my workspaces (persistent project memory)";
+            this.chkMemoryEnabled.UseVisualStyleBackColor = true;
+            //
+            // lblMemoryMaxLines
+            //
+            this.lblMemoryMaxLines.AutoSize = true;
+            this.lblMemoryMaxLines.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblMemoryMaxLines.Name = "lblMemoryMaxLines";
+            this.lblMemoryMaxLines.Size = new System.Drawing.Size(121, 26);
+            this.lblMemoryMaxLines.TabIndex = 22;
+            this.lblMemoryMaxLines.Text = "Memory size limit";
+            this.lblMemoryMaxLines.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            //
+            // nudMemoryMaxLines
+            //
+            this.nudMemoryMaxLines.Increment = new decimal(new int[] {
+            5,
+            0,
+            0,
+            0});
+            this.nudMemoryMaxLines.Maximum = new decimal(new int[] {
+            500,
+            0,
+            0,
+            0});
+            this.nudMemoryMaxLines.Minimum = new decimal(new int[] {
+            5,
+            0,
+            0,
+            0});
+            this.nudMemoryMaxLines.Name = "nudMemoryMaxLines";
+            this.nudMemoryMaxLines.Size = new System.Drawing.Size(120, 20);
+            this.nudMemoryMaxLines.TabIndex = 23;
+            this.nudMemoryMaxLines.Value = new decimal(new int[] {
+            40,
+            0,
+            0,
+            0});
+            //
             // lblProviderDataCollection
             // 
             this.lblProviderDataCollection.AutoSize = true;
@@ -601,6 +669,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.nudTranscriptMaxWidth)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudMessageMaxWidth)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudFontSize)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudMemoryMaxLines)).EndInit();
             this.tabControl1.ResumeLayout(false);
             this.tabVisual.ResumeLayout(false);
             this.tabJson.ResumeLayout(false);
@@ -642,6 +711,10 @@
         private System.Windows.Forms.NumericUpDown nudMessageMaxWidth;
         private System.Windows.Forms.Label lblProviderDataCollection;
         private System.Windows.Forms.CheckBox chkZdr;
+        private System.Windows.Forms.Label lblMemoryEnabled;
+        private System.Windows.Forms.CheckBox chkMemoryEnabled;
+        private System.Windows.Forms.Label lblMemoryMaxLines;
+        private System.Windows.Forms.NumericUpDown nudMemoryMaxLines;
         private System.Windows.Forms.Label lblColor;
         private System.Windows.Forms.ComboBox cmbColor;
         private System.Windows.Forms.TabPage tabMcp;

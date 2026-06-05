@@ -53,6 +53,13 @@ namespace GxPT
             t["web__search"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
             // extract only fetches and returns page content (no state change) -> ReadOnly/auto-allow.
             t["web__extract"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
+            // Memory: reads auto-allow; writes are low-risk local .gxpt edits -> Write (prompt once,
+            // remember-eligible per tool). forget stays Write rather than Destructive (design M7/sec.8).
+            t["memory__read_memory"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
+            t["memory__remember"] = new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
+            t["memory__update_memory"] = new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
+            t["memory__forget"] = new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
+            t["memory__consolidate"] = new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
             return t;
         }
 
