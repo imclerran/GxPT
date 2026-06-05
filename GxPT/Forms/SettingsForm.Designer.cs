@@ -42,8 +42,8 @@
             this.lblFontSize = new System.Windows.Forms.Label();
             this.lblEnableLogging = new System.Windows.Forms.Label();
             this.txtApiKey = new System.Windows.Forms.TextBox();
-            this.txtModels = new System.Windows.Forms.TextBox();
             this.pnlModelsRow = new System.Windows.Forms.Panel();
+            this.txtModels = new System.Windows.Forms.TextBox();
             this.pnlModelsRight = new System.Windows.Forms.Panel();
             this.grpRecommended = new System.Windows.Forms.GroupBox();
             this.btnAddRecommended = new System.Windows.Forms.Button();
@@ -56,6 +56,8 @@
             this.chkEnableLogging = new System.Windows.Forms.CheckBox();
             this.lblProviderDataCollection = new System.Windows.Forms.Label();
             this.chkZdr = new System.Windows.Forms.CheckBox();
+            this.lblColor = new System.Windows.Forms.Label();
+            this.cmbColor = new System.Windows.Forms.ComboBox();
             this.lblMemoryEnabled = new System.Windows.Forms.Label();
             this.chkMemoryEnabled = new System.Windows.Forms.CheckBox();
             this.lblMemoryMaxLines = new System.Windows.Forms.Label();
@@ -63,18 +65,16 @@
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabVisual = new System.Windows.Forms.TabPage();
             this.tabJson = new System.Windows.Forms.TabPage();
-            this.lblColor = new System.Windows.Forms.Label();
-            this.cmbColor = new System.Windows.Forms.ComboBox();
             this.tabMcp = new System.Windows.Forms.TabPage();
             this.tblMcp = new System.Windows.Forms.TableLayoutPanel();
-            this.tblMcpKeyless = new System.Windows.Forms.TableLayoutPanel();
             this.chkMcpWeb = new System.Windows.Forms.CheckBox();
             this.txtWebSearchKey = new System.Windows.Forms.TextBox();
             this.chkMcpGithub = new System.Windows.Forms.CheckBox();
             this.txtGithubPat = new System.Windows.Forms.TextBox();
+            this.tblMcpKeyless = new System.Windows.Forms.TableLayoutPanel();
             this.chkMcpFiles = new System.Windows.Forms.CheckBox();
-            this.chkMcpGit = new System.Windows.Forms.CheckBox();
             this.chkMcpCommand = new System.Windows.Forms.CheckBox();
+            this.chkMcpGit = new System.Windows.Forms.CheckBox();
             this.chkMcpMsBuild = new System.Windows.Forms.CheckBox();
             this.lblMcpCustom = new System.Windows.Forms.Label();
             this.rtbMcpJson = new System.Windows.Forms.RichTextBox();
@@ -101,7 +101,7 @@
             this.flowLayoutPanel1.Controls.Add(this.btnSave);
             this.flowLayoutPanel1.Dock = System.Windows.Forms.DockStyle.Bottom;
             this.flowLayoutPanel1.FlowDirection = System.Windows.Forms.FlowDirection.RightToLeft;
-            this.flowLayoutPanel1.Location = new System.Drawing.Point(0, 389);
+            this.flowLayoutPanel1.Location = new System.Drawing.Point(0, 437);
             this.flowLayoutPanel1.Name = "flowLayoutPanel1";
             this.flowLayoutPanel1.Size = new System.Drawing.Size(604, 23);
             this.flowLayoutPanel1.TabIndex = 0;
@@ -178,7 +178,7 @@
             this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblSettings.RowStyles.Add(new System.Windows.Forms.RowStyle());
-            this.tblSettings.Size = new System.Drawing.Size(590, 357);
+            this.tblSettings.Size = new System.Drawing.Size(590, 405);
             this.tblSettings.TabIndex = 2;
             // 
             // lblApiKey
@@ -196,7 +196,7 @@
             // 
             this.lblModels.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.lblModels.AutoSize = true;
-            this.lblModels.Location = new System.Drawing.Point(83, 6);
+            this.lblModels.Location = new System.Drawing.Point(83, 32);
             this.lblModels.Margin = new System.Windows.Forms.Padding(3, 6, 3, 0);
             this.lblModels.Name = "lblModels";
             this.lblModels.Size = new System.Drawing.Size(41, 13);
@@ -217,7 +217,7 @@
             // 
             this.lblTheme.AutoSize = true;
             this.lblTheme.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblTheme.Location = new System.Drawing.Point(3, 202);
+            this.lblTheme.Location = new System.Drawing.Point(3, 198);
             this.lblTheme.Name = "lblTheme";
             this.lblTheme.Size = new System.Drawing.Size(121, 27);
             this.lblTheme.TabIndex = 10;
@@ -228,7 +228,7 @@
             // 
             this.lblTranscriptMaxWidth.AutoSize = true;
             this.lblTranscriptMaxWidth.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblTranscriptMaxWidth.Location = new System.Drawing.Point(3, 256);
+            this.lblTranscriptMaxWidth.Location = new System.Drawing.Point(3, 252);
             this.lblTranscriptMaxWidth.Name = "lblTranscriptMaxWidth";
             this.lblTranscriptMaxWidth.Size = new System.Drawing.Size(121, 26);
             this.lblTranscriptMaxWidth.TabIndex = 12;
@@ -239,7 +239,7 @@
             // 
             this.lblMessageMaxWidth.AutoSize = true;
             this.lblMessageMaxWidth.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblMessageMaxWidth.Location = new System.Drawing.Point(3, 282);
+            this.lblMessageMaxWidth.Location = new System.Drawing.Point(3, 278);
             this.lblMessageMaxWidth.Name = "lblMessageMaxWidth";
             this.lblMessageMaxWidth.Size = new System.Drawing.Size(121, 26);
             this.lblMessageMaxWidth.TabIndex = 14;
@@ -250,7 +250,7 @@
             // 
             this.lblFontSize.AutoSize = true;
             this.lblFontSize.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblFontSize.Location = new System.Drawing.Point(3, 308);
+            this.lblFontSize.Location = new System.Drawing.Point(3, 304);
             this.lblFontSize.Name = "lblFontSize";
             this.lblFontSize.Size = new System.Drawing.Size(121, 26);
             this.lblFontSize.TabIndex = 8;
@@ -260,7 +260,7 @@
             // lblEnableLogging
             // 
             this.lblEnableLogging.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblEnableLogging.Location = new System.Drawing.Point(3, 334);
+            this.lblEnableLogging.Location = new System.Drawing.Point(3, 382);
             this.lblEnableLogging.Name = "lblEnableLogging";
             this.lblEnableLogging.Size = new System.Drawing.Size(121, 23);
             this.lblEnableLogging.TabIndex = 3;
@@ -271,72 +271,74 @@
             // 
             this.txtApiKey.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
                         | System.Windows.Forms.AnchorStyles.Right)));
-            this.txtApiKey.Location = new System.Drawing.Point(130, 3);
+            this.txtApiKey.Location = new System.Drawing.Point(127, 3);
+            this.txtApiKey.Margin = new System.Windows.Forms.Padding(0, 3, 0, 3);
             this.txtApiKey.Name = "txtApiKey";
-            this.txtApiKey.Size = new System.Drawing.Size(457, 20);
+            this.txtApiKey.Size = new System.Drawing.Size(463, 20);
             this.txtApiKey.TabIndex = 7;
             // 
-            // txtModels
-            //
-            this.txtModels.AcceptsReturn = true;
-            this.txtModels.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.txtModels.Multiline = true;
-            this.txtModels.Name = "txtModels";
-            this.txtModels.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.txtModels.TabIndex = 6;
-            //
             // pnlModelsRow
-            //
-            // Hosts the models textbox (fills the left space) with pnlModelsRight docked to its right.
-            // txtModels is added first so it fills the area the right-docked panel leaves.
+            // 
             this.pnlModelsRow.Controls.Add(this.txtModels);
             this.pnlModelsRow.Controls.Add(this.pnlModelsRight);
             this.pnlModelsRow.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.pnlModelsRow.Location = new System.Drawing.Point(127, 26);
             this.pnlModelsRow.Margin = new System.Windows.Forms.Padding(0);
             this.pnlModelsRow.Name = "pnlModelsRow";
+            this.pnlModelsRow.Size = new System.Drawing.Size(463, 122);
             this.pnlModelsRow.TabIndex = 20;
-            //
+            // 
+            // txtModels
+            // 
+            this.txtModels.AcceptsReturn = true;
+            this.txtModels.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.txtModels.Location = new System.Drawing.Point(0, 0);
+            this.txtModels.Multiline = true;
+            this.txtModels.Name = "txtModels";
+            this.txtModels.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
+            this.txtModels.Size = new System.Drawing.Size(274, 122);
+            this.txtModels.TabIndex = 6;
+            // 
             // pnlModelsRight
-            //
-            // Thin right column hosting the group docked to its top, so the group collapses to its own
-            // height instead of stretching to the full row height (the space below it stays empty).
+            // 
             this.pnlModelsRight.Controls.Add(this.grpRecommended);
             this.pnlModelsRight.Dock = System.Windows.Forms.DockStyle.Right;
-            // Left padding insets the (top-docked) group, leaving a gap between it and the textbox.
-            this.pnlModelsRight.Padding = new System.Windows.Forms.Padding(4, 0, 0, 0);
+            this.pnlModelsRight.Location = new System.Drawing.Point(274, 0);
             this.pnlModelsRight.Name = "pnlModelsRight";
-            this.pnlModelsRight.Size = new System.Drawing.Size(189, 116);
+            this.pnlModelsRight.Padding = new System.Windows.Forms.Padding(4, 0, 0, 0);
+            this.pnlModelsRight.Size = new System.Drawing.Size(189, 122);
             this.pnlModelsRight.TabIndex = 20;
-            //
+            // 
             // grpRecommended
-            //
+            // 
             this.grpRecommended.Controls.Add(this.btnAddRecommended);
             this.grpRecommended.Controls.Add(this.btnReplaceRecommended);
             this.grpRecommended.Dock = System.Windows.Forms.DockStyle.Top;
+            this.grpRecommended.Location = new System.Drawing.Point(4, 0);
             this.grpRecommended.Name = "grpRecommended";
-            this.grpRecommended.Size = new System.Drawing.Size(181, 96);
+            this.grpRecommended.Size = new System.Drawing.Size(185, 96);
             this.grpRecommended.TabIndex = 21;
             this.grpRecommended.TabStop = false;
             this.grpRecommended.Text = "Recommended models";
-            //
+            // 
             // btnAddRecommended
-            //
+            // 
             this.btnAddRecommended.Location = new System.Drawing.Point(13, 26);
             this.btnAddRecommended.Name = "btnAddRecommended";
             this.btnAddRecommended.Size = new System.Drawing.Size(150, 26);
             this.btnAddRecommended.TabIndex = 0;
             this.btnAddRecommended.Text = "Add to list";
             this.btnAddRecommended.UseVisualStyleBackColor = true;
-            //
+            // 
             // btnReplaceRecommended
-            //
+            // 
             this.btnReplaceRecommended.Location = new System.Drawing.Point(13, 60);
             this.btnReplaceRecommended.Name = "btnReplaceRecommended";
             this.btnReplaceRecommended.Size = new System.Drawing.Size(150, 26);
             this.btnReplaceRecommended.TabIndex = 1;
             this.btnReplaceRecommended.Text = "Replace list...";
             this.btnReplaceRecommended.UseVisualStyleBackColor = true;
-            //
+            // 
             // cmbDefaultModel
             // 
             this.cmbDefaultModel.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -351,7 +353,7 @@
             // cmbTheme
             // 
             this.cmbTheme.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cmbTheme.Location = new System.Drawing.Point(130, 205);
+            this.cmbTheme.Location = new System.Drawing.Point(130, 201);
             this.cmbTheme.Name = "cmbTheme";
             this.cmbTheme.Size = new System.Drawing.Size(120, 21);
             this.cmbTheme.TabIndex = 11;
@@ -363,7 +365,7 @@
             0,
             0,
             0});
-            this.nudTranscriptMaxWidth.Location = new System.Drawing.Point(130, 259);
+            this.nudTranscriptMaxWidth.Location = new System.Drawing.Point(130, 255);
             this.nudTranscriptMaxWidth.Maximum = new decimal(new int[] {
             1900,
             0,
@@ -390,7 +392,7 @@
             0,
             0,
             0});
-            this.nudMessageMaxWidth.Location = new System.Drawing.Point(130, 285);
+            this.nudMessageMaxWidth.Location = new System.Drawing.Point(130, 281);
             this.nudMessageMaxWidth.Minimum = new decimal(new int[] {
             50,
             0,
@@ -408,7 +410,7 @@
             // nudFontSize
             // 
             this.nudFontSize.DecimalPlaces = 2;
-            this.nudFontSize.Location = new System.Drawing.Point(130, 311);
+            this.nudFontSize.Location = new System.Drawing.Point(130, 307);
             this.nudFontSize.Name = "nudFontSize";
             this.nudFontSize.Size = new System.Drawing.Size(120, 20);
             this.nudFontSize.TabIndex = 9;
@@ -417,51 +419,97 @@
             // 
             this.chkEnableLogging.AutoSize = true;
             this.chkEnableLogging.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.chkEnableLogging.Location = new System.Drawing.Point(130, 340);
+            this.chkEnableLogging.Location = new System.Drawing.Point(130, 388);
             this.chkEnableLogging.Margin = new System.Windows.Forms.Padding(3, 6, 3, 3);
             this.chkEnableLogging.Name = "chkEnableLogging";
             this.chkEnableLogging.Size = new System.Drawing.Size(457, 14);
             this.chkEnableLogging.TabIndex = 4;
             this.chkEnableLogging.UseVisualStyleBackColor = true;
-            //
+            // 
+            // lblProviderDataCollection
+            // 
+            this.lblProviderDataCollection.AutoSize = true;
+            this.lblProviderDataCollection.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblProviderDataCollection.Location = new System.Drawing.Point(3, 175);
+            this.lblProviderDataCollection.Name = "lblProviderDataCollection";
+            this.lblProviderDataCollection.Size = new System.Drawing.Size(121, 23);
+            this.lblProviderDataCollection.TabIndex = 16;
+            this.lblProviderDataCollection.Text = "Zero Data Retention";
+            this.lblProviderDataCollection.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            // 
+            // chkZdr
+            // 
+            this.chkZdr.AutoSize = true;
+            this.chkZdr.Dock = System.Windows.Forms.DockStyle.Left;
+            this.chkZdr.Location = new System.Drawing.Point(130, 178);
+            this.chkZdr.Name = "chkZdr";
+            this.chkZdr.Size = new System.Drawing.Size(299, 17);
+            this.chkZdr.TabIndex = 17;
+            this.chkZdr.Text = "Default new conversations to zero-retention providers only";
+            this.chkZdr.UseVisualStyleBackColor = true;
+            // 
+            // lblColor
+            // 
+            this.lblColor.AutoSize = true;
+            this.lblColor.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblColor.Location = new System.Drawing.Point(3, 225);
+            this.lblColor.Name = "lblColor";
+            this.lblColor.Size = new System.Drawing.Size(121, 27);
+            this.lblColor.TabIndex = 18;
+            this.lblColor.Text = "Chat Color";
+            this.lblColor.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            // 
+            // cmbColor
+            // 
+            this.cmbColor.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.cmbColor.FormattingEnabled = true;
+            this.cmbColor.Location = new System.Drawing.Point(130, 228);
+            this.cmbColor.Name = "cmbColor";
+            this.cmbColor.Size = new System.Drawing.Size(121, 21);
+            this.cmbColor.TabIndex = 19;
+            // 
             // lblMemoryEnabled
-            //
+            // 
             this.lblMemoryEnabled.AutoSize = true;
             this.lblMemoryEnabled.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblMemoryEnabled.Location = new System.Drawing.Point(3, 330);
             this.lblMemoryEnabled.Name = "lblMemoryEnabled";
-            this.lblMemoryEnabled.Size = new System.Drawing.Size(121, 23);
+            this.lblMemoryEnabled.Size = new System.Drawing.Size(121, 26);
             this.lblMemoryEnabled.TabIndex = 20;
             this.lblMemoryEnabled.Text = "Memory";
             this.lblMemoryEnabled.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            //
+            // 
             // chkMemoryEnabled
-            //
+            // 
             this.chkMemoryEnabled.AutoSize = true;
             this.chkMemoryEnabled.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.chkMemoryEnabled.Location = new System.Drawing.Point(130, 336);
             this.chkMemoryEnabled.Margin = new System.Windows.Forms.Padding(3, 6, 3, 3);
             this.chkMemoryEnabled.Name = "chkMemoryEnabled";
-            this.chkMemoryEnabled.Size = new System.Drawing.Size(457, 14);
+            this.chkMemoryEnabled.Size = new System.Drawing.Size(457, 17);
             this.chkMemoryEnabled.TabIndex = 21;
             this.chkMemoryEnabled.Text = "Remember facts about my workspaces (persistent project memory)";
             this.chkMemoryEnabled.UseVisualStyleBackColor = true;
-            //
+            // 
             // lblMemoryMaxLines
-            //
+            // 
             this.lblMemoryMaxLines.AutoSize = true;
             this.lblMemoryMaxLines.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblMemoryMaxLines.Location = new System.Drawing.Point(3, 356);
             this.lblMemoryMaxLines.Name = "lblMemoryMaxLines";
             this.lblMemoryMaxLines.Size = new System.Drawing.Size(121, 26);
             this.lblMemoryMaxLines.TabIndex = 22;
             this.lblMemoryMaxLines.Text = "Memory size limit";
             this.lblMemoryMaxLines.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            //
+            // 
             // nudMemoryMaxLines
-            //
+            // 
             this.nudMemoryMaxLines.Increment = new decimal(new int[] {
             5,
             0,
             0,
             0});
+            this.nudMemoryMaxLines.Location = new System.Drawing.Point(130, 359);
             this.nudMemoryMaxLines.Maximum = new decimal(new int[] {
             500,
             0,
@@ -480,28 +528,6 @@
             0,
             0,
             0});
-            //
-            // lblProviderDataCollection
-            // 
-            this.lblProviderDataCollection.AutoSize = true;
-            this.lblProviderDataCollection.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblProviderDataCollection.Location = new System.Drawing.Point(3, 175);
-            this.lblProviderDataCollection.Name = "lblProviderDataCollection";
-            this.lblProviderDataCollection.Size = new System.Drawing.Size(121, 27);
-            this.lblProviderDataCollection.TabIndex = 16;
-            this.lblProviderDataCollection.Text = "Zero Data Retention";
-            this.lblProviderDataCollection.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            //
-            // chkZdr
-            //
-            this.chkZdr.AutoSize = true;
-            this.chkZdr.Dock = System.Windows.Forms.DockStyle.Left;
-            this.chkZdr.Location = new System.Drawing.Point(130, 178);
-            this.chkZdr.Name = "chkZdr";
-            this.chkZdr.Size = new System.Drawing.Size(300, 21);
-            this.chkZdr.TabIndex = 17;
-            this.chkZdr.Text = "Default new conversations to zero-retention providers only";
-            this.chkZdr.UseVisualStyleBackColor = true;
             // 
             // tabControl1
             // 
@@ -512,7 +538,7 @@
             this.tabControl1.Location = new System.Drawing.Point(0, 0);
             this.tabControl1.Name = "tabControl1";
             this.tabControl1.SelectedIndex = 0;
-            this.tabControl1.Size = new System.Drawing.Size(604, 389);
+            this.tabControl1.Size = new System.Drawing.Size(604, 437);
             this.tabControl1.TabIndex = 3;
             // 
             // tabVisual
@@ -521,7 +547,7 @@
             this.tabVisual.Location = new System.Drawing.Point(4, 22);
             this.tabVisual.Name = "tabVisual";
             this.tabVisual.Padding = new System.Windows.Forms.Padding(3);
-            this.tabVisual.Size = new System.Drawing.Size(596, 363);
+            this.tabVisual.Size = new System.Drawing.Size(596, 411);
             this.tabVisual.TabIndex = 0;
             this.tabVisual.Text = "Visual";
             this.tabVisual.UseVisualStyleBackColor = true;
@@ -536,9 +562,9 @@
             this.tabJson.TabIndex = 1;
             this.tabJson.Text = "JSON";
             this.tabJson.UseVisualStyleBackColor = true;
-            //
+            // 
             // tabMcp
-            //
+            // 
             this.tabMcp.Controls.Add(this.tblMcp);
             this.tabMcp.Location = new System.Drawing.Point(4, 22);
             this.tabMcp.Name = "tabMcp";
@@ -547,9 +573,9 @@
             this.tabMcp.TabIndex = 2;
             this.tabMcp.Text = "Tools";
             this.tabMcp.UseVisualStyleBackColor = true;
-            //
+            // 
             // tblMcp
-            //
+            // 
             this.tblMcp.ColumnCount = 2;
             this.tblMcp.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
             this.tblMcp.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
@@ -557,7 +583,6 @@
             this.tblMcp.Controls.Add(this.txtWebSearchKey, 1, 0);
             this.tblMcp.Controls.Add(this.chkMcpGithub, 0, 1);
             this.tblMcp.Controls.Add(this.txtGithubPat, 1, 1);
-            // The four key-free servers share one row, side by side.
             this.tblMcp.Controls.Add(this.tblMcpKeyless, 0, 2);
             this.tblMcp.Controls.Add(this.lblMcpCustom, 0, 3);
             this.tblMcp.Controls.Add(this.rtbMcpJson, 0, 4);
@@ -570,16 +595,54 @@
             this.tblMcp.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblMcp.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.tblMcp.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tblMcp.SetColumnSpan(this.tblMcpKeyless, 2);
-            this.tblMcp.SetColumnSpan(this.lblMcpCustom, 2);
-            this.tblMcp.SetColumnSpan(this.rtbMcpJson, 2);
             this.tblMcp.Size = new System.Drawing.Size(590, 357);
             this.tblMcp.TabIndex = 0;
-            //
+            // 
+            // chkMcpWeb
+            // 
+            this.chkMcpWeb.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            this.chkMcpWeb.AutoSize = true;
+            this.chkMcpWeb.Location = new System.Drawing.Point(3, 4);
+            this.chkMcpWeb.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
+            this.chkMcpWeb.Name = "chkMcpWeb";
+            this.chkMcpWeb.Size = new System.Drawing.Size(84, 17);
+            this.chkMcpWeb.TabIndex = 0;
+            this.chkMcpWeb.Text = "Web search";
+            this.chkMcpWeb.UseVisualStyleBackColor = true;
+            // 
+            // txtWebSearchKey
+            // 
+            this.txtWebSearchKey.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
+            this.txtWebSearchKey.Location = new System.Drawing.Point(93, 3);
+            this.txtWebSearchKey.Name = "txtWebSearchKey";
+            this.txtWebSearchKey.Size = new System.Drawing.Size(494, 20);
+            this.txtWebSearchKey.TabIndex = 1;
+            // 
+            // chkMcpGithub
+            // 
+            this.chkMcpGithub.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            this.chkMcpGithub.AutoSize = true;
+            this.chkMcpGithub.Location = new System.Drawing.Point(3, 30);
+            this.chkMcpGithub.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
+            this.chkMcpGithub.Name = "chkMcpGithub";
+            this.chkMcpGithub.Size = new System.Drawing.Size(59, 17);
+            this.chkMcpGithub.TabIndex = 2;
+            this.chkMcpGithub.Text = "GitHub";
+            this.chkMcpGithub.UseVisualStyleBackColor = true;
+            // 
+            // txtGithubPat
+            // 
+            this.txtGithubPat.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
+            this.txtGithubPat.Location = new System.Drawing.Point(93, 29);
+            this.txtGithubPat.Name = "txtGithubPat";
+            this.txtGithubPat.Size = new System.Drawing.Size(494, 20);
+            this.txtGithubPat.TabIndex = 3;
+            // 
             // tblMcpKeyless
-            //
+            // 
             this.tblMcpKeyless.AutoSize = true;
             this.tblMcpKeyless.ColumnCount = 4;
+            this.tblMcp.SetColumnSpan(this.tblMcpKeyless, 2);
             this.tblMcpKeyless.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
             this.tblMcpKeyless.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
             this.tblMcpKeyless.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
@@ -588,136 +651,94 @@
             this.tblMcpKeyless.Controls.Add(this.chkMcpCommand, 1, 0);
             this.tblMcpKeyless.Controls.Add(this.chkMcpGit, 2, 0);
             this.tblMcpKeyless.Controls.Add(this.chkMcpMsBuild, 3, 0);
+            this.tblMcpKeyless.Location = new System.Drawing.Point(0, 52);
             this.tblMcpKeyless.Margin = new System.Windows.Forms.Padding(0);
             this.tblMcpKeyless.Name = "tblMcpKeyless";
             this.tblMcpKeyless.RowCount = 1;
             this.tblMcpKeyless.RowStyles.Add(new System.Windows.Forms.RowStyle());
+            this.tblMcpKeyless.Size = new System.Drawing.Size(248, 25);
             this.tblMcpKeyless.TabIndex = 4;
-            //
-            // chkMcpWeb
-            //
-            this.chkMcpWeb.Anchor = System.Windows.Forms.AnchorStyles.Left;
-            this.chkMcpWeb.AutoSize = true;
-            this.chkMcpWeb.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
-            this.chkMcpWeb.Name = "chkMcpWeb";
-            this.chkMcpWeb.TabIndex = 0;
-            this.chkMcpWeb.Text = "Web search";
-            this.chkMcpWeb.UseVisualStyleBackColor = true;
-            //
-            // txtWebSearchKey
-            //
-            this.txtWebSearchKey.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
-            this.txtWebSearchKey.Name = "txtWebSearchKey";
-            this.txtWebSearchKey.Size = new System.Drawing.Size(450, 20);
-            this.txtWebSearchKey.TabIndex = 1;
-            //
-            // chkMcpGithub
-            //
-            this.chkMcpGithub.Anchor = System.Windows.Forms.AnchorStyles.Left;
-            this.chkMcpGithub.AutoSize = true;
-            this.chkMcpGithub.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
-            this.chkMcpGithub.Name = "chkMcpGithub";
-            this.chkMcpGithub.TabIndex = 2;
-            this.chkMcpGithub.Text = "GitHub";
-            this.chkMcpGithub.UseVisualStyleBackColor = true;
-            //
-            // txtGithubPat
-            //
-            this.txtGithubPat.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
-            this.txtGithubPat.Name = "txtGithubPat";
-            this.txtGithubPat.Size = new System.Drawing.Size(450, 20);
-            this.txtGithubPat.TabIndex = 3;
-            //
+            // 
             // chkMcpFiles
-            //
+            // 
             this.chkMcpFiles.Anchor = System.Windows.Forms.AnchorStyles.Left;
             this.chkMcpFiles.AutoSize = true;
+            this.chkMcpFiles.Location = new System.Drawing.Point(3, 4);
             this.chkMcpFiles.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.chkMcpFiles.Name = "chkMcpFiles";
+            this.chkMcpFiles.Size = new System.Drawing.Size(47, 17);
             this.chkMcpFiles.TabIndex = 4;
             this.chkMcpFiles.Text = "Files";
             this.chkMcpFiles.UseVisualStyleBackColor = true;
-            //
-            // chkMcpGit
-            //
-            this.chkMcpGit.Anchor = System.Windows.Forms.AnchorStyles.Left;
-            this.chkMcpGit.AutoSize = true;
-            this.chkMcpGit.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
-            this.chkMcpGit.Name = "chkMcpGit";
-            this.chkMcpGit.TabIndex = 6;
-            this.chkMcpGit.Text = "Git";
-            this.chkMcpGit.UseVisualStyleBackColor = true;
-            //
+            // 
             // chkMcpCommand
-            //
+            // 
             this.chkMcpCommand.Anchor = System.Windows.Forms.AnchorStyles.Left;
             this.chkMcpCommand.AutoSize = true;
+            this.chkMcpCommand.Location = new System.Drawing.Point(56, 4);
             this.chkMcpCommand.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.chkMcpCommand.Name = "chkMcpCommand";
+            this.chkMcpCommand.Size = new System.Drawing.Size(73, 17);
             this.chkMcpCommand.TabIndex = 5;
             this.chkMcpCommand.Text = "Command";
             this.chkMcpCommand.UseVisualStyleBackColor = true;
-            //
+            // 
+            // chkMcpGit
+            // 
+            this.chkMcpGit.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            this.chkMcpGit.AutoSize = true;
+            this.chkMcpGit.Location = new System.Drawing.Point(135, 4);
+            this.chkMcpGit.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
+            this.chkMcpGit.Name = "chkMcpGit";
+            this.chkMcpGit.Size = new System.Drawing.Size(39, 17);
+            this.chkMcpGit.TabIndex = 6;
+            this.chkMcpGit.Text = "Git";
+            this.chkMcpGit.UseVisualStyleBackColor = true;
+            // 
             // chkMcpMsBuild
-            //
+            // 
             this.chkMcpMsBuild.Anchor = System.Windows.Forms.AnchorStyles.Left;
             this.chkMcpMsBuild.AutoSize = true;
+            this.chkMcpMsBuild.Location = new System.Drawing.Point(180, 4);
             this.chkMcpMsBuild.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.chkMcpMsBuild.Name = "chkMcpMsBuild";
+            this.chkMcpMsBuild.Size = new System.Drawing.Size(65, 17);
             this.chkMcpMsBuild.TabIndex = 7;
             this.chkMcpMsBuild.Text = "MSBuild";
             this.chkMcpMsBuild.UseVisualStyleBackColor = true;
-            //
+            // 
             // lblMcpCustom
-            //
+            // 
             this.lblMcpCustom.AutoSize = true;
+            this.tblMcp.SetColumnSpan(this.lblMcpCustom, 2);
+            this.lblMcpCustom.Location = new System.Drawing.Point(3, 85);
             this.lblMcpCustom.Margin = new System.Windows.Forms.Padding(3, 8, 3, 3);
             this.lblMcpCustom.Name = "lblMcpCustom";
+            this.lblMcpCustom.Size = new System.Drawing.Size(133, 13);
             this.lblMcpCustom.TabIndex = 8;
             this.lblMcpCustom.Text = "Custom servers (mcp.json):";
-            //
+            // 
             // rtbMcpJson
-            //
+            // 
             this.rtbMcpJson.AcceptsTab = true;
             this.rtbMcpJson.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.tblMcp.SetColumnSpan(this.rtbMcpJson, 2);
             this.rtbMcpJson.DetectUrls = false;
             this.rtbMcpJson.Dock = System.Windows.Forms.DockStyle.Fill;
             this.rtbMcpJson.Font = new System.Drawing.Font("Consolas", 9F);
             this.rtbMcpJson.HideSelection = false;
+            this.rtbMcpJson.Location = new System.Drawing.Point(3, 104);
             this.rtbMcpJson.Name = "rtbMcpJson";
-            this.rtbMcpJson.ScrollBars = System.Windows.Forms.RichTextBoxScrollBars.Both;
+            this.rtbMcpJson.Size = new System.Drawing.Size(584, 250);
             this.rtbMcpJson.TabIndex = 8;
             this.rtbMcpJson.Text = "";
             this.rtbMcpJson.WordWrap = false;
-            //
-            // lblColor
-            //
-            this.lblColor.AutoSize = true;
-            this.lblColor.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblColor.Location = new System.Drawing.Point(3, 229);
-            this.lblColor.Name = "lblColor";
-            this.lblColor.Size = new System.Drawing.Size(121, 27);
-            this.lblColor.TabIndex = 18;
-            this.lblColor.Text = "Chat Color";
-            this.lblColor.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            // 
-            // cmbColor
-            // 
-            this.cmbColor.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cmbColor.FormattingEnabled = true;
-            this.cmbColor.Location = new System.Drawing.Point(130, 232);
-            this.cmbColor.Name = "cmbColor";
-            this.cmbColor.Size = new System.Drawing.Size(121, 21);
-            this.cmbColor.TabIndex = 19;
             // 
             // SettingsForm
             // 
             this.AcceptButton = this.btnSave;
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            // Tall enough that the Percent-sized Models row gives the textbox / Recommended-models group
-            // room for both buttons (the memory-system rows had squeezed it). MinimumSize keeps it from
-            // being resized back down into clipping.
             this.ClientSize = new System.Drawing.Size(604, 460);
             this.Controls.Add(this.tabControl1);
             this.Controls.Add(this.flowLayoutPanel1);
@@ -727,12 +748,12 @@
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "Settings";
             this.flowLayoutPanel1.ResumeLayout(false);
-            this.grpRecommended.ResumeLayout(false);
-            this.pnlModelsRight.ResumeLayout(false);
-            this.pnlModelsRow.ResumeLayout(false);
-            this.pnlModelsRow.PerformLayout();
             this.tblSettings.ResumeLayout(false);
             this.tblSettings.PerformLayout();
+            this.pnlModelsRow.ResumeLayout(false);
+            this.pnlModelsRow.PerformLayout();
+            this.pnlModelsRight.ResumeLayout(false);
+            this.grpRecommended.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.nudTranscriptMaxWidth)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudMessageMaxWidth)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudFontSize)).EndInit();
@@ -741,7 +762,6 @@
             this.tabVisual.ResumeLayout(false);
             this.tabJson.ResumeLayout(false);
             this.tabMcp.ResumeLayout(false);
-            this.tabMcp.PerformLayout();
             this.tblMcp.ResumeLayout(false);
             this.tblMcp.PerformLayout();
             this.tblMcpKeyless.ResumeLayout(false);
