@@ -702,10 +702,14 @@
             this.AcceptButton = this.btnSave;
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(604, 412);
+            // Tall enough that the Percent-sized Models row gives the textbox / Recommended-models group
+            // room for both buttons (the memory-system rows had squeezed it). MinimumSize keeps it from
+            // being resized back down into clipping.
+            this.ClientSize = new System.Drawing.Size(604, 460);
             this.Controls.Add(this.tabControl1);
             this.Controls.Add(this.flowLayoutPanel1);
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
+            this.MinimumSize = new System.Drawing.Size(620, 498);
             this.Name = "SettingsForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "Settings";
