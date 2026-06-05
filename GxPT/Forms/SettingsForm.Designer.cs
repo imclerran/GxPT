@@ -43,7 +43,7 @@
             this.lblEnableLogging = new System.Windows.Forms.Label();
             this.txtApiKey = new System.Windows.Forms.TextBox();
             this.txtModels = new System.Windows.Forms.TextBox();
-            this.pnlModelsLeft = new System.Windows.Forms.Panel();
+            this.pnlModelsRow = new System.Windows.Forms.Panel();
             this.grpRecommended = new System.Windows.Forms.GroupBox();
             this.btnAddRecommended = new System.Windows.Forms.Button();
             this.btnReplaceRecommended = new System.Windows.Forms.Button();
@@ -79,7 +79,7 @@
             this.rtbMcpJson = new System.Windows.Forms.RichTextBox();
             this.flowLayoutPanel1.SuspendLayout();
             this.tblSettings.SuspendLayout();
-            this.pnlModelsLeft.SuspendLayout();
+            this.pnlModelsRow.SuspendLayout();
             this.grpRecommended.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.nudTranscriptMaxWidth)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudMessageMaxWidth)).BeginInit();
@@ -134,13 +134,10 @@
             // tblSettings
             // 
             this.tblSettings.ColumnCount = 2;
-            // Fixed width on the label column so the "Recommended models" group fits beneath the Models
-            // label without forcing the column to auto-grow unpredictably. txtModels is anchored
-            // Left|Right (below) so it shrinks to fit the remaining space rather than clipping.
-            this.tblSettings.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 175F));
+            this.tblSettings.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
             this.tblSettings.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tblSettings.Controls.Add(this.lblApiKey, 0, 0);
-            this.tblSettings.Controls.Add(this.pnlModelsLeft, 0, 1);
+            this.tblSettings.Controls.Add(this.lblModels, 0, 1);
             this.tblSettings.Controls.Add(this.lblDefaultModel, 0, 2);
             this.tblSettings.Controls.Add(this.lblTheme, 0, 4);
             this.tblSettings.Controls.Add(this.lblTranscriptMaxWidth, 0, 6);
@@ -148,7 +145,7 @@
             this.tblSettings.Controls.Add(this.lblFontSize, 0, 8);
             this.tblSettings.Controls.Add(this.lblEnableLogging, 0, 11);
             this.tblSettings.Controls.Add(this.txtApiKey, 1, 0);
-            this.tblSettings.Controls.Add(this.txtModels, 1, 1);
+            this.tblSettings.Controls.Add(this.pnlModelsRow, 1, 1);
             this.tblSettings.Controls.Add(this.cmbDefaultModel, 1, 2);
             this.tblSettings.Controls.Add(this.cmbTheme, 1, 4);
             this.tblSettings.Controls.Add(this.nudTranscriptMaxWidth, 1, 6);
@@ -197,7 +194,7 @@
             // 
             this.lblModels.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.lblModels.AutoSize = true;
-            this.lblModels.Location = new System.Drawing.Point(126, 6);
+            this.lblModels.Location = new System.Drawing.Point(83, 6);
             this.lblModels.Margin = new System.Windows.Forms.Padding(3, 6, 3, 0);
             this.lblModels.Name = "lblModels";
             this.lblModels.Size = new System.Drawing.Size(41, 13);
@@ -280,50 +277,49 @@
             // txtModels
             //
             this.txtModels.AcceptsReturn = true;
-            this.txtModels.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
-                        | System.Windows.Forms.AnchorStyles.Right)));
-            this.txtModels.Location = new System.Drawing.Point(130, 29);
+            this.txtModels.Dock = System.Windows.Forms.DockStyle.Fill;
             this.txtModels.Multiline = true;
             this.txtModels.Name = "txtModels";
             this.txtModels.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.txtModels.Size = new System.Drawing.Size(457, 116);
             this.txtModels.TabIndex = 6;
             //
-            // pnlModelsLeft
+            // pnlModelsRow
             //
-            this.pnlModelsLeft.Controls.Add(this.lblModels);
-            this.pnlModelsLeft.Controls.Add(this.grpRecommended);
-            this.pnlModelsLeft.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.pnlModelsLeft.Margin = new System.Windows.Forms.Padding(0);
-            this.pnlModelsLeft.Name = "pnlModelsLeft";
-            this.pnlModelsLeft.TabIndex = 20;
+            // Hosts the models textbox (fills the left space) with the "Recommended models" group docked
+            // to its right. txtModels is added first so it fills the area the right-docked group leaves.
+            this.pnlModelsRow.Controls.Add(this.txtModels);
+            this.pnlModelsRow.Controls.Add(this.grpRecommended);
+            this.pnlModelsRow.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.pnlModelsRow.Margin = new System.Windows.Forms.Padding(0);
+            this.pnlModelsRow.Name = "pnlModelsRow";
+            this.pnlModelsRow.TabIndex = 20;
             //
             // grpRecommended
             //
-            this.grpRecommended.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.grpRecommended.Controls.Add(this.btnAddRecommended);
             this.grpRecommended.Controls.Add(this.btnReplaceRecommended);
-            this.grpRecommended.Location = new System.Drawing.Point(4, 30);
+            this.grpRecommended.Dock = System.Windows.Forms.DockStyle.Right;
+            this.grpRecommended.Margin = new System.Windows.Forms.Padding(3, 0, 0, 0);
             this.grpRecommended.Name = "grpRecommended";
-            this.grpRecommended.Size = new System.Drawing.Size(165, 86);
+            this.grpRecommended.Size = new System.Drawing.Size(178, 116);
             this.grpRecommended.TabIndex = 21;
             this.grpRecommended.TabStop = false;
             this.grpRecommended.Text = "Recommended models";
             //
             // btnAddRecommended
             //
-            this.btnAddRecommended.Location = new System.Drawing.Point(10, 22);
+            this.btnAddRecommended.Location = new System.Drawing.Point(13, 26);
             this.btnAddRecommended.Name = "btnAddRecommended";
-            this.btnAddRecommended.Size = new System.Drawing.Size(145, 25);
+            this.btnAddRecommended.Size = new System.Drawing.Size(150, 26);
             this.btnAddRecommended.TabIndex = 0;
             this.btnAddRecommended.Text = "Add to list";
             this.btnAddRecommended.UseVisualStyleBackColor = true;
             //
             // btnReplaceRecommended
             //
-            this.btnReplaceRecommended.Location = new System.Drawing.Point(10, 52);
+            this.btnReplaceRecommended.Location = new System.Drawing.Point(13, 60);
             this.btnReplaceRecommended.Name = "btnReplaceRecommended";
-            this.btnReplaceRecommended.Size = new System.Drawing.Size(145, 25);
+            this.btnReplaceRecommended.Size = new System.Drawing.Size(150, 26);
             this.btnReplaceRecommended.TabIndex = 1;
             this.btnReplaceRecommended.Text = "Replace list...";
             this.btnReplaceRecommended.UseVisualStyleBackColor = true;
@@ -715,8 +711,8 @@
             this.Text = "Settings";
             this.flowLayoutPanel1.ResumeLayout(false);
             this.grpRecommended.ResumeLayout(false);
-            this.pnlModelsLeft.ResumeLayout(false);
-            this.pnlModelsLeft.PerformLayout();
+            this.pnlModelsRow.ResumeLayout(false);
+            this.pnlModelsRow.PerformLayout();
             this.tblSettings.ResumeLayout(false);
             this.tblSettings.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.nudTranscriptMaxWidth)).EndInit();
@@ -750,7 +746,7 @@
         private System.Windows.Forms.CheckBox chkEnableLogging;
         private System.Windows.Forms.ComboBox cmbDefaultModel;
         private System.Windows.Forms.TextBox txtModels;
-        private System.Windows.Forms.Panel pnlModelsLeft;
+        private System.Windows.Forms.Panel pnlModelsRow;
         private System.Windows.Forms.GroupBox grpRecommended;
         private System.Windows.Forms.Button btnAddRecommended;
         private System.Windows.Forms.Button btnReplaceRecommended;

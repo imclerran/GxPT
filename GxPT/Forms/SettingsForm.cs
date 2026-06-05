@@ -990,6 +990,10 @@ namespace GxPT
                 }
             }
             catch { }
+
+            // Load runs with _isSyncing set, which suppresses TxtModels_TextChanged, so set the
+            // recommended-models button states explicitly here.
+            UpdateRecommendedButtonStates();
         }
 
         private void CaptureVisualControlsToSettings(SettingsData target)
@@ -1101,14 +1105,10 @@ namespace GxPT
                 if (seen.Add(m)) { result.Add(m); added = true; }
             }
 
-            if (!added)
-            {
-                MessageBox.Show(this, "Your list already includes all of GxPT's recommended models.",
-                    "Recommended models", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
+            // The button is disabled when there's nothing to add, so this is just a guard.
+            if (!added) return;
 
-            // Setting Lines fires TxtModels_TextChanged, which refreshes the default-model combo.
+            // Setting Lines fires TxtModels_TextChanged, which refreshes the combo and button states.
             this.txtModels.Lines = result.ToArray();
         }
 
@@ -1124,6 +1124,53 @@ namespace GxPT
             if (answer != DialogResult.OK) return;
 
             this.txtModels.Lines = (string[])ModelDefaults.Models.Clone();
+        }
+
+        // Enable the recommended-models buttons based on how the current list compares to the shipped
+        // catalog (independent of the acknowledged-hash that drives the banner). "Add to list" is enabled
+        // whenever a recommended model is missing; "Replace list..." whenever the list isn't already
+        // exactly the recommended set/order - so it doubles as a "reset to default" even after the user
+        // applied the recommendations and then tweaked them.
+        private void UpdateRecommendedButtonStates()
+        {
+            try
+            {
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var current = new List<string>();
+                if (this.txtModels.Lines != null)
+                {
+                    foreach (var line in this.txtModels.Lines)
+                    {
+                        if (line == null) continue;
+                        var t = line.Trim();
+                        if (t.Length == 0) continue;
+                        if (seen.Add(t)) current.Add(t);
+                    }
+                }
+
+                bool anyMissing = false;
+                foreach (var m in ModelDefaults.Models)
+                {
+                    if (!seen.Contains(m)) { anyMissing = true; break; }
+                }
+
+                bool matchesRecommended = (current.Count == ModelDefaults.Models.Length);
+                if (matchesRecommended)
+                {
+                    for (int i = 0; i < current.Count; i++)
+                    {
+                        if (!string.Equals(current[i], ModelDefaults.Models[i], StringComparison.OrdinalIgnoreCase))
+                        {
+                            matchesRecommended = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (this.btnAddRecommended != null) this.btnAddRecommended.Enabled = anyMissing;
+                if (this.btnReplaceRecommended != null) this.btnReplaceRecommended.Enabled = !matchesRecommended;
+            }
+            catch { }
         }
 
         // When the models textbox changes, add any new non-empty lines to the default model combo box
@@ -1173,6 +1220,8 @@ namespace GxPT
             {
                 this.cmbDefaultModel.EndUpdate();
             }
+
+            UpdateRecommendedButtonStates();
         }
 
         // Ensure working copy is current before saving
