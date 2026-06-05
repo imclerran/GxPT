@@ -2151,49 +2151,63 @@ namespace GxPT
             if (_tabManager != null) _tabManager.CloseActiveConversationTab();
         }
 
-        // Build the cream notice strip and dock it at the top of the chat area (inside Panel2, above the
-        // transcript and input). Styling mirrors WorkspaceContextStrip - fixed, un-themed system chrome.
+        // Build the cream notice strip and dock it at the bottom of the chat area (in pnlBottom, just
+        // above the input - the same slot as the API-key banner). Styling mirrors WorkspaceContextStrip;
+        // the font size is matched to the rest of the UI (ThemeManager scales the API-key banner the same way).
         private void InitModelUpdateBanner()
         {
             try
             {
-                if (this.splitContainer1 == null) return;
+                if (this.pnlBottom == null) return;
 
                 _modelUpdateBanner = new System.Windows.Forms.Panel();
-                _modelUpdateBanner.Dock = DockStyle.Top;
-                _modelUpdateBanner.Height = 26;
-                _modelUpdateBanner.Padding = new Padding(8, 0, 8, 0);
+                _modelUpdateBanner.AutoSize = true;
+                _modelUpdateBanner.Dock = DockStyle.Bottom;
+                _modelUpdateBanner.Padding = new Padding(6, 4, 6, 4);
                 _modelUpdateBanner.BackColor = Color.FromArgb(252, 246, 220); // cream / warning
                 _modelUpdateBanner.Visible = false;
 
-                var links = new FlowLayoutPanel();
-                links.Dock = DockStyle.Right;
-                links.FlowDirection = FlowDirection.LeftToRight;
-                links.WrapContents = false;
-                links.AutoSize = true;
-                links.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-                links.Margin = new Padding(0);
+                // The default control font is noticeably small; match the configured chat font size so this
+                // reads like the rest of the UI (and the API-key banner, which ThemeManager scales likewise).
+                try
+                {
+                    double fs = AppSettings.GetDouble("font_size", 0);
+                    float size = (fs > 0) ? (float)Math.Max(6, Math.Min(48, fs)) : 9f;
+                    _modelUpdateBanner.Font = new Font(_modelUpdateBanner.Font.FontFamily, size, _modelUpdateBanner.Font.Style);
+                }
+                catch { }
+
+                var flow = new FlowLayoutPanel();
+                flow.AutoSize = true;
+                flow.Dock = DockStyle.Fill;
+                flow.FlowDirection = FlowDirection.LeftToRight;
+                flow.WrapContents = false;
+                flow.Margin = new Padding(0);
+
+                var text = new Label();
+                text.AutoSize = true;
+                text.TextAlign = ContentAlignment.MiddleLeft;
+                text.ForeColor = Color.FromArgb(55, 55, 55);
+                text.Margin = new Padding(3, 0, 3, 0);
+                text.Anchor = AnchorStyles.None; // vertically centered in the flow row
+                text.Text = "Updated recommended models are available.";
 
                 var review = MakeBannerLink("Review in Settings");
                 review.LinkClicked += delegate { OnModelBannerReview(); };
                 var dismiss = MakeBannerLink("Dismiss");
                 dismiss.LinkClicked += delegate { OnModelBannerDismiss(); };
-                links.Controls.Add(review);
-                links.Controls.Add(dismiss);
 
-                var text = new Label();
-                text.Dock = DockStyle.Fill;
-                text.AutoEllipsis = true;
-                text.TextAlign = ContentAlignment.MiddleLeft;
-                text.ForeColor = Color.FromArgb(55, 55, 55);
-                text.Text = "Updated recommended models are available.";
+                flow.Controls.Add(text);
+                flow.Controls.Add(review);
+                flow.Controls.Add(dismiss);
+                _modelUpdateBanner.Controls.Add(flow);
 
-                // Fill first, edge-docked links after (matches the working docking order elsewhere).
-                _modelUpdateBanner.Controls.Add(text);
-                _modelUpdateBanner.Controls.Add(links);
+                // Host in pnlBottom; SendToBack keeps the input box bottom-most so the banner sits above it.
+                this.pnlBottom.Controls.Add(_modelUpdateBanner);
+                _modelUpdateBanner.SendToBack();
 
-                this.splitContainer1.Panel2.Controls.Add(_modelUpdateBanner);
-                _modelUpdateBanner.BringToFront(); // Top dock sits above the Fill tab control
+                // Let the input-height math account for this banner's footprint, like the other banners.
+                if (_inputManager != null) _inputManager.SetModelUpdateBanner(_modelUpdateBanner);
             }
             catch { }
         }
@@ -2208,8 +2222,8 @@ namespace GxPT
             lnk.ActiveLinkColor = Color.FromArgb(0, 90, 158);
             lnk.VisitedLinkColor = Color.FromArgb(0, 90, 158);
             lnk.LinkBehavior = LinkBehavior.HoverUnderline;
-            lnk.Margin = new Padding(12, 0, 0, 0);
-            lnk.Anchor = AnchorStyles.None; // vertically centered in the flow panel
+            lnk.Margin = new Padding(12, 0, 3, 0);
+            lnk.Anchor = AnchorStyles.None; // vertically centered in the flow row
             return lnk;
         }
 

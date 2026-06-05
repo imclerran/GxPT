@@ -18,6 +18,9 @@ namespace GxPT
         private readonly SplitContainer _splitContainer;
         private readonly Panel _pnlApiKeyBanner;
         private readonly Panel _pnlAttachmentsBanner;
+        // Optional extra banner hosted in pnlBottom (the "updated recommended models" notice), registered
+        // after construction because it is built programmatically once the managers already exist.
+        private Panel _pnlModelUpdateBanner;
 
         // Automatic property with both getter and setter
         public bool TextIsHint { get; private set; }
@@ -37,6 +40,24 @@ namespace GxPT
 
             InitializeInput();
             WireEvents();
+        }
+
+        // Register the (programmatically built) model-update banner so its footprint is included in the
+        // available-height math and the input box reflows when it shows/hides.
+        public void SetModelUpdateBanner(Panel banner)
+        {
+            _pnlModelUpdateBanner = banner;
+            try
+            {
+                if (banner != null)
+                {
+                    banner.VisibleChanged += (s, e) => AdjustInputBoxHeight();
+                    banner.Resize += (s, e) => AdjustInputBoxHeight();
+                }
+            }
+            catch { }
+            try { AdjustInputBoxHeight(); }
+            catch { }
         }
 
         // Programmatically set the input text and optionally focus the input box.
@@ -222,6 +243,9 @@ namespace GxPT
                 // Subtract attachments banner if present
                 if (_pnlAttachmentsBanner != null && _pnlAttachmentsBanner.Visible)
                     h = Math.Max(0, h - _pnlAttachmentsBanner.Height);
+                // Subtract the model-update banner if present (also hosted in pnlBottom)
+                if (_pnlModelUpdateBanner != null && _pnlModelUpdateBanner.Visible)
+                    h = Math.Max(0, h - _pnlModelUpdateBanner.Height);
                 return Math.Max(0, h);
             }
             catch
