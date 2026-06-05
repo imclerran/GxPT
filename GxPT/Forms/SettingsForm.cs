@@ -68,6 +68,18 @@ namespace GxPT
             // Wire events (in case not hooked up in designer)
             this.Load += SettingsForm_Load;
 
+            // Grey out the memory size limit when memory is disabled (it only applies when on).
+            try
+            {
+                if (this.chkMemoryEnabled != null)
+                    this.chkMemoryEnabled.CheckedChanged += delegate
+                    {
+                        if (this.nudMemoryMaxLines != null)
+                            this.nudMemoryMaxLines.Enabled = this.chkMemoryEnabled.Checked;
+                    };
+            }
+            catch { }
+
             // Configure theme controls (created in Designer)
             try
             {
@@ -920,6 +932,21 @@ namespace GxPT
             }
             catch { }
 
+            // Persistent project memory: enable toggle + soft index line cap.
+            try
+            {
+                if (this.chkMemoryEnabled != null) this.chkMemoryEnabled.Checked = s.mcp_memory_enabled;
+                if (this.nudMemoryMaxLines != null)
+                {
+                    decimal ml = (decimal)(s.mcp_memory_max_lines > 0 ? s.mcp_memory_max_lines : 40);
+                    if (ml < this.nudMemoryMaxLines.Minimum) ml = this.nudMemoryMaxLines.Minimum;
+                    if (ml > this.nudMemoryMaxLines.Maximum) ml = this.nudMemoryMaxLines.Maximum;
+                    this.nudMemoryMaxLines.Value = ml;
+                    this.nudMemoryMaxLines.Enabled = (this.chkMemoryEnabled == null) || this.chkMemoryEnabled.Checked;
+                }
+            }
+            catch { }
+
             // Transcript Max Width and Message Max Width (%)
             try
             {
@@ -1005,6 +1032,18 @@ namespace GxPT
                 if (this.chkZdr != null) target.provider_zdr = this.chkZdr.Checked;
             }
             catch { }
+
+            // Persistent project memory toggle + soft index cap.
+            try
+            {
+                if (this.chkMemoryEnabled != null) target.mcp_memory_enabled = this.chkMemoryEnabled.Checked;
+                if (this.nudMemoryMaxLines != null)
+                {
+                    int ml = (int)this.nudMemoryMaxLines.Value;
+                    target.mcp_memory_max_lines = ml > 0 ? ml : 40;
+                }
+            }
+            catch { if (target.mcp_memory_max_lines <= 0) target.mcp_memory_max_lines = 40; }
 
             // Transcript width and Message width percent
             try { target.transcript_max_width = (int)this.nudTranscriptMaxWidth.Value; }

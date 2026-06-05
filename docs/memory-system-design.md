@@ -201,10 +201,16 @@ Built (branch `claude/sleepy-pascal-7Tiuo`):
   `.vdproj`.
 
 Configured via `settings.json` keys **`mcp_memory_enabled`** (default `false`) and
-**`mcp_memory_max_lines`** (default `40`), persisted in `SettingsData`. Editable now
-through the Settings dialog's JSON editor.
+**`mcp_memory_max_lines`** (default `40`), persisted in `SettingsData`. Surfaced in
+the **main settings tab** (`tblSettings`) as an enable checkbox + a size-limit
+spinner (the spinner greys out when memory is off), and still editable via the JSON
+editor.
 
-**Remaining:** a visual toggle + cap field in the **main settings tab** (Designer
-work; placement/labels TBD). **Not yet built/compiled** — these projects target
-.NET 3.5 / WinForms and must be built in Visual Studio on Windows; the source here
-is convention-matched but unverified by a compiler.
+Approval: `read_memory` auto-allows by the **ReadOnly tier** (the approval policy now
+allows any ReadOnly-tier tool by tier, not a name list); the write tools are Write
+tier (prompt once, remember-able).
+
+**Note:** these projects target .NET 3.5 / WinForms and must be built in Visual
+Studio on Windows — build the **whole solution** so `MemoryMcpServer.exe` is compiled
+and copied to `mcp-servers\`. The source here is convention-matched but unverified by
+a compiler.
