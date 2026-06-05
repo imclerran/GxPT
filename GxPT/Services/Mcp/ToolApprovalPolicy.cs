@@ -41,6 +41,7 @@ namespace GxPT
             s["git__fetch"] = true; // updates remote-tracking refs only; no working-tree change
             s["web__search"] = true;
             s["web__extract"] = true; // only fetches and returns page content; no state change
+            s["memory__read_memory"] = true; // reads a memory detail file; no state change
             return s;
         }
 
