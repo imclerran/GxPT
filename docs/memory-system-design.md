@@ -34,7 +34,7 @@ MCP server for the tool surface, plus host-side injection of a light index.
 | M1 | **Standalone `MemoryMcpServer`** (stdio, workdir-scoped), not a loopback/in-process server | Reuses the tested `StdioTransport` + `McpServer` loop; process isolation + per-call timeout; just one more `NewBuiltIn(...)`. Disk is the source of truth, so in-process state sharing buys nothing. |
 | M2 | **Host owns injection; server owns writes** | One-way contract over a known path (`.gxpt/`), exactly like the `GXPT_WORKDIR` convention. Host reads the primary file each request; the server is the only writer. |
 | M3 | **Memory-semantic tools, not raw file I/O** | The server keeps the primary index consistent; the model supplies content, not file edits. Raw read/write would just re-skin `FilesMcpServer`. |
-| M4 | **Name = handle, summary = description** | Each index entry is `name: summary` (+ optional `→ detail.md`). The caller supplies the **name** (a handle, max 5 words; slugified to `[A-Za-z0-9]`, spaces → hyphens, which is also the detail filename); the **summary** is a single line of prose and never a key. |
+| M4 | **Name = handle, summary = description** | Each index entry is `name: summary` (+ optional `→ detail.md`). The caller supplies the **name** (a handle, max 5 words; normalized to **kebab-case** — lowercase `[a-z0-9]` words joined by hyphens, which is also the detail filename); the **summary** is a single line of prose and never a key. |
 | M5 | **Single enable flag, surfaced in the main settings tab** | Memory is a feature (with context cost), not server plumbing. One `MemoryEnabled` bool gates **both** server launch and injection, so they can't desync. |
 | M6 | **No memory text in the constant `AgentSystemPrompt`** | All memory framing lives inside the omittable injected block, so the OFF state leaves zero trace — no phantom capability. |
 | M7 | **Compaction is model-driven; `consolidate` is a mechanical, no-LLM atomic replace** | The cap bounds the index, not detail files. The model prunes/consolidates; the server only nudges. `consolidate` just does the all-or-nothing file ops — keeping the server provider-free (M1/M2) and the merged content visible at approval. |
@@ -59,9 +59,11 @@ MCP server for the tool surface, plus host-side injection of a light index.
 ```
 
 Each entry is one line: a `name` (caller-supplied handle, **max 5 words**) and a
-**single-line** `summary`. The server **slugifies** the name to `[A-Za-z0-9]` with
-spaces replaced by hyphens; that slug is the canonical handle shown in `memory.md`
-and the detail filename (`<slug>.md`), so no separate name→file map is needed.
+**single-line** `summary`. The server normalizes the name to **kebab-case** (lowercase `[a-z0-9]` words joined
+by single hyphens; word boundaries from whitespace, separators, and camelCase, so
+`Auth Flow`, `authFlow`, and `auth_flow` all become `auth-flow`). That slug is the
+canonical handle shown in `memory.md` and the detail filename (`<slug>.md`), so no
+separate name→file map is needed.
 
 Soft size cap on `memory.md`, **default 40 lines** and **user-configurable**; on
 exceed the server nudges the model to compact (it never compacts on its own).
@@ -72,9 +74,8 @@ exceed the server nudges the model to compact (it never compacts on its own).
 
 - `remember(name, summary, detail?)` — **adds a new entry.** Appends a `name: summary`
   line to `memory.md`; if `detail` given, writes `<slug>.md` and links it. `name` is
-  **required** (max 5 words), `summary` is a **single line**; the server slugifies the
-  name (`[A-Za-z0-9]`, spaces → hyphens) and **rejects a slug that collides** with an
-  existing entry (use
+  **required** (max 5 words), `summary` is a **single line**; the server normalizes the
+  name to **kebab-case** and **rejects a slug that collides** with an existing entry (use
   `update_memory` to change one). *(Write tier — remember-eligible.)*
 - `read_memory(name)` — returns a detail file's contents. *(ReadOnly.)*
 - `update_memory(name, summary?, detail?)` — **replaces** the named entry's fields,
@@ -181,8 +182,9 @@ memories as standalone entries.
 - **Soft cap defaults to 40 lines**, exposed as a user-configurable setting
   (alongside the `MemoryEnabled` toggle in the main settings tab).
 - **`.gxpt/.gitignore` is seeded automatically** (`*`) on first write.
-- **Names are slugified to `[A-Za-z0-9]`** (spaces → hyphens); the slug is the index
-  handle and the `<slug>.md` filename, so no name→file map is needed.
+- **Names are normalized to kebab-case** (lowercase, hyphen-joined; camelCase/underscore/
+  whitespace boundaries); the slug is the index handle and the `<slug>.md` filename, so
+  no name→file map is needed.
 
 ---
 

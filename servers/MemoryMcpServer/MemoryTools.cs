@@ -26,8 +26,9 @@ namespace MemoryMcpServer
                 + "decisions, gotchas). Optionally include 'detail' for a longer note stored separately "
                 + "and read on demand.",
                 SchemaBuilder.Object()
-                    .Str("name", true, "Short handle: at most 5 words, slugified to [A-Za-z0-9] joined "
-                        + "by hyphens. Must not match an existing memory.")
+                    .Str("name", true, "Short handle in kebab-case: lowercase words joined by single "
+                        + "hyphens (e.g. auth-flow), at most 5 words. It is normalized to kebab-case "
+                        + "automatically. Must not match an existing memory.")
                     .Str("summary", true, "A single concise line describing the memory, shown in the "
                         + "always-loaded index. Keep it short.")
                     .Str("detail", false, "Optional longer note stored in <name>.md and retrieved with "
@@ -71,8 +72,8 @@ namespace MemoryMcpServer
                 + "rolled-up line. The originals' specifics must be preserved in 'detail'.",
                 SchemaBuilder.Object()
                     .Arr("names", "string", true, "Names of the existing memories to merge and remove.")
-                    .Str("new_name", true, "Name for the consolidated memory (<=5 words; may reuse one of "
-                        + "the source names).")
+                    .Str("new_name", true, "Name for the consolidated memory in kebab-case (<=5 words; "
+                        + "may reuse one of the source names).")
                     .Str("summary", true, "A single rolled-up line for the consolidated entry's index line.")
                     .Str("detail", true, "The merged note: one section per absorbed memory, keyed by its "
                         + "original name.")
