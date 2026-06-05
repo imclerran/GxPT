@@ -302,8 +302,10 @@
             // height instead of stretching to the full row height (the space below it stays empty).
             this.pnlModelsRight.Controls.Add(this.grpRecommended);
             this.pnlModelsRight.Dock = System.Windows.Forms.DockStyle.Right;
+            // Left padding insets the (top-docked) group, leaving a gap between it and the textbox.
+            this.pnlModelsRight.Padding = new System.Windows.Forms.Padding(8, 0, 0, 0);
             this.pnlModelsRight.Name = "pnlModelsRight";
-            this.pnlModelsRight.Size = new System.Drawing.Size(181, 116);
+            this.pnlModelsRight.Size = new System.Drawing.Size(189, 116);
             this.pnlModelsRight.TabIndex = 20;
             //
             // grpRecommended
