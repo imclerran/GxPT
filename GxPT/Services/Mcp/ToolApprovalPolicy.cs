@@ -25,36 +25,22 @@ namespace GxPT
             _store = store != null ? store : new InMemoryApprovalStore();
         }
 
-        // Tools that never require approval (always allowed, no prompt): the read-only built-ins, which
-        // are high-frequency and don't modify anything. Tools that write, delete, run commands, or push
-        // deliberately stay gated.
-        private static readonly Dictionary<string, bool> _autoAllow = BuildAutoAllowSet();
-        private static Dictionary<string, bool> BuildAutoAllowSet()
-        {
-            var s = new Dictionary<string, bool>(StringComparer.Ordinal);
-            s["files__read"] = true;
-            s["files__list"] = true;
-            s["files__search"] = true;
-            s["git__status"] = true;
-            s["git__diff"] = true;
-            s["git__log"] = true;
-            s["git__fetch"] = true; // updates remote-tracking refs only; no working-tree change
-            s["web__search"] = true;
-            s["web__extract"] = true; // only fetches and returns page content; no state change
-            s["memory__read_memory"] = true; // reads a memory detail file; no state change
-            return s;
-        }
-
         // The orchestrator calls this. functionName is the qualified name; args already parsed.
         public ApprovalDecision Check(string functionName, JObject args)
         {
-            if (functionName != null && _autoAllow.ContainsKey(functionName))
-                return ApprovalDecision.Allow;
-
             string server = ServerOf(functionName);
             bool firstParty = server != null && _firstPartyServers.ContainsKey(server);
             JObject annotations = null; // third-party annotations not yet plumbed; unknown -> Write/Tool
             ToolPolicy pol = _classifier.Classify(functionName, annotations, firstParty);
+
+            // Read-only tools never modify anything -> always allowed, no prompt. Driven by the
+            // classified tier (not a name list), so every ReadOnly tool auto-allows: the read-only
+            // built-ins (files read/list/search, git status/diff/log/fetch, web search/extract,
+            // memory read_memory) and any future ReadOnly tool. Third-party tools can't currently
+            // reach ReadOnly (their annotations aren't plumbed; unknown -> Write); if that changes and
+            // you don't want to trust a server's self-declared readOnlyHint, add "&& firstParty" here.
+            if (pol.Tier == ToolTier.ReadOnly)
+                return ApprovalDecision.Allow;
 
             // Already-remembered fast paths.
             if (pol.Scope == RememberScope.Tool && _store.IsToolApproved(functionName))
