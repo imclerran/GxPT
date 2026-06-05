@@ -23,16 +23,19 @@ namespace MemoryMcpServer
                 + "line to the always-loaded memory index and never overwrites an existing memory (use "
                 + "update_memory to change one - a duplicate name is rejected). Use it for durable, "
                 + "reusable facts worth recalling in future conversations (conventions, architecture, "
-                + "decisions, gotchas). Optionally include 'detail' for a longer note stored separately "
-                + "and read on demand.",
+                + "decisions, gotchas). Most memories need only the one-line summary; add 'detail' only "
+                + "when a single line cannot capture it.",
                 SchemaBuilder.Object()
                     .Str("name", true, "Short handle in kebab-case: lowercase words joined by single "
                         + "hyphens (e.g. auth-flow), at most 5 words. It is normalized to kebab-case "
                         + "automatically. Must not match an existing memory.")
-                    .Str("summary", true, "A single concise line describing the memory, shown in the "
-                        + "always-loaded index. Keep it short.")
-                    .Str("detail", false, "Optional longer note stored in <name>.md and retrieved with "
-                        + "read_memory.")
+                    .Str("summary", true, "A single concise line capturing the memory, shown in the "
+                        + "always-loaded index. For a simple fact this is the whole memory - no detail "
+                        + "needed. Keep it short.")
+                    .Str("detail", false, "Optional, and usually unnecessary: omit it when the summary "
+                        + "already captures the memory in full. Add it only when there is substantially "
+                        + "more worth storing than fits in one line - a detail file costs an extra "
+                        + "read_memory call to retrieve later.")
                     .Build(),
                 delegate(ToolCallContext ctx) { return Remember(store, ctx); });
 
