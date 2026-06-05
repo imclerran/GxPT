@@ -105,6 +105,10 @@ namespace GxPT
             // Keep default model list updated as models are typed
             this.txtModels.TextChanged += TxtModels_TextChanged;
 
+            // A multiline TextBox doesn't wire up Ctrl+A select-all natively (the single-line API key
+            // box does), so handle it here.
+            this.txtModels.KeyDown += TxtModels_KeyDown;
+
             // "Recommended models" group: bring the user's list in line with the shipped catalog.
             // Both buttons edit the textbox only; nothing persists until Save (so the user can review
             // or back out). Tooltips carry the "why" (append vs. replace, and the deprecated-model cleanup).
@@ -1174,6 +1178,16 @@ namespace GxPT
         }
 
         // When the models textbox changes, add any new non-empty lines to the default model combo box
+        private void TxtModels_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Control && e.KeyCode == Keys.A)
+            {
+                this.txtModels.SelectAll();
+                e.SuppressKeyPress = true; // prevent the ding and the default (no-op) handling
+                e.Handled = true;
+            }
+        }
+
         private void TxtModels_TextChanged(object sender, EventArgs e)
         {
             if (_isSyncing) return;
