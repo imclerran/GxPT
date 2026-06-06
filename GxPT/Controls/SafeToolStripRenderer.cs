@@ -20,8 +20,8 @@ namespace GxPT
     // This renderer makes disabled-image rendering resilient in two ways:
     //   1. It caches the disabled image per source image, so the grayed bitmap is created at
     //      most once instead of on every paint.
-    //   2. If creation throws, it degrades gracefully -- caching the failure and drawing the
-    //      normal image -- rather than letting the exception escape the paint loop.
+    //   2. If creation throws, it degrades gracefully -- caching the failure and drawing no
+    //      icon -- rather than letting the exception escape the paint loop.
     internal sealed class SafeToolStripRenderer : ToolStripProfessionalRenderer
     {
         // Maps a source image to its cached disabled version. A null value means disabled-image
@@ -35,8 +35,10 @@ namespace GxPT
                 if (e != null && e.Item != null && !e.Item.Enabled && e.Image != null)
                 {
                     Image disabled = GetCachedDisabledImage(e.Image);
-                    // Fall back to the normal image when the grayed version could not be made.
-                    e.Graphics.DrawImage(disabled ?? e.Image, e.ImageRectangle);
+                    // Draw the grayed icon when available; if it could not be made, draw no
+                    // icon at all rather than an out-of-place full-color image on a disabled item.
+                    if (disabled != null)
+                        e.Graphics.DrawImage(disabled, e.ImageRectangle);
                     return;
                 }
             }
