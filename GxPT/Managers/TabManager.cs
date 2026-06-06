@@ -97,6 +97,10 @@ namespace GxPT
             try
             {
                 _tabCtxMenu = new ContextMenuStrip();
+                // Use a renderer that survives GDI+ failures while graying a disabled item's
+                // image; the Delete item below carries an icon and is disabled for unsaved tabs.
+                try { _tabCtxMenu.Renderer = new SafeToolStripRenderer(); }
+                catch { }
                 _miTabNew = new ToolStripMenuItem("New Tab");
                 _miTabClose = new ToolStripMenuItem("Close");
                 _miTabCloseOthers = new ToolStripMenuItem("Close Others");
