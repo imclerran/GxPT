@@ -1149,8 +1149,9 @@ namespace GxPT
                 dlg.ShowDialog(this);
                 // The dialog writes settings.json directly; drop the cached copy so reads are fresh.
                 AppSettings.Reload();
-                // The global ZDR default may have changed: re-sync the per-tab checkbox (checked +
-                // disabled when ZDR is forced globally; existing conversations don't latch until sent).
+                // Re-sync the per-tab checkbox. Its checked/enabled state now depends only on the
+                // conversation's own toggle and latch — the global default seeds new conversations but
+                // does not retroactively change one that's already open.
                 SyncZdrCheckboxFromActiveTab();
                 // Re-init client in case API key changed
                 InitializeClient();
@@ -1590,10 +1591,10 @@ namespace GxPT
         private bool ResolveZdrForSend(TabManager.ChatTabContext ctx)
         {
             if (ctx == null || ctx.Conversation == null) return false;
-            // Latched conversations stay ZDR for good, even if the global default is later turned off.
-            bool zdr;
-            try { zdr = AppSettings.GetGlobalZdrDefault() || ctx.Conversation.Zdr || ConvIsZdrLatched(ctx); }
-            catch { zdr = ctx.Conversation.Zdr || ConvIsZdrLatched(ctx); }
+            // The per-conversation toggle (seeded from the global default at creation) is the source of
+            // truth; a latched conversation stays ZDR for good. The global default is not re-applied here,
+            // so unchecking the box before the first send genuinely disables ZDR for this conversation.
+            bool zdr = ctx.Conversation.Zdr || ConvIsZdrLatched(ctx);
             if (!zdr) return false;
 
             if (ctx.Conversation.ZdrFirstMessageIndex < 0)
@@ -1680,23 +1681,22 @@ namespace GxPT
             return (slash >= 0 && slash < full.Length - 1) ? full.Substring(slash + 1) : full;
         }
 
-        // Per-tab ZDR checkbox <-> active conversation. Checked = effective ZDR; disabled (locked on)
-        // when the global default forces it or the conversation has already latched ZDR.
+        // Per-tab ZDR checkbox <-> active conversation. Checked = the conversation's own ZDR toggle
+        // (seeded from the global default when the conversation was created), or locked on once latched.
+        // Disabled only when the conversation has latched ZDR — the global default no longer locks the
+        // box, so the user can uncheck it before the first send.
         private bool _syncingZdr;
         private void SyncZdrCheckboxFromActiveTab()
         {
             if (this.chkZdrTab == null) return;
             var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
-            bool globalDefault = false;
-            try { globalDefault = AppSettings.GetGlobalZdrDefault(); }
-            catch { }
             bool latched = ConvIsZdrLatched(ctx);
             bool convZdr = ctx != null && ctx.Conversation != null && ctx.Conversation.Zdr;
             _syncingZdr = true;
             try
             {
-                this.chkZdrTab.Checked = globalDefault || convZdr || latched;
-                this.chkZdrTab.Enabled = ctx != null && ctx.Conversation != null && !globalDefault && !latched;
+                this.chkZdrTab.Checked = convZdr || latched;
+                this.chkZdrTab.Enabled = ctx != null && ctx.Conversation != null && !latched;
             }
             finally { _syncingZdr = false; }
         }
@@ -2326,7 +2326,8 @@ namespace GxPT
                 DialogResult dr = dlg.ShowDialog(this);
                 // The dialog writes settings.json directly; drop the cached copy so reads are fresh.
                 AppSettings.Reload();
-                // Reflect any change to the global ZDR default in the per-tab checkbox.
+                // Re-sync the per-tab checkbox after settings may have changed (the global default
+                // seeds new conversations; it does not retroactively re-lock this one).
                 SyncZdrCheckboxFromActiveTab();
                 if (dr == DialogResult.OK)
                 {
