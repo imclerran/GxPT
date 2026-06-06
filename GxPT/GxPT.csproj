@@ -98,6 +98,7 @@
     <Compile Include="Controls\DiffPreviewPanel.cs">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Include="Controls\SafeToolStripRenderer.cs" />
     <Compile Include="Managers\ImportExportManager.cs" />
     <Compile Include="Services\AppSettings.cs" />
     <Compile Include="Services\RecentWorkDirs.cs" />

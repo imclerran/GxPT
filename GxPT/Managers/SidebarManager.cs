@@ -354,6 +354,10 @@ namespace GxPT
 
                 // Create context menu but don't assign it directly
                 _conversationContextMenu = new ContextMenuStrip();
+                // Use a renderer that survives GDI+ failures while graying a disabled item's
+                // image (the Delete item below carries an icon).
+                try { _conversationContextMenu.Renderer = new SafeToolStripRenderer(); }
+                catch { }
                 var miOpen = new ToolStripMenuItem("Open");
                 var miExport = new ToolStripMenuItem("Export");
                 var miRename = new ToolStripMenuItem("Rename");
