@@ -1268,7 +1268,11 @@ namespace GxPT
                 delegate
                 {
                     var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
-                    return (c != null && c.Conversation != null) ? c.Conversation.WorkingDir : null;
+                    if (c == null) return null;
+                    // The tab's WorkingDir is the canonical value (what the MCP servers receive); fall
+                    // back to the conversation's copy only if the tab field is empty.
+                    if (!string.IsNullOrEmpty(c.WorkingDir)) return c.WorkingDir;
+                    return c.Conversation != null ? c.Conversation.WorkingDir : null;
                 },
                 delegate(string serverName)
                 {

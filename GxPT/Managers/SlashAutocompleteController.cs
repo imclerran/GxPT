@@ -97,13 +97,18 @@ namespace GxPT
                     e.Handled = true; e.SuppressKeyPress = true;
                     return true;
                 case Keys.Enter:
-                    // If what's typed already matches the highlighted item, there is nothing to
-                    // complete -- close the popup and let Enter send in a single keystroke. Otherwise
-                    // Enter completes to the highlighted item (a second Enter then sends).
-                    if (TypedTextMatchesSelection())
+                    // Send in one keystroke only when the highlighted item is terminal (nothing more to
+                    // complete) AND already equals what's typed. A path-taking command name or a
+                    // directory still has completion to offer, so Enter completes/drills instead -- e.g.
+                    // "/explain" + Enter opens the file list rather than sending an empty path.
                     {
-                        Hide();
-                        return false; // fall through to the normal Enter -> send path
+                        Item sel = _list.SelectedItem as Item;
+                        bool terminal = (sel == null) || !sel.ContinueCompleting;
+                        if (terminal && TypedTextMatchesSelection())
+                        {
+                            Hide();
+                            return false; // fall through to the normal Enter -> send path
+                        }
                     }
                     AcceptSelected();
                     e.Handled = true; e.SuppressKeyPress = true;
@@ -169,7 +174,8 @@ namespace GxPT
                 Item it = new Item();
                 it.Display = display;
                 it.Insert = "/" + cmd.Name + " ";
-                it.IsDirectory = false; // accepting a name closes the popup
+                // A path-taking command flows into path completion after accepting; others close.
+                it.ContinueCompleting = cmd.TakesPathArgument;
                 _items.Add(it);
             }
 
@@ -216,7 +222,7 @@ namespace GxPT
                 Item it = new Item();
                 it.Display = en.Name + (en.IsDir ? "/" : string.Empty);
                 it.Insert = "/" + commandName + " " + dirPrefix + en.Name + (en.IsDir ? "/" : string.Empty);
-                it.IsDirectory = en.IsDir; // accepting a directory keeps the popup open to drill in
+                it.ContinueCompleting = en.IsDir; // a directory keeps the popup open to drill in
                 _items.Add(it);
             }
 
@@ -337,11 +343,11 @@ namespace GxPT
             Item it = _list.SelectedItem as Item;
             if (it == null) return;
 
-            // For a file (or a command name) accepting closes the popup; for a directory we let the
-            // text change re-trigger so the user can keep drilling into children.
-            _ignoreNextChange = !it.IsDirectory;
+            // Keep the popup open when there is more to complete: a directory (drill into children) or a
+            // command that takes a path argument (flow straight into path completion). Otherwise close.
+            _ignoreNextChange = !it.ContinueCompleting;
             _input.SetInputText(it.Insert, true);
-            if (!it.IsDirectory) Hide();
+            if (!it.ContinueCompleting) Hide();
         }
 
         private void List_MouseClick(object sender, MouseEventArgs e)
@@ -378,7 +384,9 @@ namespace GxPT
         {
             public string Display;
             public string Insert;
-            public bool IsDirectory;
+            // True when accepting should keep the popup open for further completion (a directory, or a
+            // command name whose path argument is next).
+            public bool ContinueCompleting;
             public override string ToString() { return Display; }
         }
 
