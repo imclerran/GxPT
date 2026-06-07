@@ -305,9 +305,12 @@ namespace GxPT
                     finally { if (Interlocked.Decrement(ref remaining) == 0) { try { done.Set(); } catch { } } }
                 });
             }
-            // Backstop only; near-instant in practice. Not disposed, to avoid a race with a late
-            // worker calling Set() after the cap fires (this path runs only on shutdown/rebuild).
-            done.WaitOne(ForcefulShutdownCapMs, false);
+            // Backstop only; near-instant in practice. A clean finish (WaitOne true) means the final
+            // worker has signaled and no further Set() can occur, so the handle is safe to dispose.
+            // Only on the rare cap timeout do we leave it for the finalizer, since a still-running
+            // worker may yet call Set().
+            if (done.WaitOne(ForcefulShutdownCapMs, false))
+                done.Close();
         }
 
         // Upper bound on how long Dispose will wait for the parallel forceful teardown to finish.
