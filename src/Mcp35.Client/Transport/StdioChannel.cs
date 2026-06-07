@@ -164,13 +164,18 @@ namespace Mcp35.Client.Transport
             }
             catch (Exception ex) { _log.Log("mcp", "Closing stdin threw: " + ex.Message); }
 
-            // Forceful (app/host shutdown): kill now and return. TerminateProcess guarantees the
-            // child dies without us waiting, and the reader/stderr threads are background threads,
-            // so we skip both WaitForExit and the joins. Effectively instantaneous.
+            // Forceful (app/host shutdown): kill now instead of waiting out the stdin-EOF grace.
+            // Killing closes the child's pipes, so the reader/stderr threads hit clean EOF and exit
+            // within ~1ms — we join them (near-instant here, unlike the graceful wait on a still-live
+            // process) so the streams are never disposed out from under a live read. That keeps this
+            // path exception-free while still completing in milliseconds. _stopping is already set,
+            // so the threads' EOF is treated as an intentional stop, not a fault.
             if (ForcefulShutdown)
             {
                 try { if (_proc != null && !_proc.HasExited) _proc.Kill(); }
                 catch (Exception ex) { _log.Log("mcp", "Kill threw: " + ex.Message); }
+                JoinThread(_readerThread);
+                JoinThread(_stderrThread);
                 try { if (_proc != null) _proc.Close(); }
                 catch { }
                 return;
