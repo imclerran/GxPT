@@ -97,10 +97,21 @@ public interface IToolClassifier {
    Destructive/None; `readOnlyHint:true` → ReadOnly/Tool; otherwise → Write/Tool.
    We can't infer a third-party server's argument semantics, so third-party
    **never** gets command/path parsing — its Destructive tools are
-   `Scope=None` (or an `ExactArgs` rule, §3) only.
+   `Scope=None` (or an `ExactArgs` rule, §3) only. The hints are read from the
+   tool's declared `annotations` in `tools/list`, plumbed through the registry
+   (`McpToolRegistry.AnnotationsFor`) into the gate — *not* the hardcoded null
+   they were stubbed to before.
 4. **No annotation / unknown → Write/Tool** (the accepted tradeoff of advisory
    trust: a side-effecting tool that fails to flag itself is remember-eligible
-   only *after* a first human prompt).
+   only *after* a first human prompt). This is the **fail-safe default**: an
+   absent `readOnlyHint` is treated as **not** read-only, so a forgotten
+   annotation never silently widens access.
+
+> Built-in servers also declare these hints (`ToolAnnotations.ReadOnly/Write/
+> Destructive`) on every tool. First-party classification still comes from the
+> authoritative table above (hints ignored for *tiering*), but the declared
+> `readOnlyHint` is what a capability filter — e.g. a future "read-only"
+> subagent tool set — selects on, so it must be present on the wire.
 
 ---
 

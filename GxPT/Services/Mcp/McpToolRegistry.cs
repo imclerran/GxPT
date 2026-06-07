@@ -24,7 +24,7 @@ namespace GxPT
     //
     // Thread-safe: lifecycle methods are driven from connection reader threads (Ready/ToolsChanged/
     // fault), while the orchestrator calls the per-request/resolution methods from its worker thread.
-    internal sealed class McpToolRegistry
+    internal sealed class McpToolRegistry : IToolAnnotationSource
     {
         public const string RevealToolsName = "reveal_tools";
         public const int DefaultRevealCap = 24; // discovery spec §13
@@ -36,6 +36,7 @@ namespace GxPT
             public string FunctionName;
             public string Description;
             public JObject Schema;
+            public JObject Annotations; // tool capability hints (readOnlyHint/destructiveHint); may be null
             public string Workdir; // null = workdir-independent (web/github/custom)
         }
 
@@ -101,6 +102,7 @@ namespace GxPT
                     e.FunctionName = fn;
                     e.Description = t.Description;
                     e.Schema = t.InputSchema;
+                    e.Annotations = t.Annotations;
                     e.Workdir = workdir;
                     AddEntryLocked(fn, e, fns);
                 }
@@ -134,6 +136,7 @@ namespace GxPT
                     e.FunctionName = fn;
                     e.Description = t.Description;
                     e.Schema = t.InputSchema;
+                    e.Annotations = t.Annotations;
                     e.Workdir = workdir;
                     AddEntryLocked(fn, e, fns);
                 }
@@ -375,6 +378,21 @@ namespace GxPT
             conn = null;
             toolName = null;
             return false;
+        }
+
+        // The discovered capability annotations (readOnlyHint/destructiveHint) for a function name, so
+        // the approval gate can classify a tool by what it declares. Returns a clone (never the stored
+        // token) so the caller can't reparent the catalog's copy; null when the tool set no annotations
+        // — the classifier then fails closed (treats it as not read-only -> Write/Tool tier).
+        public JObject AnnotationsFor(string functionName)
+        {
+            lock (_lock)
+            {
+                CatalogEntry e;
+                if (TryFirstEntryLocked(functionName, out e) && e.Annotations != null)
+                    return (JObject)e.Annotations.DeepClone();
+            }
+            return null;
         }
 
         // ---- internals ----

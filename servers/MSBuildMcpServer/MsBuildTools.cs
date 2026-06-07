@@ -36,6 +36,7 @@ namespace MSBuildMcpServer
                 MsBuildInstall inst = install; // capture a per-iteration copy for the closure
                 string toolName = "build_" + inst.Version.Replace('.', '_');
                 server.AddTool(toolName, BuildDescription(inst), BuildSchema(inst),
+                    ToolAnnotations.Destructive(),
                     delegate(ToolCallContext ctx) { return Run(config, runner, inst, ctx); });
             }
 
@@ -47,6 +48,7 @@ namespace MSBuildMcpServer
                 DevenvInstall vs = ide; // capture a per-iteration copy for the closure
                 string toolName = "build_solution_" + vs.Year;
                 server.AddTool(toolName, BuildDevenvDescription(vs), BuildDevenvSchema(),
+                    ToolAnnotations.Destructive(),
                     delegate(ToolCallContext ctx) { return RunDevenv(config, runner, vs, ctx); });
             }
         }

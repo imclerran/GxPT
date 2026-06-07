@@ -26,12 +26,14 @@ namespace WebSearchMcpServer
                 "Search the web and return relevant results, each with a title, URL, and content snippet (optionally a synthesized answer). " +
                 "Start here when you need current information. The returned URLs can be passed to web__extract to read full page content.",
                 BuildSearchSchema(),
+                ToolAnnotations.ReadOnly(),
                 delegate(ToolCallContext ctx) { return Search(config, client, ctx); });
 
             server.AddTool("extract",
                 "Fetch the full text of specific web pages you ALREADY have URLs for (for example, URLs returned by web__search). " +
                 "Requires the 'urls' argument: one or more absolute http(s) URLs. Do not call this without URLs — run web__search first to find them.",
                 BuildExtractSchema(),
+                ToolAnnotations.ReadOnly(),
                 delegate(ToolCallContext ctx) { return Extract(config, client, ctx); });
         }
 

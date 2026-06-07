@@ -1768,7 +1768,8 @@ namespace GxPT
                         ? new ToolApprovalPolicy(
                             new ToolClassifier(),
                             new TranscriptApprovalPrompt(this, delegate { return ctx.ApprovalPanel; }),
-                            _approvalStore)
+                            _approvalStore,
+                            _mcpRegistry) // classify third-party tools by their declared readOnly/destructive hints
                         : (IToolApprovalPolicy)new AllowAllApprovalPolicy();
                     var orch = new McpChatOrchestrator(_client, _mcpRegistry, approval,
                                                        model, LoggerSink.Instance);

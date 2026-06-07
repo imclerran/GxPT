@@ -75,6 +75,25 @@ namespace Mcp35.Server.Tests
         }
 
         [Fact]
+        public void ToolsList_emits_annotations_when_provided_and_omits_them_otherwise()
+        {
+            var server = NewServer();
+            server.AddTool("peek", "Read only.", EchoSchema(), ToolAnnotations.ReadOnly(),
+                ctx => ToolResults.Text("ok"));
+            server.AddTool("plain", "No annotations.", EchoSchema(),
+                ctx => ToolResults.Text("ok"));
+
+            var msgs = ServerHarness.Exchange(server, ServerHarness.ToolsList(2));
+            JArray tools = (JArray)msgs[0]["result"]["tools"];
+
+            // Annotated tool carries the declared hints verbatim.
+            Assert.Equal(true, (bool)tools[0]["annotations"]["readOnlyHint"]);
+            Assert.Equal(false, (bool)tools[0]["annotations"]["destructiveHint"]);
+            // Unannotated tool omits the field entirely (NullValueHandling.Ignore).
+            Assert.Null(tools[1]["annotations"]);
+        }
+
+        [Fact]
         public void ToolsList_preserves_registration_order()
         {
             var server = NewServer();

@@ -41,6 +41,7 @@ namespace FilesMcpServer
                     .Int("end_line", false, "Last line to return (1-based, inclusive)")
                     .Bool("line_numbers", false, "Prefix each returned line with its 1-based line number")
                     .Build(),
+                ToolAnnotations.ReadOnly(),
                 delegate(ToolCallContext ctx) { return Read(sandbox, ctx); });
 
             server.AddTool("list", "List entries of a directory under the workspace root.",
@@ -48,6 +49,7 @@ namespace FilesMcpServer
                     .Str("path", true, "Directory path relative to the workspace root")
                     .Bool("recursive", false, "Recurse into subdirectories (bounded depth)")
                     .Build(),
+                ToolAnnotations.ReadOnly(),
                 delegate(ToolCallContext ctx) { return List(sandbox, ctx); });
 
             server.AddTool("write", "Create or overwrite a text file under the workspace root.",
@@ -56,10 +58,12 @@ namespace FilesMcpServer
                     .Str("content", true, "UTF-8 text content to write")
                     .Bool("create_dirs", false, "Create missing parent directories")
                     .Build(),
+                ToolAnnotations.Write(),
                 delegate(ToolCallContext ctx) { return Write(sandbox, ctx); });
 
             server.AddTool("delete", "Delete a file or an empty directory under the workspace root.",
                 SchemaBuilder.Object().Str("path", true, "Path relative to the workspace root").Build(),
+                ToolAnnotations.Destructive(),
                 delegate(ToolCallContext ctx) { return Delete(sandbox, ctx); });
 
             server.AddTool("edit", "Replace an exact text span in a file under the workspace root. "
@@ -71,6 +75,7 @@ namespace FilesMcpServer
                     .Str("new_string", true, "Replacement text")
                     .Bool("replace_all", false, "Replace every occurrence instead of requiring a unique match")
                     .Build(),
+                ToolAnnotations.Write(),
                 delegate(ToolCallContext ctx) { return Edit(sandbox, ctx); });
 
             server.AddTool("search", "Search file contents for a string or regex under the workspace root, "
@@ -89,6 +94,7 @@ namespace FilesMcpServer
                         + "anchors. 'line' is where each match starts. Bounded by the read cap; line-mode streams "
                         + "files of any size, multiline skips files over the cap.")
                     .Build(),
+                ToolAnnotations.ReadOnly(),
                 delegate(ToolCallContext ctx) { return Search(sandbox, ctx); });
         }
 

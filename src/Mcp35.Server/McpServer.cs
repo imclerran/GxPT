@@ -39,6 +39,14 @@ namespace Mcp35.Server
 
         public void AddTool(string name, string description, JObject inputSchema, ToolHandler handler)
         {
+            AddTool(name, description, inputSchema, null, handler);
+        }
+
+        // Overload that also carries the tool's capability annotations (readOnlyHint/destructiveHint,
+        // see ToolAnnotations). The host classifies tools by these hints, so built-in servers should
+        // declare them; an absent annotations object passes through as no hints (host fails closed).
+        public void AddTool(string name, string description, JObject inputSchema, JObject annotations, ToolHandler handler)
+        {
             if (string.IsNullOrEmpty(name)) throw new ArgumentException("Tool name is required.", "name");
             if (handler == null) throw new ArgumentNullException("handler");
             if (_started) throw new InvalidOperationException("Cannot add tools after Run() has started.");
@@ -48,6 +56,7 @@ namespace Mcp35.Server
             descriptor.Name = name;
             descriptor.Description = description;
             descriptor.InputSchema = inputSchema ?? EmptyObjectSchema();
+            descriptor.Annotations = annotations; // null => omitted from tools/list (NullValueHandling.Ignore)
 
             _tools[name] = new RegisteredTool(descriptor, handler);
             _toolOrder.Add(name);

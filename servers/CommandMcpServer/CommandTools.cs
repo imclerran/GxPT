@@ -31,6 +31,7 @@ namespace CommandMcpServer
                     .Str("command", true, "The exact command line to run, in Windows cmd.exe syntax.")
                     .Int("timeout_ms", false, "Kill the command after this many milliseconds (default 60000)")
                     .Build(),
+                ToolAnnotations.Destructive(),
                 delegate(ToolCallContext ctx) { return Run(config, runner, ctx); });
         }
 
