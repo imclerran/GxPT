@@ -92,9 +92,19 @@ namespace GxPT
                     e.Handled = true; e.SuppressKeyPress = true;
                     return true;
                 case Keys.Tab:
+                    // Tab always completes to the highlighted item (it never sends).
+                    AcceptSelected();
+                    e.Handled = true; e.SuppressKeyPress = true;
+                    return true;
                 case Keys.Enter:
-                    // While the popup is open, both accept the highlighted item (it always has a
-                    // selection). Sending happens on the next Enter, once the popup has closed.
+                    // If what's typed already matches the highlighted item, there is nothing to
+                    // complete -- close the popup and let Enter send in a single keystroke. Otherwise
+                    // Enter completes to the highlighted item (a second Enter then sends).
+                    if (TypedTextMatchesSelection())
+                    {
+                        Hide();
+                        return false; // fall through to the normal Enter -> send path
+                    }
                     AcceptSelected();
                     e.Handled = true; e.SuppressKeyPress = true;
                     return true;
@@ -298,6 +308,19 @@ namespace GxPT
                     e.IsInputKey = true; // ensure KeyDown fires for these instead of being pre-handled
                     break;
             }
+        }
+
+        // True when the field already equals the highlighted completion (ignoring a trailing space), so
+        // accepting would change nothing and Enter should send instead. Works for both modes: a fully
+        // typed "/commit" or "/explain src/Foo.cs" matches its item and sends in one Enter, while a
+        // partial token or a directory step differs and completes first.
+        private bool TypedTextMatchesSelection()
+        {
+            Item it = _list.SelectedItem as Item;
+            if (it == null) return true; // nothing to complete -> just send
+            string cur = (_txt.Text ?? string.Empty).TrimEnd();
+            string ins = (it.Insert ?? string.Empty).TrimEnd();
+            return string.Equals(cur, ins, StringComparison.Ordinal);
         }
 
         private void Move(int delta)
