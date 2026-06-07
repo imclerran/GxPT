@@ -129,6 +129,7 @@
     <Compile Include="Services\FolderPicker.cs" />
     <Compile Include="Services\HoverWheelRouter.cs" />
     <Compile Include="Managers\InputManager.cs" />
+    <Compile Include="Managers\SlashAutocompleteController.cs" />
     <Compile Include="Services\ImportExportService.cs" />
     <Compile Include="Services\Logger.cs" />
     <Compile Include="Services\OpenRouterClient.cs">

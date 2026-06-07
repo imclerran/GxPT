@@ -22,6 +22,10 @@ namespace GxPT
         // after construction because it is built programmatically once the managers already exist.
         private Panel _pnlModelUpdateBanner;
 
+        // Slash-command autocomplete popup (filters the registry / completes path arguments as the user
+        // types after a leading '/').
+        private SlashAutocompleteController _autocomplete;
+
         // Automatic property with both getter and setter
         public bool TextIsHint { get; private set; }
 
@@ -40,6 +44,9 @@ namespace GxPT
 
             InitializeInput();
             WireEvents();
+
+            try { _autocomplete = new SlashAutocompleteController(_mainForm, this, _txtMessage); }
+            catch { _autocomplete = null; }
         }
 
         // Register the (programmatically built) model-update banner so its footprint is included in the
@@ -144,6 +151,11 @@ namespace GxPT
 
         private void txtMessage_KeyDown(object sender, KeyEventArgs e)
         {
+            // KeyDown is wired both here and via MainForm; bail if the other handler already acted.
+            if (e.Handled || e.SuppressKeyPress) return;
+            // Let the autocomplete popup consume navigation/accept keys first.
+            if (_autocomplete != null && _autocomplete.HandleKeyDown(e)) return;
+
             // ESC cancels editing (if active), clears input and attachments, and restores state
             if (e.KeyCode == Keys.Escape)
             {
@@ -311,6 +323,11 @@ namespace GxPT
 
         public void HandleKeyDown(KeyEventArgs e)
         {
+            // KeyDown is wired both here and via the InputManager's own handler; bail if already acted.
+            if (e.Handled || e.SuppressKeyPress) return;
+            // Let the autocomplete popup consume navigation/accept keys first.
+            if (_autocomplete != null && _autocomplete.HandleKeyDown(e)) return;
+
             // ESC cancels editing (if active), clears input and attachments, and restores state
             if (e.KeyCode == Keys.Escape)
             {

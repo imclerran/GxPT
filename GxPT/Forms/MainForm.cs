@@ -1276,6 +1276,20 @@ namespace GxPT
                 });
         }
 
+        // Accessors used by the autocomplete popup. Both ensure the subsystem is built first, so the
+        // popup works on the very first keystroke (before any send has occurred).
+        internal SlashCommandRegistry GetSlashRegistry()
+        {
+            EnsureSlashCommands();
+            return _slashRegistry;
+        }
+
+        internal ISlashCommandContext GetSlashContext()
+        {
+            EnsureSlashCommands();
+            return _slashContext;
+        }
+
         private void btnSend_Click(object sender, EventArgs e)
         {
             var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
