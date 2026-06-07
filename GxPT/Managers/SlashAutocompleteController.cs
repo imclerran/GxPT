@@ -6,9 +6,9 @@ using System.Windows.Forms;
 
 namespace GxPT
 {
-    // Token-aware autocomplete for the input box. Built on a ToolStripDropDown hosting a ListBox: it is
-    // a non-activating popup (the caret stays in the text box), auto-closes on outside click/focus loss,
-    // and opens upward (the input sits at the bottom of the window).
+    // Token-aware autocomplete for the input box. Built on a borderless, non-activating top-level form
+    // hosting a ListBox (see PopupForm for why not a ToolStripDropDown): the caret stays in the text
+    // box, so typing and key navigation keep working, and it opens upward above the input.
     //
     // Two modes, switched purely on the field text (commands only ever start at position 0):
     //   * name mode  -- "/<prefix>"      -> filter the command registry.
@@ -25,8 +25,12 @@ namespace GxPT
         private readonly InputManager _input;
         private readonly TextBox _txt;
 
-        private readonly ToolStripDropDown _dropDown;
-        private readonly ToolStripControlHost _hostCtl;
+        // A borderless, non-activating top-level form hosts the list. We deliberately do NOT use a
+        // ToolStripDropDown: while one is open it installs an application-wide modal keyboard filter
+        // (for menu navigation) that swallows every keystroke before it reaches the text box, which
+        // killed typing. A plain non-activating form installs no such filter, so the text box keeps
+        // focus and receives all keys; we drive the list selection manually from its KeyDown.
+        private readonly PopupForm _popup;
         private readonly ListBox _list;
 
         private readonly List<Item> _items = new List<Item>();
@@ -50,29 +54,25 @@ namespace GxPT
             _list.BorderStyle = BorderStyle.FixedSingle;
             _list.IntegralHeight = false;
             _list.SelectionMode = SelectionMode.One;
+            _list.Dock = DockStyle.Fill;
             _list.MouseClick += List_MouseClick;
 
-            _hostCtl = new ToolStripControlHost(_list);
-            _hostCtl.AutoSize = false;
-            _hostCtl.Margin = Padding.Empty;
-            _hostCtl.Padding = Padding.Empty;
+            _popup = new PopupForm();
+            _popup.Controls.Add(_list);
+            if (_host != null) _popup.Owner = _host; // stays above the main window, closes with it
 
-            _dropDown = new NonActivatingDropDown();
-            _dropDown.AutoClose = true;        // closes on outside click / focus change
-            _dropDown.DropShadowEnabled = true;
-            _dropDown.Padding = Padding.Empty;
-            _dropDown.Items.Add(_hostCtl);
-
-            // Only TextChanged drives (re)evaluation. We deliberately do NOT hide on the text box's
-            // LostFocus: a ToolStripDropDown is a non-activating tool window, but wiring LostFocus risks
-            // closing the popup the instant it shows. AutoClose covers clicks elsewhere.
             if (_txt != null)
+            {
                 _txt.TextChanged += delegate { OnTextChanged(); };
+                // Safe now that the popup never takes focus on show: this only fires on a genuine focus
+                // change (the user clicked another control), which is exactly when we want to close.
+                _txt.LostFocus += delegate { Hide(); };
+            }
         }
 
         public bool IsOpen
         {
-            get { return _dropDown != null && _dropDown.Visible; }
+            get { return _popup != null && _popup.Visible; }
         }
 
         // Called from InputManager's key handlers before its own Enter/Esc logic. Returns true when the
@@ -274,24 +274,19 @@ namespace GxPT
 
             int rows = Math.Min(_items.Count, MaxRows);
             int itemH = _list.ItemHeight > 0 ? _list.ItemHeight : 15;
-            int height = rows * itemH + 4;
+            int height = rows * itemH + 2;
             int width = _txt.Width;
-            if (width < 120) width = 120;
+            if (width < 160) width = 160;
 
-            Size sz = new Size(width, height);
-            _list.Size = sz;
-            _hostCtl.Size = sz;
+            // Position above the input (it sits at the bottom of the window); drop below if there is no
+            // room above. Coordinates are screen-space because the popup is a top-level form.
+            Point screen = _txt.PointToScreen(Point.Empty);
+            int top = screen.Y - height;
+            if (top < 0) top = screen.Y + _txt.Height;
+            _popup.Bounds = new Rectangle(screen.X, top, width, height);
 
-            if (_dropDown.Visible)
-            {
-                // Reflow so the popup tracks the new row count while it stays open.
-                _dropDown.PerformLayout();
-            }
-            else
-            {
-                // Open above the input, left-aligned with it.
-                _dropDown.Show(_txt, new Point(0, 0), ToolStripDropDownDirection.AboveRight);
-            }
+            if (!_popup.Visible)
+                _popup.ShowNoActivate();
         }
 
         private void Move(int delta)
@@ -326,8 +321,8 @@ namespace GxPT
 
         public void Hide()
         {
-            if (_dropDown != null && _dropDown.Visible)
-                _dropDown.Close();
+            if (_popup != null && _popup.Visible)
+                _popup.Hide();
         }
 
         // ---- helpers / types ----
@@ -361,34 +356,53 @@ namespace GxPT
             public Entry(string name, bool isDir) { Name = name; IsDir = isDir; }
         }
 
-        // A ToolStripDropDown that never takes activation: the input box keeps keyboard focus while the
-        // popup is open, so typing continues and the arrow/Tab/Enter routing (handled on the text box)
-        // keeps working. Without this, Show() activates the popup window and the text box goes dead.
-        private sealed class NonActivatingDropDown : ToolStripDropDown
+        // A borderless top-level form that never steals focus: the input box keeps keyboard focus while
+        // the popup is open (so typing and the arrow/Tab/Enter routing keep working) and clicking an
+        // item does not transfer focus either (MA_NOACTIVATE), so no LostFocus race on selection.
+        private sealed class PopupForm : Form
         {
             private const int WS_EX_NOACTIVATE = 0x08000000;
+            private const int WS_EX_TOOLWINDOW = 0x00000080;
             private const int WM_MOUSEACTIVATE = 0x0021;
             private const int MA_NOACTIVATE = 0x0003;
+
+            public PopupForm()
+            {
+                FormBorderStyle = FormBorderStyle.None; // border is drawn by the hosted ListBox
+                StartPosition = FormStartPosition.Manual;
+                ShowInTaskbar = false;
+                ControlBox = false;
+                MinimizeBox = false;
+                MaximizeBox = false;
+            }
+
+            // Honored by Form.Show: present the window without activating it.
+            protected override bool ShowWithoutActivation { get { return true; } }
 
             protected override CreateParams CreateParams
             {
                 get
                 {
                     CreateParams cp = base.CreateParams;
-                    cp.ExStyle |= WS_EX_NOACTIVATE;
+                    cp.ExStyle |= WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
                     return cp;
                 }
             }
 
             protected override void WndProc(ref Message m)
             {
-                // Don't activate (and don't steal focus) when an item is clicked.
+                // Don't activate (and don't pull focus off the text box) when an item is clicked.
                 if (m.Msg == WM_MOUSEACTIVATE)
                 {
                     m.Result = (IntPtr)MA_NOACTIVATE;
                     return;
                 }
                 base.WndProc(ref m);
+            }
+
+            public void ShowNoActivate()
+            {
+                if (!Visible) Show();
             }
         }
     }
