@@ -28,19 +28,36 @@ namespace GxPT
 
         // Agentic behavior guidance, prepended as a system message on tool-enabled turns only
         // (this orchestrator runs solely when at least one tool is available). Kept short to
-        // limit token cost. Reinforces three things: act through the tools, treat a denial as
-        // scoped to that one call rather than a permanent ban, and don't volunteer a rundown of
-        // tools/capabilities unasked.
+        // limit token cost. Reinforces four things: act through the tools, don't return a null/
+        // evasive answer when a tool could resolve the question, treat a denial as scoped to that
+        // one call rather than a permanent ban, and don't volunteer a rundown of tools unasked.
         internal const string AgentSystemPrompt =
-            "You are operating as an agent with access to tools. Use them proactively to "
-            + "accomplish the user's request instead of asking the user to do what you can do "
-            + "yourself.\n\n"
+            "You are an AI assistant operating as an agent with access to tools. Use them "
+            + "proactively to accomplish the user's request instead of asking the user to do what "
+            + "you can do yourself, and instead of guessing when a tool could give you the answer.\n\n"
+            + "Before saying you don't know or can't help, consider whether one of your tools could "
+            + "answer the question - if so, use it. Do not return an empty or evasive response when "
+            + "investigation is possible; make a genuine attempt with the tools available before "
+            + "reporting that something cannot be done.\n\n"
             + "When a tool call is denied or cancelled, treat it as a refusal of that specific "
             + "call in that specific moment, not a permanent ban on the tool. You may try the same "
             + "tool again later with adjusted arguments or once the situation changes.\n\n"
             + "Do not list or describe your tools or capabilities unless the user asks. Reply to "
             + "greetings and casual messages naturally and briefly, and bring up what you can do "
             + "only when it is relevant to the user's request.";
+
+        // Per-turn workspace block, built from WorkingDir and injected as its own ephemeral system
+        // message right after the agent prompt (only when a workspace is set). Kept separate from
+        // AgentSystemPrompt because the path is dynamic; absent entirely when there is no workspace,
+        // so a workspace-less turn leaves no trace of one in context. Tells the model where it is
+        // running so questions about "the project/code/files" go to disk before the web.
+        internal static string WorkspaceSystemMessage(string workingDir)
+        {
+            if (string.IsNullOrEmpty(workingDir)) return null;
+            return "You are running in this workspace directory: `" + workingDir + "`. When the user "
+                + "asks about files, code, or the project without naming an external source, they "
+                + "mean this workspace - look here first.";
+        }
 
         private readonly IChatStreamer _streamer;
         private readonly McpToolRegistry _registry;
@@ -155,10 +172,14 @@ namespace GxPT
                 // The names manifest rides as an extra system message in front of history; it is not
                 // persisted (rebuilt each request from the live catalog).
                 // Ephemeral system messages, ordered stable -> volatile for prompt-cache reuse:
-                // constant agent prompt, then memory (changes rarely within a turn), then the
-                // names manifest (rebuilt every request). None are persisted into history.
+                // constant agent prompt, then the workspace block (constant for the turn), then
+                // memory (changes rarely within a turn), then the names manifest (rebuilt every
+                // request). None are persisted into history.
                 List<ChatMessage> requestMessages = new List<ChatMessage>();
                 requestMessages.Add(new ChatMessage("system", AgentSystemPrompt));
+                string workspaceBlock = WorkspaceSystemMessage(WorkingDir);
+                if (!string.IsNullOrEmpty(workspaceBlock))
+                    requestMessages.Add(new ChatMessage("system", workspaceBlock));
                 if (MemorySystemMessageProvider != null)
                 {
                     string memoryBlock = MemorySystemMessageProvider();
