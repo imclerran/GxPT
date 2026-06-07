@@ -33,6 +33,7 @@ namespace GitMcpServer
 
             server.AddTool("status", "Show the working tree status (porcelain).",
                 SchemaBuilder.Object().Build(),
+                ToolAnnotations.ReadOnly(),
                 delegate(ToolCallContext ctx) { return Status(config, runner, ctx); });
 
             server.AddTool("diff", "Show changes; optionally only staged changes or a single path.",
@@ -40,10 +41,12 @@ namespace GitMcpServer
                     .Bool("staged", false, "Show staged (cached) changes instead of the working tree")
                     .Str("path", false, "Limit the diff to this path")
                     .Build(),
+                ToolAnnotations.ReadOnly(),
                 delegate(ToolCallContext ctx) { return Diff(config, runner, ctx); });
 
             server.AddTool("log", "Show recent commit history.",
                 SchemaBuilder.Object().Int("max", false, "Maximum commits to show (default 20)").Build(),
+                ToolAnnotations.ReadOnly(),
                 delegate(ToolCallContext ctx) { return Log(config, runner, ctx); });
 
             server.AddTool("commit", "Stage and commit changes with a message.",
@@ -51,6 +54,7 @@ namespace GitMcpServer
                     .Str("message", true, "The commit message")
                     .Bool("all", false, "Stage all changes (git add -A) before committing")
                     .Build(),
+                ToolAnnotations.Write(),
                 delegate(ToolCallContext ctx) { return Commit(config, runner, ctx); });
 
             server.AddTool("push", "Push commits to a remote.",
@@ -58,6 +62,7 @@ namespace GitMcpServer
                     .Str("remote", false, "Remote name (e.g. origin)")
                     .Str("branch", false, "Branch name")
                     .Build(),
+                ToolAnnotations.Destructive(),
                 delegate(ToolCallContext ctx) { return Push(config, runner, ctx); });
 
             // ---- remote sync ----
@@ -67,6 +72,7 @@ namespace GitMcpServer
                     .Str("remote", false, "Remote name (default: the configured/default remote)")
                     .Bool("prune", false, "Remove remote-tracking refs that no longer exist on the remote")
                     .Build(),
+                ToolAnnotations.ReadOnly(),
                 delegate(ToolCallContext ctx) { return Fetch(config, runner, ctx); });
 
             server.AddTool("pull", "Fetch from and integrate with a remote (merge by default, or rebase).",
@@ -75,6 +81,7 @@ namespace GitMcpServer
                     .Str("branch", false, "Branch name")
                     .Bool("rebase", false, "Rebase the current branch onto the upstream instead of merging")
                     .Build(),
+                ToolAnnotations.Destructive(),
                 delegate(ToolCallContext ctx) { return Pull(config, runner, ctx); });
 
             // ---- branches / working tree ----
@@ -85,6 +92,7 @@ namespace GitMcpServer
                     .Bool("create", false, "Create a new branch from the current HEAD (git checkout -b)")
                     .Str("start_point", false, "When create=true, the commit/branch to start the new branch from")
                     .Build(),
+                ToolAnnotations.Destructive(),
                 delegate(ToolCallContext ctx) { return Checkout(config, runner, ctx); });
 
             server.AddTool("restore", "Restore working-tree files (discard local changes) or unstage them.",
@@ -93,6 +101,7 @@ namespace GitMcpServer
                     .Bool("staged", false, "Restore the staged content (unstage) instead of the working tree")
                     .Str("source", false, "Restore the files' content from this commit/ref")
                     .Build(),
+                ToolAnnotations.Destructive(),
                 delegate(ToolCallContext ctx) { return Restore(config, runner, ctx); });
 
             server.AddTool("branch", "List, create, delete, or rename branches.",
@@ -103,6 +112,7 @@ namespace GitMcpServer
                     .Bool("all", false, "Include remote-tracking branches when listing")
                     .Bool("force", false, "Force the operation (e.g. delete an unmerged branch)")
                     .Build(),
+                ToolAnnotations.Write(),
                 delegate(ToolCallContext ctx) { return Branch(config, runner, ctx); });
 
             // ---- integrate ----
@@ -112,6 +122,7 @@ namespace GitMcpServer
                     .Str("branch", true, "Branch or commit to merge into the current branch")
                     .Bool("no_ff", false, "Always create a merge commit (--no-ff)")
                     .Build(),
+                ToolAnnotations.Destructive(),
                 delegate(ToolCallContext ctx) { return Merge(config, runner, ctx); });
 
             server.AddTool("rebase", "Rebase the current branch, or continue/abort/skip an in-progress rebase.",
@@ -119,6 +130,7 @@ namespace GitMcpServer
                     .Str("action", false, "start | continue | abort | skip (default: start)")
                     .Str("onto", false, "Upstream branch/commit to rebase onto (required when action=start)")
                     .Build(),
+                ToolAnnotations.Destructive(),
                 delegate(ToolCallContext ctx) { return Rebase(config, runner, ctx); });
 
             server.AddTool("cherry_pick", "Apply the changes of an existing commit onto the current branch.",
@@ -126,6 +138,7 @@ namespace GitMcpServer
                     .Str("commit", true, "Commit (or range) to cherry-pick")
                     .Bool("no_commit", false, "Apply the changes without committing (-n)")
                     .Build(),
+                ToolAnnotations.Destructive(),
                 delegate(ToolCallContext ctx) { return CherryPick(config, runner, ctx); });
 
             // ---- staging / stash ----
@@ -135,6 +148,7 @@ namespace GitMcpServer
                     .Arr("paths", "string", false, "Files/pathspecs to stage")
                     .Bool("all", false, "Stage all changes (git add -A)")
                     .Build(),
+                ToolAnnotations.Write(),
                 delegate(ToolCallContext ctx) { return Add(config, runner, ctx); });
 
             server.AddTool("reset", "Reset the current HEAD, or unstage specific paths.",
@@ -143,6 +157,7 @@ namespace GitMcpServer
                     .Str("target", false, "Commit/ref to reset to (default: HEAD)")
                     .Arr("paths", "string", false, "Unstage only these paths (leaves working tree and HEAD untouched)")
                     .Build(),
+                ToolAnnotations.Destructive(),
                 delegate(ToolCallContext ctx) { return Reset(config, runner, ctx); });
 
             server.AddTool("rm", "Remove files from the working tree and the index.",
@@ -151,6 +166,7 @@ namespace GitMcpServer
                     .Bool("cached", false, "Remove only from the index, keeping the working-tree file (--cached)")
                     .Bool("recursive", false, "Allow recursive removal of directories (-r)")
                     .Build(),
+                ToolAnnotations.Destructive(),
                 delegate(ToolCallContext ctx) { return Rm(config, runner, ctx); });
 
             server.AddTool("stash", "Save, restore, list, or drop stashed changes.",
@@ -159,6 +175,7 @@ namespace GitMcpServer
                     .Str("message", false, "Description for the stash (action=push)")
                     .Int("index", false, "Stash index N (refers to stash@{N}) for pop/apply/drop")
                     .Build(),
+                ToolAnnotations.Write(),
                 delegate(ToolCallContext ctx) { return Stash(config, runner, ctx); });
         }
 

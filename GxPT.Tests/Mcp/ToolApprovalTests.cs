@@ -16,11 +16,29 @@ namespace GxPT.Tests.Mcp
             public ApprovalChoice Ask(ApprovalRequest req) { Calls++; Last = req; return Next; }
         }
 
+        // A fixed annotation source: maps a function name to the readOnlyHint/destructiveHint JObject
+        // the discovered tool would carry (mirrors what McpToolRegistry plumbs from tools/list).
+        private sealed class FakeAnnotations : IToolAnnotationSource
+        {
+            private readonly Dictionary<string, JObject> _map = new Dictionary<string, JObject>();
+            public FakeAnnotations Set(string fn, JObject ann) { _map[fn] = ann; return this; }
+            public JObject AnnotationsFor(string functionName)
+            {
+                JObject a;
+                return _map.TryGetValue(functionName, out a) ? a : null;
+            }
+        }
+
         private static JObject Args(string json) { return JObject.Parse(json); }
 
         private static ToolApprovalPolicy Policy(ScriptedPrompt prompt, IApprovalStore store)
         {
             return new ToolApprovalPolicy(new ToolClassifier(), prompt, store);
+        }
+
+        private static ToolApprovalPolicy Policy(ScriptedPrompt prompt, IApprovalStore store, IToolAnnotationSource annotations)
+        {
+            return new ToolApprovalPolicy(new ToolClassifier(), prompt, store, annotations);
         }
 
         // ---- classification (spec §2) ----
@@ -78,6 +96,59 @@ namespace GxPT.Tests.Mcp
             var unknown = c.Classify("acme__do", null, false);
             Assert.Equal(ToolTier.Write, unknown.Tier);
             Assert.Equal(RememberScope.Tool, unknown.Scope);
+        }
+
+        // ---- annotations plumbed end-to-end through the policy (#94) ----
+
+        [Fact]
+        public void Third_party_read_only_annotation_auto_allows_without_prompt()
+        {
+            var prompt = new ScriptedPrompt { Next = ApprovalChoice.Deny };
+            var ann = new FakeAnnotations().Set("acme__peek", JObject.Parse("{\"readOnlyHint\":true}"));
+            var pol = Policy(prompt, new InMemoryApprovalStore(), ann);
+
+            // The declared readOnlyHint reaches the classifier -> ReadOnly tier -> allowed, no prompt.
+            Assert.Equal(ApprovalDecision.Allow, pol.Check("acme__peek", Args("{}")));
+            Assert.Equal(0, prompt.Calls);
+        }
+
+        [Fact]
+        public void Third_party_destructive_annotation_prompts_every_time()
+        {
+            var prompt = new ScriptedPrompt { Next = ApprovalChoice.RememberTool }; // even if user tries to remember
+            var ann = new FakeAnnotations().Set("acme__nuke", JObject.Parse("{\"destructiveHint\":true}"));
+            var pol = Policy(prompt, new InMemoryApprovalStore(), ann);
+
+            pol.Check("acme__nuke", Args("{}"));
+            pol.Check("acme__nuke", Args("{}"));
+            Assert.Equal(2, prompt.Calls); // Destructive -> None scope -> never remembered
+        }
+
+        [Fact]
+        public void Third_party_without_annotation_falls_back_to_write_tool()
+        {
+            // Fail-safe default (#94): an absent hint is treated as NOT read-only, so the tool is gated
+            // as Write/Tool (prompt once, then remembered) rather than silently auto-allowed.
+            var prompt = new ScriptedPrompt { Next = ApprovalChoice.RememberTool };
+            var pol = Policy(prompt, new InMemoryApprovalStore(), new FakeAnnotations());
+
+            Assert.Equal(ApprovalDecision.Allow, pol.Check("acme__do", Args("{}")));
+            Assert.Equal(1, prompt.Calls);
+            Assert.Equal(ApprovalDecision.Allow, pol.Check("acme__do", Args("{}")));
+            Assert.Equal(1, prompt.Calls); // remembered (Tool scope)
+        }
+
+        [Fact]
+        public void First_party_tools_ignore_the_annotation_source()
+        {
+            // First-party tools are classified by the authoritative table, never by annotations — so a
+            // (bogus) readOnlyHint for git__push must not downgrade it out of the Destructive tier.
+            var prompt = new ScriptedPrompt { Next = ApprovalChoice.Deny };
+            var ann = new FakeAnnotations().Set("git__push", JObject.Parse("{\"readOnlyHint\":true}"));
+            var pol = Policy(prompt, new InMemoryApprovalStore(), ann);
+
+            pol.Check("git__push", Args("{}"));
+            Assert.Equal(1, prompt.Calls); // still gated (Destructive), not auto-allowed
         }
 
         // ---- decision model (spec §3) ----

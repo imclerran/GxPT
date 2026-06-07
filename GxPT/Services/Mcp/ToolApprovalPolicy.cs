@@ -5,6 +5,15 @@ using Newtonsoft.Json.Linq;
 
 namespace GxPT
 {
+    // Supplies the capability annotations (readOnlyHint/destructiveHint) a discovered tool declared,
+    // keyed by qualified function name. Implemented by McpToolRegistry; injected into ToolApprovalPolicy
+    // so third-party tools are classified by their declared hints rather than always falling through to
+    // the conservative Write/Tool tier. Returns null when the tool set no annotations.
+    internal interface IToolAnnotationSource
+    {
+        JObject AnnotationsFor(string functionName);
+    }
+
     // The real approval gate (approval spec §3) behind the orchestrator's IToolApprovalPolicy.Check.
     // Classifies the tool, consults remembered approvals (tool-name set + argument rules), and only
     // prompts (via IToolApprovalPrompt) when not already allowed; persists the user's remembered
@@ -17,12 +26,22 @@ namespace GxPT
         private readonly IToolClassifier _classifier;
         private readonly IToolApprovalPrompt _prompt;
         private readonly IApprovalStore _store;
+        private readonly IToolAnnotationSource _annotations;
 
         public ToolApprovalPolicy(IToolClassifier classifier, IToolApprovalPrompt prompt, IApprovalStore store)
+            : this(classifier, prompt, store, null)
+        {
+        }
+
+        // annotations: source of each tool's declared readOnlyHint/destructiveHint (the registry). When
+        // null, no annotations are available and every non-first-party tool falls back to Write/Tool.
+        public ToolApprovalPolicy(IToolClassifier classifier, IToolApprovalPrompt prompt, IApprovalStore store,
+            IToolAnnotationSource annotations)
         {
             _classifier = classifier != null ? classifier : new ToolClassifier();
             _prompt = prompt;
             _store = store != null ? store : new InMemoryApprovalStore();
+            _annotations = annotations;
         }
 
         // The orchestrator calls this. functionName is the qualified name; args already parsed.
@@ -30,15 +49,21 @@ namespace GxPT
         {
             string server = ServerOf(functionName);
             bool firstParty = server != null && _firstPartyServers.ContainsKey(server);
-            JObject annotations = null; // third-party annotations not yet plumbed; unknown -> Write/Tool
+            // Pull the tool's declared capability hints from the discovered definition. First-party tools
+            // are classified by the authoritative hardcoded table (annotations ignored), so only look them
+            // up for third-party tools. Absent annotations -> null -> classifier fails closed (Write/Tool),
+            // so a forgotten readOnlyHint never silently widens access.
+            JObject annotations = (!firstParty && _annotations != null)
+                ? _annotations.AnnotationsFor(functionName)
+                : null;
             ToolPolicy pol = _classifier.Classify(functionName, annotations, firstParty);
 
             // Read-only tools never modify anything -> always allowed, no prompt. Driven by the
             // classified tier (not a name list), so every ReadOnly tool auto-allows: the read-only
             // built-ins (files read/list/search, git status/diff/log/fetch, web search/extract,
-            // memory read_memory) and any future ReadOnly tool. Third-party tools can't currently
-            // reach ReadOnly (their annotations aren't plumbed; unknown -> Write); if that changes and
-            // you don't want to trust a server's self-declared readOnlyHint, add "&& firstParty" here.
+            // memory read_memory) and any future ReadOnly tool. A third-party tool now reaches ReadOnly
+            // too when it declares readOnlyHint:true (plumbed above); if you don't want to trust a
+            // server's self-declared readOnlyHint, add "&& firstParty" here.
             if (pol.Tier == ToolTier.ReadOnly)
                 return ApprovalDecision.Allow;
 

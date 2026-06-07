@@ -37,6 +37,7 @@ namespace MemoryMcpServer
                         + "more worth storing than fits in one line - a detail file costs an extra "
                         + "read_memory call to retrieve later.")
                     .Build(),
+                ToolAnnotations.Write(),
                 delegate(ToolCallContext ctx) { return Remember(store, ctx); });
 
             server.AddTool("read_memory",
@@ -45,6 +46,7 @@ namespace MemoryMcpServer
                 SchemaBuilder.Object()
                     .Str("name", true, "The memory's name (as shown in the index).")
                     .Build(),
+                ToolAnnotations.ReadOnly(),
                 delegate(ToolCallContext ctx) { return Read(store, ctx); });
 
             server.AddTool("update_memory",
@@ -58,6 +60,7 @@ namespace MemoryMcpServer
                     .Str("detail", false, "New full detail contents (replaces <name>.md entirely; empty "
                         + "removes it).")
                     .Build(),
+                ToolAnnotations.Write(),
                 delegate(ToolCallContext ctx) { return Update(store, ctx); });
 
             server.AddTool("forget",
@@ -65,6 +68,7 @@ namespace MemoryMcpServer
                 SchemaBuilder.Object()
                     .Str("name", true, "The memory's name (as shown in the index).")
                     .Build(),
+                ToolAnnotations.Write(),
                 delegate(ToolCallContext ctx) { return Forget(store, ctx); });
 
             server.AddTool("consolidate",
@@ -81,6 +85,7 @@ namespace MemoryMcpServer
                     .Str("detail", true, "The merged note: one section per absorbed memory, keyed by its "
                         + "original name.")
                     .Build(),
+                ToolAnnotations.Write(),
                 delegate(ToolCallContext ctx) { return Consolidate(store, ctx); });
         }
 

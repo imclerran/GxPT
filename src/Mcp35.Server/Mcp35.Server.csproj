@@ -43,6 +43,7 @@
     <Compile Include="ToolRegistration.cs" />
     <Compile Include="ToolResults.cs" />
     <Compile Include="SchemaBuilder.cs" />
+    <Compile Include="ToolAnnotations.cs" />
     <Compile Include="StdErrLogSink.cs" />
     <Compile Include="Process\ProcessRunner.cs" />
     <Compile Include="Process\ProcessRequest.cs" />
