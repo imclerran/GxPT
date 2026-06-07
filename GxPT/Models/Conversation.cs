@@ -38,8 +38,10 @@ namespace GxPT
         // Whether the user dismissed the (unset) workspace strip for this conversation; persisted so
         // the strip stays hidden on reopen until they set a folder.
         public bool WorkspaceStripDismissed { get; set; }
-        // Zero data retention for this conversation. Zdr is the per-conversation toggle (effective ZDR
-        // for a send is globalDefault OR Zdr). ZdrFirstMessageIndex is a one-way latch: the History
+        // Zero data retention for this conversation. Zdr is the per-conversation toggle and the sole
+        // source of truth for effective ZDR: it is seeded from the global default when a new conversation
+        // is created (see the constructor), but the global default is NOT a live override - the user can
+        // uncheck the box before the first send. ZdrFirstMessageIndex is a one-way latch: the History
         // index of the first user message actually sent with ZDR on (-1 until then). Once latched it
         // never clears, so the checkbox locks on and the tab/messages are marked from that point.
         public bool Zdr { get; set; }
@@ -53,6 +55,11 @@ namespace GxPT
             Name = GenericName; // initialize to generic name
             SelectedModel = null;
             ZdrFirstMessageIndex = -1; // not latched until a ZDR send occurs
+            // A brand-new conversation inherits the current global ZDR default as its starting value
+            // (seed only - not a live override, so the user can still uncheck it before the first send).
+            // Loaded conversations overwrite this from their saved value in ConversationStore.FromDto.
+            try { Zdr = AppSettings.GetGlobalZdrDefault(); }
+            catch { Zdr = false; }
             LastUpdated = DateTime.Now;
         }
 
@@ -110,12 +117,10 @@ namespace GxPT
                     }
 
                     // Respect ZDR for the title request too (it sends the user's message): effective
-                    // ZDR is the global default OR this conversation's toggle OR a latched conversation.
-                    // If ZDR is in effect it stays in effect for every retry — the title model supports
-                    // ZDR, so we never fall back to a non-ZDR request.
-                    bool zdr;
-                    try { zdr = AppSettings.GetGlobalZdrDefault() || this.Zdr || ZdrFirstMessageIndex >= 0; }
-                    catch { zdr = this.Zdr || ZdrFirstMessageIndex >= 0; }
+                    // ZDR is this conversation's toggle (seeded from the global default at creation) OR a
+                    // latched conversation. If ZDR is in effect it stays in effect for every retry — the
+                    // title model supports ZDR, so we never fall back to a non-ZDR request.
+                    bool zdr = this.Zdr || ZdrFirstMessageIndex >= 0;
 
                     string title = RequestTitleWithRetry(userMsg, zdr);
                     if (!string.IsNullOrEmpty(title))
