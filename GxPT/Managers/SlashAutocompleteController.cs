@@ -57,7 +57,7 @@ namespace GxPT
             _hostCtl.Margin = Padding.Empty;
             _hostCtl.Padding = Padding.Empty;
 
-            _dropDown = new ToolStripDropDown();
+            _dropDown = new NonActivatingDropDown();
             _dropDown.AutoClose = true;        // closes on outside click / focus change
             _dropDown.DropShadowEnabled = true;
             _dropDown.Padding = Padding.Empty;
@@ -267,6 +267,11 @@ namespace GxPT
 
         private void SizeAndShow()
         {
+            // Match the user's input font (set in Settings) so the list scales on high-DPI screens
+            // instead of rendering at the ListBox default size. ItemHeight follows the font.
+            if (_txt.Font != null && !_list.Font.Equals(_txt.Font))
+                _list.Font = _txt.Font;
+
             int rows = Math.Min(_items.Count, MaxRows);
             int itemH = _list.ItemHeight > 0 ? _list.ItemHeight : 15;
             int height = rows * itemH + 4;
@@ -354,6 +359,37 @@ namespace GxPT
             public readonly string Name;
             public readonly bool IsDir;
             public Entry(string name, bool isDir) { Name = name; IsDir = isDir; }
+        }
+
+        // A ToolStripDropDown that never takes activation: the input box keeps keyboard focus while the
+        // popup is open, so typing continues and the arrow/Tab/Enter routing (handled on the text box)
+        // keeps working. Without this, Show() activates the popup window and the text box goes dead.
+        private sealed class NonActivatingDropDown : ToolStripDropDown
+        {
+            private const int WS_EX_NOACTIVATE = 0x08000000;
+            private const int WM_MOUSEACTIVATE = 0x0021;
+            private const int MA_NOACTIVATE = 0x0003;
+
+            protected override CreateParams CreateParams
+            {
+                get
+                {
+                    CreateParams cp = base.CreateParams;
+                    cp.ExStyle |= WS_EX_NOACTIVATE;
+                    return cp;
+                }
+            }
+
+            protected override void WndProc(ref Message m)
+            {
+                // Don't activate (and don't steal focus) when an item is clicked.
+                if (m.Msg == WM_MOUSEACTIVATE)
+                {
+                    m.Result = (IntPtr)MA_NOACTIVATE;
+                    return;
+                }
+                base.WndProc(ref m);
+            }
         }
     }
 }
