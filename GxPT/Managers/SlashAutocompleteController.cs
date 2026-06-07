@@ -35,10 +35,6 @@ namespace GxPT
 
         private readonly List<Item> _items = new List<Item>();
         private bool _ignoreNextChange;
-        // True once the user has moved the selection with the arrow keys. Enter accepts only after
-        // navigation; otherwise Enter falls through and sends, so "/commit"+Enter still sends in one
-        // keystroke. Tab always accepts.
-        private bool _navigated;
 
         // One-directory cache so typing within the same folder filters in memory instead of re-scanning.
         private string _cacheKey;
@@ -64,6 +60,10 @@ namespace GxPT
             if (_txt != null)
             {
                 _txt.TextChanged += delegate { OnTextChanged(); };
+                // Tab (and, defensively, the nav/accept keys) are otherwise consumed by WinForms during
+                // key pre-processing for focus navigation, so KeyDown never sees them. Marking them as
+                // input keys while the popup is open routes them to our KeyDown handler instead.
+                _txt.PreviewKeyDown += Txt_PreviewKeyDown;
                 // Safe now that the popup never takes focus on show: this only fires on a genuine focus
                 // change (the user clicked another control), which is exactly when we want to close.
                 _txt.LostFocus += delegate { Hide(); };
@@ -92,12 +92,9 @@ namespace GxPT
                     e.Handled = true; e.SuppressKeyPress = true;
                     return true;
                 case Keys.Tab:
-                    AcceptSelected();
-                    e.Handled = true; e.SuppressKeyPress = true;
-                    return true;
                 case Keys.Enter:
-                    // Accept only if the user navigated the list; otherwise let Enter send.
-                    if (!_navigated) return false;
+                    // While the popup is open, both accept the highlighted item (it always has a
+                    // selection). Sending happens on the next Enter, once the popup has closed.
                     AcceptSelected();
                     e.Handled = true; e.SuppressKeyPress = true;
                     return true;
@@ -251,7 +248,6 @@ namespace GxPT
         {
             if (_items.Count == 0) { Hide(); return; }
 
-            _navigated = false; // fresh result set: Enter sends until the user navigates again
             _list.BeginUpdate();
             try
             {
@@ -289,10 +285,24 @@ namespace GxPT
                 _popup.ShowNoActivate();
         }
 
+        private void Txt_PreviewKeyDown(object sender, PreviewKeyDownEventArgs e)
+        {
+            if (!IsOpen) return;
+            switch (e.KeyCode)
+            {
+                case Keys.Tab:
+                case Keys.Up:
+                case Keys.Down:
+                case Keys.Enter:
+                case Keys.Escape:
+                    e.IsInputKey = true; // ensure KeyDown fires for these instead of being pre-handled
+                    break;
+            }
+        }
+
         private void Move(int delta)
         {
             if (_list.Items.Count == 0) return;
-            _navigated = true;
             int idx = _list.SelectedIndex + delta;
             if (idx < 0) idx = 0;
             if (idx > _list.Items.Count - 1) idx = _list.Items.Count - 1;
