@@ -289,6 +289,14 @@ namespace Mcp35.Core.Rpc
             }
         }
 
+        // The peer holds no process of its own; "forceful" is honored by the underlying channel,
+        // which the owning transport configures (e.g. StdioTransport sets StdioChannel.ForcefulShutdown
+        // before disposing). Either way the teardown sequence here is the same.
+        public void Shutdown(bool forceful)
+        {
+            Dispose();
+        }
+
         public void Dispose()
         {
             lock (_gate)

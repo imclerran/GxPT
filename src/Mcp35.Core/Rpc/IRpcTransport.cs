@@ -48,6 +48,14 @@ namespace Mcp35.Core.Rpc
         void Start();
         bool IsConnected { get; }
 
+        /// <summary>
+        /// Tear down the transport. When <paramref name="forceful"/> is true, favor speed over
+        /// politeness for application/host shutdown: kill child processes immediately and skip
+        /// best-effort niceties (the graceful stdin-EOF wait, the HTTP session DELETE). When
+        /// false, behaves exactly like <see cref="IDisposable.Dispose"/>.
+        /// </summary>
+        void Shutdown(bool forceful);
+
         /// <summary>Blocking request/response; the transport allocates the id and correlates.</summary>
         JsonRpcResponse SendRequest(string method, JToken @params, int timeoutMs);
 

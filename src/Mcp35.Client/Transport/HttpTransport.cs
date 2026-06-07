@@ -142,11 +142,19 @@ namespace Mcp35.Client.Transport
 
         public void Dispose()
         {
+            Shutdown(false);
+        }
+
+        public void Shutdown(bool forceful)
+        {
             if (_disposed) return;
             _disposed = true;
 
             // Best-effort session teardown: DELETE with the session header. Failure is swallowed.
-            if (_sessionId != null)
+            // Forceful (app/host shutdown) skips it — a blocking network round trip to a remote
+            // server that may be slow or unreachable must not delay close; the server GCs the
+            // session on its own timeout.
+            if (!forceful && _sessionId != null)
             {
                 try
                 {

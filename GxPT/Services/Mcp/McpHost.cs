@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Mcp35.Client;
 using Mcp35.Core.Diagnostics;
 
@@ -243,7 +244,16 @@ namespace GxPT
         }
 
         // Unsubscribe (so Dispose's Closed event doesn't re-enter), drop from the registry, dispose.
+        // Graceful path: gives each child the stdin-EOF grace window. Runtime tab-close teardowns
+        // (ReleaseWorkingDir/RetainOnly) use this.
         private void Teardown(McpServerConnection conn)
+        {
+            Teardown(conn, false);
+        }
+
+        // forceful=true tears the connection down for speed (kill child immediately, skip the HTTP
+        // session DELETE) — for application/host shutdown.
+        private void Teardown(McpServerConnection conn, bool forceful)
         {
             if (conn == null) return;
             try { conn.ToolsChanged -= OnToolsChanged; }
@@ -251,23 +261,56 @@ namespace GxPT
             try { conn.StateChanged -= OnStateChanged; }
             catch { }
             _registry.RemoveConnection(conn);
-            try { conn.Dispose(); }
+            try { conn.Shutdown(forceful); }
             catch { }
         }
 
         public void Dispose()
         {
+            // Snapshot every connection under the lock, then tear them down OUTSIDE it so a slow
+            // shutdown can't block other host callers on the lock.
+            List<McpServerConnection> all = new List<McpServerConnection>();
             lock (_lock)
             {
                 if (_disposed) return;
                 _disposed = true;
                 foreach (List<McpServerConnection> conns in _scopedByWorkdir.Values)
-                    for (int i = 0; i < conns.Count; i++) Teardown(conns[i]);
+                    all.AddRange(conns);
                 _scopedByWorkdir.Clear();
                 _pendingWorkdirs.Clear();
-                for (int i = 0; i < _eager.Count; i++) Teardown(_eager[i]);
+                all.AddRange(_eager);
                 _eager.Clear();
             }
+
+            ForcefulTeardownAll(all);
         }
+
+        // Tear down many connections concurrently with a forceful (kill-now) shutdown. Each child's
+        // teardown is independent, so fanning them across the thread pool turns N sequential waits
+        // into one batch. Each forceful kill is ~instant; the overall cap is only a backstop so a
+        // pathologically stuck transport can never freeze the caller (the UI thread on app close).
+        private void ForcefulTeardownAll(List<McpServerConnection> conns)
+        {
+            if (conns == null || conns.Count == 0) return;
+
+            int remaining = conns.Count;
+            ManualResetEvent done = new ManualResetEvent(false);
+            for (int i = 0; i < conns.Count; i++)
+            {
+                McpServerConnection c = conns[i];
+                ThreadPool.QueueUserWorkItem(delegate
+                {
+                    try { Teardown(c, true); }
+                    catch { }
+                    finally { if (Interlocked.Decrement(ref remaining) == 0) { try { done.Set(); } catch { } } }
+                });
+            }
+            // Backstop only; near-instant in practice. Not disposed, to avoid a race with a late
+            // worker calling Set() after the cap fires (this path runs only on shutdown/rebuild).
+            done.WaitOne(ForcefulShutdownCapMs, false);
+        }
+
+        // Upper bound on how long Dispose will wait for the parallel forceful teardown to finish.
+        private const int ForcefulShutdownCapMs = 1500;
     }
 }

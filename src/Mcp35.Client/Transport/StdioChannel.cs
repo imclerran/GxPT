@@ -31,6 +31,15 @@ namespace Mcp35.Client.Transport
         private volatile bool _stopping;
         private int _faultRaised; // 0/1 guard so Faulted fires at most once
 
+        /// <summary>
+        /// When set before <see cref="Dispose"/>, the child is killed immediately instead of being
+        /// given the stdin-EOF grace window. Kill (TerminateProcess) guarantees the child dies even
+        /// though we don't wait, and the reader/stderr threads are background threads, so this path
+        /// neither waits for exit nor joins them — teardown is effectively instantaneous. Used for
+        /// application/host shutdown where speed matters more than a polite handshake.
+        /// </summary>
+        internal bool ForcefulShutdown;
+
         public event Action<string> MessageReceived;
         public event Action<Exception> Faulted;
 
@@ -154,6 +163,18 @@ namespace Mcp35.Client.Transport
                 if (_proc != null) _proc.StandardInput.Close();
             }
             catch (Exception ex) { _log.Log("mcp", "Closing stdin threw: " + ex.Message); }
+
+            // Forceful (app/host shutdown): kill now and return. TerminateProcess guarantees the
+            // child dies without us waiting, and the reader/stderr threads are background threads,
+            // so we skip both WaitForExit and the joins. Effectively instantaneous.
+            if (ForcefulShutdown)
+            {
+                try { if (_proc != null && !_proc.HasExited) _proc.Kill(); }
+                catch (Exception ex) { _log.Log("mcp", "Kill threw: " + ex.Message); }
+                try { if (_proc != null) _proc.Close(); }
+                catch { }
+                return;
+            }
 
             // 2. Wait for graceful exit, else kill.
             try

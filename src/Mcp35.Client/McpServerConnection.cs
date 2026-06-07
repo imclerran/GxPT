@@ -201,9 +201,19 @@ namespace Mcp35.Client
 
         public void Dispose()
         {
+            Shutdown(false);
+        }
+
+        /// <summary>
+        /// Close the connection. When <paramref name="forceful"/> is true, the transport tears down
+        /// for speed (kill child processes immediately, skip best-effort niceties) — for
+        /// application/host shutdown. When false, behaves like <see cref="Dispose"/>.
+        /// </summary>
+        public void Shutdown(bool forceful)
+        {
             try { _transport.Inbound -= OnInbound; }
             catch { }
-            try { _transport.Dispose(); }
+            try { _transport.Shutdown(forceful); }
             catch (Exception ex) { _log.Log("mcp", "Transport dispose threw: " + ex.Message); }
             SetState(ConnectionState.Closed, null);
         }
