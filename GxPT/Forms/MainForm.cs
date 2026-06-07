@@ -20,6 +20,10 @@ namespace GxPT
         private OpenRouterClient _client;
         private McpHost _mcpHost;
         private McpToolRegistry _mcpRegistry;
+        // Slash-command subsystem (built lazily on first send/keystroke; see EnsureSlashCommands).
+        private SlashCommandRegistry _slashRegistry;
+        private SlashCommandProcessor _slashProcessor;
+        private ISlashCommandContext _slashContext;
         // Remembered tool approvals are shared across all tabs for the app session (in-memory). The
         // approval *prompt* is per-tab (each conversation has its own ToolApprovalPanel), but the
         // remembered choices live in this one store so "remember" applies everywhere.
@@ -1241,6 +1245,37 @@ namespace GxPT
             this.Close();
         }
 
+        // Build the slash-command registry/processor on first use. Defaults are merged with the user's
+        // %AppData%/GxPT/commands.json (if present). The context reads live state through delegates so
+        // it always sees the current working folder and the current MCP registry (which is recreated
+        // when the working folder changes).
+        private void EnsureSlashCommands()
+        {
+            if (_slashProcessor != null) return;
+
+            string userJson = null;
+            try
+            {
+                string path = Path.Combine(AppSettings.SettingsDirectory, "commands.json");
+                if (File.Exists(path)) userJson = File.ReadAllText(path);
+            }
+            catch { }
+
+            var commands = SlashCommandConfig.LoadMerged(userJson, LoggerSink.Instance);
+            _slashRegistry = new SlashCommandRegistry(commands);
+            _slashProcessor = new SlashCommandProcessor(_slashRegistry);
+            _slashContext = new DelegateSlashCommandContext(
+                delegate
+                {
+                    var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                    return (c != null && c.Conversation != null) ? c.Conversation.WorkingDir : null;
+                },
+                delegate(string serverName)
+                {
+                    return _mcpRegistry != null && _mcpRegistry.HasServer(serverName);
+                });
+        }
+
         private void btnSend_Click(object sender, EventArgs e)
         {
             var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
@@ -1250,6 +1285,35 @@ namespace GxPT
             string baseText = _inputManager != null ? (_inputManager.GetInputText() ?? string.Empty) : string.Empty;
             string text = baseText;
             if (ctx.IsSending) return; // ensure only one in-flight request per tab
+
+            // Slash-command interception. Only a leading slash (position 0) is a command; prompt
+            // commands expand in place (the expansion becomes the actual user message), while gated or
+            // invalid commands are surfaced without sending. Unknown "/foo" returns null and is sent
+            // literally, so ordinary messages that happen to start with "/" are not hijacked.
+            if (baseText.Length > 0 && baseText[0] == '/')
+            {
+                EnsureSlashCommands();
+                var slash = _slashProcessor.Process(baseText, _slashContext);
+                if (slash != null)
+                {
+                    if (slash.Error != null)
+                    {
+                        // Surface the reason like other inline errors; keep the typed command so the
+                        // user can correct it (e.g. fix the path or enable the server).
+                        ctx.Transcript.AddMessage(MessageRole.Assistant, slash.Error);
+                        return;
+                    }
+                    if (!slash.SendToModel)
+                    {
+                        // Client command handled locally (none in v1, but the seam is live).
+                        if (_inputManager != null) _inputManager.ClearInput();
+                        return;
+                    }
+                    // Prompt expansion: send the template instead of the typed "/command".
+                    baseText = slash.TextToSend;
+                    text = slash.TextToSend;
+                }
+            }
 
             // If editing a prior user message, compare text+attachments+model; confirm only if changed
             bool isEditResend = false;
