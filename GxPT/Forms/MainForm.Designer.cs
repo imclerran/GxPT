@@ -19,13 +19,13 @@
             }
             // TEMP shutdown instrumentation: base.Dispose recursively disposes the whole control
             // tree (tabs + transcripts), the prime suspect for close latency.
-            if (disposing) ShutdownDiag.Log("MainForm.Dispose: control-tree disposal begin");
+            if (disposing) ShutdownDiag.Mark("MainForm.Dispose: control-tree disposal begin");
             long __t = disposing ? ShutdownDiag.Now : 0;
             base.Dispose(disposing);
             if (disposing)
             {
-                ShutdownDiag.Log("MainForm.Dispose: control-tree disposal done (+" + (ShutdownDiag.Now - __t) + "ms)");
-                ShutdownDiag.Log("Transcripts disposed during close: " + ShutdownDiag.TranscriptCount
+                ShutdownDiag.Mark("MainForm.Dispose: control-tree disposal done (+" + (ShutdownDiag.Now - __t) + "ms)");
+                ShutdownDiag.Mark("Transcripts disposed during close: " + ShutdownDiag.TranscriptCount
                     + " in " + ShutdownDiag.TranscriptTotalMs + "ms total");
             }
         }

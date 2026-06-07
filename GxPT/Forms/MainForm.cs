@@ -263,7 +263,7 @@ namespace GxPT
         private void MainForm_FormClosing_SaveOpenTabs(object sender, FormClosingEventArgs e)
         {
             ShutdownDiag.Begin(); // TEMP shutdown instrumentation
-            ShutdownDiag.Log("FormClosing: begin");
+            ShutdownDiag.Mark("FormClosing: begin");
 
             long __tSave = ShutdownDiag.Now;
             try
@@ -273,20 +273,20 @@ namespace GxPT
                 SessionState.SaveOpenTabs(openIds, activeId);
             }
             catch { }
-            ShutdownDiag.Log("FormClosing: SaveOpenTabs done (+" + (ShutdownDiag.Now - __tSave) + "ms)");
+            ShutdownDiag.Mark("FormClosing: SaveOpenTabs done (+" + (ShutdownDiag.Now - __tSave) + "ms)");
 
             // Shut down MCP servers (close stdio children / HTTP sessions).
             long __tMcp = ShutdownDiag.Now;
             try { if (_mcpHost != null) _mcpHost.Dispose(); }
             catch { }
-            ShutdownDiag.Log("FormClosing: McpHost.Dispose done (+" + (ShutdownDiag.Now - __tMcp) + "ms)");
+            ShutdownDiag.Mark("FormClosing: McpHost.Dispose done (+" + (ShutdownDiag.Now - __tMcp) + "ms)");
         }
 
         // TEMP shutdown instrumentation: milestone after the form has closed but before/around
         // control-tree disposal.
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
-            ShutdownDiag.Log("OnFormClosed");
+            ShutdownDiag.Mark("OnFormClosed");
             base.OnFormClosed(e);
         }
 

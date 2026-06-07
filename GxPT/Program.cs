@@ -57,7 +57,28 @@ namespace GxPT
                     catch { }
                 };
             }
+            // TEMP shutdown instrumentation: capture the tail past Dispose into CLR/process exit.
+            AppDomain.CurrentDomain.ProcessExit += delegate
+            {
+                ShutdownDiag.Mark("ProcessExit (finalizers/CLR shutdown begin)");
+                ShutdownDiag.Flush();
+            };
+
             Application.Run(mainForm);
+
+            // The message loop has exited and the form is disposed by here.
+            ShutdownDiag.Mark("Application.Run returned");
+
+            // Deterministic probe: drop the form root and force a full GC + finalizer pass so we can
+            // MEASURE finalizer/native-handle cleanup cost here (reliably, while we can still log)
+            // instead of inferring it from the unpredictable CLR-shutdown finalization tail.
+            long __g = ShutdownDiag.Now;
+            mainForm = null;
+            System.GC.Collect();
+            System.GC.WaitForPendingFinalizers();
+            System.GC.Collect();
+            ShutdownDiag.Mark("forced GC + finalizers done (+" + (ShutdownDiag.Now - __g) + "ms)");
+            ShutdownDiag.Flush();
         }
     }
 }
