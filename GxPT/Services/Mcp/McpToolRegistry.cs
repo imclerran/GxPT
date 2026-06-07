@@ -233,6 +233,25 @@ namespace GxPT
             get { lock (_lock) { return _byFunctionName.Count > 0; } }
         }
 
+        // True when any tool from the named server is currently exposed (the server is enabled,
+        // connected, and -- for workdir-scoped servers -- bound to a working directory). Tool names are
+        // server-qualified ("git__status"), so a present prefix is an accurate "this toolset is usable
+        // right now" signal. Used to gate slash commands via their Requires / RequiresAny lists.
+        public bool HasServer(string serverName)
+        {
+            if (string.IsNullOrEmpty(serverName)) return false;
+            string prefix = serverName + "__";
+            lock (_lock)
+            {
+                foreach (string fn in _byFunctionName.Keys)
+                {
+                    if (fn != null && fn.StartsWith(prefix, StringComparison.Ordinal))
+                        return true;
+                }
+            }
+            return false;
+        }
+
         public string NamesManifestSystemMessage()
         {
             lock (_lock)
