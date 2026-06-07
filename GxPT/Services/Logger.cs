@@ -24,9 +24,6 @@ namespace GxPT
             catch { }
         }
 
-        // Exposes the logging gate so diagnostics can avoid altering behavior when logging is off.
-        public static bool Enabled { get { return IsEnabled(); } }
-
         private static bool IsEnabled()
         {
             try

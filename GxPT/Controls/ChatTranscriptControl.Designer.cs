@@ -13,9 +13,6 @@
         /// <param name="disposing">true if managed resources should be disposed; otherwise, false.</param>
         protected override void Dispose(bool disposing)
         {
-            // TEMP shutdown instrumentation: only accounts for disposals during the close window.
-            bool __diag = disposing && ShutdownDiag.Running;
-            long __t = __diag ? ShutdownDiag.Now : 0;
             if (disposing && (components != null))
             {
                 components.Dispose();
@@ -23,11 +20,6 @@
             try { SyntaxHighlightingRenderer.SegmentsReady -= OnSegmentsReady; }
             catch { }
             base.Dispose(disposing);
-            if (__diag)
-            {
-                ShutdownDiag.TranscriptCount++;
-                ShutdownDiag.TranscriptTotalMs += (ShutdownDiag.Now - __t);
-            }
         }
 
         #region Component Designer generated code

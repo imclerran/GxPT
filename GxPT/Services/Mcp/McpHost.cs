@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Threading;
 using Mcp35.Client;
 using Mcp35.Core.Diagnostics;
@@ -364,7 +363,7 @@ namespace GxPT
         public void Dispose()
         {
             // Snapshot every connection under the lock, then tear them down OUTSIDE it so a slow
-            // shutdown can't block other host callers on the lock.
+            // teardown can't block other host callers on the lock.
             List<McpServerConnection> all = new List<McpServerConnection>();
             lock (_lock)
             {
@@ -378,60 +377,9 @@ namespace GxPT
                 _eager.Clear();
             }
 
-            ForcefulTeardownAll(all);
+            // Forceful (kill-now) teardown: each child exits in ~1ms whether it's killed or sees its
+            // stdin close, so a simple sequential loop is plenty fast and avoids thread-pool overhead.
+            for (int i = 0; i < all.Count; i++) Teardown(all[i], true);
         }
-
-        // Tear down many connections concurrently with a forceful (kill-now) shutdown. Each child's
-        // teardown is independent, so fanning them across the thread pool turns N sequential waits
-        // into one batch. Each forceful kill is ~instant; the overall cap is only a backstop so a
-        // pathologically stuck transport can never freeze the caller (the UI thread on app close).
-        private void ForcefulTeardownAll(List<McpServerConnection> conns)
-        {
-            if (conns == null || conns.Count == 0) return;
-
-            // TEMP shutdown diagnostics (read by the close instrumentation after Dispose).
-            Stopwatch __sw = Stopwatch.StartNew();
-            DiagCount = conns.Count;
-            long __firstWorkerStart = -1;
-
-            int remaining = conns.Count;
-            ManualResetEvent done = new ManualResetEvent(false);
-            for (int i = 0; i < conns.Count; i++)
-            {
-                McpServerConnection c = conns[i];
-                ThreadPool.QueueUserWorkItem(delegate
-                {
-                    // Record when the FIRST queued worker actually starts running — this exposes
-                    // thread-pool injection lag (.NET 3.5 can be slow to add worker threads).
-                    Interlocked.CompareExchange(ref __firstWorkerStart, __sw.ElapsedMilliseconds, -1);
-                    try { Teardown(c, true); }
-                    catch { }
-                    finally { if (Interlocked.Decrement(ref remaining) == 0) { try { done.Set(); } catch { } } }
-                });
-            }
-            // Backstop only; near-instant in practice. A clean finish (WaitOne true) means the final
-            // worker has signaled and no further Set() can occur, so the handle is safe to dispose.
-            // Only on the rare cap timeout do we leave it for the finalizer, since a still-running
-            // worker may yet call Set().
-            bool completed = done.WaitOne(ForcefulShutdownCapMs, false);
-            if (completed)
-                done.Close();
-
-            DiagBatchMs = __sw.ElapsedMilliseconds;
-            DiagTimedOut = !completed;
-            DiagPendingAtTimeout = completed ? 0 : remaining;
-            DiagFirstWorkerStartMs = Interlocked.Read(ref __firstWorkerStart);
-        }
-
-        // Upper bound on how long Dispose will wait for the parallel forceful teardown to finish.
-        private const int ForcefulShutdownCapMs = 1500;
-
-        // TEMP shutdown diagnostics: last forceful teardown's breakdown, surfaced via the close
-        // instrumentation to catch intermittent thread-pool/cap-driven slow shutdowns.
-        internal static int DiagCount;
-        internal static long DiagBatchMs;
-        internal static long DiagFirstWorkerStartMs; // ms from queue until first worker ran (-1 = never)
-        internal static bool DiagTimedOut;
-        internal static int DiagPendingAtTimeout;
     }
 }
