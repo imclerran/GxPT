@@ -279,7 +279,12 @@ namespace GxPT
             long __tMcp = ShutdownDiag.Now;
             try { if (_mcpHost != null) _mcpHost.Dispose(); }
             catch { }
-            ShutdownDiag.Mark("FormClosing: McpHost.Dispose done (+" + (ShutdownDiag.Now - __tMcp) + "ms)");
+            ShutdownDiag.Mark("FormClosing: McpHost.Dispose done (+" + (ShutdownDiag.Now - __tMcp) + "ms)"
+                + " [conns=" + McpHost.DiagCount
+                + ", firstWorkerStart=" + McpHost.DiagFirstWorkerStartMs + "ms"
+                + ", batch=" + McpHost.DiagBatchMs + "ms"
+                + (McpHost.DiagTimedOut ? ", TIMED OUT@cap pending=" + McpHost.DiagPendingAtTimeout : "")
+                + "]");
         }
 
         // TEMP shutdown instrumentation: milestone after the form has closed but before/around

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using Mcp35.Client;
 using Mcp35.Core.Diagnostics;
@@ -293,6 +294,11 @@ namespace GxPT
         {
             if (conns == null || conns.Count == 0) return;
 
+            // TEMP shutdown diagnostics (read by the close instrumentation after Dispose).
+            Stopwatch __sw = Stopwatch.StartNew();
+            DiagCount = conns.Count;
+            long __firstWorkerStart = -1;
+
             int remaining = conns.Count;
             ManualResetEvent done = new ManualResetEvent(false);
             for (int i = 0; i < conns.Count; i++)
@@ -300,6 +306,9 @@ namespace GxPT
                 McpServerConnection c = conns[i];
                 ThreadPool.QueueUserWorkItem(delegate
                 {
+                    // Record when the FIRST queued worker actually starts running — this exposes
+                    // thread-pool injection lag (.NET 3.5 can be slow to add worker threads).
+                    Interlocked.CompareExchange(ref __firstWorkerStart, __sw.ElapsedMilliseconds, -1);
                     try { Teardown(c, true); }
                     catch { }
                     finally { if (Interlocked.Decrement(ref remaining) == 0) { try { done.Set(); } catch { } } }
@@ -309,11 +318,25 @@ namespace GxPT
             // worker has signaled and no further Set() can occur, so the handle is safe to dispose.
             // Only on the rare cap timeout do we leave it for the finalizer, since a still-running
             // worker may yet call Set().
-            if (done.WaitOne(ForcefulShutdownCapMs, false))
+            bool completed = done.WaitOne(ForcefulShutdownCapMs, false);
+            if (completed)
                 done.Close();
+
+            DiagBatchMs = __sw.ElapsedMilliseconds;
+            DiagTimedOut = !completed;
+            DiagPendingAtTimeout = completed ? 0 : remaining;
+            DiagFirstWorkerStartMs = Interlocked.Read(ref __firstWorkerStart);
         }
 
         // Upper bound on how long Dispose will wait for the parallel forceful teardown to finish.
         private const int ForcefulShutdownCapMs = 1500;
+
+        // TEMP shutdown diagnostics: last forceful teardown's breakdown, surfaced via the close
+        // instrumentation to catch intermittent thread-pool/cap-driven slow shutdowns.
+        internal static int DiagCount;
+        internal static long DiagBatchMs;
+        internal static long DiagFirstWorkerStartMs; // ms from queue until first worker ran (-1 = never)
+        internal static bool DiagTimedOut;
+        internal static int DiagPendingAtTimeout;
     }
 }

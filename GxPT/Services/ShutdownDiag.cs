@@ -15,22 +15,30 @@ namespace GxPT
         private static readonly List<string> _marks = new List<string>();
         private static readonly object _gate = new object();
         private static int _flushedUpTo; // index of first not-yet-written mark
+        private static bool _enabled;    // snapshot of the logging gate, taken at Begin()
 
-        // Start the close clock (called at the top of FormClosing). Idempotent.
+        // Start the close clock (called at the top of FormClosing). Idempotent. When logging is off,
+        // the whole diagnostic stays dormant so normal shutdowns are completely unaffected.
         public static void Begin()
         {
-            if (!_sw.IsRunning) _sw.Start();
+            if (_sw.IsRunning) return;
+            _enabled = Logger.Enabled;
+            if (_enabled) _sw.Start();
         }
 
-        // True once Begin() has run — used to ignore transcript disposals during normal runtime.
-        public static bool Running { get { return _sw.IsRunning; } }
+        // True only while a measured (logging-on) close is in progress.
+        public static bool Running { get { return _enabled && _sw.IsRunning; } }
+
+        // Whether this close is being measured (used to gate the heavier probes, e.g. the forced GC).
+        public static bool Enabled { get { return _enabled; } }
 
         // Milliseconds since Begin().
         public static long Now { get { return _sw.IsRunning ? _sw.ElapsedMilliseconds : 0; } }
 
-        // Record a timeline mark. Cheap: just appends to an in-memory list.
+        // Record a timeline mark. Cheap: just appends to an in-memory list. No-op when not measuring.
         public static void Mark(string label)
         {
+            if (!_enabled) return;
             lock (_gate) { _marks.Add("[" + Now + "ms] " + label); }
         }
 
