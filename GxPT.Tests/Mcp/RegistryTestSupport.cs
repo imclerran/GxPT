@@ -48,6 +48,7 @@ namespace GxPT.Tests.Mcp
         public void Start() { }
         public bool IsConnected { get { return _connected; } }
         public void Dispose() { _connected = false; }
+        public void Shutdown(bool forceful) { _connected = false; }
         public void SendNotification(string method, JToken @params) { }
 
         public JsonRpcResponse SendRequest(string method, JToken @params, int timeoutMs)

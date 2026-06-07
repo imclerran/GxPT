@@ -56,6 +56,8 @@ namespace Mcp35.Client.Tests
 
         public void Dispose() { _connected = false; }
 
+        public void Shutdown(bool forceful) { _connected = false; }
+
         public void RaiseInbound(string method)
         {
             EventHandler<JsonRpcInboundEventArgs> h = Inbound;

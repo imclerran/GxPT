@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Mcp35.Client;
 using Mcp35.Core.Diagnostics;
 
@@ -18,7 +19,11 @@ namespace GxPT
     // requested them (McpToolRegistry.TryResolve(name, workdir)).
     // Transport construction is delegated to an IServerConnector so this logic is testable without
     // spawning processes. Thread-safe via a single lock; event handlers touch only the (separately
-    // locked) registry, so they never re-enter this lock.
+    // locked) registry, so they never re-enter this lock. The blocking part of connecting (process
+    // spawn + handshake in conn.Open) runs WITHOUT the lock held: a connection is opened on a
+    // throwaway object, then published into the collections/registry under the lock with a _disposed
+    // re-check. This keeps Dispose() from ever waiting behind an in-progress connect (the cause of
+    // the slow app close when shutting down while servers were still connecting).
     internal sealed class McpHost : IDisposable
     {
         public const int DefaultOpenTimeoutMs = 15000;
@@ -35,9 +40,16 @@ namespace GxPT
             new Dictionary<string, List<McpServerConnection>>(StringComparer.OrdinalIgnoreCase);
         // Working dirs requested before Start() knew the scoped specs; launched when Start arrives.
         private readonly List<string> _pendingWorkdirs = new List<string>();
+        // Workdirs whose scoped set is being connected right now. Reserved (under _lock) before the
+        // blocking Open() runs unlocked, so a second EnsureWorkingDir for the same folder waits on the
+        // event instead of launching a duplicate set.
+        private readonly Dictionary<string, ManualResetEvent> _connecting =
+            new Dictionary<string, ManualResetEvent>(StringComparer.OrdinalIgnoreCase);
         private List<McpServerSpec> _scopedSpecs = new List<McpServerSpec>();
         private bool _started;
-        private bool _disposed;
+        // Volatile: the connect loops (which run OUTSIDE _lock) poll this to bail out promptly once
+        // Dispose flips it, and the publish steps re-check it under _lock.
+        private volatile bool _disposed;
 
         public McpHost(IServerConnector connector, McpToolRegistry registry, ILogSink log)
             : this(connector, registry, log, DefaultOpenTimeoutMs)
@@ -76,6 +88,11 @@ namespace GxPT
         // EnsureWorkingDir. Call once after building specs from config.
         public void Start(IEnumerable<McpServerSpec> specs)
         {
+            // Phase 1 (locked, fast): record the scoped specs, list the eager specs to open, flip
+            // _started, and snapshot any workdirs requested before Start knew the specs. No blocking
+            // work happens under the lock.
+            List<McpServerSpec> eagerToOpen = new List<McpServerSpec>();
+            List<string> pending;
             lock (_lock)
             {
                 if (_disposed) return;
@@ -87,21 +104,45 @@ namespace GxPT
                         if (spec == null) continue;
                         if (spec.WorkdirScoped) { scoped.Add(spec); continue; }
                         if (!spec.Enabled) continue;
-                        McpServerConnection conn = ConnectAndAdd(spec, null);
-                        if (conn != null) _eager.Add(conn);
+                        eagerToOpen.Add(spec);
                     }
                 }
                 _scopedSpecs = scoped;
                 _started = true;
+                pending = new List<string>(_pendingWorkdirs);
+                _pendingWorkdirs.Clear();
+            }
 
-                // Launch any working directories requested before Start knew the scoped specs.
-                if (_pendingWorkdirs.Count > 0)
+            // Phase 2 (unlocked): connect the eager servers, publishing each as it becomes ready.
+            for (int i = 0; i < eagerToOpen.Count; i++)
+            {
+                if (_disposed) break;
+                McpServerConnection conn = CreateAndOpen(eagerToOpen[i], null);
+                if (conn != null) PublishEager(conn);
+            }
+
+            // Phase 3 (unlocked): connect the scoped sets for any pre-Start workdir requests.
+            for (int i = 0; i < pending.Count; i++)
+            {
+                if (_disposed) break;
+                ConnectScoped(pending[i]);
+            }
+        }
+
+        // Publish a freshly-opened eager connection into the host + registry. If the host was disposed
+        // while we were connecting (unlocked), discard it instead so we never leak a started server.
+        private void PublishEager(McpServerConnection conn)
+        {
+            lock (_lock)
+            {
+                if (!_disposed)
                 {
-                    List<string> pending = new List<string>(_pendingWorkdirs);
-                    _pendingWorkdirs.Clear();
-                    for (int i = 0; i < pending.Count; i++) OpenScopedLocked(pending[i]);
+                    _registry.AddConnection(conn, null);
+                    _eager.Add(conn);
+                    return;
                 }
             }
+            Teardown(conn, true);
         }
 
         // Ensure the workdir-scoped servers (files/git/command) for `workdir` are running. Idempotent:
@@ -111,16 +152,84 @@ namespace GxPT
         public void EnsureWorkingDir(string workdir)
         {
             if (string.IsNullOrEmpty(workdir)) return;
+            ConnectScoped(workdir);
+        }
+
+        // Ensure the scoped set for `workdir` is running, connecting it if needed. The blocking Open()
+        // handshakes run WITHOUT _lock held (so Dispose never waits on them); the lock is taken only
+        // briefly to reserve the workdir and again to publish the result. A second caller for a
+        // workdir already being connected waits for that connect rather than launching a duplicate.
+        private void ConnectScoped(string workdir)
+        {
+            if (string.IsNullOrEmpty(workdir)) return;
+
+            List<McpServerSpec> specs;
+            ManualResetEvent reservation;
+            ManualResetEvent waitFor;
             lock (_lock)
             {
                 if (_disposed) return;
-                if (_scopedByWorkdir.ContainsKey(workdir)) return;
+                if (_scopedByWorkdir.ContainsKey(workdir)) return;      // already connected
                 if (!_started)
                 {
                     if (!_pendingWorkdirs.Contains(workdir)) _pendingWorkdirs.Add(workdir);
-                    return;
+                    return;                                             // Start will connect it
                 }
-                OpenScopedLocked(workdir);
+                if (_connecting.TryGetValue(workdir, out waitFor))
+                {
+                    specs = null;                                       // someone else owns the connect
+                    reservation = null;
+                }
+                else
+                {
+                    waitFor = null;
+                    reservation = new ManualResetEvent(false);
+                    _connecting[workdir] = reservation;
+                    specs = new List<McpServerSpec>(_scopedSpecs);      // snapshot to use unlocked
+                }
+            }
+
+            if (waitFor != null)
+            {
+                waitFor.WaitOne();   // an in-progress connect owns this workdir; wait for it to publish
+                return;
+            }
+
+            // We hold the reservation: connect the scoped specs OUTSIDE the lock, then publish (or
+            // discard, if the host was disposed meanwhile) under it. try/finally guarantees the
+            // reservation is always cleared and signaled, so waiters never hang.
+            List<McpServerConnection> conns = new List<McpServerConnection>();
+            try
+            {
+                for (int i = 0; i < specs.Count; i++)
+                {
+                    if (_disposed) break;
+                    McpServerSpec spec = specs[i];
+                    if (spec == null || !spec.Enabled) continue;
+                    McpServerConnection conn = CreateAndOpen(spec, workdir);
+                    if (conn != null) conns.Add(conn);
+                }
+            }
+            finally
+            {
+                bool discard;
+                lock (_lock)
+                {
+                    _connecting.Remove(workdir);
+                    if (_disposed || _scopedByWorkdir.ContainsKey(workdir))
+                    {
+                        discard = true;
+                    }
+                    else
+                    {
+                        for (int i = 0; i < conns.Count; i++) _registry.AddConnection(conns[i], workdir);
+                        _scopedByWorkdir[workdir] = conns;
+                        discard = false;
+                    }
+                }
+                if (discard)
+                    for (int i = 0; i < conns.Count; i++) Teardown(conns[i], true);
+                reservation.Set();
             }
         }
 
@@ -171,22 +280,11 @@ namespace GxPT
             }
         }
 
-        // Launch all enabled scoped specs for `workdir` and record the set. Caller holds _lock.
-        private void OpenScopedLocked(string workdir)
-        {
-            if (string.IsNullOrEmpty(workdir) || _scopedByWorkdir.ContainsKey(workdir)) return;
-            List<McpServerConnection> conns = new List<McpServerConnection>();
-            for (int i = 0; i < _scopedSpecs.Count; i++)
-            {
-                McpServerSpec spec = _scopedSpecs[i];
-                if (spec == null || !spec.Enabled) continue;
-                McpServerConnection conn = ConnectAndAdd(spec, workdir);
-                if (conn != null) conns.Add(conn);
-            }
-            _scopedByWorkdir[workdir] = conns;
-        }
-
-        private McpServerConnection ConnectAndAdd(McpServerSpec spec, string workdir)
+        // Create + Open a single connection WITHOUT holding _lock — this is the blocking part (process
+        // spawn + initialize/tools-list handshake). Returns a Ready connection (not yet registered or
+        // published) or null on failure, cleaning up on the way out. The caller publishes the result
+        // into the collections + registry under _lock.
+        private McpServerConnection CreateAndOpen(McpServerSpec spec, string workdir)
         {
             McpServerConnection conn;
             try { conn = _connector.Create(spec, workdir); }
@@ -214,8 +312,6 @@ namespace GxPT
 
             if (conn.State == ConnectionState.Ready)
             {
-                // Tag the connection with its workdir so tool calls resolve to the right folder.
-                _registry.AddConnection(conn, workdir);
                 _log.Log("mcp", "server '" + spec.Name + "' ready"
                     + (string.IsNullOrEmpty(workdir) ? " (eager)" : " (workdir=" + workdir + ")"));
                 return conn;
@@ -243,7 +339,16 @@ namespace GxPT
         }
 
         // Unsubscribe (so Dispose's Closed event doesn't re-enter), drop from the registry, dispose.
+        // Graceful path: gives each child the stdin-EOF grace window. Runtime tab-close teardowns
+        // (ReleaseWorkingDir/RetainOnly) use this.
         private void Teardown(McpServerConnection conn)
+        {
+            Teardown(conn, false);
+        }
+
+        // forceful=true tears the connection down for speed (kill child immediately, skip the HTTP
+        // session DELETE) — for application/host shutdown.
+        private void Teardown(McpServerConnection conn, bool forceful)
         {
             if (conn == null) return;
             try { conn.ToolsChanged -= OnToolsChanged; }
@@ -251,23 +356,30 @@ namespace GxPT
             try { conn.StateChanged -= OnStateChanged; }
             catch { }
             _registry.RemoveConnection(conn);
-            try { conn.Dispose(); }
+            try { conn.Shutdown(forceful); }
             catch { }
         }
 
         public void Dispose()
         {
+            // Snapshot every connection under the lock, then tear them down OUTSIDE it so a slow
+            // teardown can't block other host callers on the lock.
+            List<McpServerConnection> all = new List<McpServerConnection>();
             lock (_lock)
             {
                 if (_disposed) return;
                 _disposed = true;
                 foreach (List<McpServerConnection> conns in _scopedByWorkdir.Values)
-                    for (int i = 0; i < conns.Count; i++) Teardown(conns[i]);
+                    all.AddRange(conns);
                 _scopedByWorkdir.Clear();
                 _pendingWorkdirs.Clear();
-                for (int i = 0; i < _eager.Count; i++) Teardown(_eager[i]);
+                all.AddRange(_eager);
                 _eager.Clear();
             }
+
+            // Forceful (kill-now) teardown: each child exits in ~1ms whether it's killed or sees its
+            // stdin close, so a simple sequential loop is plenty fast and avoids thread-pool overhead.
+            for (int i = 0; i < all.Count; i++) Teardown(all[i], true);
         }
     }
 }

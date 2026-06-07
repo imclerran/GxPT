@@ -51,9 +51,16 @@ namespace Mcp35.Client.Transport
 
         public void Dispose()
         {
-            // Dispose the peer first (faults pending calls so no caller hangs), then the channel
-            // performs graceful stdin-EOF shutdown. JsonRpcPeer.Dispose disposes its channel too,
-            // so guard against a double dispose in StdioChannel (idempotent via _stopping).
+            Shutdown(false);
+        }
+
+        public void Shutdown(bool forceful)
+        {
+            // Configure the channel's teardown style before disposing it. Disposing the peer faults
+            // pending calls so no caller hangs, then it disposes the channel, which honors the flag:
+            // forceful kills the child immediately; otherwise it performs the graceful stdin-EOF wait.
+            // JsonRpcPeer.Dispose disposes its channel too, so the double dispose is idempotent (_stopping).
+            _channel.ForcefulShutdown = forceful;
             _peer.Dispose();
         }
     }

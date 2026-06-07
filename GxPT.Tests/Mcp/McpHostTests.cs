@@ -204,6 +204,35 @@ namespace GxPT.Tests.Mcp
             Assert.Empty(Manifest(reg));
             Assert.True(c.Created.All(conn => conn.State == ConnectionState.Closed));
         }
+
+        [Fact]
+        public void Dispose_does_not_block_while_a_server_is_still_connecting()
+        {
+            // Regression: closing the app while servers were still connecting used to hang for the
+            // whole handshake because Start held the host lock across the blocking conn.Open().
+            var connector = new GatedServerConnector();
+            var reg = new McpToolRegistry(24, null);
+            var host = new McpHost(connector, reg, null, 5000);
+
+            // Connect on a background thread; its eager Open() parks in the gated handshake.
+            var startThread = new System.Threading.Thread(delegate () { host.Start(new[] { Specs.Eager("web", true) }); });
+            startThread.IsBackground = true;
+            startThread.Start();
+            Assert.True(connector.Opening.WaitOne(5000), "connect never reached Open()");
+
+            // Dispose must return promptly even though the connect is still blocked.
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            host.Dispose();
+            sw.Stop();
+            Assert.True(sw.ElapsedMilliseconds < 1000, "Dispose blocked on in-flight connect: " + sw.ElapsedMilliseconds + "ms");
+
+            // Release the handshake; the connect finishes, sees the host disposed, and discards its
+            // server rather than publishing it — nothing leaks into the registry.
+            connector.OpenGate.Set();
+            Assert.True(startThread.Join(5000), "connect thread did not finish");
+            Assert.Empty(Manifest(reg));
+            Assert.True(connector.Created.All(conn => conn.State == ConnectionState.Closed));
+        }
     }
 
     // Compile-coverage + smoke for the live connector against the real Mcp35.Client transports.
