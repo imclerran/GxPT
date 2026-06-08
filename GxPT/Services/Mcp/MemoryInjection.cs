@@ -32,13 +32,15 @@ namespace GxPT
             sb.Append("memory tools (remember / read_memory / update_memory / forget / consolidate). Do ");
             sb.Append("NOT read or write memory by editing files directly, and do not use the file tools ");
             sb.Append("for it — always go through the memory tools, which keep the index consistent.\n\n");
-            sb.Append("Use it to record durable, reusable facts (conventions, architecture, decisions, ");
-            sb.Append("gotchas) worth recalling in future conversations. Record a new fact with ");
-            sb.Append("`remember`; read the detail behind an index line with `read_memory`; revise with ");
-            sb.Append("`update_memory`; remove with `forget`; and merge related entries with ");
-            sb.Append("`consolidate` to keep the index small. Prefer updating or consolidating over ");
-            sb.Append("piling on near-duplicate entries. Do not mention this memory unless it is ");
-            sb.Append("relevant.\n\n");
+            sb.Append("Use the memory system as something you maintain, not just consult. As you work, ");
+            sb.Append("proactively remember durable facts about this workspace — conventions, architecture, ");
+            sb.Append("decisions, and hard-won gotchas that may waste effort in the future — the moment you ");
+            sb.Append("learn them, rather than only when explicitly asked. Skip transient or easily ");
+            sb.Append("re-derived details, and prefer updating or consolidating existing entries over ");
+            sb.Append("adding near-duplicates. Record a new fact with `remember`; read the detail behind ");
+            sb.Append("an index line with `read_memory`; revise with `update_memory`; remove with ");
+            sb.Append("`forget`; and merge related entries with `consolidate` to keep the index small. ");
+            sb.Append("Do not mention this memory unless it is relevant.\n\n");
 
             if (string.IsNullOrEmpty(index))
             {

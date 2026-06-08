@@ -155,6 +155,18 @@ namespace GxPT
             }
         }
 
+        // Store a boolean value (preserved as a JSON bool, read back by GetBool)
+        public static void SetBool(string key, bool value)
+        {
+            if (string.IsNullOrEmpty(key)) return;
+            lock (_gate)
+            {
+                EnsureLoadedLocked();
+                _cache[key] = value;
+                PersistLocked();
+            }
+        }
+
         public static List<string> GetList(string key)
         {
             var result = new List<string>();

@@ -58,6 +58,18 @@
     <Compile Include="..\GxPT\Services\Skills\SkillFrontmatter.cs" Link="Linked\Skills\SkillFrontmatter.cs" />
     <Compile Include="..\GxPT\Services\Skills\Skill.cs" Link="Linked\Skills\Skill.cs" />
     <Compile Include="..\GxPT\Services\Skills\SkillCatalog.cs" Link="Linked\Skills\SkillCatalog.cs" />
+    <Compile Include="..\GxPT\Services\Commands\SlashCommandKind.cs" Link="Linked\Commands\SlashCommandKind.cs" />
+    <Compile Include="..\GxPT\Services\Commands\SlashCommandResult.cs" Link="Linked\Commands\SlashCommandResult.cs" />
+    <Compile Include="..\GxPT\Services\Commands\ISlashCommandContext.cs" Link="Linked\Commands\ISlashCommandContext.cs" />
+    <Compile Include="..\GxPT\Services\Commands\ISlashCommand.cs" Link="Linked\Commands\ISlashCommand.cs" />
+    <Compile Include="..\GxPT\Services\Commands\WorkspacePath.cs" Link="Linked\Commands\WorkspacePath.cs" />
+    <Compile Include="..\GxPT\Services\Commands\IArgumentCompleter.cs" Link="Linked\Commands\IArgumentCompleter.cs" />
+    <Compile Include="..\GxPT\Services\Commands\ClientCommands.cs" Link="Linked\Commands\ClientCommands.cs" />
+    <Compile Include="..\GxPT\Services\Commands\PromptCommand.cs" Link="Linked\Commands\PromptCommand.cs" />
+    <Compile Include="..\GxPT\Services\Commands\SlashCommandGate.cs" Link="Linked\Commands\SlashCommandGate.cs" />
+    <Compile Include="..\GxPT\Services\Commands\SlashCommandRegistry.cs" Link="Linked\Commands\SlashCommandRegistry.cs" />
+    <Compile Include="..\GxPT\Services\Commands\SlashCommandProcessor.cs" Link="Linked\Commands\SlashCommandProcessor.cs" />
+    <Compile Include="..\GxPT\Services\Commands\SlashCommandConfig.cs" Link="Linked\Commands\SlashCommandConfig.cs" />
   </ItemGroup>
 
   <!-- MCP library sources (Core + Client) linked in so the host's Services/Mcp/ code (registry,

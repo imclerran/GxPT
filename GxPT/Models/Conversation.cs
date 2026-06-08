@@ -38,6 +38,10 @@ namespace GxPT
         // Whether the user dismissed the (unset) workspace strip for this conversation; persisted so
         // the strip stays hidden on reopen until they set a folder.
         public bool WorkspaceStripDismissed { get; set; }
+        // True when this conversation was created by /compact (seeded with a summary of an earlier
+        // conversation). Persisted so the chromeless "Continued from a compacted conversation." note
+        // re-renders on reopen.
+        public bool ContinuedFromCompaction { get; set; }
         // Zero data retention for this conversation. Zdr is the per-conversation toggle and the sole
         // source of truth for effective ZDR: it is seeded from the global default when a new conversation
         // is created (see the constructor), but the global default is NOT a live override - the user can

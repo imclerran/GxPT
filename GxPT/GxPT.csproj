@@ -26,7 +26,7 @@
     <UpdateRequired>false</UpdateRequired>
     <MapFileExtensions>true</MapFileExtensions>
     <ApplicationRevision>0</ApplicationRevision>
-    <ApplicationVersion>0.16.3.%2a</ApplicationVersion>
+    <ApplicationVersion>0.17.0.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
   </PropertyGroup>
@@ -106,6 +106,19 @@
     <Compile Include="Services\Skills\SkillFrontmatter.cs" />
     <Compile Include="Services\Skills\Skill.cs" />
     <Compile Include="Services\Skills\SkillCatalog.cs" />
+    <Compile Include="Services\Commands\SlashCommandKind.cs" />
+    <Compile Include="Services\Commands\SlashCommandResult.cs" />
+    <Compile Include="Services\Commands\ISlashCommandContext.cs" />
+    <Compile Include="Services\Commands\ISlashCommand.cs" />
+    <Compile Include="Services\Commands\WorkspacePath.cs" />
+    <Compile Include="Services\Commands\IArgumentCompleter.cs" />
+    <Compile Include="Services\Commands\ClientCommands.cs" />
+    <Compile Include="Services\Commands\MainFormSlashContext.cs" />
+    <Compile Include="Services\Commands\PromptCommand.cs" />
+    <Compile Include="Services\Commands\SlashCommandGate.cs" />
+    <Compile Include="Services\Commands\SlashCommandRegistry.cs" />
+    <Compile Include="Services\Commands\SlashCommandProcessor.cs" />
+    <Compile Include="Services\Commands\SlashCommandConfig.cs" />
     <Compile Include="Models\ChatModels.cs" />
     <Compile Include="Models\Conversation.cs" />
     <Compile Include="Models\ModelDefaults.cs" />
@@ -122,6 +135,7 @@
     <Compile Include="Services\FolderPicker.cs" />
     <Compile Include="Services\HoverWheelRouter.cs" />
     <Compile Include="Managers\InputManager.cs" />
+    <Compile Include="Managers\SlashAutocompleteController.cs" />
     <Compile Include="Services\ImportExportService.cs" />
     <Compile Include="Services\Logger.cs" />
     <Compile Include="Services\OpenRouterClient.cs">
