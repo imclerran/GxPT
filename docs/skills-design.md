@@ -26,9 +26,15 @@ same idea one level up.
 - **Three disclosure levels.** Only the skill **name + one-line description** is
   always in context (the manifest); the **`SKILL.md` body** loads on demand; the
   **bundled files/scripts** are read/run only when used.
-- **Host-native, no new server on the read path.** Discovery + the load meta-tool
-  live in the GxPT host, exactly like `reveal_tools` (a host-synthesized meta-tool,
-  never routed to a connection — D11 in `mcp-architecture.md`).
+- **Host-native catalog, sandboxed execution.** Discovery, `open_skill`, and asset
+  reads (`read_skill_file`) live in the GxPT host (host-synthesized meta-tools, like
+  `reveal_tools`). Running a skill's bundled **script** goes through a dedicated,
+  sandboxed `SkillsMcpServer` (the skills analogue of `CommandMcpServer`),
+  always-confirm.
+- **Skills can ship runnable scripts.** A bundled `.bat`/`.cmd` entry (which may wrap
+  a sibling `.py`/`.ps1`/`.exe`) is invoked **by handle** — `(slug, relpath)`, never
+  an absolute path — and runs in the **workspace**, with its own folder reachable
+  **read-only** for assets.
 - **Two trigger paths into one catalog.** The model can open a skill autonomously
   (`open_skill`), and the user can drive it explicitly with a slash command. Both
   resolve against the same `SkillCatalog`.
@@ -46,7 +52,7 @@ same idea one level up.
 
 | # | Decision | Rationale |
 |---|----------|-----------|
-| S1 | **Host-synthesized `open_skill(names[])` meta-tool**, not a `SkillsMcpServer` | Disk is the source of truth and the catalog is read-only, so a stdio process buys nothing on the read path. `open_skill` is a sibling of `reveal_tools` — in the exposed `tools` array but handled inside the host registry, never routed to a connection (D11). A server only earns its place later if the *model* must author skills (then it mirrors `MemoryMcpServer`). |
+| S1 | **Catalog & reads are host-synthesized meta-tools** (`open_skill`, `read_skill_file`), not a server; **only execution gets a server** (S11) | Discovery and asset reads are just disk reads, so a stdio process buys nothing — they ride the host registry like `reveal_tools`, never routed to a connection (D11). Spawning a *script* is the one concern that genuinely needs process isolation + a per-call timeout, so it (and only it) is a server. |
 | S2 | **Bundled + project scope at launch** (`<exe>/skills/` and `<workdir>/.gxpt/skills/`); user-global deferred | Bundled "starter" skills are the main draw, so unlike memory (project-only by choice) skills lead with bundled. Project skills reuse the `.gxpt/` convention the memory system established. |
 | S3 | **Model-initiated *and* slash-command triggers**, over one catalog | `open_skill` matches GxPT's `reveal_tools` precedent (the model picks from the manifest mid-task); the slash command gives the user a deliberate "run this now" entry point. Both pre-/open the same `SKILL.md`, so there is one load path, not two. |
 | S4 | **`SKILL.md` = minimal frontmatter + markdown body**, parsed by a hand-rolled reader | net35 has no YAML parser and the repo keeps exactly one JSON lib (Newtonsoft, D3). A ~20-line `--- … ---` reader for `name`/`description` keeps authoring familiar to Claude Code skills without a new dependency or a JSON sidecar. |
@@ -55,7 +61,12 @@ same idea one level up.
 | S10 | **Conversation overrides the global default** (tri-state per skill: *inherit / on / off*); global state lives in a dedicated `%AppData%/GxPT/skills.json`, conversation overrides in the conversation JSON | A plain disabled-set can't express "force-on over a global-off", so the conversation layer is tri-state, not a set. A dedicated file keeps global state out of `settings.json` and the settings form (S6) while still persisting it — matching the repo's `recent-workdirs.json` / `mcp.json` dedicated-file pattern. |
 | S7 | **`open_skill` returns the body as the tool result** (not a separate ephemeral injection) | Returning through the normal tool-loop lands the body in history naturally and keeps it available for the rest of the task — no new injection channel. The always-on **manifest** still rides as an ephemeral system message (S8). |
 | S8 | **Manifest injected as an ephemeral system message**, in the stable→volatile stack | Same treatment as the names manifest and the memory block: rebuilt each request from the live catalog, never persisted. Cheap (names + one-liners), so it sits in front of history every turn when skills are enabled for the conversation. |
-| S9 | **Bundled scripts run through the existing approval tiers** — skills get no new execution channel | A skill body instructs the model to use `files__*` / `command__run`, which already hit the three-tier gate (Destructive = always-confirm). A skill that runs code is exactly as gated as the command tool, no more (mcp-architecture §9). |
+| S9 | **Skill scripts run via a dedicated `run_skill_script(slug, relpath, args[])` tool, *not* `command__run`** | A skill should not make the model compose an arbitrary command or name a path in the user's Program Files. The handle-based tool shrinks the exec surface from "any command string" to "the declared entry of a named skill + literal args" — smaller, auditable, still gated (Destructive/always-confirm). |
+| S11 | **Execution lives in a first-party `SkillsMcpServer`** (stdio, launched with the skill roots in its env), reusing `Mcp35.Server`'s process-exec helper | Same reasoning that justified a standalone `MemoryMcpServer` (M1): process isolation + per-call timeout + the tested stdio loop. It is the skills analogue of `CommandMcpServer` — the sandboxed execution surface. Catalog/reads stay host-native (S1). |
+| S12 | **Entry points are `.bat`/`.cmd` only**; `.py`/`.ps1`/`.exe` are reached *through* the batch via `%~dp0` | One uniform, validatable entry type; the author owns interpreter selection (and graceful failure when it's absent). `%~dp0` (the batch's own dir at runtime) locates bundled siblings install-path-independently, so nothing hardcodes where `<exe>` landed. A user-authored skill with Python/PS installed ships a `.bat` wrapper calling its sibling script. |
+| S13 | **Assets are read by handle via `read_skill_file(slug, relpath)`** (ReadOnly), not `files__*` | `files__*` is hard-sandboxed to the workspace and rejects absolute paths, so it can't reach a bundled skill's files. A relative-handle read tool resolves `slug`+`relpath` host-side (within the skill root), works for bundled *and* project skills uniformly, and auto-allows by the ReadOnly tier — mirroring `read_memory`. |
+| S14 | **cwd is always the workspace; the skill dir is a read-only asset source, never a working/output dir** | Skills operate on and write to the user's project, not their own install location (which, for bundled skills, is often non-writable Program Files anyway). `%~dp0` / `GXPT_SKILL_DIR` locate read-only assets; all output goes to cwd. `run_skill_script` therefore requires a workspace (like `command__run`); a workspace-less self-contained skill would use a temp scratch cwd — deferred, never the skill dir. |
+| S15 | **`run_skill_script` is Destructive but remember-eligible by exact `(slug, relpath)`**; pipelines live *inside* the script | Because the surface is a fixed declared entry (not an arbitrary string), a remembered approval is narrow and auditable — *less* friction than `command__run` while *more* locked down. Args are shown each run but aren't part of the remembered grain. Output filtering belongs inside the batch (`… | findstr …`); a shell pipeline in the tool call would re-import the arbitrary-shell surface the tool exists to remove. |
 
 ---
 
@@ -65,8 +76,12 @@ same idea one level up.
 ```
 <GxPT.exe dir>/skills/
   <slug>/
-    SKILL.md           # frontmatter + body
-    <bundled files…>   # templates, examples, scripts (optional)
+    SKILL.md             # frontmatter + body
+    scripts/
+      gen.bat            # entry point (.bat/.cmd only) — may wrap a sibling script
+      gen.py             # reached via %~dp0, never invoked directly
+    template.md          # read on demand via read_skill_file
+    examples/
 ```
 Deployed by the same `AfterBuild` copy that places `mcp-servers\` (and seeded into
 the setup `.vdproj`), so bundled skills travel with the install.
@@ -97,6 +112,10 @@ description: Draft release notes from the git log since the last tag.
 - `description` is a **single line** — it is what the model sees in the manifest, so
   it should read as "use this when…".
 - The body and any sibling files are Level-2/3 content, paid for only on open.
+- **Reference bundled assets by *relative* path only — never absolute.** The install
+  dir varies per machine, so the body names assets relatively (`scripts/gen.bat`,
+  `template.md`); the host resolves them to this machine's location on open (§5), and
+  scripts find their own siblings via `%~dp0` at runtime.
 
 ---
 
@@ -106,11 +125,13 @@ description: Draft release notes from the git log since the last tag.
 |-------|---------|------------------------|------|
 | 1 | `slug` + `description` (the **manifest**) | every request, while skills are enabled for the conversation (S8) | tiny |
 | 2 | the **`SKILL.md` body** | when `open_skill(slug)` is called (by model or slash) (S7) | medium |
-| 3 | **bundled files/scripts** | read via `files__*`, run via `command__run`, as the body directs (S9) | paid on use |
+| 3 | **bundled files/scripts** | files read via `read_skill_file` (S13); scripts run via `run_skill_script` (S9/S11) | paid on use |
 
 ---
 
-## 5. Host pieces (`Services/Skills/`)
+## 5. Host pieces
+
+### Catalog & reads (host-native, `Services/Skills/`)
 
 ```
 McpChatOrchestrator (RunTurn loop)
@@ -122,22 +143,58 @@ McpChatOrchestrator (RunTurn loop)
   │     names manifest
   │     ...history
   │
-  └─ exposed tools: reveal_tools, open_skill(names[]), …revealed tools
-                                   └─ host-handled (S1): reads SKILL.md from disk,
-                                      returns body + bundled-file listing as the tool result (S7)
+  └─ exposed tools: reveal_tools, open_skill(names[]), read_skill_file(slug, relpath),
+                    run_skill_script(slug, relpath, args[]), …revealed tools
 ```
 
 - **`SkillCatalog`** — scans bundled + project skill folders, parses each frontmatter
   into `(slug, description, path)`, applies project-over-bundled shadowing, and
   produces `SkillsManifestSystemMessage(enabledSet)` and `slug → path` resolution.
   Pure logic (no WinForms) → net48 linked-source tests.
-- **`open_skill(names[])`** — host-synthesized meta-tool, registered alongside
-  `reveal_tools` in the registry. Reads the named `SKILL.md` bodies, returns each
-  body plus a listing of its bundled files as the tool result. Batch (plural) for
-  the same reason `reveal_tools` is batch: resolve ambiguity by opening candidates.
+- **`open_skill(names[])`** (host-synthesized, like `reveal_tools`) — returns, per
+  named skill: the **`SKILL.md` body** (authored with *relative* asset paths), the
+  **resolved absolute skill directory on this machine**, and a **listing** of bundled
+  assets (relative path → resolved absolute). The author writes once, portably; the
+  host supplies the machine-specific location, so no absolute path is ever baked into
+  the markdown. Batch (plural) to resolve ambiguity by opening candidates.
+- **`read_skill_file(slug, relpath)`** (host-synthesized, **ReadOnly**, S13) — reads a
+  Level-3 asset by relative handle, resolved within the skill root (`PathSandbox`
+  semantics against that root: no absolute, no `..` escape). Works for bundled and
+  project skills alike; auto-allows by tier like `read_memory`. Keeps `open_skill`'s
+  result a *listing*, so big templates aren't dumped into context.
 - **Optional LRU cap** on how many full bodies persist, reusing the `reveal_tools`
   reveal-cap machinery — only if skill bodies start to crowd context. Not needed
   initially.
+
+### Execution — `SkillsMcpServer` (S11)
+
+A first-party stdio server, launched with the skill roots (bundled dir +
+`<workdir>/.gxpt/skills`) in its environment, exposing one tool:
+
+```
+run_skill_script(slug, relpath, args[])
+```
+
+**Locking, before anything runs:**
+1. **slug → skill root** via the catalog; reject unknown or disabled skills.
+2. **relpath → file**, resolved within the root (`PathSandbox`: no absolute, no `..`
+   escape, no drive/UNC). Must stay inside the root.
+3. **Extension allowlist:** `.bat`/`.cmd` only (S12). (Optionally require entries
+   under a conventional `scripts/` subdir.)
+4. **args** passed as literal argv tokens (`%1..%N`), each quoted host-side — no shell
+   metacharacters from the model are honored. *(cmd.exe + batch arg quoting is a known
+   footgun — `^`/`%` handling — so this rides a tested quoter, ideally
+   `CommandMcpServer`'s.)*
+
+**Runtime contract (S14):**
+- **cwd = the workspace** — what the skill operates on and writes to.
+- **`%~dp0` / `GXPT_SKILL_DIR` = the skill's own folder** — read-only asset source,
+  located install-path-independently (`%~dp0` derives from the absolute path the host
+  invokes, not from cwd, so the two never collide). Plus `GXPT_WORKDIR`,
+  `GXPT_SKILL_SLUG`.
+- Returns exit code + stdout + stderr (capped like other tool results).
+- **Requires a workspace** (like `command__run`); no workspace ⇒ the tool isn't
+  resolvable (workspace-less self-contained skills → temp scratch cwd, deferred).
 
 ---
 
@@ -220,15 +277,27 @@ slash commands in §6.
 ## 8. Security & approval
 
 - **A loaded `SKILL.md` body is injected instructions.** Bundled (first-party) and
-  project-local skills are effectively author-trusted. Treat skill content as
-  untrusted input at the parse boundary regardless — the same posture the
-  architecture takes toward tool output (mcp-architecture §9) — and the day
-  user-global / shared skills land, gate a first open with the approval prompt so
-  the user sees what's being loaded.
-- **No new execution channel (S9).** Bundled scripts run only because the body tells
-  the model to invoke `command__run` / `files__*`, which already pass through the
-  three-tier gate (Destructive = always-confirm, argument-scoped allowlists). A
-  skill is never a way to bypass approval.
+  project-local skills are effectively author-trusted (a project skill carries the
+  same trust as the repo the user opened). Treat skill content as untrusted input at
+  the parse boundary regardless — the posture the architecture takes toward tool
+  output (mcp-architecture §9) — and when user-global / shared skills land, gate a
+  first open with the approval prompt so the user sees what's being loaded.
+- **Execution is a *narrowed* surface, not `command__run` (S9).** `run_skill_script`
+  lets the model run only the **declared entry of a named skill** with **literal
+  args** — it cannot compose an arbitrary command or name a path. It is **Destructive
+  (always-confirm)** but **remember-eligible by exact `(slug, relpath)`** (S15): a
+  remembered allow is narrow and auditable, so it's *less* friction than `command__run`
+  while *more* locked down. The prompt is human-readable ("skill `release-notes` wants
+  to run `scripts/gen.bat --since v1.2` — *bundled*") and distinguishes bundled vs.
+  project source.
+- **Skills never operate on their own dir (S14).** cwd is the workspace; the skill
+  folder is reached read-only for assets. Bundled skills typically sit in
+  non-writable Program Files (an OS-level backstop), but the *write-only-to-workspace*
+  rule is the real contract, since project skills live in the writable workspace tree.
+- **No path or interpreter handling by the model.** `(slug, relpath)` handles plus the
+  batch-only `%~dp0` wrapper convention (S12/S13) keep absolute paths and interpreter
+  selection entirely host/author-side — the model never pastes a Program Files path
+  into a shell.
 
 ---
 
@@ -245,10 +314,16 @@ Same dual-world pattern as the rest of the repo (net48 linked-source via
 - **Enablement resolution** — the two-layer precedence: conversation override beats
   global default; **force-on over a global-off**; `reset` falls back to inherit;
   newly-added slugs default on at both layers.
-- **Host loop (`GxPT.Tests`)** — `open_skill` resolution + body-as-tool-result;
-  manifest injected in the correct stable→volatile slot and reflecting the resolved
-  enabled set; feature-off (either layer) ⇒ no manifest and no `open_skill` exposed;
-  pre-opened skill equals a model `open_skill`.
+- **Host loop (`GxPT.Tests`)** — `open_skill` resolution + body-as-tool-result (body +
+  resolved skill dir + asset listing); manifest injected in the correct stable→volatile
+  slot and reflecting the resolved enabled set; feature-off (either layer) ⇒ no
+  manifest and no `open_skill` exposed; pre-opened skill equals a model `open_skill`.
+- **`read_skill_file`** — relative-handle resolution within the skill root; rejects
+  absolute / `..`-escape / drive paths; works for bundled and project skills.
+- **`SkillsMcpServer` / `run_skill_script`** — slug+relpath resolution and sandbox
+  rejection; `.bat`/`.cmd` extension allowlist; literal-arg quoting (no shell-metachar
+  injection); cwd = workspace while `%~dp0` / `GXPT_SKILL_DIR` point at the skill root;
+  unknown/disabled slug rejected; no-workspace ⇒ unresolvable.
 
 ---
 
@@ -257,21 +332,27 @@ Same dual-world pattern as the rest of the repo (net48 linked-source via
 1. **`SkillCatalog` + frontmatter parser** + bundled-skill discovery (pure, TDD).
 2. **Manifest injection** in the orchestrator's ephemeral stack, gated by the
    per-conversation enabled set.
-3. **`open_skill` meta-tool** in the registry (sibling to `reveal_tools`), body as
-   tool result.
-4. **`SlashCommandRouter`** in `InputManager`: invocation + `/skills` listing +
-   on/off toggles; per-conversation persistence in the conversation JSON.
-5. **Project skills** (`<workdir>/.gxpt/skills/`) + project-over-bundled shadowing;
-   ship a couple of bundled first-party skills to dogfood.
-6. **(Optional/later)** user-global skills; LRU cap on opened bodies; a
-   `SkillsMcpServer` only if the model should author skills at runtime.
+3. **`open_skill` meta-tool** (sibling to `reveal_tools`): body + resolved skill dir +
+   asset listing as the tool result.
+4. **`read_skill_file` meta-tool** (ReadOnly) for Level-3 assets.
+5. **`SlashCommandRouter`** in `InputManager`: invocation + `/skills` listing +
+   on/off toggles; per-conversation + global persistence.
+6. **`SkillsMcpServer` + `run_skill_script`**: batch-only entry, handle resolution +
+   sandbox, literal args, cwd = workspace, always-confirm (remember-eligible by
+   `(slug, relpath)`). Added to `GxPT.sln`, the `AfterBuild` copy, and the setup
+   `.vdproj` (like `MemoryMcpServer`).
+7. **Project skills** (`<workdir>/.gxpt/skills/`) + project-over-bundled shadowing;
+   ship a couple of bundled first-party skills (with a `%~dp0` wrapper) to dogfood.
+8. **(Optional/later)** user-global skills; LRU cap on opened bodies; a
+   model-authored-skills writer surface (mirrors `MemoryMcpServer`'s writer role).
 
 ---
 
 ## 11. Open / soft decisions
 
 **Resolved (2026-06-08):**
-- ~~`open_skill` host meta-tool vs. `SkillsMcpServer`~~ → host meta-tool (S1).
+- ~~`open_skill` host meta-tool vs. `SkillsMcpServer`~~ → catalog & reads are host
+  meta-tools; execution is a `SkillsMcpServer` (S1/S11).
 - ~~Scope~~ → bundled + project at launch, user-global deferred (S2).
 - ~~Trigger model~~ → model-initiated (`open_skill`) **and** slash command, one
   catalog/load path (S3).
@@ -280,10 +361,22 @@ Same dual-world pattern as the rest of the repo (net48 linked-source via
 - ~~Whether enablement should be promotable to an app-wide default~~ → yes: two
   scopes, `global` (a dedicated `skills.json`) and `here` (the conversation), with
   the conversation overriding the global default (S6/S10, §6/§7).
+- ~~How the model invokes bundled scripts~~ → `run_skill_script(slug, relpath,
+  args[])` in a sandboxed `SkillsMcpServer`, batch-only entry, handle-based (no
+  absolute paths), cwd = workspace (S9/S11–S15, §5/§8).
+- ~~Reading bundled assets `files__*` can't reach~~ → `read_skill_file(slug, relpath)`,
+  ReadOnly, host-resolved within the skill root (S13).
+- ~~Per-machine install path in authored markdown~~ → never author absolute paths;
+  `open_skill` returns the resolved skill dir + asset listing, and `%~dp0` locates
+  bundled siblings at runtime (S12, §5).
 
 **Deferred:**
 - User-global skills home and precedence (`project > user > bundled`).
 - LRU cap on opened bodies (only if bodies crowd context).
-- A `SkillsMcpServer` writer role for model-authored skills.
+- Workspace-less skill execution via a temp scratch cwd (a workspace is required
+  today, S14).
+- Non-batch direct entry types (`.exe`/`.py`/`.ps1`); today they're reached only
+  through a `.bat`/`.cmd` wrapper (S12).
+- A model-authored-skills writer surface (mirrors `MemoryMcpServer`'s writer role).
 </content>
 </invoke>
