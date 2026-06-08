@@ -3417,6 +3417,12 @@ namespace GxPT
                     return true;
                 }
                 case "reveal_tools": header = "Checking available tools"; return true;
+                case "open_skill":
+                {
+                    string slugs = JoinPaths(args, "names"); // generic string-array joiner
+                    header = slugs.Length > 0 ? "Reading skill: " + slugs : "Reading skill";
+                    return true;
+                }
                 default: return false;
             }
         }
