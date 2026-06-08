@@ -205,6 +205,22 @@ namespace GxPT
             List<Entry> entries = GetEntries(baseDirAbs);
 
             _items.Clear();
+
+            // When listing a directory's contents (no partial leaf typed), offer a "this folder" entry at
+            // the top so the current, fully-typed directory can be accepted without drilling into a child.
+            // It is the default selection, so at "/explain src/" Enter accepts the folder (closes; next
+            // Enter sends) instead of completing the first child. At the root it inserts ".".
+            if (leaf.Length == 0)
+            {
+                Item here = new Item();
+                here.Display = ".  (this folder)";
+                here.Insert = baseRel.Length == 0
+                    ? "/" + commandName + " ."
+                    : "/" + commandName + " " + dirPrefix; // dirPrefix == the typed dir path (e.g. "src/")
+                here.ContinueCompleting = false;            // terminal: accepting closes the popup
+                _items.Add(here);
+            }
+
             for (int i = 0; i < entries.Count && _items.Count < MaxPathResults; i++)
             {
                 Entry en = entries[i];
@@ -430,7 +446,10 @@ namespace GxPT
 
             // Keep the popup open when there is more to complete: a directory (drill into children) or a
             // command that takes a path argument (flow straight into path completion). Otherwise close.
-            _ignoreNextChange = !it.ContinueCompleting;
+            // Only arm the ignore-next-change guard when the text actually changes -- accepting the
+            // "this folder" entry can be a no-op (Insert == current text), which raises no TextChanged.
+            bool changes = !string.Equals(_txt.Text ?? string.Empty, it.Insert, StringComparison.Ordinal);
+            _ignoreNextChange = changes && !it.ContinueCompleting;
             _input.SetInputText(it.Insert, true);
             if (!it.ContinueCompleting) Hide();
         }
