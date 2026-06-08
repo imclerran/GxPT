@@ -281,7 +281,8 @@ scope.
 Per-tab by construction; **no `settings.json` key, no checkbox** — all control is the
 §6 slash commands. The `/skills` list shows each skill's effective state **and the rung
 that decided it** (e.g. `on here`, `off globally`, `all skills off here`, `default`),
-with a "fallback for unset skills" header showing the feature toggle (rungs 3–4).
+under a `Default: ON globally · OFF here` header naming the feature toggle (rungs 3–4) —
+the default for any skill with no per-skill setting.
 
 ---
 

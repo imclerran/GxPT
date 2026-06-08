@@ -143,12 +143,12 @@ namespace GxPT
             IDictionary<string, bool> convOv = ctx.GetConversationSkillOverrides();
 
             StringBuilder sb = new StringBuilder();
-            sb.Append("Skills - most specific setting wins.");
-            // The feature toggle (rungs 3-4): the fallback for any skill with no per-skill setting. Worded
-            // as a "fallback" so it doesn't read as "all skills are off" (a per-skill 'on' still wins).
-            sb.Append("\nFallback for unset skills: ").Append(global.FeatureOff ? "off" : "on").Append(" globally");
+            sb.Append("Skills \u2014 most specific setting wins.");
+            // The feature toggle (rungs 3-4) = the default for any skill with no per-skill setting. The
+            // "here" half only shows when this conversation has set it (otherwise it inherits global).
+            sb.Append("\nDefault: ").Append(global.FeatureOff ? "OFF" : "ON").Append(" globally");
             if (convFeatureOff.HasValue)
-                sb.Append(", ").Append(convFeatureOff.Value ? "off" : "on").Append(" in this conversation");
+                sb.Append(" \u00b7 ").Append(convFeatureOff.Value ? "OFF" : "ON").Append(" here");
 
             IList<Skill> skills = cat.Skills;
             if (skills == null || skills.Count == 0)
@@ -157,6 +157,11 @@ namespace GxPT
                 return sb.ToString();
             }
 
+            int width = 0;
+            for (int i = 0; i < skills.Count; i++)
+                if (skills[i].Slug != null && skills[i].Slug.Length > width) width = skills[i].Slug.Length;
+
+            sb.Append("\n"); // blank line before the list
             for (int i = 0; i < skills.Count; i++)
             {
                 Skill s = skills[i];
@@ -164,8 +169,8 @@ namespace GxPT
                 bool? ov = (convOv != null && convOv.TryGetValue(s.Slug, out v)) ? (bool?)v : null;
                 SkillRule rule;
                 bool enabled = SkillResolve.Resolve(global, s.Slug, ov, convFeatureOff, out rule);
-                sb.Append("\n  ").Append(enabled ? "[on] " : "[off] ").Append(s.Slug)
-                  .Append("  (").Append(ReasonText(rule, enabled)).Append(") - ").Append(s.Description);
+                sb.Append("\n  ").Append((s.Slug != null ? s.Slug : "").PadRight(width)).Append("  ")
+                  .Append(enabled ? "ON " : "OFF").Append("  (").Append(ReasonText(rule, enabled)).Append(")");
             }
             return sb.ToString();
         }
