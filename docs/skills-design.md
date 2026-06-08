@@ -51,7 +51,8 @@ same idea one level up.
 | S3 | **Model-initiated *and* slash-command triggers**, over one catalog | `open_skill` matches GxPT's `reveal_tools` precedent (the model picks from the manifest mid-task); the slash command gives the user a deliberate "run this now" entry point. Both pre-/open the same `SKILL.md`, so there is one load path, not two. |
 | S4 | **`SKILL.md` = minimal frontmatter + markdown body**, parsed by a hand-rolled reader | net35 has no YAML parser and the repo keeps exactly one JSON lib (Newtonsoft, D3). A ~20-line `--- … ---` reader for `name`/`description` keeps authoring familiar to Claude Code skills without a new dependency or a JSON sidecar. |
 | S5 | **Folder name = slug = handle**; reuse the memory system's kebab-case `Slug` | No name→path map needed (memory M4). `<workdir>/.gxpt/skills/<slug>/SKILL.md`; the slug is what appears in the manifest, what `open_skill` takes, and what the slash command types. |
-| S6 | **No skills UI in `SettingsForm`; enablement is per-conversation via slash commands**, default **all-on** | Skills are a discoverable capability, not a privacy-sensitive opt-in like memory — so they default on and need no settings toggle. Per-conversation scope matches `Zdr`/`WorkingDir` grain (different tabs, different skill sets). Stored as a **disabled-set** (+ a global off flag) so newly-added bundled skills auto-appear. |
+| S6 | **No skills UI in `SettingsForm`; enablement is driven entirely by slash commands** at two scopes — **global default** and **this conversation** — default **all-on** | Skills are a discoverable capability, not a privacy-sensitive opt-in like memory, so they default on and need no settings toggle. Global gives an app-wide default; per-conversation matches the `Zdr`/`WorkingDir` grain (different tabs, different skill sets). |
+| S10 | **Conversation overrides the global default** (tri-state per skill: *inherit / on / off*); global state lives in a dedicated `%AppData%/GxPT/skills.json`, conversation overrides in the conversation JSON | A plain disabled-set can't express "force-on over a global-off", so the conversation layer is tri-state, not a set. A dedicated file keeps global state out of `settings.json` and the settings form (S6) while still persisting it — matching the repo's `recent-workdirs.json` / `mcp.json` dedicated-file pattern. |
 | S7 | **`open_skill` returns the body as the tool result** (not a separate ephemeral injection) | Returning through the normal tool-loop lands the body in history naturally and keeps it available for the rest of the task — no new injection channel. The always-on **manifest** still rides as an ephemeral system message (S8). |
 | S8 | **Manifest injected as an ephemeral system message**, in the stable→volatile stack | Same treatment as the names manifest and the memory block: rebuilt each request from the live catalog, never persisted. Cheap (names + one-liners), so it sits in front of history every turn when skills are enabled for the conversation. |
 | S9 | **Bundled scripts run through the existing approval tiers** — skills get no new execution channel | A skill body instructs the model to use `files__*` / `command__run`, which already hit the three-tier gate (Destructive = always-confirm). A skill that runs code is exactly as gated as the command tool, no more (mcp-architecture §9). |
@@ -150,12 +151,17 @@ Scoped to skills for now, but built as a general dispatcher.
 | Command | Effect | Turn? |
 |---------|--------|-------|
 | `/<slug> [text]` | **Invoke**: pre-open `<slug>` for this turn (host injects its body as if `open_skill` were called), then send `text` as the user message | yes (LLM turn) |
-| `/skills` | List available skills with their on/off state, rendered as a local transcript note | no |
-| `/skills on` · `/skills off` | Global per-conversation toggle (whole manifest + `open_skill` on/off) | no |
-| `/skill on <slug>` · `/skill off <slug>` | Per-skill toggle for this conversation | no |
+| `/skills` | List available skills with their **effective** on/off state and where each came from (global default vs. this conversation), as a local transcript note | no |
+| `/skills on｜off [here｜global]` | Toggle the **whole feature** (manifest + `open_skill`); scope defaults to `here` (this conversation), `global` sets the app-wide default | no |
+| `/skill on｜off <slug> [here｜global]` | Toggle **one skill** at the given scope; defaults to `here` | no |
+| `/skill reset <slug>` · `/skills reset` | Drop the conversation override(s) so the skill / whole feature falls back to the global default | no |
 
+- **Scope keyword is the last token**, one of `here` (this conversation, the
+  default) or `global` (the app-wide default in `skills.json`). Omitted ⇒ `here`.
 - **Reserved slugs:** `skill` and `skills` (so the management verbs never collide
-  with an invocation). Slugs are kebab-case, so other collisions can't occur.
+  with an invocation). The subcommand keywords (`on`/`off`/`reset`/`here`/`global`)
+  only ever follow `/skill` or `/skills`, so they don't collide with `/<slug>`
+  invocation. Slugs are kebab-case, so other collisions can't occur.
 - **Invocation is sugar over the load path:** `/release-notes draft v2` →
   pre-open `release-notes` + user text `draft v2`. The host treats a pre-opened
   skill exactly like an `open_skill` result already in context — one load path (S3).
@@ -168,18 +174,42 @@ Scoped to skills for now, but built as a general dispatcher.
 
 ## 7. Enablement & persistence
 
-- **Per-conversation, default all-on** (S6). The enabled set is derived as
-  *all discovered skills minus a disabled-set*, so newly-added bundled or project
-  skills appear automatically.
-- **Stored with the conversation** (alongside `WorkingDir` / `Zdr` in the
-  conversation JSON): a `DisabledSkills` slug list + a `SkillsOff` global bool.
-  Compact, forward-compatible, and per-tab — concurrent tabs can carry different
-  skill sets, matching the workdir-scoped server model.
-- **When a conversation has skills globally off** (`/skills off`): no manifest, no
-  `open_skill` exposed, no trace in context — the per-conversation analogue of the
-  memory M6 "disabled leaves no trace" property.
-- **No `SettingsForm` surface.** No `settings.json` key, no checkbox. All control is
-  the slash commands above.
+Two layers, resolved per request. Everything defaults to **all-on**, so absence at
+both layers means a skill is enabled — newly-added bundled or project skills appear
+automatically.
+
+### Layer 1 — global default (`%AppData%/GxPT/skills.json`)
+The app-wide baseline, written only by `… global` slash commands (no settings-form
+surface, S6). A dedicated file like `recent-workdirs.json` / `mcp.json`:
+```json
+{ "feature_off": false, "disabled": ["noisy-skill"] }
+```
+- `feature_off` — whole-feature off everywhere unless a conversation overrides it.
+- `disabled` — slugs off by default everywhere unless a conversation overrides them.
+
+### Layer 2 — conversation override (conversation JSON)
+Stored beside `WorkingDir` / `Zdr`, this layer **overrides** the global default for
+one conversation and is **tri-state per skill** (a set can't force a skill *on* over
+a global *off*, S10):
+```json
+{ "skills_feature_off": null, "skill_overrides": { "release-notes": true, "noisy-skill": false } }
+```
+- `skills_feature_off` — `null` inherits global; `true`/`false` forces the feature
+  off/on for this conversation.
+- `skill_overrides` — `slug → bool` (`true` force-on, `false` force-off); a slug
+  absent here **inherits** the global default. `/skill reset` removes an entry;
+  `/skills reset` clears the map and `skills_feature_off`.
+
+### Resolution (each request)
+1. **Feature:** `skills_feature_off` if non-null, else global `feature_off`. If off ⇒
+   no manifest, no `open_skill` exposed, no trace in context (the memory M6 property,
+   here per conversation).
+2. **Per skill** (feature on): conversation `skill_overrides[slug]` if present, else
+   *enabled unless* `slug ∈ global.disabled`.
+
+Per-tab by construction — concurrent tabs carry their own override layer over the
+shared global default. **No `settings.json` key, no checkbox**; all control is the
+slash commands in §6.
 
 ---
 
@@ -205,11 +235,16 @@ Same dual-world pattern as the rest of the repo (net48 linked-source via
 
 - **`SkillCatalog` + frontmatter parser** — discovery, project-over-bundled
   shadowing, malformed frontmatter, manifest assembly for a given enabled set.
-- **`SlashCommandRouter`** — parsing, reserved-slug handling, invocation transform
-  (pre-open + residual text), management commands producing no LLM turn.
+- **`SlashCommandRouter`** — parsing, reserved-slug handling, scope keyword
+  (`here`/`global`, default `here`), invocation transform (pre-open + residual
+  text), management commands producing no LLM turn.
+- **Enablement resolution** — the two-layer precedence: conversation override beats
+  global default; **force-on over a global-off**; `reset` falls back to inherit;
+  newly-added slugs default on at both layers.
 - **Host loop (`GxPT.Tests`)** — `open_skill` resolution + body-as-tool-result;
-  manifest injected in the correct stable→volatile slot; `/skills off` ⇒ no
-  manifest and no `open_skill` exposed; pre-opened skill equals a model `open_skill`.
+  manifest injected in the correct stable→volatile slot and reflecting the resolved
+  enabled set; feature-off (either layer) ⇒ no manifest and no `open_skill` exposed;
+  pre-opened skill equals a model `open_skill`.
 
 ---
 
@@ -236,13 +271,15 @@ Same dual-world pattern as the rest of the repo (net48 linked-source via
 - ~~Scope~~ → bundled + project at launch, user-global deferred (S2).
 - ~~Trigger model~~ → model-initiated (`open_skill`) **and** slash command, one
   catalog/load path (S3).
-- ~~Per-skill settings UI~~ → dropped; enablement is per-conversation via slash
-  commands, default all-on (S6).
+- ~~Per-skill settings UI~~ → dropped; enablement is slash-command driven, default
+  all-on (S6).
+- ~~Whether enablement should be promotable to an app-wide default~~ → yes: two
+  scopes, `global` (a dedicated `skills.json`) and `here` (the conversation), with
+  the conversation overriding the global default (S6/S10, §6/§7).
 
 **Deferred:**
 - User-global skills home and precedence (`project > user > bundled`).
 - LRU cap on opened bodies (only if bodies crowd context).
 - A `SkillsMcpServer` writer role for model-authored skills.
-- Whether `/skills` state should ever be promotable to an app-wide default.
 </content>
 </invoke>
