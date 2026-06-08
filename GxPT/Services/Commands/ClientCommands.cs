@@ -46,7 +46,8 @@ namespace GxPT
         {
             string slug = (args ?? string.Empty).Trim();
             if (slug.Length == 0) return SlashCommandResult.Fail("Usage: /model <author/model>");
-            ctx.SetModel(slug); // silent: the model combo reflects the change
+            ctx.SetModel(slug);
+            ctx.WriteInfo("Model set to " + slug + ".");
             return SlashCommandResult.Handled();
         }
 
@@ -132,7 +133,7 @@ namespace GxPT
 
             string err = ctx.SetServerEnabled(name, target);
             if (err != null) return SlashCommandResult.Fail(err);
-            // Silent: /tool completion shows each server's current on/off state.
+            ctx.WriteInfo(name + " server " + (target ? "enabled" : "disabled") + ".");
             return SlashCommandResult.Handled();
         }
 
