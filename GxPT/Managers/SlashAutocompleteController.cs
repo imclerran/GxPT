@@ -198,10 +198,13 @@ namespace GxPT
             string baseRel = lastSep >= 0 ? arg.Substring(0, lastSep) : string.Empty;
             string leaf = lastSep >= 0 ? arg.Substring(lastSep + 1) : arg;
 
-            // A leaf that begins with whitespace means the path token is already finished and the user
-            // typed a space after it (e.g. "/explain src/ "). Close rather than re-opening with a
-            // "no matching files" row. (An empty leaf -- "/explain src/" -- still lists the folder.)
-            if (leaf.Length > 0 && char.IsWhiteSpace(leaf[0])) { Hide(); return; }
+            // The path token is finished once the user types a space after it -- after a directory's "/"
+            // ("/explain src/ ", leaf " ") or after a bare name ("/explain src ", arg ends with a space).
+            // In either case close rather than re-opening with a "no matching files" row. An empty leaf
+            // ("/explain src/") still lists the folder.
+            bool trailingSpace = arg.Length > 0 && char.IsWhiteSpace(arg[arg.Length - 1]);
+            bool leadingSpaceLeaf = leaf.Length > 0 && char.IsWhiteSpace(leaf[0]);
+            if (trailingSpace || leadingSpaceLeaf) { Hide(); return; }
 
             string baseDirAbs;
             try { baseDirAbs = baseRel.Length > 0 ? Path.Combine(workdir, baseRel) : workdir; }
