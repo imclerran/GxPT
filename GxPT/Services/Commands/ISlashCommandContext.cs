@@ -33,5 +33,9 @@ namespace GxPT
         // ---- conversation / app actions ----
         void NewConversation();
         void ExportConversations();
+
+        // Summarize the current conversation and open the summary as context in a new conversation tab.
+        // Runs asynchronously; the original conversation is left untouched.
+        void Compact();
     }
 }

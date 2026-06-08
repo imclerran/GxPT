@@ -14,6 +14,7 @@ namespace GxPT
             list.Add(new ToolCommand());
             list.Add(new NewCommand());
             list.Add(new ExportCommand());
+            list.Add(new CompactCommand());
             return list;
         }
     }
@@ -208,6 +209,19 @@ namespace GxPT
         public override SlashCommandResult Invoke(string args, ISlashCommandContext ctx)
         {
             ctx.ExportConversations();
+            return SlashCommandResult.Handled();
+        }
+    }
+
+    // /compact -- summarize this conversation into a new one (leaving the original untouched).
+    internal sealed class CompactCommand : ClientCommandBase
+    {
+        public override string Name { get { return "compact"; } }
+        public override string Description { get { return "Summarize this conversation into a new one"; } }
+
+        public override SlashCommandResult Invoke(string args, ISlashCommandContext ctx)
+        {
+            ctx.Compact();
             return SlashCommandResult.Handled();
         }
     }

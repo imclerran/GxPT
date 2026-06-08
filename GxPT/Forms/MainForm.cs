@@ -1294,7 +1294,7 @@ namespace GxPT
             {
                 var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
                 if (c != null && c.Transcript != null)
-                    c.Transcript.AddMessage(MessageRole.Assistant, text ?? string.Empty);
+                    c.Transcript.AddMessage(MessageRole.Tool, text ?? string.Empty); // chromeless, like tool activity
             }
             catch { }
         }
@@ -1398,6 +1398,195 @@ namespace GxPT
             ImportExportManager.ExportAll(this);
         }
 
+        // ===== /compact: summarize the current conversation into a new tab =====
+
+        private const string CompactionSystemPrompt =
+            "You are a summarization assistant. Produce a concise but complete summary of the "
+            + "conversation that captures the user's goals, key decisions, important facts, code, file "
+            + "paths, and any open tasks or next steps. Write it so another assistant can resume the work "
+            + "with full context. Output only the summary, with no preamble or commentary.";
+
+        private const string CompactionContextPrefix =
+            "The following is a summary of an earlier conversation, provided as context so you can "
+            + "continue it seamlessly:\n\n";
+
+        internal void SlashCompact()
+        {
+            var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            if (ctx == null || ctx.Conversation == null || ctx.Transcript == null) return;
+
+            string transcriptText = RenderHistoryForSummary(ctx.Conversation.History);
+            if (string.IsNullOrEmpty(transcriptText))
+            {
+                ctx.Transcript.AddMessage(MessageRole.Tool, "Nothing to compact.");
+                return;
+            }
+            if (_client == null || !_client.IsConfigured)
+            {
+                ctx.Transcript.AddMessage(MessageRole.Tool, "Cannot compact: client is not configured.");
+                return;
+            }
+
+            // Chromeless progress line; remember its index so we can flip it to "Compacted" when done.
+            int msgIndex = ctx.Transcript.AddMessageGetIndex(MessageRole.Tool, "Compacting conversation...");
+
+            string model = ResolveCompactionModel();
+            bool zdr = ResolveZdrForSend(ctx);
+
+            List<ChatMessage> messages = new List<ChatMessage>();
+            messages.Add(new ChatMessage("system", CompactionSystemPrompt));
+            messages.Add(new ChatMessage("user",
+                "Summarize the following conversation so a new session can continue it seamlessly.\n\n"
+                + transcriptText));
+
+            // Snapshot what the completion callback needs (the active tab may change before it returns).
+            var sourceCtx = ctx;
+            var transcriptRef = ctx.Transcript;
+            int idx = msgIndex;
+
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                string summary = null, error = null;
+                try
+                {
+                    string raw = _client.CreateCompletion(model, messages,
+                        new ClientProperties { Zdr = zdr ? true : (bool?)null });
+                    summary = ExtractCompletionContent(raw); // CreateCompletion returns the raw JSON body
+                }
+                catch (Exception ex) { error = ex.Message; }
+
+                try
+                {
+                    BeginInvoke((MethodInvoker)delegate
+                    {
+                        try
+                        {
+                            if (!string.IsNullOrEmpty(error) || string.IsNullOrEmpty(summary))
+                            {
+                                transcriptRef.UpdateMessageAt(idx,
+                                    "Compaction failed" + (string.IsNullOrEmpty(error) ? "." : ": " + error));
+                                return;
+                            }
+                            transcriptRef.UpdateMessageAt(idx, "Compacted conversation.");
+                            OpenCompactedConversation(sourceCtx, summary);
+                        }
+                        catch (Exception ex2)
+                        {
+                            try { transcriptRef.UpdateMessageAt(idx, "Compaction failed: " + ex2.Message); }
+                            catch { }
+                        }
+                    });
+                }
+                catch { }
+            });
+        }
+
+        // Open a new conversation tab seeded with the summary as a hidden system message (context). The
+        // original conversation is left untouched. Inherits the source tab's working folder and model.
+        private void OpenCompactedConversation(TabManager.ChatTabContext sourceCtx, string summary)
+        {
+            string wd = sourceCtx != null ? sourceCtx.WorkingDir : null;
+            TabManager.ChatTabContext nctx;
+            if (!string.IsNullOrEmpty(wd))
+            {
+                OpenNewTabWithWorkingDir(wd);
+                nctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            }
+            else
+            {
+                nctx = _tabManager != null ? _tabManager.CreateConversationTab() : null;
+            }
+            if (nctx == null || nctx.Conversation == null) return;
+
+            // System-role history is sent to the model but never rendered (RebuildTranscript skips it),
+            // so the summary rides along as invisible context.
+            nctx.Conversation.History.Add(new ChatMessage("system", CompactionContextPrefix + summary));
+
+            // Continue with the source conversation's model.
+            if (sourceCtx != null && !string.IsNullOrEmpty(sourceCtx.SelectedModel))
+            {
+                nctx.SelectedModel = sourceCtx.SelectedModel;
+                nctx.Conversation.SelectedModel = sourceCtx.SelectedModel;
+                try
+                {
+                    if (this.cmbModel != null)
+                    {
+                        _syncingModelCombo = true;
+                        try { this.cmbModel.Text = sourceCtx.SelectedModel; }
+                        finally { _syncingModelCombo = false; }
+                    }
+                }
+                catch { }
+            }
+
+            if (nctx.Transcript != null)
+                nctx.Transcript.AddMessage(MessageRole.Tool, "Continued from a compacted conversation.");
+        }
+
+        // The model used for compaction summaries: always gemini-flash-latest. Resolve it against the
+        // configured catalog so it matches the app's id convention (e.g. a leading "~"), falling back to
+        // the plain slug if the catalog doesn't list it.
+        private string ResolveCompactionModel()
+        {
+            const string target = "gemini-flash-latest";
+            IList<string> models = SlashGetModels();
+            if (models != null)
+            {
+                for (int i = 0; i < models.Count; i++)
+                {
+                    string m = models[i];
+                    if (string.IsNullOrEmpty(m)) continue;
+                    if (m.Replace("~", string.Empty).EndsWith(target, StringComparison.OrdinalIgnoreCase))
+                        return m;
+                }
+            }
+            return "google/" + target;
+        }
+
+        // Pull choices[0].message.content from a chat-completion JSON body (CreateCompletion returns the
+        // raw body). Mirrors Conversation.ExtractTitleFromJson; uses JavaScriptSerializer like that path.
+        private static string ExtractCompletionContent(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return null;
+            try
+            {
+                var ser = new System.Web.Script.Serialization.JavaScriptSerializer();
+                var root = ser.DeserializeObject(json) as Dictionary<string, object>;
+                if (root == null || !root.ContainsKey("choices")) return null;
+                var choices = root["choices"] as object[];
+                if (choices == null || choices.Length == 0) return null;
+                var first = choices[0] as Dictionary<string, object>;
+                if (first == null) return null;
+                if (first.ContainsKey("message"))
+                {
+                    var msg = first["message"] as Dictionary<string, object>;
+                    if (msg != null && msg.ContainsKey("content"))
+                        return msg["content"] as string;
+                }
+                if (first.ContainsKey("text"))
+                    return first["text"] as string;
+            }
+            catch { }
+            return null;
+        }
+
+        private static string RenderHistoryForSummary(IList<ChatMessage> history)
+        {
+            if (history == null) return string.Empty;
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < history.Count; i++)
+            {
+                var m = history[i];
+                if (m == null) continue;
+                string role = (m.Role ?? string.Empty).ToLowerInvariant();
+                if (role != "user" && role != "assistant") continue;
+                string content = m.Content ?? string.Empty;
+                if (content.Trim().Length == 0) continue;
+                sb.Append(role == "user" ? "User: " : "Assistant: ").Append(content).Append("\n\n");
+            }
+            return sb.ToString().Trim();
+        }
+
         // Accessors used by the autocomplete popup. Both ensure the subsystem is built first, so the
         // popup works on the very first keystroke (before any send has occurred).
         internal SlashCommandRegistry GetSlashRegistry()
@@ -1434,9 +1623,9 @@ namespace GxPT
                 {
                     if (slash.Error != null)
                     {
-                        // Surface the reason like other inline errors; keep the typed command so the
-                        // user can correct it (e.g. fix the path or enable the server).
-                        ctx.Transcript.AddMessage(MessageRole.Assistant, slash.Error);
+                        // Surface the reason as a chromeless (tool-style) line; keep the typed command so
+                        // the user can correct it (e.g. fix the path or enable the server).
+                        ctx.Transcript.AddMessage(MessageRole.Tool, slash.Error);
                         return;
                     }
                     if (!slash.SendToModel)

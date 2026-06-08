@@ -25,5 +25,6 @@ namespace GxPT
 
         public void NewConversation() { _form.SlashNewConversation(); }
         public void ExportConversations() { _form.SlashExportConversations(); }
+        public void Compact() { _form.SlashCompact(); }
     }
 }

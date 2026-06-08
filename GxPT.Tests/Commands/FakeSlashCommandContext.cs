@@ -55,7 +55,9 @@ namespace GxPT.Tests.Commands
             return null;
         }
 
+        public int CompactCount;
         public void NewConversation() { NewConversationCount++; }
         public void ExportConversations() { ExportCount++; }
+        public void Compact() { CompactCount++; }
     }
 }

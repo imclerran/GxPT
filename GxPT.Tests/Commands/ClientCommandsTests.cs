@@ -148,6 +148,15 @@ namespace GxPT.Tests.Commands
             Assert.Equal(1, ctx.ExportCount);
         }
 
+        [Fact]
+        public void Compact_triggers_compaction()
+        {
+            var ctx = new FakeSlashCommandContext("/work");
+            var result = new CompactCommand().Invoke("", ctx);
+            Assert.False(result.SendToModel);
+            Assert.Equal(1, ctx.CompactCount);
+        }
+
         // ---- registration / dispatch through the processor ----
 
         [Fact]
