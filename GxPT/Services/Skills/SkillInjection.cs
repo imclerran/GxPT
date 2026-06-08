@@ -34,13 +34,12 @@ namespace GxPT
             return SkillCatalog.Build(BundledRoot(exeDir), ProjectRoot(workingDir));
         }
 
-        // The phase-2 ephemeral block: framing + the slug/description manifest. Returns null when the
-        // catalog is empty, so a skill-less conversation injects nothing (no phantom capability).
-        public static string BuildManifestMessage(SkillCatalog catalog)
+        // The phase-2 ephemeral block: framing + the slug/description manifest, built from the skills
+        // ENABLED for this conversation (SkillResolve). Returns null when the set is empty, so a
+        // skill-less or all-disabled conversation injects nothing (no phantom capability).
+        public static string BuildManifestMessage(IList<Skill> enabledSkills)
         {
-            if (catalog == null) return null;
-            IList<Skill> skills = catalog.Skills;
-            if (skills == null || skills.Count == 0) return null;
+            if (enabledSkills == null || enabledSkills.Count == 0) return null;
 
             StringBuilder sb = new StringBuilder();
             sb.Append("# Skills\n\n");
@@ -50,7 +49,7 @@ namespace GxPT
             sb.Append("directly callable - you do NOT need to reveal it first - and you may open several ");
             sb.Append("skills at once. Do not mention skills unless they are relevant to the request.\n\n");
             sb.Append("Available skills:\n");
-            sb.Append(catalog.BuildManifest());
+            sb.Append(SkillCatalog.BuildManifest(enabledSkills));
             return sb.ToString();
         }
     }

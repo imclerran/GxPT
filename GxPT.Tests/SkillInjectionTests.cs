@@ -41,7 +41,7 @@ namespace GxPT.Tests
         public void BuildManifestMessage_EmptyCatalog_ReturnsNull()
         {
             SkillCatalog empty = SkillCatalog.Build(_root, null);   // _root has no skill folders
-            Assert.Null(SkillInjection.BuildManifestMessage(empty));
+            Assert.Null(SkillInjection.BuildManifestMessage(empty.Skills));
             Assert.Null(SkillInjection.BuildManifestMessage(null));
         }
 
@@ -54,7 +54,7 @@ namespace GxPT.Tests
                 "---\nname: Release Notes\ndescription: Draft notes.\n---\nbody\n", new UTF8Encoding(false));
 
             SkillCatalog cat = SkillCatalog.Build(_root, null);
-            string msg = SkillInjection.BuildManifestMessage(cat);
+            string msg = SkillInjection.BuildManifestMessage(cat.Skills);
 
             Assert.NotNull(msg);
             Assert.Contains("# Skills", msg);

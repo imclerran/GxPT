@@ -20,16 +20,27 @@ namespace GxPT
         private const int MaxBodyChars = 32 * 1024;
         private const int MaxAssetsListed = 200;
 
-        private readonly SkillCatalog _catalog;
+        // Indexed by slug over the skills ENABLED for this turn (SkillResolve), so open_skill can only
+        // load a skill the conversation actually has on. Explicit /use (phase 4b) goes through the
+        // catalog directly and is not bound by this set.
+        private readonly Dictionary<string, Skill> _bySlug;
 
-        public SkillTools(SkillCatalog catalog)
+        public SkillTools(IList<Skill> enabledSkills)
         {
-            _catalog = catalog;
+            _bySlug = new Dictionary<string, Skill>(StringComparer.OrdinalIgnoreCase);
+            if (enabledSkills != null)
+            {
+                for (int i = 0; i < enabledSkills.Count; i++)
+                {
+                    Skill s = enabledSkills[i];
+                    if (s != null && !string.IsNullOrEmpty(s.Slug)) _bySlug[s.Slug] = s;
+                }
+            }
         }
 
         public bool HasSkills
         {
-            get { return _catalog != null && _catalog.Skills.Count > 0; }
+            get { return _bySlug.Count > 0; }
         }
 
         public bool IsOpenSkill(string functionName)
@@ -70,7 +81,6 @@ namespace GxPT
         public string Open(string[] names)
         {
             if (names == null || names.Length == 0) return "No skill names provided.";
-            if (_catalog == null) return "No skills are available.";
 
             StringBuilder sb = new StringBuilder();
             for (int i = 0; i < names.Length; i++)
@@ -78,7 +88,7 @@ namespace GxPT
                 if (sb.Length > 0) sb.Append("\n\n");
                 string slug = names[i];
                 Skill skill;
-                if (slug == null || !_catalog.TryGet(slug, out skill))
+                if (slug == null || !_bySlug.TryGetValue(slug, out skill))
                 {
                     sb.Append("Unknown skill: ").Append(slug != null ? slug : "(null)");
                     continue;

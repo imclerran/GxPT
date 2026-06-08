@@ -42,7 +42,7 @@ namespace GxPT.Tests
 
         private SkillTools Tools()
         {
-            return new SkillTools(SkillCatalog.Build(_bundled, null));
+            return new SkillTools(SkillCatalog.Build(_bundled, null).Skills);
         }
 
         [Fact]
@@ -75,9 +75,9 @@ namespace GxPT.Tests
         [Fact]
         public void HasSkills_ReflectsCatalog()
         {
-            Assert.False(new SkillTools(SkillCatalog.Build(_bundled, null)).HasSkills);
+            Assert.False(new SkillTools(SkillCatalog.Build(_bundled, null).Skills).HasSkills);
             WriteSkill("a", "A.", "body");
-            Assert.True(new SkillTools(SkillCatalog.Build(_bundled, null)).HasSkills);
+            Assert.True(new SkillTools(SkillCatalog.Build(_bundled, null).Skills).HasSkills);
         }
 
         [Fact]

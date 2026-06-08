@@ -2134,17 +2134,17 @@ namespace GxPT
             catch { }
         }
 
-        // True when this conversation has at least one discoverable skill (bundled or project). Used to
-        // route the turn through the tool loop even with no MCP tools, since skills inject a manifest and
-        // expose open_skill there. Cheap (a couple of directory scans); BeginToolSend re-scans to build
-        // the catalog it actually uses, so this is just the gate.
+        // True when this conversation has at least one ENABLED skill (bundled or project). Used to route
+        // the turn through the tool loop even with no MCP tools, since skills inject a manifest and expose
+        // open_skill there. Cheap (a couple of directory scans + skills.json); BeginToolSend re-resolves
+        // the enabled set it actually uses, so this is just the gate.
         private static bool ConversationHasSkills(TabManager.ChatTabContext ctx)
         {
             try
             {
                 string workdir = (ctx != null) ? ctx.WorkingDir : null;
                 SkillCatalog cat = SkillInjection.BuildCatalog(AppDomain.CurrentDomain.BaseDirectory, workdir);
-                return cat.Skills.Count > 0;
+                return SkillResolve.EnabledSkills(cat.Skills, SkillEnablement.LoadGlobal(), null, null).Count > 0;
             }
             catch { return false; }
         }
@@ -2231,15 +2231,19 @@ namespace GxPT
                     }
 
                     // Skills: discover bundled (<exe>/skills) + project (<workdir>/.gxpt/skills) skills for
-                    // this turn, inject the manifest, and expose open_skill. The catalog is built once per
-                    // send (stable within the turn); a later turn re-scans, so on-disk edits take effect.
+                    // this turn, resolve which are enabled (global skills.json default; the per-conversation
+                    // override layer lands in phase 4b), then inject the manifest and expose open_skill over
+                    // the enabled set. Rebuilt per send, so on-disk edits take effect on the next turn.
                     SkillCatalog skillCatalog =
                         SkillInjection.BuildCatalog(AppDomain.CurrentDomain.BaseDirectory, ctx.WorkingDir);
-                    if (skillCatalog.Skills.Count > 0)
+                    List<Skill> enabledSkills = SkillResolve.EnabledSkills(
+                        skillCatalog.Skills, SkillEnablement.LoadGlobal(), null, null);
+                    if (enabledSkills.Count > 0)
                     {
+                        List<Skill> enabledForTurn = enabledSkills;
                         orch.SkillsManifestSystemMessageProvider =
-                            delegate { return SkillInjection.BuildManifestMessage(skillCatalog); };
-                        orch.SkillTools = new SkillTools(skillCatalog);
+                            delegate { return SkillInjection.BuildManifestMessage(enabledForTurn); };
+                        orch.SkillTools = new SkillTools(enabledForTurn);
                     }
 
                     // Assistant text appends to the current assistant bubble; a tool call closes it so

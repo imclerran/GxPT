@@ -61,6 +61,8 @@
     <Compile Include="..\GxPT\Services\Mcp\MemoryInjection.cs" Link="Linked\Mcp\MemoryInjection.cs" />
     <Compile Include="..\GxPT\Services\Skills\SkillInjection.cs" Link="Linked\Skills\SkillInjection.cs" />
     <Compile Include="..\GxPT\Services\Skills\SkillTools.cs" Link="Linked\Skills\SkillTools.cs" />
+    <Compile Include="..\GxPT\Services\Skills\SkillEnablement.cs" Link="Linked\Skills\SkillEnablement.cs" />
+    <Compile Include="..\GxPT\Services\Skills\SkillResolve.cs" Link="Linked\Skills\SkillResolve.cs" />
     <Compile Include="..\GxPT\Services\Commands\SlashCommandKind.cs" Link="Linked\Commands\SlashCommandKind.cs" />
     <Compile Include="..\GxPT\Services\Commands\SlashCommandResult.cs" Link="Linked\Commands\SlashCommandResult.cs" />
     <Compile Include="..\GxPT\Services\Commands\ISlashCommandContext.cs" Link="Linked\Commands\ISlashCommandContext.cs" />
