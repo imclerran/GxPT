@@ -564,7 +564,14 @@ namespace GxPT
 
                 // Create textbox for inline editing
                 _renameTextBox = new TextBox();
-                _renameTextBox.Text = lvi.Text;
+                // Seed with the raw conversation name, not the displayed row text: the latter
+                // carries the "[zdr] " marker prefix, which must not become part of the name.
+                string editText = lvi.Text;
+                if (info.Zdr && editText != null && editText.StartsWith(MainForm.ZdrTitlePrefix))
+                {
+                    editText = editText.Substring(MainForm.ZdrTitlePrefix.Length);
+                }
+                _renameTextBox.Text = editText;
                 _renameTextBox.BorderStyle = BorderStyle.None;
                 // Allow explicit height by using multiline (single-line behavior preserved by AcceptsReturn=false)
                 _renameTextBox.Multiline = true;
