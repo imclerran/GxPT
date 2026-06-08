@@ -198,18 +198,11 @@ namespace GxPT
             string baseRel = lastSep >= 0 ? arg.Substring(0, lastSep) : string.Empty;
             string leaf = lastSep >= 0 ? arg.Substring(lastSep + 1) : arg;
 
-            // The path token is finished once the user types a space after it -- after a directory's "/"
-            // ("/explain src/ ", leaf " ") or after a bare name ("/explain src ", arg ends with a space).
-            // In either case close rather than re-opening with a "no matching files" row. An empty leaf
-            // ("/explain src/") still lists the folder.
-            bool trailingSpace = arg.Length > 0 && char.IsWhiteSpace(arg[arg.Length - 1]);
-            bool leadingSpaceLeaf = leaf.Length > 0 && char.IsWhiteSpace(leaf[0]);
-            if (trailingSpace || leadingSpaceLeaf) { Hide(); return; }
-
             string baseDirAbs;
             try { baseDirAbs = baseRel.Length > 0 ? Path.Combine(workdir, baseRel) : workdir; }
             catch { Hide(); return; }
 
+            bool dirExists = Directory.Exists(baseDirAbs);
             List<Entry> entries = GetEntries(baseDirAbs);
 
             _items.Clear();
@@ -218,7 +211,7 @@ namespace GxPT
             // the top so the current, fully-typed directory can be accepted without drilling into a child.
             // It is the default selection, so at "/explain src/" Enter accepts the folder (closes; next
             // Enter sends) instead of completing the first child. At the root it inserts ".".
-            if (leaf.Length == 0)
+            if (leaf.Length == 0 && dirExists)
             {
                 Item here = new Item();
                 here.Display = ".  (this folder)";
@@ -245,7 +238,12 @@ namespace GxPT
 
             if (_items.Count == 0)
             {
-                ShowInfo(Directory.Exists(baseDirAbs) ? "No matching files" : "Folder not found");
+                // Folder exists but nothing matches the partial leaf: just close. This is also what makes
+                // a finished path token ("/explain src ") and a path with spaces behave correctly -- the
+                // popup simply isn't shown when there is nothing to suggest, instead of nagging. A missing
+                // folder is still worth flagging.
+                if (dirExists) Hide();
+                else ShowInfo("Folder not found");
                 return;
             }
 
