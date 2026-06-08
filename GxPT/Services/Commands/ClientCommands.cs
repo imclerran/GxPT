@@ -11,7 +11,7 @@ namespace GxPT
         {
             List<ISlashCommand> list = new List<ISlashCommand>();
             list.Add(new ModelCommand());
-            list.Add(new ServerCommand());
+            list.Add(new ToolCommand());
             list.Add(new NewCommand());
             list.Add(new ExportCommand());
             return list;
@@ -96,17 +96,17 @@ namespace GxPT
         }
     }
 
-    // /server <name> [on|off] -- enable/disable a built-in MCP server (omit on|off to toggle).
-    internal sealed class ServerCommand : ClientCommandBase, IArgumentCompleter
+    // /tool <name> [on|off] -- enable/disable a built-in MCP tool server (omit on|off to toggle).
+    internal sealed class ToolCommand : ClientCommandBase, IArgumentCompleter
     {
-        public override string Name { get { return "server"; } }
-        public override string Description { get { return "Enable or disable an MCP server"; } }
+        public override string Name { get { return "tool"; } }
+        public override string Description { get { return "Enable or disable a tool server"; } }
         public override string ArgumentHint { get { return "<name> [on|off]"; } }
 
         public override SlashCommandResult Invoke(string args, ISlashCommandContext ctx)
         {
             string a = (args ?? string.Empty).Trim();
-            if (a.Length == 0) return SlashCommandResult.Fail("Usage: /server <name> [on|off]");
+            if (a.Length == 0) return SlashCommandResult.Fail("Usage: /tool <name> [on|off]");
 
             string name, rest;
             int sp = a.IndexOf(' ');

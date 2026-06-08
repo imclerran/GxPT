@@ -1332,13 +1332,14 @@ namespace GxPT
             catch { }
         }
 
-        // Built-in MCP servers that can be toggled by name (custom mcp.json servers are presence-based).
+        // Built-in MCP tool servers that can be toggled by name with /tool (custom mcp.json servers are
+        // presence-based; memory is intentionally excluded -- it's a feature toggle, not a tool server).
         internal IList<string> SlashGetServerNames()
         {
             return new List<string>(new string[]
             {
                 McpConfig.WebName, McpConfig.FilesName, McpConfig.GitName,
-                McpConfig.CommandName, McpConfig.MsBuildName, McpConfig.MemoryName, McpConfig.GitHubName
+                McpConfig.CommandName, McpConfig.MsBuildName, McpConfig.GitHubName
             });
         }
 

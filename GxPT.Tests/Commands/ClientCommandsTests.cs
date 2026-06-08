@@ -91,7 +91,7 @@ namespace GxPT.Tests.Commands
         [Fact]
         public void Server_completes_names_then_onoff()
         {
-            var cmd = new ServerCommand();
+            var cmd = new ToolCommand();
             var names = cmd.CompleteArgument("", CtxWithServers()).Select(i => i.InsertArg).ToList();
             Assert.Contains("git ", names);
             Assert.Contains("files ", names);
@@ -105,10 +105,10 @@ namespace GxPT.Tests.Commands
         public void Server_invoke_explicit_on_off()
         {
             var ctx = CtxWithServers();
-            new ServerCommand().Invoke("files on", ctx);
+            new ToolCommand().Invoke("files on", ctx);
             Assert.True(ctx.ServerStates["files"]);
 
-            new ServerCommand().Invoke("git off", ctx);
+            new ToolCommand().Invoke("git off", ctx);
             Assert.False(ctx.ServerStates["git"]);
         }
 
@@ -116,16 +116,16 @@ namespace GxPT.Tests.Commands
         public void Server_invoke_toggles_when_state_omitted()
         {
             var ctx = CtxWithServers(); // git starts on
-            new ServerCommand().Invoke("git", ctx);
+            new ToolCommand().Invoke("git", ctx);
             Assert.False(ctx.ServerStates["git"]);
-            new ServerCommand().Invoke("git", ctx);
+            new ToolCommand().Invoke("git", ctx);
             Assert.True(ctx.ServerStates["git"]);
         }
 
         [Fact]
         public void Server_invoke_unknown_name_fails()
         {
-            var result = new ServerCommand().Invoke("bogus on", CtxWithServers());
+            var result = new ToolCommand().Invoke("bogus on", CtxWithServers());
             Assert.NotNull(result.Error);
         }
 
