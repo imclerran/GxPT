@@ -140,8 +140,40 @@ namespace GxPT
             {
                 string name = body.Substring(0, sp);
                 string arg = body.Substring(sp + 1);
-                ShowPathMode(name, arg);
+
+                SlashCommandRegistry registry = _host != null ? _host.GetSlashRegistry() : null;
+                ISlashCommand cmd;
+                if (registry != null && registry.TryResolve(name, out cmd) && cmd is IArgumentCompleter)
+                    ShowArgMode(name, (IArgumentCompleter)cmd, arg);
+                else
+                    ShowPathMode(name, arg); // resolves the command itself; handles path args or hides
             }
+        }
+
+        // ---- generic argument completion (commands that implement IArgumentCompleter) ----
+
+        private void ShowArgMode(string commandName, IArgumentCompleter completer, string arg)
+        {
+            ISlashCommandContext ctx = _host.GetSlashContext();
+            IList<ArgCompletion> cands = null;
+            try { cands = completer.CompleteArgument(arg ?? string.Empty, ctx); }
+            catch { cands = null; }
+            if (cands == null || cands.Count == 0) { Hide(); return; }
+
+            _items.Clear();
+            for (int i = 0; i < cands.Count && _items.Count < MaxPathResults; i++)
+            {
+                ArgCompletion c = cands[i];
+                if (c == null || c.InsertArg == null) continue;
+                Item it = new Item();
+                it.Display = c.Display;
+                it.Insert = "/" + commandName + " " + c.InsertArg;
+                it.ContinueCompleting = c.ContinueCompleting;
+                _items.Add(it);
+            }
+
+            if (_items.Count == 0) { Hide(); return; }
+            Populate();
         }
 
         // ---- name mode ----
@@ -167,8 +199,9 @@ namespace GxPT
                 Item it = new Item();
                 it.Display = display;
                 it.Insert = "/" + cmd.Name + " ";
-                // A path-taking command flows into path completion after accepting; others close.
-                it.ContinueCompleting = cmd.TakesPathArgument;
+                // A command that takes an argument (a path, or a list/choice via IArgumentCompleter)
+                // flows into argument completion after accepting its name; others close.
+                it.ContinueCompleting = cmd.TakesPathArgument || (cmd is IArgumentCompleter);
                 _items.Add(it);
             }
 
@@ -369,12 +402,14 @@ namespace GxPT
             SlashCommandRegistry reg = _host != null ? _host.GetSlashRegistry() : null;
             ISlashCommand cmd = null;
             if (reg != null && name.Length > 0) reg.TryResolve(name, out cmd);
-            bool pathMode = sp >= 0 && cmd != null && cmd.TakesPathArgument;
+            // Argument mode covers both filesystem paths and list/choice args (IArgumentCompleter); the
+            // accept/close logic below works on the highlighted item, so it is identical for both.
+            bool argMode = sp >= 0 && cmd != null && (cmd.TakesPathArgument || (cmd is IArgumentCompleter));
 
             Item sel = _list.SelectedItem as Item;
             bool actionable = sel != null && sel.Insert != null;
 
-            if (pathMode)
+            if (argMode)
             {
                 if (actionable)
                 {
@@ -402,10 +437,10 @@ namespace GxPT
             return false;
         }
 
-        // True when the current field is a complete, runnable invocation that Enter should send as-is:
-        // the command resolves and, if it takes a path, a non-empty valid path is present. A path
-        // command with no path yet (e.g. "/explain ") is NOT runnable, so Enter completes/opens the file
-        // list instead; a partial command name ("/com") is likewise not runnable and gets completed.
+        // True when the current field is a complete, runnable invocation that Enter should run in one
+        // keystroke: the command resolves and, if it takes an argument, one is present. A command that
+        // expects an argument but has none (e.g. "/explain " or "/model ") is NOT runnable, so Enter
+        // completes/opens the argument list instead; a partial name ("/com") is likewise not runnable.
         private bool CurrentInputIsRunnable()
         {
             string text = _txt != null ? (_txt.Text ?? string.Empty) : string.Empty;
@@ -421,12 +456,9 @@ namespace GxPT
             ISlashCommand cmd;
             if (reg == null || !reg.TryResolve(name, out cmd)) return false;
 
-            if (cmd.TakesPathArgument)
-            {
-                string a = arg.Trim();
-                if (a.Length == 0) return false;          // needs a path -> complete instead of send
-                if (!WorkspacePath.IsValid(a)) return false; // let the processor report the bad path
-            }
+            bool needsArg = cmd.TakesPathArgument || (cmd is IArgumentCompleter);
+            if (needsArg && arg.Trim().Length == 0) return false; // expects an argument -> complete first
+            if (cmd.TakesPathArgument && !WorkspacePath.IsValid(arg.Trim())) return false; // bad path -> let processor report
             return true;
         }
 

@@ -107,7 +107,9 @@
     <Compile Include="Services\Commands\ISlashCommandContext.cs" />
     <Compile Include="Services\Commands\ISlashCommand.cs" />
     <Compile Include="Services\Commands\WorkspacePath.cs" />
-    <Compile Include="Services\Commands\DelegateSlashCommandContext.cs" />
+    <Compile Include="Services\Commands\IArgumentCompleter.cs" />
+    <Compile Include="Services\Commands\ClientCommands.cs" />
+    <Compile Include="Services\Commands\MainFormSlashContext.cs" />
     <Compile Include="Services\Commands\PromptCommand.cs" />
     <Compile Include="Services\Commands\SlashCommandGate.cs" />
     <Compile Include="Services\Commands\SlashCommandRegistry.cs" />

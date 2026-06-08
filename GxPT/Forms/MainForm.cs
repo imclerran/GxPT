@@ -1261,23 +1261,140 @@ namespace GxPT
             }
             catch { }
 
-            var commands = SlashCommandConfig.LoadMerged(userJson, LoggerSink.Instance);
-            _slashRegistry = new SlashCommandRegistry(commands);
+            // Built-in client commands first, then prompt commands (built-in + user commands.json).
+            var all = new List<ISlashCommand>();
+            all.AddRange(ClientCommands.BuiltIns());
+            all.AddRange(SlashCommandConfig.LoadMerged(userJson, LoggerSink.Instance));
+
+            _slashRegistry = new SlashCommandRegistry(all);
             _slashProcessor = new SlashCommandProcessor(_slashRegistry);
-            _slashContext = new DelegateSlashCommandContext(
-                delegate
+            _slashContext = new MainFormSlashContext(this);
+        }
+
+        // ===== ISlashCommandContext backing (called via MainFormSlashContext) =====
+
+        internal string SlashWorkingDir()
+        {
+            var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            if (c == null) return null;
+            // The tab's WorkingDir is the canonical value (what the MCP servers receive); fall back to the
+            // conversation's copy only if the tab field is empty.
+            if (!string.IsNullOrEmpty(c.WorkingDir)) return c.WorkingDir;
+            return c.Conversation != null ? c.Conversation.WorkingDir : null;
+        }
+
+        internal bool SlashHasServer(string serverName)
+        {
+            return _mcpRegistry != null && _mcpRegistry.HasServer(serverName);
+        }
+
+        internal void SlashWriteInfo(string text)
+        {
+            try
+            {
+                var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                if (c != null && c.Transcript != null)
+                    c.Transcript.AddMessage(MessageRole.Assistant, text ?? string.Empty);
+            }
+            catch { }
+        }
+
+        internal IList<string> SlashGetModels()
+        {
+            var list = AppSettings.GetList("models");
+            if (list == null || list.Count == 0) list = ModelDefaults.ModelList();
+            return list ?? new List<string>();
+        }
+
+        internal string SlashGetActiveModel()
+        {
+            return GetSelectedModel();
+        }
+
+        internal void SlashSetModel(string slug)
+        {
+            if (string.IsNullOrEmpty(slug)) return;
+            try
+            {
+                if (this.cmbModel != null)
                 {
-                    var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
-                    if (c == null) return null;
-                    // The tab's WorkingDir is the canonical value (what the MCP servers receive); fall
-                    // back to the conversation's copy only if the tab field is empty.
-                    if (!string.IsNullOrEmpty(c.WorkingDir)) return c.WorkingDir;
-                    return c.Conversation != null ? c.Conversation.WorkingDir : null;
-                },
-                delegate(string serverName)
+                    _syncingModelCombo = true;
+                    try { this.cmbModel.Text = slug; }
+                    finally { _syncingModelCombo = false; }
+                }
+                var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                if (c != null)
                 {
-                    return _mcpRegistry != null && _mcpRegistry.HasServer(serverName);
-                });
+                    c.SelectedModel = slug;
+                    if (c.Conversation != null) c.Conversation.SelectedModel = slug;
+                }
+            }
+            catch { }
+        }
+
+        // Built-in MCP servers that can be toggled by name (custom mcp.json servers are presence-based).
+        internal IList<string> SlashGetServerNames()
+        {
+            return new List<string>(new string[]
+            {
+                McpConfig.WebName, McpConfig.FilesName, McpConfig.GitName,
+                McpConfig.CommandName, McpConfig.MsBuildName, McpConfig.MemoryName, McpConfig.GitHubName
+            });
+        }
+
+        // (settings key, default-on) for a server name, or null/false for an unknown name.
+        private static string ServerSettingKey(string name, out bool defaultOn)
+        {
+            defaultOn = false;
+            if (string.Equals(name, McpConfig.WebName, StringComparison.OrdinalIgnoreCase)) return "mcp_web_enabled";
+            if (string.Equals(name, McpConfig.FilesName, StringComparison.OrdinalIgnoreCase)) return "mcp_files_enabled";
+            if (string.Equals(name, McpConfig.GitName, StringComparison.OrdinalIgnoreCase)) { defaultOn = true; return "mcp_git_enabled"; }
+            if (string.Equals(name, McpConfig.CommandName, StringComparison.OrdinalIgnoreCase)) return "mcp_command_enabled";
+            if (string.Equals(name, McpConfig.MsBuildName, StringComparison.OrdinalIgnoreCase)) { defaultOn = true; return "mcp_msbuild_enabled"; }
+            if (string.Equals(name, McpConfig.MemoryName, StringComparison.OrdinalIgnoreCase)) return "mcp_memory_enabled";
+            if (string.Equals(name, McpConfig.GitHubName, StringComparison.OrdinalIgnoreCase)) return "mcp_github_enabled";
+            return null;
+        }
+
+        internal bool SlashGetServerEnabled(string name)
+        {
+            bool defaultOn;
+            string key = ServerSettingKey(name, out defaultOn);
+            if (key == null) return false;
+            bool stored = AppSettings.GetBool(key, defaultOn);
+            // Git/MSBuild are force-off when the underlying tool isn't installed, mirroring RebuildMcpHost.
+            if (string.Equals(name, McpConfig.GitName, StringComparison.OrdinalIgnoreCase)) return stored && GitProbe.IsInstalled();
+            if (string.Equals(name, McpConfig.MsBuildName, StringComparison.OrdinalIgnoreCase)) return stored && MsBuildProbe.IsInstalled();
+            return stored;
+        }
+
+        internal string SlashSetServerEnabled(string name, bool enabled)
+        {
+            bool defaultOn;
+            string key = ServerSettingKey(name, out defaultOn);
+            if (key == null) return "Unknown server: " + name;
+
+            if (enabled && string.Equals(name, McpConfig.GitName, StringComparison.OrdinalIgnoreCase) && !GitProbe.IsInstalled())
+                return "git is not installed, so the git server can't be enabled.";
+            if (enabled && string.Equals(name, McpConfig.MsBuildName, StringComparison.OrdinalIgnoreCase) && !MsBuildProbe.IsInstalled())
+                return "MSBuild was not found, so the msbuild server can't be enabled.";
+            if (enabled && string.Equals(name, McpConfig.GitHubName, StringComparison.OrdinalIgnoreCase)
+                && string.IsNullOrEmpty(AppSettings.GetString("mcp_github_pat")))
+                return "Set a GitHub PAT in Settings before enabling the github server.";
+
+            AppSettings.SetBool(key, enabled);
+            RebuildMcpHost(); // reconnects with the new server set (connects on a background thread)
+            return null;
+        }
+
+        internal void SlashNewConversation()
+        {
+            if (_tabManager != null) _tabManager.CreateConversationTab();
+        }
+
+        internal void SlashExportConversations()
+        {
+            ImportExportManager.ExportAll(this);
         }
 
         // Accessors used by the autocomplete popup. Both ensure the subsystem is built first, so the
