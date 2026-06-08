@@ -20,6 +20,10 @@ namespace GxPT
         private OpenRouterClient _client;
         private McpHost _mcpHost;
         private McpToolRegistry _mcpRegistry;
+        // Slash-command subsystem (built lazily on first send/keystroke; see EnsureSlashCommands).
+        private SlashCommandRegistry _slashRegistry;
+        private SlashCommandProcessor _slashProcessor;
+        private ISlashCommandContext _slashContext;
         // Remembered tool approvals are shared across all tabs for the app session (in-memory). The
         // approval *prompt* is per-tab (each conversation has its own ToolApprovalPanel), but the
         // remembered choices live in this one store so "remember" applies everywhere.
@@ -1241,6 +1245,387 @@ namespace GxPT
             this.Close();
         }
 
+        // Build the slash-command registry/processor on first use. Defaults are merged with the user's
+        // %AppData%/GxPT/commands.json (if present). The context reads live state through delegates so
+        // it always sees the current working folder and the current MCP registry (which is recreated
+        // when the working folder changes).
+        private void EnsureSlashCommands()
+        {
+            if (_slashProcessor != null) return;
+
+            string userJson = null;
+            try
+            {
+                string path = Path.Combine(AppSettings.SettingsDirectory, "commands.json");
+                if (File.Exists(path)) userJson = File.ReadAllText(path);
+            }
+            catch { }
+
+            // Built-in client commands first, then prompt commands (built-in + user commands.json).
+            var all = new List<ISlashCommand>();
+            all.AddRange(ClientCommands.BuiltIns());
+            all.AddRange(SlashCommandConfig.LoadMerged(userJson, LoggerSink.Instance));
+
+            _slashRegistry = new SlashCommandRegistry(all);
+            _slashProcessor = new SlashCommandProcessor(_slashRegistry);
+            _slashContext = new MainFormSlashContext(this);
+        }
+
+        // ===== ISlashCommandContext backing (called via MainFormSlashContext) =====
+
+        internal string SlashWorkingDir()
+        {
+            var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            if (c == null) return null;
+            // The tab's WorkingDir is the canonical value (what the MCP servers receive); fall back to the
+            // conversation's copy only if the tab field is empty.
+            if (!string.IsNullOrEmpty(c.WorkingDir)) return c.WorkingDir;
+            return c.Conversation != null ? c.Conversation.WorkingDir : null;
+        }
+
+        internal bool SlashHasServer(string serverName)
+        {
+            return _mcpRegistry != null && _mcpRegistry.HasServer(serverName);
+        }
+
+        internal void SlashWriteInfo(string text)
+        {
+            try
+            {
+                var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                if (c != null && c.Transcript != null)
+                    c.Transcript.AddMessage(MessageRole.Tool, text ?? string.Empty); // chromeless, like tool activity
+            }
+            catch { }
+        }
+
+        internal IList<string> SlashGetModels()
+        {
+            var list = AppSettings.GetList("models");
+            if (list == null || list.Count == 0) list = ModelDefaults.ModelList();
+            return list ?? new List<string>();
+        }
+
+        internal string SlashGetActiveModel()
+        {
+            return GetSelectedModel();
+        }
+
+        internal void SlashSetModel(string slug)
+        {
+            if (string.IsNullOrEmpty(slug)) return;
+            try
+            {
+                if (this.cmbModel != null)
+                {
+                    _syncingModelCombo = true;
+                    try { this.cmbModel.Text = slug; }
+                    finally { _syncingModelCombo = false; }
+                }
+                var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                if (c != null)
+                {
+                    c.SelectedModel = slug;
+                    if (c.Conversation != null) c.Conversation.SelectedModel = slug;
+                }
+            }
+            catch { }
+        }
+
+        // Built-in MCP tool servers that can be toggled by name with /tool (custom mcp.json servers are
+        // presence-based; memory is intentionally excluded -- it's a feature toggle, not a tool server).
+        internal IList<string> SlashGetServerNames()
+        {
+            return new List<string>(new string[]
+            {
+                McpConfig.WebName, McpConfig.FilesName, McpConfig.GitName,
+                McpConfig.CommandName, McpConfig.MsBuildName, McpConfig.GitHubName
+            });
+        }
+
+        // (settings key, default-on) for a server name, or null/false for an unknown name.
+        private static string ServerSettingKey(string name, out bool defaultOn)
+        {
+            defaultOn = false;
+            if (string.Equals(name, McpConfig.WebName, StringComparison.OrdinalIgnoreCase)) return "mcp_web_enabled";
+            if (string.Equals(name, McpConfig.FilesName, StringComparison.OrdinalIgnoreCase)) return "mcp_files_enabled";
+            if (string.Equals(name, McpConfig.GitName, StringComparison.OrdinalIgnoreCase)) { defaultOn = true; return "mcp_git_enabled"; }
+            if (string.Equals(name, McpConfig.CommandName, StringComparison.OrdinalIgnoreCase)) return "mcp_command_enabled";
+            if (string.Equals(name, McpConfig.MsBuildName, StringComparison.OrdinalIgnoreCase)) { defaultOn = true; return "mcp_msbuild_enabled"; }
+            if (string.Equals(name, McpConfig.MemoryName, StringComparison.OrdinalIgnoreCase)) return "mcp_memory_enabled";
+            if (string.Equals(name, McpConfig.GitHubName, StringComparison.OrdinalIgnoreCase)) return "mcp_github_enabled";
+            return null;
+        }
+
+        internal bool SlashGetServerEnabled(string name)
+        {
+            bool defaultOn;
+            string key = ServerSettingKey(name, out defaultOn);
+            if (key == null) return false;
+            bool stored = AppSettings.GetBool(key, defaultOn);
+            // Git/MSBuild are force-off when the underlying tool isn't installed, mirroring RebuildMcpHost.
+            if (string.Equals(name, McpConfig.GitName, StringComparison.OrdinalIgnoreCase)) return stored && GitProbe.IsInstalled();
+            if (string.Equals(name, McpConfig.MsBuildName, StringComparison.OrdinalIgnoreCase)) return stored && MsBuildProbe.IsInstalled();
+            return stored;
+        }
+
+        internal string SlashSetServerEnabled(string name, bool enabled)
+        {
+            bool defaultOn;
+            string key = ServerSettingKey(name, out defaultOn);
+            if (key == null) return "Unknown server: " + name;
+
+            if (enabled && string.Equals(name, McpConfig.GitName, StringComparison.OrdinalIgnoreCase) && !GitProbe.IsInstalled())
+                return "git is not installed, so the git server can't be enabled.";
+            if (enabled && string.Equals(name, McpConfig.MsBuildName, StringComparison.OrdinalIgnoreCase) && !MsBuildProbe.IsInstalled())
+                return "MSBuild was not found, so the msbuild server can't be enabled.";
+            if (enabled && string.Equals(name, McpConfig.GitHubName, StringComparison.OrdinalIgnoreCase)
+                && string.IsNullOrEmpty(AppSettings.GetString("mcp_github_pat")))
+                return "Set a GitHub PAT in Settings before enabling the github server.";
+
+            AppSettings.SetBool(key, enabled);
+            RebuildMcpHost(); // reconnects with the new server set (connects on a background thread)
+            return null;
+        }
+
+        internal void SlashNewConversation()
+        {
+            if (_tabManager != null) _tabManager.CreateConversationTab();
+        }
+
+        internal void SlashExportConversations()
+        {
+            ImportExportManager.ExportAll(this);
+        }
+
+        // ===== /compact: summarize the current conversation into a new tab =====
+
+        private const string CompactionSystemPrompt =
+            "You are a summarization assistant. Produce a concise but complete summary of the "
+            + "conversation that captures the user's goals, key decisions, important facts, code, file "
+            + "paths, and any open tasks or next steps. Write it so another assistant can resume the work "
+            + "with full context. Output only the summary, with no preamble or commentary.";
+
+        private const string CompactionContextPrefix =
+            "The following is a summary of an earlier conversation, provided as context so you can "
+            + "continue it seamlessly:\n\n";
+
+        // Compaction always summarizes with gemini-flash (fast/cheap), regardless of the chat model.
+        private const string CompactionModel = "~google/gemini-flash-latest";
+
+        // Chromeless marker shown atop a conversation that /compact created. Persisted via
+        // Conversation.ContinuedFromCompaction, so it re-renders on reopen (see RebuildTranscriptAsync).
+        internal const string CompactionNoteText = "Continued from a compacted conversation.";
+
+        internal void SlashCompact()
+        {
+            var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            if (ctx == null || ctx.Conversation == null || ctx.Transcript == null) return;
+
+            string transcriptText = RenderHistoryForSummary(ctx.Conversation.History);
+            if (string.IsNullOrEmpty(transcriptText))
+            {
+                ctx.Transcript.AddMessage(MessageRole.Tool, "Nothing to compact.");
+                return;
+            }
+            if (_client == null || !_client.IsConfigured)
+            {
+                ctx.Transcript.AddMessage(MessageRole.Tool, "Cannot compact: client is not configured.");
+                return;
+            }
+
+            // Chromeless progress line; remember its index so we can flip it to "Compacted" when done.
+            int msgIndex = ctx.Transcript.AddMessageGetIndex(MessageRole.Tool, "Compacting conversation...");
+
+            string model = CompactionModel;
+            bool zdr = ResolveZdrForSend(ctx);
+
+            List<ChatMessage> messages = new List<ChatMessage>();
+            messages.Add(new ChatMessage("system", CompactionSystemPrompt));
+            messages.Add(new ChatMessage("user",
+                "Summarize the following conversation so a new session can continue it seamlessly.\n\n"
+                + transcriptText));
+
+            // Snapshot what the completion callback needs (the active tab may change before it returns).
+            var sourceCtx = ctx;
+            var transcriptRef = ctx.Transcript;
+            int idx = msgIndex;
+
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                string summary = null, error = null;
+                try
+                {
+                    string raw = _client.CreateCompletion(model, messages,
+                        new ClientProperties { Zdr = zdr ? true : (bool?)null });
+                    summary = ExtractCompletionContent(raw); // CreateCompletion returns the raw JSON body
+                }
+                catch (Exception ex) { error = ex.Message; }
+
+                try
+                {
+                    BeginInvoke((MethodInvoker)delegate
+                    {
+                        try
+                        {
+                            if (!string.IsNullOrEmpty(error) || string.IsNullOrEmpty(summary))
+                            {
+                                transcriptRef.UpdateMessageAt(idx,
+                                    "Compaction failed" + (string.IsNullOrEmpty(error) ? "." : ": " + error));
+                                return;
+                            }
+                            transcriptRef.UpdateMessageAt(idx, "Compacted conversation.");
+                            OpenCompactedConversation(sourceCtx, summary);
+                        }
+                        catch (Exception ex2)
+                        {
+                            try { transcriptRef.UpdateMessageAt(idx, "Compaction failed: " + ex2.Message); }
+                            catch { }
+                        }
+                    });
+                }
+                catch { }
+            });
+        }
+
+        // Open a new conversation tab seeded with the summary as a hidden system message (context). The
+        // original conversation is left untouched. Inherits the source tab's working folder and model.
+        private void OpenCompactedConversation(TabManager.ChatTabContext sourceCtx, string summary)
+        {
+            string wd = sourceCtx != null ? sourceCtx.WorkingDir : null;
+            TabManager.ChatTabContext nctx;
+            if (!string.IsNullOrEmpty(wd))
+            {
+                OpenNewTabWithWorkingDir(wd);
+                nctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            }
+            else
+            {
+                nctx = _tabManager != null ? _tabManager.CreateConversationTab() : null;
+            }
+            if (nctx == null || nctx.Conversation == null) return;
+
+            // System-role history is sent to the model but never rendered (RebuildTranscript skips it),
+            // so the summary rides along as invisible context.
+            nctx.Conversation.History.Add(new ChatMessage("system", CompactionContextPrefix + summary));
+            // Persist the "continued from compaction" marker so the note survives reopen.
+            nctx.Conversation.ContinuedFromCompaction = true;
+
+            // Continue with the source conversation's model.
+            if (sourceCtx != null && !string.IsNullOrEmpty(sourceCtx.SelectedModel))
+            {
+                nctx.SelectedModel = sourceCtx.SelectedModel;
+                nctx.Conversation.SelectedModel = sourceCtx.SelectedModel;
+                try
+                {
+                    if (this.cmbModel != null)
+                    {
+                        _syncingModelCombo = true;
+                        try { this.cmbModel.Text = sourceCtx.SelectedModel; }
+                        finally { _syncingModelCombo = false; }
+                    }
+                }
+                catch { }
+            }
+
+            if (nctx.Transcript != null)
+                nctx.Transcript.AddMessage(MessageRole.Tool, CompactionNoteText);
+
+            // Persist immediately. A compacted conversation already has meaningful content (the summary
+            // context + marker), so it must survive closing/reopening and app restart even before the
+            // first user send -- otherwise it stays NoSaveUntilUserSend and is never written to disk.
+            string srcName = (sourceCtx != null && sourceCtx.Conversation != null) ? sourceCtx.Conversation.Name : null;
+            if (!string.IsNullOrEmpty(srcName) && !string.Equals(srcName, "New Conversation", StringComparison.OrdinalIgnoreCase))
+                nctx.Conversation.Name = srcName + " (compacted)";
+            nctx.Conversation.LastUpdated = DateTime.Now; // sort to the top of the history list
+            nctx.NoSaveUntilUserSend = false;
+            try { ConversationStore.Save(nctx.Conversation); }
+            catch { }
+
+            // Reflect the name on the tab, and register this tab as the open instance of the persisted
+            // conversation -- so double-clicking its history entry focuses this tab instead of opening a
+            // duplicate (the dedup is keyed on Conversation.Id via TrackOpenConversation).
+            try
+            {
+                string title = string.IsNullOrEmpty(nctx.Conversation.Name) ? "New Conversation" : nctx.Conversation.Name;
+                if (nctx.Page != null) nctx.Page.Text = ZdrTitle(nctx.Conversation, title);
+            }
+            catch { }
+            try { if (_sidebarManager != null) _sidebarManager.TrackOpenConversation(nctx.Conversation.Id, nctx.Page); }
+            catch { }
+
+            // Refresh the open history sidebar on a fresh UI message: a synchronous refresh here runs
+            // inside the tab-creation/layout call stack and doesn't take, so the new entry would only
+            // show after the sidebar is toggled. Deferring lets it settle first.
+            try
+            {
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    try { if (_sidebarManager != null) _sidebarManager.RefreshSidebarList(); }
+                    catch { }
+                });
+            }
+            catch { }
+        }
+
+        // Pull choices[0].message.content from a chat-completion JSON body (CreateCompletion returns the
+        // raw body). Mirrors Conversation.ExtractTitleFromJson; uses JavaScriptSerializer like that path.
+        private static string ExtractCompletionContent(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return null;
+            try
+            {
+                var ser = new System.Web.Script.Serialization.JavaScriptSerializer();
+                var root = ser.DeserializeObject(json) as Dictionary<string, object>;
+                if (root == null || !root.ContainsKey("choices")) return null;
+                var choices = root["choices"] as object[];
+                if (choices == null || choices.Length == 0) return null;
+                var first = choices[0] as Dictionary<string, object>;
+                if (first == null) return null;
+                if (first.ContainsKey("message"))
+                {
+                    var msg = first["message"] as Dictionary<string, object>;
+                    if (msg != null && msg.ContainsKey("content"))
+                        return msg["content"] as string;
+                }
+                if (first.ContainsKey("text"))
+                    return first["text"] as string;
+            }
+            catch { }
+            return null;
+        }
+
+        private static string RenderHistoryForSummary(IList<ChatMessage> history)
+        {
+            if (history == null) return string.Empty;
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < history.Count; i++)
+            {
+                var m = history[i];
+                if (m == null) continue;
+                string role = (m.Role ?? string.Empty).ToLowerInvariant();
+                if (role != "user" && role != "assistant") continue;
+                string content = m.Content ?? string.Empty;
+                if (content.Trim().Length == 0) continue;
+                sb.Append(role == "user" ? "User: " : "Assistant: ").Append(content).Append("\n\n");
+            }
+            return sb.ToString().Trim();
+        }
+
+        // Accessors used by the autocomplete popup. Both ensure the subsystem is built first, so the
+        // popup works on the very first keystroke (before any send has occurred).
+        internal SlashCommandRegistry GetSlashRegistry()
+        {
+            EnsureSlashCommands();
+            return _slashRegistry;
+        }
+
+        internal ISlashCommandContext GetSlashContext()
+        {
+            EnsureSlashCommands();
+            return _slashContext;
+        }
+
         private void btnSend_Click(object sender, EventArgs e)
         {
             var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
@@ -1250,6 +1635,35 @@ namespace GxPT
             string baseText = _inputManager != null ? (_inputManager.GetInputText() ?? string.Empty) : string.Empty;
             string text = baseText;
             if (ctx.IsSending) return; // ensure only one in-flight request per tab
+
+            // Slash-command interception. Only a leading slash (position 0) is a command; prompt
+            // commands expand in place (the expansion becomes the actual user message), while gated or
+            // invalid commands are surfaced without sending. Unknown "/foo" returns null and is sent
+            // literally, so ordinary messages that happen to start with "/" are not hijacked.
+            if (baseText.Length > 0 && baseText[0] == '/')
+            {
+                EnsureSlashCommands();
+                var slash = _slashProcessor.Process(baseText, _slashContext);
+                if (slash != null)
+                {
+                    if (slash.Error != null)
+                    {
+                        // Surface the reason as a chromeless (tool-style) line; keep the typed command so
+                        // the user can correct it (e.g. fix the path or enable the server).
+                        ctx.Transcript.AddMessage(MessageRole.Tool, slash.Error);
+                        return;
+                    }
+                    if (!slash.SendToModel)
+                    {
+                        // Client command handled locally (none in v1, but the seam is live).
+                        if (_inputManager != null) _inputManager.ClearInput();
+                        return;
+                    }
+                    // Prompt expansion: send the template instead of the typed "/command".
+                    baseText = slash.TextToSend;
+                    text = slash.TextToSend;
+                }
+            }
 
             // If editing a prior user message, compare text+attachments+model; confirm only if changed
             bool isEditResend = false;
@@ -3150,6 +3564,14 @@ namespace GxPT
                 // message (its source history index is at/after the ZDR latch). Tool blocks are false.
                 var itemZdr = new List<bool>();
                 int zdrLatch = convo.ZdrFirstMessageIndex;
+                // A /compact conversation shows a persistent chromeless marker at the very top, rebuilt
+                // from the saved flag (the live note added at creation isn't in history). ToolActivityRole
+                // renders as MessageRole.Tool (chromeless); kept parallel with itemZdr.
+                if (convo.ContinuedFromCompaction)
+                {
+                    items.Add(new ChatMessage(ToolActivityRole, CompactionNoteText));
+                    itemZdr.Add(false);
+                }
                 // Consecutive tool-call runs that aren't separated by real assistant text merge into one
                 // chrome-less block (e.g. reveal_tools followed by the call it enabled), so they read as
                 // tightly as a single multi-call turn instead of two blocks with a gap between them. A

@@ -1,0 +1,592 @@
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.IO;
+using System.Windows.Forms;
+
+namespace GxPT
+{
+    // Token-aware autocomplete for the input box. Built on a borderless, non-activating top-level form
+    // hosting a ListBox (see PopupForm for why not a ToolStripDropDown): the caret stays in the text
+    // box, so typing and key navigation keep working, and it opens upward above the input.
+    //
+    // Two modes, switched purely on the field text (commands only ever start at position 0):
+    //   * name mode  -- "/<prefix>"      -> filter the command registry.
+    //   * path mode  -- "/<cmd> <arg>"   -> when the resolved command takes a path argument, complete
+    //                                        against one directory under the working folder.
+    // Path completion never offers anything WorkspacePath would reject (absolute, drive, ".."), so what
+    // is offered is always valid at the file server.
+    internal sealed class SlashAutocompleteController
+    {
+        private const int MaxRows = 8;       // visible rows before scrolling
+        private const int MaxPathResults = 50;
+
+        private readonly MainForm _host;
+        private readonly InputManager _input;
+        private readonly TextBox _txt;
+
+        // A borderless, non-activating top-level form hosts the list. We deliberately do NOT use a
+        // ToolStripDropDown: while one is open it installs an application-wide modal keyboard filter
+        // (for menu navigation) that swallows every keystroke before it reaches the text box, which
+        // killed typing. A plain non-activating form installs no such filter, so the text box keeps
+        // focus and receives all keys; we drive the list selection manually from its KeyDown.
+        private readonly PopupForm _popup;
+        private readonly ListBox _list;
+
+        private readonly List<Item> _items = new List<Item>();
+        private bool _ignoreNextChange;
+
+        // One-directory cache so typing within the same folder filters in memory instead of re-scanning.
+        private string _cacheKey;
+        private List<Entry> _cacheEntries;
+
+        public SlashAutocompleteController(MainForm host, InputManager input, TextBox txt)
+        {
+            _host = host;
+            _input = input;
+            _txt = txt;
+
+            _list = new ListBox();
+            _list.BorderStyle = BorderStyle.FixedSingle;
+            _list.IntegralHeight = false;
+            _list.SelectionMode = SelectionMode.One;
+            _list.Dock = DockStyle.Fill;
+            _list.MouseClick += List_MouseClick;
+
+            _popup = new PopupForm();
+            _popup.Controls.Add(_list);
+            if (_host != null) _popup.Owner = _host; // stays above the main window, closes with it
+
+            if (_txt != null)
+            {
+                _txt.TextChanged += delegate { OnTextChanged(); };
+                // Tab (and, defensively, the nav/accept keys) are otherwise consumed by WinForms during
+                // key pre-processing for focus navigation, so KeyDown never sees them. Marking them as
+                // input keys while the popup is open routes them to our KeyDown handler instead.
+                _txt.PreviewKeyDown += Txt_PreviewKeyDown;
+                // Safe now that the popup never takes focus on show: this only fires on a genuine focus
+                // change (the user clicked another control), which is exactly when we want to close.
+                _txt.LostFocus += delegate { Hide(); };
+            }
+        }
+
+        public bool IsOpen
+        {
+            get { return _popup != null && _popup.Visible; }
+        }
+
+        // Called from InputManager's key handlers before its own Enter/Esc logic. Returns true when the
+        // keystroke was consumed by the popup.
+        public bool HandleKeyDown(KeyEventArgs e)
+        {
+            if (!IsOpen) return false;
+
+            switch (e.KeyCode)
+            {
+                case Keys.Down:
+                    Move(1);
+                    e.Handled = true; e.SuppressKeyPress = true;
+                    return true;
+                case Keys.Up:
+                    Move(-1);
+                    e.Handled = true; e.SuppressKeyPress = true;
+                    return true;
+                case Keys.Tab:
+                    // Tab always completes/drills the highlighted item one level (never sends). Tab on a
+                    // directory adds its "/" and lists its contents, so you walk the tree one step at a
+                    // time. Nothing to do on an info row.
+                    if (!SelectedIsActionable()) { Hide(); e.Handled = true; e.SuppressKeyPress = true; return true; }
+                    AcceptSelected();
+                    e.Handled = true; e.SuppressKeyPress = true;
+                    return true;
+                case Keys.Enter:
+                    if (TryHandleEnter())
+                    {
+                        e.Handled = true; e.SuppressKeyPress = true;
+                        return true;
+                    }
+                    return false; // popup already closed inside; let the normal Enter -> send path run
+                case Keys.Escape:
+                    Hide();
+                    e.Handled = true; e.SuppressKeyPress = true;
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private void OnTextChanged()
+        {
+            if (_ignoreNextChange) { _ignoreNextChange = false; return; }
+            try { Reevaluate(); }
+            catch { Hide(); }
+        }
+
+        private void Reevaluate()
+        {
+            if (_txt == null || _input == null) { Hide(); return; }
+            if (_input.TextIsHint) { Hide(); return; }
+
+            string text = _txt.Text ?? string.Empty;
+            if (text.Length == 0 || text[0] != '/') { Hide(); return; }
+
+            string body = text.Substring(1);
+            int sp = IndexOfWhitespace(body);
+            if (sp < 0)
+            {
+                ShowNameMode(body);
+            }
+            else
+            {
+                string name = body.Substring(0, sp);
+                string arg = body.Substring(sp + 1);
+
+                SlashCommandRegistry registry = _host != null ? _host.GetSlashRegistry() : null;
+                ISlashCommand cmd;
+                if (registry != null && registry.TryResolve(name, out cmd) && cmd is IArgumentCompleter)
+                    ShowArgMode(name, (IArgumentCompleter)cmd, arg);
+                else
+                    ShowPathMode(name, arg); // resolves the command itself; handles path args or hides
+            }
+        }
+
+        // ---- generic argument completion (commands that implement IArgumentCompleter) ----
+
+        private void ShowArgMode(string commandName, IArgumentCompleter completer, string arg)
+        {
+            ISlashCommandContext ctx = _host.GetSlashContext();
+            IList<ArgCompletion> cands = null;
+            try { cands = completer.CompleteArgument(arg ?? string.Empty, ctx); }
+            catch { cands = null; }
+            if (cands == null || cands.Count == 0) { Hide(); return; }
+
+            _items.Clear();
+            for (int i = 0; i < cands.Count && _items.Count < MaxPathResults; i++)
+            {
+                ArgCompletion c = cands[i];
+                if (c == null || c.InsertArg == null) continue;
+                Item it = new Item();
+                it.Display = c.Display;
+                it.Insert = "/" + commandName + " " + c.InsertArg;
+                it.ContinueCompleting = c.ContinueCompleting;
+                _items.Add(it);
+            }
+
+            if (_items.Count == 0) { Hide(); return; }
+            Populate();
+        }
+
+        // ---- name mode ----
+
+        private void ShowNameMode(string prefix)
+        {
+            SlashCommandRegistry registry = _host != null ? _host.GetSlashRegistry() : null;
+            if (registry == null) { Hide(); return; }
+            ISlashCommandContext ctx = _host.GetSlashContext();
+
+            IList<ISlashCommand> matches = registry.Match(prefix);
+            _items.Clear();
+            for (int i = 0; i < matches.Count; i++)
+            {
+                ISlashCommand cmd = matches[i];
+                string display = "/" + cmd.Name;
+                if (!string.IsNullOrEmpty(cmd.ArgumentHint)) display += " " + cmd.ArgumentHint;
+                if (!string.IsNullOrEmpty(cmd.Description)) display += "  -  " + cmd.Description;
+
+                string reason = SlashCommandGate.UnavailableReason(cmd, ctx);
+                if (reason != null) display += "  (" + reason + ")";
+
+                Item it = new Item();
+                it.Display = display;
+                it.Insert = "/" + cmd.Name + " ";
+                // A command that takes an argument (a path, or a list/choice via IArgumentCompleter)
+                // flows into argument completion after accepting its name; others close.
+                it.ContinueCompleting = cmd.TakesPathArgument || (cmd is IArgumentCompleter);
+                _items.Add(it);
+            }
+
+            Populate();
+        }
+
+        // ---- path mode ----
+
+        private void ShowPathMode(string commandName, string arg)
+        {
+            SlashCommandRegistry registry = _host != null ? _host.GetSlashRegistry() : null;
+            if (registry == null) { Hide(); return; }
+
+            ISlashCommand cmd;
+            if (!registry.TryResolve(commandName, out cmd) || !cmd.TakesPathArgument) { Hide(); return; }
+
+            // Surface why no paths are offered instead of silently hiding (also self-diagnosing).
+            if (!WorkspacePath.IsValid(arg)) { ShowInfo("Paths must be relative to the working folder (no \"..\")"); return; }
+
+            ISlashCommandContext ctx = _host.GetSlashContext();
+            string workdir = ctx != null ? ctx.WorkingDir : null;
+            if (string.IsNullOrEmpty(workdir)) { ShowInfo("No working folder set for this conversation"); return; }
+
+            // Split the argument into "already-typed directory prefix" + "partial leaf".
+            int lastSep = LastSeparator(arg);
+            string dirPrefix = lastSep >= 0 ? arg.Substring(0, lastSep + 1) : string.Empty; // keeps the sep
+            string baseRel = lastSep >= 0 ? arg.Substring(0, lastSep) : string.Empty;
+            string leaf = lastSep >= 0 ? arg.Substring(lastSep + 1) : arg;
+
+            string baseDirAbs;
+            try { baseDirAbs = baseRel.Length > 0 ? Path.Combine(workdir, baseRel) : workdir; }
+            catch { Hide(); return; }
+
+            bool dirExists = Directory.Exists(baseDirAbs);
+            List<Entry> entries = GetEntries(baseDirAbs);
+
+            _items.Clear();
+
+            // When listing a directory's contents (no partial leaf typed), offer a "this folder" entry at
+            // the top so the current, fully-typed directory can be accepted without drilling into a child.
+            // It is the default selection, so at "/explain src/" Enter accepts the folder (closes; next
+            // Enter sends) instead of completing the first child. At the root it inserts ".".
+            if (leaf.Length == 0 && dirExists)
+            {
+                Item here = new Item();
+                here.Display = ".  (this folder)";
+                here.Insert = baseRel.Length == 0
+                    ? "/" + commandName + " ."
+                    : "/" + commandName + " " + dirPrefix; // dirPrefix == the typed dir path (e.g. "src/")
+                here.ContinueCompleting = false;            // terminal: accepting closes the popup
+                _items.Add(here);
+            }
+
+            for (int i = 0; i < entries.Count && _items.Count < MaxPathResults; i++)
+            {
+                Entry en = entries[i];
+                if (leaf.Length > 0 &&
+                    !en.Name.StartsWith(leaf, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                Item it = new Item();
+                it.Display = en.Name + (en.IsDir ? "/" : string.Empty);
+                it.Insert = "/" + commandName + " " + dirPrefix + en.Name + (en.IsDir ? "/" : string.Empty);
+                it.ContinueCompleting = en.IsDir; // a directory keeps the popup open to drill in
+                _items.Add(it);
+            }
+
+            if (_items.Count == 0)
+            {
+                // Folder exists but nothing matches the partial leaf: just close. This is also what makes
+                // a finished path token ("/explain src ") and a path with spaces behave correctly -- the
+                // popup simply isn't shown when there is nothing to suggest, instead of nagging. A missing
+                // folder is still worth flagging.
+                if (dirExists) Hide();
+                else ShowInfo("Folder not found");
+                return;
+            }
+
+            Populate();
+        }
+
+        // Shows a single, non-selectable informational row (Insert == null) explaining why there are no
+        // path suggestions. Keeps the popup visible so the reason is seen, rather than hiding silently.
+        private void ShowInfo(string text)
+        {
+            _items.Clear();
+            Item it = new Item();
+            it.Display = text;
+            it.Insert = null;           // marks an info row: not actionable
+            it.ContinueCompleting = false;
+            _items.Add(it);
+            Populate();
+        }
+
+        private List<Entry> GetEntries(string baseDirAbs)
+        {
+            string key = (baseDirAbs ?? string.Empty).ToLowerInvariant();
+            if (string.Equals(key, _cacheKey, StringComparison.Ordinal) && _cacheEntries != null)
+                return _cacheEntries;
+
+            List<Entry> list = new List<Entry>();
+            try
+            {
+                if (Directory.Exists(baseDirAbs))
+                {
+                    string[] dirs = Directory.GetDirectories(baseDirAbs);
+                    Array.Sort(dirs, StringComparer.OrdinalIgnoreCase);
+                    for (int i = 0; i < dirs.Length; i++)
+                        list.Add(new Entry(Path.GetFileName(dirs[i]), true));
+
+                    string[] files = Directory.GetFiles(baseDirAbs);
+                    Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+                    for (int i = 0; i < files.Length; i++)
+                        list.Add(new Entry(Path.GetFileName(files[i]), false));
+                }
+            }
+            catch { list.Clear(); }
+
+            _cacheKey = key;
+            _cacheEntries = list;
+            return list;
+        }
+
+        // ---- shared popup plumbing ----
+
+        private void Populate()
+        {
+            if (_items.Count == 0) { Hide(); return; }
+
+            _list.BeginUpdate();
+            try
+            {
+                _list.Items.Clear();
+                for (int i = 0; i < _items.Count; i++)
+                    _list.Items.Add(_items[i]);
+                _list.SelectedIndex = 0;
+            }
+            finally { _list.EndUpdate(); }
+
+            SizeAndShow();
+        }
+
+        private void SizeAndShow()
+        {
+            // Match the user's input font (set in Settings) so the list scales on high-DPI screens
+            // instead of rendering at the ListBox default size. ItemHeight follows the font.
+            if (_txt.Font != null && !_list.Font.Equals(_txt.Font))
+                _list.Font = _txt.Font;
+
+            int rows = Math.Min(_items.Count, MaxRows);
+            int itemH = _list.ItemHeight > 0 ? _list.ItemHeight : 15;
+            int height = rows * itemH + 2;
+            int width = _txt.Width;
+            if (width < 160) width = 160;
+
+            // Position above the input (it sits at the bottom of the window); drop below if there is no
+            // room above. Coordinates are screen-space because the popup is a top-level form.
+            Point screen = _txt.PointToScreen(Point.Empty);
+            int top = screen.Y - height;
+            if (top < 0) top = screen.Y + _txt.Height;
+            _popup.Bounds = new Rectangle(screen.X, top, width, height);
+
+            if (!_popup.Visible)
+                _popup.ShowNoActivate();
+        }
+
+        private void Txt_PreviewKeyDown(object sender, PreviewKeyDownEventArgs e)
+        {
+            if (!IsOpen) return;
+            switch (e.KeyCode)
+            {
+                case Keys.Tab:
+                case Keys.Up:
+                case Keys.Down:
+                case Keys.Enter:
+                case Keys.Escape:
+                    e.IsInputKey = true; // ensure KeyDown fires for these instead of being pre-handled
+                    break;
+            }
+        }
+
+        // Decides what Enter does while the popup is open. Returns true when the popup consumed the
+        // keystroke (completed/drilled, or closed without sending); false to let the normal Enter -> send
+        // path run.
+        //
+        // Path mode: Enter behaves like Tab while the filename is partial (complete a file, drill a
+        // directory), and once a full filename is typed it just closes the popup -- so a second Enter
+        // (with the popup gone) sends. This keeps Enter from firing a message straight out of an open
+        // file list. Name mode is unchanged: a runnable command (e.g. "/commit") sends in one Enter,
+        // while a partial name ("/com") completes.
+        private bool TryHandleEnter()
+        {
+            string text = _txt != null ? (_txt.Text ?? string.Empty) : string.Empty;
+            string body = (text.Length > 0 && text[0] == '/') ? text.Substring(1) : text;
+            int sp = IndexOfWhitespace(body);
+            string name = sp < 0 ? body : body.Substring(0, sp);
+
+            SlashCommandRegistry reg = _host != null ? _host.GetSlashRegistry() : null;
+            ISlashCommand cmd = null;
+            if (reg != null && name.Length > 0) reg.TryResolve(name, out cmd);
+            // Argument mode covers both filesystem paths and list/choice args (IArgumentCompleter); the
+            // accept/close logic below works on the highlighted item, so it is identical for both.
+            bool argMode = sp >= 0 && cmd != null && (cmd.TakesPathArgument || (cmd is IArgumentCompleter));
+
+            Item sel = _list.SelectedItem as Item;
+            bool actionable = sel != null && sel.Insert != null;
+
+            if (argMode)
+            {
+                if (actionable)
+                {
+                    if (sel.ContinueCompleting) { AcceptSelected(); return true; } // directory -> drill in
+                    string curT = text.TrimEnd();
+                    string insT = sel.Insert.TrimEnd();
+                    if (!string.Equals(curT, insT, StringComparison.Ordinal))
+                    {
+                        AcceptSelected(); // partial filename -> complete it (same as Tab)
+                        return true;
+                    }
+                    // Full filename already typed: close the popup but do not send; next Enter sends.
+                    Hide();
+                    return true;
+                }
+                // Info row / empty list: close and let it send (the processor reports any path error).
+                Hide();
+                return false;
+            }
+
+            // Name mode: send a runnable command in one Enter, otherwise complete the highlighted item.
+            if (CurrentInputIsRunnable()) { Hide(); return false; }
+            if (actionable) { AcceptSelected(); return true; }
+            Hide();
+            return false;
+        }
+
+        // True when the current field is a complete, runnable invocation that Enter should run in one
+        // keystroke: the command resolves and, if it takes an argument, one is present. A command that
+        // expects an argument but has none (e.g. "/explain " or "/model ") is NOT runnable, so Enter
+        // completes/opens the argument list instead; a partial name ("/com") is likewise not runnable.
+        private bool CurrentInputIsRunnable()
+        {
+            string text = _txt != null ? (_txt.Text ?? string.Empty) : string.Empty;
+            if (text.Length == 0 || text[0] != '/') return false;
+
+            string body = text.Substring(1);
+            int sp = IndexOfWhitespace(body);
+            string name = sp < 0 ? body : body.Substring(0, sp);
+            string arg = sp < 0 ? string.Empty : body.Substring(sp + 1);
+            if (name.Length == 0) return false;
+
+            SlashCommandRegistry reg = _host != null ? _host.GetSlashRegistry() : null;
+            ISlashCommand cmd;
+            if (reg == null || !reg.TryResolve(name, out cmd)) return false;
+
+            bool needsArg = cmd.TakesPathArgument || (cmd is IArgumentCompleter);
+            if (needsArg && arg.Trim().Length == 0) return false; // expects an argument -> complete first
+            if (cmd.TakesPathArgument && !WorkspacePath.IsValid(arg.Trim())) return false; // bad path -> let processor report
+            return true;
+        }
+
+        private void Move(int delta)
+        {
+            if (_list.Items.Count == 0) return;
+            int idx = _list.SelectedIndex + delta;
+            if (idx < 0) idx = 0;
+            if (idx > _list.Items.Count - 1) idx = _list.Items.Count - 1;
+            _list.SelectedIndex = idx;
+        }
+
+        private bool SelectedIsActionable()
+        {
+            Item it = _list.SelectedItem as Item;
+            return it != null && it.Insert != null;
+        }
+
+        private void AcceptSelected()
+        {
+            Item it = _list.SelectedItem as Item;
+            if (it == null || it.Insert == null) return; // info row: nothing to accept
+
+            // Keep the popup open when there is more to complete: a directory (drill into children) or a
+            // command that takes a path argument (flow straight into path completion). Otherwise close.
+            // Only arm the ignore-next-change guard when the text actually changes -- accepting the
+            // "this folder" entry can be a no-op (Insert == current text), which raises no TextChanged.
+            bool changes = !string.Equals(_txt.Text ?? string.Empty, it.Insert, StringComparison.Ordinal);
+            _ignoreNextChange = changes && !it.ContinueCompleting;
+            _input.SetInputText(it.Insert, true);
+            if (!it.ContinueCompleting) Hide();
+        }
+
+        private void List_MouseClick(object sender, MouseEventArgs e)
+        {
+            int idx = _list.IndexFromPoint(e.Location);
+            if (idx < 0) return;
+            _list.SelectedIndex = idx;
+            AcceptSelected();
+        }
+
+        public void Hide()
+        {
+            if (_popup != null && _popup.Visible)
+                _popup.Hide();
+        }
+
+        // ---- helpers / types ----
+
+        private static int IndexOfWhitespace(string s)
+        {
+            for (int i = 0; i < s.Length; i++)
+                if (char.IsWhiteSpace(s[i])) return i;
+            return -1;
+        }
+
+        private static int LastSeparator(string s)
+        {
+            for (int i = s.Length - 1; i >= 0; i--)
+                if (s[i] == '/' || s[i] == '\\') return i;
+            return -1;
+        }
+
+        private sealed class Item
+        {
+            public string Display;
+            public string Insert;
+            // True when accepting should keep the popup open for further completion (a directory, or a
+            // command name whose path argument is next).
+            public bool ContinueCompleting;
+            public override string ToString() { return Display; }
+        }
+
+        private struct Entry
+        {
+            public readonly string Name;
+            public readonly bool IsDir;
+            public Entry(string name, bool isDir) { Name = name; IsDir = isDir; }
+        }
+
+        // A borderless top-level form that never steals focus: the input box keeps keyboard focus while
+        // the popup is open (so typing and the arrow/Tab/Enter routing keep working) and clicking an
+        // item does not transfer focus either (MA_NOACTIVATE), so no LostFocus race on selection.
+        private sealed class PopupForm : Form
+        {
+            private const int WS_EX_NOACTIVATE = 0x08000000;
+            private const int WS_EX_TOOLWINDOW = 0x00000080;
+            private const int WM_MOUSEACTIVATE = 0x0021;
+            private const int MA_NOACTIVATE = 0x0003;
+
+            public PopupForm()
+            {
+                FormBorderStyle = FormBorderStyle.None; // border is drawn by the hosted ListBox
+                StartPosition = FormStartPosition.Manual;
+                ShowInTaskbar = false;
+                ControlBox = false;
+                MinimizeBox = false;
+                MaximizeBox = false;
+            }
+
+            // Honored by Form.Show: present the window without activating it.
+            protected override bool ShowWithoutActivation { get { return true; } }
+
+            protected override CreateParams CreateParams
+            {
+                get
+                {
+                    CreateParams cp = base.CreateParams;
+                    cp.ExStyle |= WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
+                    return cp;
+                }
+            }
+
+            protected override void WndProc(ref Message m)
+            {
+                // Don't activate (and don't pull focus off the text box) when an item is clicked.
+                if (m.Msg == WM_MOUSEACTIVATE)
+                {
+                    m.Result = (IntPtr)MA_NOACTIVATE;
+                    return;
+                }
+                base.WndProc(ref m);
+            }
+
+            public void ShowNoActivate()
+            {
+                if (!Visible) Show();
+            }
+        }
+    }
+}

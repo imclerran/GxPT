@@ -128,6 +128,26 @@ namespace GxPT.Tests
         }
 
         [Fact]
+        public void ContinuedFromCompaction_round_trips()
+        {
+            var convo = new Conversation(null);
+            convo.Name = "C";
+            convo.ContinuedFromCompaction = true;
+            convo.History.Add(new ChatMessage("system", "summary context"));
+
+            var reload = ConversationStore.LoadFromJson(null, ConversationStore.ToJson(convo));
+            Assert.True(reload.ContinuedFromCompaction);
+        }
+
+        [Fact]
+        public void ContinuedFromCompaction_defaults_false_for_legacy_files()
+        {
+            string json = "{\"Name\":\"L\",\"Messages\":[]}";
+            var convo = ConversationStore.LoadFromJson(null, json);
+            Assert.False(convo.ContinuedFromCompaction);
+        }
+
+        [Fact]
         public void Load_legacy_file_without_working_dir_is_null()
         {
             var convo = ConversationStore.LoadFromJson(null, "{\"Name\":\"C\",\"Messages\":[]}");
