@@ -100,20 +100,12 @@ namespace GxPT
                     e.Handled = true; e.SuppressKeyPress = true;
                     return true;
                 case Keys.Enter:
-                    // Enter runs what's typed as soon as it's a runnable invocation -- including a folder
-                    // or partial path -- so "/explain src/" + Enter sends the directory instead of being
-                    // forced to keep drilling. When it's not yet runnable (unknown command, or a path
-                    // command with no path yet), Enter completes the highlighted item instead, so
-                    // "/explain" + Enter opens the file list and "/com" + Enter completes to "/commit".
-                    if (CurrentInputIsRunnable())
+                    if (TryHandleEnter())
                     {
-                        Hide();
-                        return false; // fall through to the normal Enter -> send path
+                        e.Handled = true; e.SuppressKeyPress = true;
+                        return true;
                     }
-                    if (!SelectedIsActionable()) { Hide(); return false; }
-                    AcceptSelected();
-                    e.Handled = true; e.SuppressKeyPress = true;
-                    return true;
+                    return false; // popup already closed inside; let the normal Enter -> send path run
                 case Keys.Escape:
                     Hide();
                     e.Handled = true; e.SuppressKeyPress = true;
@@ -334,6 +326,58 @@ namespace GxPT
                     e.IsInputKey = true; // ensure KeyDown fires for these instead of being pre-handled
                     break;
             }
+        }
+
+        // Decides what Enter does while the popup is open. Returns true when the popup consumed the
+        // keystroke (completed/drilled, or closed without sending); false to let the normal Enter -> send
+        // path run.
+        //
+        // Path mode: Enter behaves like Tab while the filename is partial (complete a file, drill a
+        // directory), and once a full filename is typed it just closes the popup -- so a second Enter
+        // (with the popup gone) sends. This keeps Enter from firing a message straight out of an open
+        // file list. Name mode is unchanged: a runnable command (e.g. "/commit") sends in one Enter,
+        // while a partial name ("/com") completes.
+        private bool TryHandleEnter()
+        {
+            string text = _txt != null ? (_txt.Text ?? string.Empty) : string.Empty;
+            string body = (text.Length > 0 && text[0] == '/') ? text.Substring(1) : text;
+            int sp = IndexOfWhitespace(body);
+            string name = sp < 0 ? body : body.Substring(0, sp);
+
+            SlashCommandRegistry reg = _host != null ? _host.GetSlashRegistry() : null;
+            ISlashCommand cmd = null;
+            if (reg != null && name.Length > 0) reg.TryResolve(name, out cmd);
+            bool pathMode = sp >= 0 && cmd != null && cmd.TakesPathArgument;
+
+            Item sel = _list.SelectedItem as Item;
+            bool actionable = sel != null && sel.Insert != null;
+
+            if (pathMode)
+            {
+                if (actionable)
+                {
+                    if (sel.ContinueCompleting) { AcceptSelected(); return true; } // directory -> drill in
+                    string curT = text.TrimEnd();
+                    string insT = sel.Insert.TrimEnd();
+                    if (!string.Equals(curT, insT, StringComparison.Ordinal))
+                    {
+                        AcceptSelected(); // partial filename -> complete it (same as Tab)
+                        return true;
+                    }
+                    // Full filename already typed: close the popup but do not send; next Enter sends.
+                    Hide();
+                    return true;
+                }
+                // Info row / empty list: close and let it send (the processor reports any path error).
+                Hide();
+                return false;
+            }
+
+            // Name mode: send a runnable command in one Enter, otherwise complete the highlighted item.
+            if (CurrentInputIsRunnable()) { Hide(); return false; }
+            if (actionable) { AcceptSelected(); return true; }
+            Hide();
+            return false;
         }
 
         // True when the current field is a complete, runnable invocation that Enter should send as-is:
