@@ -1530,6 +1530,18 @@ namespace GxPT
 
             if (nctx.Transcript != null)
                 nctx.Transcript.AddMessage(MessageRole.Tool, CompactionNoteText);
+
+            // Persist immediately. A compacted conversation already has meaningful content (the summary
+            // context + marker), so it must survive closing/reopening and app restart even before the
+            // first user send -- otherwise it stays NoSaveUntilUserSend and is never written to disk.
+            string srcName = (sourceCtx != null && sourceCtx.Conversation != null) ? sourceCtx.Conversation.Name : null;
+            if (!string.IsNullOrEmpty(srcName) && !string.Equals(srcName, "New Conversation", StringComparison.OrdinalIgnoreCase))
+                nctx.Conversation.Name = srcName + " (compacted)";
+            nctx.NoSaveUntilUserSend = false;
+            try { ConversationStore.Save(nctx.Conversation); }
+            catch { }
+            try { if (_sidebarManager != null) _sidebarManager.RefreshSidebarList(); }
+            catch { }
         }
 
         // Pull choices[0].message.content from a chat-completion JSON body (CreateCompletion returns the
