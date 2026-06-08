@@ -106,6 +106,8 @@
     <Compile Include="Services\Skills\SkillFrontmatter.cs" />
     <Compile Include="Services\Skills\Skill.cs" />
     <Compile Include="Services\Skills\SkillCatalog.cs" />
+    <Compile Include="Services\Skills\SkillInjection.cs" />
+    <Compile Include="Services\Skills\SkillTools.cs" />
     <Compile Include="Services\Commands\SlashCommandKind.cs" />
     <Compile Include="Services\Commands\SlashCommandResult.cs" />
     <Compile Include="Services\Commands\ISlashCommandContext.cs" />

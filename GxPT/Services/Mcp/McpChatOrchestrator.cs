@@ -79,6 +79,16 @@ namespace GxPT
         // so a disabled memory system leaves no trace in context (design M5/M6).
         public Func<string> MemorySystemMessageProvider { get; set; }
 
+        // Optional provider of the skills manifest system block (the always-on slug/description list plus
+        // its framing), rebuilt each request and injected as an ephemeral system message ordered after
+        // the memory block and before the MCP names manifest (design sec.5). Null/empty => no skills
+        // block, so a skill-less conversation leaves no trace in context.
+        public Func<string> SkillsManifestSystemMessageProvider { get; set; }
+
+        // Optional skills meta-tool surface (open_skill). When set and it has skills, open_skill is
+        // exposed in the tools array and handled locally without an MCP round-trip, like reveal_tools.
+        public SkillTools SkillTools { get; set; }
+
         // Provider data-collection preference applied to every request in the turn. Null leaves
         // it unset (provider default).
         public bool? ProviderDataCollectionAllowed { get; set; }
@@ -164,8 +174,16 @@ namespace GxPT
                     }
                 }
 
-                IList<JObject> tools = _registry != null ? _registry.ExposedFunctionDefs() : null;
-                string manifest = _registry != null ? _registry.NamesManifestSystemMessage() : null;
+                // MCP tools (reveal_tools + revealed defs) and their names manifest only when a server
+                // actually contributes tools; a skills-only turn skips both and offers just open_skill.
+                bool hasMcpTools = _registry != null && _registry.HasTools;
+                IList<JObject> tools = hasMcpTools ? _registry.ExposedFunctionDefs() : null;
+                string manifest = hasMcpTools ? _registry.NamesManifestSystemMessage() : null;
+                if (SkillTools != null && SkillTools.HasSkills)
+                {
+                    if (tools == null) tools = new List<JObject>();
+                    tools.Add(SkillTools.OpenSkillDef());
+                }
                 _log.Log("mcp", "[turn " + turnId + "] iteration " + (iter + 1) + "/" + budget
                     + ": requesting model with " + (tools != null ? tools.Count : 0) + " exposed tool(s)");
 
@@ -173,8 +191,8 @@ namespace GxPT
                 // persisted (rebuilt each request from the live catalog).
                 // Ephemeral system messages, ordered stable -> volatile for prompt-cache reuse:
                 // constant agent prompt, then the workspace block (constant for the turn), then
-                // memory (changes rarely within a turn), then the names manifest (rebuilt every
-                // request). None are persisted into history.
+                // memory (changes rarely within a turn), then the skills manifest, then the MCP names
+                // manifest (rebuilt every request). None are persisted into history.
                 List<ChatMessage> requestMessages = new List<ChatMessage>();
                 requestMessages.Add(new ChatMessage("system", AgentSystemPrompt));
                 string workspaceBlock = WorkspaceSystemMessage(WorkingDir);
@@ -185,6 +203,12 @@ namespace GxPT
                     string memoryBlock = MemorySystemMessageProvider();
                     if (!string.IsNullOrEmpty(memoryBlock))
                         requestMessages.Add(new ChatMessage("system", memoryBlock));
+                }
+                if (SkillsManifestSystemMessageProvider != null)
+                {
+                    string skillsBlock = SkillsManifestSystemMessageProvider();
+                    if (!string.IsNullOrEmpty(skillsBlock))
+                        requestMessages.Add(new ChatMessage("system", skillsBlock));
                 }
                 if (!string.IsNullOrEmpty(manifest))
                     requestMessages.Add(new ChatMessage("system", manifest));
@@ -358,6 +382,15 @@ namespace GxPT
                 string[] names = ParseRevealNames(call.ArgumentsJson);
                 _log.Log("mcp", "[turn " + turnId + "] reveal_tools: " + names.Length + " name(s)");
                 return _registry.Reveal(names);
+            }
+
+            // open_skill is a host meta-tool (no MCP round-trip): load skill bodies by slug. Same
+            // {names:[...]} argument shape as reveal_tools, so the parser is reused.
+            if (SkillTools != null && SkillTools.IsOpenSkill(call.Name))
+            {
+                string[] slugs = ParseRevealNames(call.ArgumentsJson);
+                _log.Log("mcp", "[turn " + turnId + "] open_skill: " + slugs.Length + " name(s)");
+                return SkillTools.Open(slugs);
             }
 
             McpServerConnection conn;

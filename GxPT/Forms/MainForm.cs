@@ -1848,7 +1848,10 @@ namespace GxPT
 
                 // Tool-enabled turn: tool activity renders as a separate chrome-less message above the
                 // answer bubble. BeginToolSend owns the whole turn; the plain path below is unchanged.
-                if (_mcpRegistry != null && _mcpRegistry.HasTools)
+                // Skills also route through the tool loop (they inject a manifest and expose open_skill),
+                // so a conversation with skills but no MCP tools still takes this path.
+                bool hasMcpTools = _mcpRegistry != null && _mcpRegistry.HasTools;
+                if (hasMcpTools || ConversationHasSkills(ctx))
                 {
                     BeginToolSend(ctx, modelToUse, zdrForSend);
                     return;
@@ -2131,6 +2134,21 @@ namespace GxPT
             catch { }
         }
 
+        // True when this conversation has at least one discoverable skill (bundled or project). Used to
+        // route the turn through the tool loop even with no MCP tools, since skills inject a manifest and
+        // expose open_skill there. Cheap (a couple of directory scans); BeginToolSend re-scans to build
+        // the catalog it actually uses, so this is just the gate.
+        private static bool ConversationHasSkills(TabManager.ChatTabContext ctx)
+        {
+            try
+            {
+                string workdir = (ctx != null) ? ctx.WorkingDir : null;
+                SkillCatalog cat = SkillInjection.BuildCatalog(AppDomain.CurrentDomain.BaseDirectory, workdir);
+                return cat.Skills.Count > 0;
+            }
+            catch { return false; }
+        }
+
         // Owns a tool-enabled chat turn. Tool activity streams into a chrome-less "Tool" message and
         // the model's answer into a separate Assistant bubble below it. Both bubbles are created
         // lazily (in the render timer) so they appear in the order content arrives — tool calls
@@ -2210,6 +2228,18 @@ namespace GxPT
                     {
                         string memWorkdir = ctx.WorkingDir;
                         orch.MemorySystemMessageProvider = delegate { return MemoryInjection.Build(memWorkdir); };
+                    }
+
+                    // Skills: discover bundled (<exe>/skills) + project (<workdir>/.gxpt/skills) skills for
+                    // this turn, inject the manifest, and expose open_skill. The catalog is built once per
+                    // send (stable within the turn); a later turn re-scans, so on-disk edits take effect.
+                    SkillCatalog skillCatalog =
+                        SkillInjection.BuildCatalog(AppDomain.CurrentDomain.BaseDirectory, ctx.WorkingDir);
+                    if (skillCatalog.Skills.Count > 0)
+                    {
+                        orch.SkillsManifestSystemMessageProvider =
+                            delegate { return SkillInjection.BuildManifestMessage(skillCatalog); };
+                        orch.SkillTools = new SkillTools(skillCatalog);
                     }
 
                     // Assistant text appends to the current assistant bubble; a tool call closes it so
