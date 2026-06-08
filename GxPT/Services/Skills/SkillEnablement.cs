@@ -51,6 +51,12 @@ namespace GxPT
             else _disabled.Remove(slug);
         }
 
+        // Clears all per-skill disables (used by `/skills reset global`); does not touch FeatureOff.
+        public void ClearDisabled()
+        {
+            _disabled.Clear();
+        }
+
         // Snapshot of the disabled slugs (sorted), for listing/inspection.
         public List<string> DisabledSlugs()
         {

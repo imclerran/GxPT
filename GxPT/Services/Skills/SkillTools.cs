@@ -98,7 +98,9 @@ namespace GxPT
             return sb.ToString();
         }
 
-        private static string RenderSkill(Skill skill)
+        // Renders one skill's block (heading + directory + asset listing + body). Shared by open_skill
+        // and the explicit /use slash command (phase 4b), which invokes a skill regardless of enablement.
+        internal static string RenderSkill(Skill skill)
         {
             StringBuilder sb = new StringBuilder();
             sb.Append("# Skill: ").Append(skill.Slug).Append('\n');

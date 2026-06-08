@@ -70,6 +70,7 @@
     <Compile Include="..\GxPT\Services\Commands\WorkspacePath.cs" Link="Linked\Commands\WorkspacePath.cs" />
     <Compile Include="..\GxPT\Services\Commands\IArgumentCompleter.cs" Link="Linked\Commands\IArgumentCompleter.cs" />
     <Compile Include="..\GxPT\Services\Commands\ClientCommands.cs" Link="Linked\Commands\ClientCommands.cs" />
+    <Compile Include="..\GxPT\Services\Commands\SkillCommands.cs" Link="Linked\Commands\SkillCommands.cs" />
     <Compile Include="..\GxPT\Services\Commands\PromptCommand.cs" Link="Linked\Commands\PromptCommand.cs" />
     <Compile Include="..\GxPT\Services\Commands\SlashCommandGate.cs" Link="Linked\Commands\SlashCommandGate.cs" />
     <Compile Include="..\GxPT\Services\Commands\SlashCommandRegistry.cs" Link="Linked\Commands\SlashCommandRegistry.cs" />

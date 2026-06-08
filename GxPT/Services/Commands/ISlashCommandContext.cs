@@ -30,6 +30,14 @@ namespace GxPT
         // change (e.g. the tool isn't installed).
         string SetServerEnabled(string serverName, bool enabled);
 
+        // ---- skills: per-conversation enablement overrides (tri-state; null = inherit the global
+        // default in skills.json). Global-scope changes go straight to SkillEnablement, not through here.
+        bool? GetConversationSkillsFeatureOff();            // null = inherit, true = off, false = on
+        void SetConversationSkillsFeatureOff(bool? value);  // persists the active conversation
+        IDictionary<string, bool> GetConversationSkillOverrides(); // copy; slug -> force on/off
+        void SetConversationSkillOverride(string slug, bool? value); // null clears the slug; persists
+        void ResetConversationSkills();                     // clear feature override + all per-skill overrides
+
         // ---- conversation / app actions ----
         void NewConversation();
         void ExportConversations();

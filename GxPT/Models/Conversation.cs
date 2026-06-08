@@ -50,6 +50,12 @@ namespace GxPT
         // never clears, so the checkbox locks on and the tab/messages are marked from that point.
         public bool Zdr { get; set; }
         public int ZdrFirstMessageIndex { get; set; }
+        // Per-conversation skill enablement overrides (design S10/sec.7), combined with the global default
+        // (skills.json) by SkillResolve. SkillsFeatureOff: null = inherit global, true/false = force the
+        // whole feature off/on for this conversation. SkillOverrides: slug -> bool (true = force on, false
+        // = force off); a slug absent inherits the global default. Set by the /skills and /skill commands.
+        public bool? SkillsFeatureOff { get; set; }
+        public Dictionary<string, bool> SkillOverrides { get; set; }
         public DateTime LastUpdated { get; set; }
         public event Action<string> NameGenerated;
 
@@ -58,6 +64,7 @@ namespace GxPT
             _client = client;
             Name = GenericName; // initialize to generic name
             SelectedModel = null;
+            SkillOverrides = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
             ZdrFirstMessageIndex = -1; // not latched until a ZDR send occurs
             // A brand-new conversation inherits the current global ZDR default as its starting value
             // (seed only - not a live override, so the user can still uncheck it before the first send).

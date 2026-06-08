@@ -1261,9 +1261,11 @@ namespace GxPT
             }
             catch { }
 
-            // Built-in client commands first, then prompt commands (built-in + user commands.json).
+            // Built-in client commands first, then skills commands, then prompt commands (built-in +
+            // user commands.json).
             var all = new List<ISlashCommand>();
             all.AddRange(ClientCommands.BuiltIns());
+            all.AddRange(SkillCommands.BuiltIns());
             all.AddRange(SlashCommandConfig.LoadMerged(userJson, LoggerSink.Instance));
 
             _slashRegistry = new SlashCommandRegistry(all);
@@ -1386,6 +1388,59 @@ namespace GxPT
             AppSettings.SetBool(key, enabled);
             RebuildMcpHost(); // reconnects with the new server set (connects on a background thread)
             return null;
+        }
+
+        // ---- skills: per-conversation override accessors backed by the active tab's Conversation ----
+
+        internal bool? SlashGetConversationSkillsFeatureOff()
+        {
+            var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            return (c != null && c.Conversation != null) ? c.Conversation.SkillsFeatureOff : null;
+        }
+
+        internal void SlashSetConversationSkillsFeatureOff(bool? value)
+        {
+            var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            if (c == null || c.Conversation == null) return;
+            c.Conversation.SkillsFeatureOff = value;
+            SaveConversationContext(c);
+        }
+
+        internal IDictionary<string, bool> SlashGetConversationSkillOverrides()
+        {
+            var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            var src = (c != null && c.Conversation != null) ? c.Conversation.SkillOverrides : null;
+            return src != null
+                ? new Dictionary<string, bool>(src, StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        internal void SlashSetConversationSkillOverride(string slug, bool? value)
+        {
+            if (string.IsNullOrEmpty(slug)) return;
+            var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            if (c == null || c.Conversation == null) return;
+            if (c.Conversation.SkillOverrides == null)
+                c.Conversation.SkillOverrides = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            if (value.HasValue) c.Conversation.SkillOverrides[slug] = value.Value;
+            else c.Conversation.SkillOverrides.Remove(slug);
+            SaveConversationContext(c);
+        }
+
+        internal void SlashResetConversationSkills()
+        {
+            var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            if (c == null || c.Conversation == null) return;
+            c.Conversation.SkillsFeatureOff = null;
+            if (c.Conversation.SkillOverrides != null) c.Conversation.SkillOverrides.Clear();
+            SaveConversationContext(c);
+        }
+
+        // Persist a conversation after a slash-command edit, honoring the help-template no-save guard.
+        private static void SaveConversationContext(TabManager.ChatTabContext c)
+        {
+            try { if (c != null && !c.NoSaveUntilUserSend) ConversationStore.Save(c.Conversation); }
+            catch { }
         }
 
         internal void SlashNewConversation()
@@ -2144,7 +2199,10 @@ namespace GxPT
             {
                 string workdir = (ctx != null) ? ctx.WorkingDir : null;
                 SkillCatalog cat = SkillInjection.BuildCatalog(AppDomain.CurrentDomain.BaseDirectory, workdir);
-                return SkillResolve.EnabledSkills(cat.Skills, SkillEnablement.LoadGlobal(), null, null).Count > 0;
+                Conversation convo = (ctx != null) ? ctx.Conversation : null;
+                return SkillResolve.EnabledSkills(cat.Skills, SkillEnablement.LoadGlobal(),
+                    convo != null ? convo.SkillsFeatureOff : null,
+                    convo != null ? convo.SkillOverrides : null).Count > 0;
             }
             catch { return false; }
         }
@@ -2236,8 +2294,11 @@ namespace GxPT
                     // the enabled set. Rebuilt per send, so on-disk edits take effect on the next turn.
                     SkillCatalog skillCatalog =
                         SkillInjection.BuildCatalog(AppDomain.CurrentDomain.BaseDirectory, ctx.WorkingDir);
+                    Conversation skillConvo = ctx.Conversation;
                     List<Skill> enabledSkills = SkillResolve.EnabledSkills(
-                        skillCatalog.Skills, SkillEnablement.LoadGlobal(), null, null);
+                        skillCatalog.Skills, SkillEnablement.LoadGlobal(),
+                        skillConvo != null ? skillConvo.SkillsFeatureOff : null,
+                        skillConvo != null ? skillConvo.SkillOverrides : null);
                     if (enabledSkills.Count > 0)
                     {
                         List<Skill> enabledForTurn = enabledSkills;
@@ -3419,8 +3480,9 @@ namespace GxPT
                 case "reveal_tools": header = "Checking available tools"; return true;
                 case "open_skill":
                 {
+                    // Post-flight (completed) record label, so past tense like the other records.
                     string slugs = JoinPaths(args, "names"); // generic string-array joiner
-                    header = slugs.Length > 0 ? "Reading skill: " + slugs : "Reading skill";
+                    header = slugs.Length > 0 ? "Read skill: " + slugs : "Read skill";
                     return true;
                 }
                 default: return false;

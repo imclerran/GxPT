@@ -9,6 +9,34 @@ namespace GxPT.Tests
     public class ConversationStoreTests
     {
         [Fact]
+        public void RoundTrip_PreservesSkillOverrides()
+        {
+            var convo = new Conversation(null);
+            convo.Id = "abc";
+            convo.SkillsFeatureOff = true;
+            convo.SkillOverrides["release-notes"] = true;
+            convo.SkillOverrides["noisy"] = false;
+
+            string json = ConversationStore.ToJson(convo);
+            var loaded = ConversationStore.LoadFromJson(null, json);
+
+            Assert.Equal(true, loaded.SkillsFeatureOff);
+            Assert.True(loaded.SkillOverrides["release-notes"]);
+            Assert.False(loaded.SkillOverrides["noisy"]);
+        }
+
+        [Fact]
+        public void LoadFromJson_MissingSkillFields_DefaultsToInheritAndEmpty()
+        {
+            string json = "{\"Id\":\"x\",\"Name\":\"N\",\"Messages\":[]}";
+            var convo = ConversationStore.LoadFromJson(null, json);
+
+            Assert.Null(convo.SkillsFeatureOff);              // inherit global
+            Assert.NotNull(convo.SkillOverrides);             // never null
+            Assert.Empty(convo.SkillOverrides);
+        }
+
+        [Fact]
         public void LoadFromJson_NullOrEmpty_ReturnsNull()
         {
             Assert.Null(ConversationStore.LoadFromJson(null, null));

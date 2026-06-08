@@ -198,38 +198,40 @@ run_skill_script(slug, relpath, args[])
 
 ---
 
-## 6. Slash commands (`SlashCommandRouter`)
+## 6. Slash commands (on the existing `ISlashCommand` framework)
 
-GxPT has no command system today (chat input is free-form), so this introduces a
-**small client-side router** in the input path (`InputManager`). It parses the
-leading `/token` and either handles it locally (no LLM turn) or transforms the turn.
-Scoped to skills for now, but built as a general dispatcher.
+GxPT now has a slash-command framework (`Services/Commands/`: `ISlashCommand`,
+`SlashCommandRegistry`/`Processor`, `commands.json`, gating, autocomplete) — so
+skills register as **commands on it**, not a new router (this supersedes the
+original `SlashCommandRouter` plan). Each command is a `Client` kind (runs locally,
+no LLM send — `WriteInfo` + `Handled()`) except `/use`, which is a `Prompt` kind
+(it returns `Send(...)`). Registered in `SkillCommands.BuiltIns()` alongside the
+other built-ins.
 
-| Command | Effect | Turn? |
-|---------|--------|-------|
-| `/<slug> [text]` | **Invoke**: pre-open `<slug>` for this turn (host injects its body as if `open_skill` were called), then send `text` as the user message | yes (LLM turn) |
-| `/skills` | List available skills with their **effective** on/off state and where each came from (global default vs. this conversation), as a local transcript note | no |
-| `/skills [on\|off] [here\|global]` | Toggle the **whole feature** (manifest + `open_skill`) at that scope; scope defaults to `here` (this conversation), `global` sets the app-wide default | no |
-| `/skill <slug> [on\|off] [here\|global]` | Toggle **one skill** at the given scope; defaults to `here` | no |
-| `/skill <slug> reset` · `/skills reset` | Drop the conversation override(s) so the skill / whole feature falls back to the global default | no |
+| Command | Kind | Effect |
+|---------|------|--------|
+| `/skills` | Client | List skills with effective on/off state and source (global default vs. this conversation) |
+| `/skills [on\|off\|reset] [here\|global]` | Client | Toggle/reset the **whole feature** at that scope (default `here`) |
+| `/skill <slug> [on\|off\|reset] [here\|global]` | Client | Toggle/reset **one skill**; bare `/skill <slug>` toggles for this conversation |
+| `/use <slug> [text]` | Prompt | **Invoke**: resolve `<slug>`, render its `SKILL.md` block (via `SkillTools.RenderSkill`) and send it inline + `text` |
 
-- **Slug-first**, mirroring the `/tool <name> [on|off]` convention: the handle sits
-  in the same position, and the verb (`on|off|reset`) is the optional second token.
-  A bare `/skill <slug>` (verb omitted) **toggles** that skill, matching `/tool`'s
-  no-verb behavior.
-- **Scope keyword is the last token**, one of `here` (this conversation, the
-  default) or `global` (the app-wide default in `skills.json`). Omitted ⇒ `here`.
-- **Reserved slugs:** `skill` and `skills` (so the management verbs never collide
-  with an invocation). The subcommand keywords (`on`/`off`/`reset`/`here`/`global`)
-  only ever follow `/skill <slug>` or `/skills`, so they don't collide with
-  `/<slug>` invocation. Slugs are kebab-case, so other collisions can't occur.
-- **Invocation is sugar over the load path:** `/release-notes draft v2` →
-  pre-open `release-notes` + user text `draft v2`. The host treats a pre-opened
-  skill exactly like an `open_skill` result already in context — one load path (S3).
-- **Management commands don't enter LLM history.** `/skills`, `/skill on|off`,
-  `/skills on|off` produce a **local** transcript note and mutate conversation
-  state; they are not sent to the model and not replayed. Only an **invocation**'s
-  residual text becomes a user message.
+- **Slug-first** for `/skill`, mirroring `/tool <name> [on|off]`; the verb
+  (`on|off|reset`) is the optional second token, scope (`here`/`global`) the optional
+  third. Scope defaults to `here`; `global` edits `skills.json`.
+- **Invocation is `/use <slug>`**, not a per-skill `/<slug>` command — the framework's
+  registry is built once at startup, so one command per dynamically-discovered skill
+  doesn't fit (decision in §11). `/use` renders the skill body **inline into the sent
+  message** (so it pre-loads without an `open_skill` round-trip) and works **regardless
+  of enablement**, since it's an explicit user action. The model's autonomous
+  `open_skill` path remains the primary, manifest-gated route.
+- **Conversation overrides vs. global:** management commands read/write the
+  per-conversation tri-state through `ISlashCommandContext`
+  (`Get/SetConversationSkill…`), persisted on the `Conversation`; `global`-scope
+  changes go straight to `SkillEnablement` (`skills.json`). Both take effect on the
+  next message (the manifest/enabled set is recomputed per send).
+- **Autocomplete:** `/skill` and `/use` complete slugs (annotated with state) via
+  `IArgumentCompleter`; `/skill`/`/skills` then complete `on|off|reset` and
+  `here|global`.
 
 ---
 
@@ -308,9 +310,12 @@ Same dual-world pattern as the rest of the repo (net48 linked-source via
 
 - **`SkillCatalog` + frontmatter parser** — discovery, project-over-bundled
   shadowing, malformed frontmatter, manifest assembly for a given enabled set.
-- **`SlashCommandRouter`** — parsing, reserved-slug handling, scope keyword
-  (`here`/`global`, default `here`), invocation transform (pre-open + residual
-  text), management commands producing no LLM turn.
+- **Skills slash commands** (`SkillCommands`, against a fake `ISlashCommandContext`) —
+  `/skills` list/toggle/reset and `/skill <slug>` toggle/reset across `here`/`global`
+  scopes; conversation overrides vs. `skills.json`; bare-slug toggle; unknown
+  slug/scope failures; `/use` sends the rendered body and works even when disabled.
+- **Conversation override persistence** — `SkillsFeatureOff` + `SkillOverrides`
+  round-trip through `ConversationStore`; missing fields default to inherit/empty.
 - **Enablement resolution** — the two-layer precedence: conversation override beats
   global default; **force-on over a global-off**; `reset` falls back to inherit;
   newly-added slugs default on at both layers.
@@ -335,8 +340,10 @@ Same dual-world pattern as the rest of the repo (net48 linked-source via
 3. **`open_skill` meta-tool** (sibling to `reveal_tools`): body + resolved skill dir +
    asset listing as the tool result.
 4. **`read_skill_file` meta-tool** (ReadOnly) for Level-3 assets.
-5. **`SlashCommandRouter`** in `InputManager`: invocation + `/skills` listing +
-   on/off toggles; per-conversation + global persistence.
+5. **Skills slash commands** on the existing `ISlashCommand` framework
+   (`SkillCommands`: `/skills`, `/skill <slug>`, `/use <slug>`) + per-conversation
+   override fields on `Conversation`/`ConversationStore` + global `skills.json`
+   enablement. *(Split: 4a = enablement core + gating; 4b = the commands.)*
 6. **`SkillsMcpServer` + `run_skill_script`**: batch-only entry, handle resolution +
    sandbox, literal args, cwd = workspace, always-confirm (remember-eligible by
    `(slug, relpath)`). Added to `GxPT.sln`, the `AfterBuild` copy, and the setup
@@ -354,8 +361,11 @@ Same dual-world pattern as the rest of the repo (net48 linked-source via
 - ~~`open_skill` host meta-tool vs. `SkillsMcpServer`~~ → catalog & reads are host
   meta-tools; execution is a `SkillsMcpServer` (S1/S11).
 - ~~Scope~~ → bundled + project at launch, user-global deferred (S2).
-- ~~Trigger model~~ → model-initiated (`open_skill`) **and** slash command, one
-  catalog/load path (S3).
+- ~~Trigger model~~ → model-initiated (`open_skill`) **and** slash command (S3).
+- ~~Slash commands: new router vs. existing framework~~ → built as `ISlashCommand`s on
+  `main`'s framework (§6); the `SlashCommandRouter` plan is dropped.
+- ~~User-initiated invocation under the static registry~~ → a single `/use <slug>`
+  Prompt command (renders the body inline), not per-skill `/<slug>` commands (§6).
 - ~~Per-skill settings UI~~ → dropped; enablement is slash-command driven, default
   all-on (S6).
 - ~~Whether enablement should be promotable to an app-wide default~~ → yes: two
