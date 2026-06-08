@@ -1537,10 +1537,21 @@ namespace GxPT
             string srcName = (sourceCtx != null && sourceCtx.Conversation != null) ? sourceCtx.Conversation.Name : null;
             if (!string.IsNullOrEmpty(srcName) && !string.Equals(srcName, "New Conversation", StringComparison.OrdinalIgnoreCase))
                 nctx.Conversation.Name = srcName + " (compacted)";
+            nctx.Conversation.LastUpdated = DateTime.Now; // sort to the top of the history list
             nctx.NoSaveUntilUserSend = false;
             try { ConversationStore.Save(nctx.Conversation); }
             catch { }
-            try { if (_sidebarManager != null) _sidebarManager.RefreshSidebarList(); }
+            // Refresh the open history sidebar on a fresh UI message: a synchronous refresh here runs
+            // inside the tab-creation/layout call stack and doesn't take, so the new entry would only
+            // show after the sidebar is toggled. Deferring lets it settle first.
+            try
+            {
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    try { if (_sidebarManager != null) _sidebarManager.RefreshSidebarList(); }
+                    catch { }
+                });
+            }
             catch { }
         }
 
