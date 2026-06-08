@@ -1410,6 +1410,9 @@ namespace GxPT
             "The following is a summary of an earlier conversation, provided as context so you can "
             + "continue it seamlessly:\n\n";
 
+        // Compaction always summarizes with gemini-flash (fast/cheap), regardless of the chat model.
+        private const string CompactionModel = "~google/gemini-flash-latest";
+
         internal void SlashCompact()
         {
             var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
@@ -1430,7 +1433,7 @@ namespace GxPT
             // Chromeless progress line; remember its index so we can flip it to "Compacted" when done.
             int msgIndex = ctx.Transcript.AddMessageGetIndex(MessageRole.Tool, "Compacting conversation...");
 
-            string model = ResolveCompactionModel();
+            string model = CompactionModel;
             bool zdr = ResolveZdrForSend(ctx);
 
             List<ChatMessage> messages = new List<ChatMessage>();
@@ -1521,26 +1524,6 @@ namespace GxPT
 
             if (nctx.Transcript != null)
                 nctx.Transcript.AddMessage(MessageRole.Tool, "Continued from a compacted conversation.");
-        }
-
-        // The model used for compaction summaries: always gemini-flash-latest. Resolve it against the
-        // configured catalog so it matches the app's id convention (e.g. a leading "~"), falling back to
-        // the plain slug if the catalog doesn't list it.
-        private string ResolveCompactionModel()
-        {
-            const string target = "gemini-flash-latest";
-            IList<string> models = SlashGetModels();
-            if (models != null)
-            {
-                for (int i = 0; i < models.Count; i++)
-                {
-                    string m = models[i];
-                    if (string.IsNullOrEmpty(m)) continue;
-                    if (m.Replace("~", string.Empty).EndsWith(target, StringComparison.OrdinalIgnoreCase))
-                        return m;
-                }
-            }
-            return "google/" + target;
         }
 
         // Pull choices[0].message.content from a chat-completion JSON body (CreateCompletion returns the
