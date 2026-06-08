@@ -152,16 +152,20 @@ Scoped to skills for now, but built as a general dispatcher.
 |---------|--------|-------|
 | `/<slug> [text]` | **Invoke**: pre-open `<slug>` for this turn (host injects its body as if `open_skill` were called), then send `text` as the user message | yes (LLM turn) |
 | `/skills` | List available skills with their **effective** on/off state and where each came from (global default vs. this conversation), as a local transcript note | no |
-| `/skills on｜off [here｜global]` | Toggle the **whole feature** (manifest + `open_skill`); scope defaults to `here` (this conversation), `global` sets the app-wide default | no |
-| `/skill on｜off <slug> [here｜global]` | Toggle **one skill** at the given scope; defaults to `here` | no |
-| `/skill reset <slug>` · `/skills reset` | Drop the conversation override(s) so the skill / whole feature falls back to the global default | no |
+| `/skills [on\|off] [here\|global]` | Toggle the **whole feature** (manifest + `open_skill`) at that scope; scope defaults to `here` (this conversation), `global` sets the app-wide default | no |
+| `/skill <slug> [on\|off] [here\|global]` | Toggle **one skill** at the given scope; defaults to `here` | no |
+| `/skill <slug> reset` · `/skills reset` | Drop the conversation override(s) so the skill / whole feature falls back to the global default | no |
 
+- **Slug-first**, mirroring the `/tool <name> [on|off]` convention: the handle sits
+  in the same position, and the verb (`on|off|reset`) is the optional second token.
+  A bare `/skill <slug>` (verb omitted) **toggles** that skill, matching `/tool`'s
+  no-verb behavior.
 - **Scope keyword is the last token**, one of `here` (this conversation, the
   default) or `global` (the app-wide default in `skills.json`). Omitted ⇒ `here`.
 - **Reserved slugs:** `skill` and `skills` (so the management verbs never collide
   with an invocation). The subcommand keywords (`on`/`off`/`reset`/`here`/`global`)
-  only ever follow `/skill` or `/skills`, so they don't collide with `/<slug>`
-  invocation. Slugs are kebab-case, so other collisions can't occur.
+  only ever follow `/skill <slug>` or `/skills`, so they don't collide with
+  `/<slug>` invocation. Slugs are kebab-case, so other collisions can't occur.
 - **Invocation is sugar over the load path:** `/release-notes draft v2` →
   pre-open `release-notes` + user text `draft v2`. The host treats a pre-opened
   skill exactly like an `open_skill` result already in context — one load path (S3).
