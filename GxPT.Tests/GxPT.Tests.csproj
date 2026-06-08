@@ -54,6 +54,10 @@
     <Compile Include="..\GxPT\Services\Logger.cs" Link="Linked\Logger.cs" />
     <Compile Include="..\GxPT\Services\AppSettings.cs" Link="Linked\AppSettings.cs" />
     <Compile Include="..\GxPT\Services\RecentWorkDirs.cs" Link="Linked\RecentWorkDirs.cs" />
+    <Compile Include="..\GxPT\Services\Skills\SkillSlug.cs" Link="Linked\Skills\SkillSlug.cs" />
+    <Compile Include="..\GxPT\Services\Skills\SkillFrontmatter.cs" Link="Linked\Skills\SkillFrontmatter.cs" />
+    <Compile Include="..\GxPT\Services\Skills\Skill.cs" Link="Linked\Skills\Skill.cs" />
+    <Compile Include="..\GxPT\Services\Skills\SkillCatalog.cs" Link="Linked\Skills\SkillCatalog.cs" />
   </ItemGroup>
 
   <!-- MCP library sources (Core + Client) linked in so the host's Services/Mcp/ code (registry,
