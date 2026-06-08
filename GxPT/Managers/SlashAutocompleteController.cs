@@ -92,19 +92,21 @@ namespace GxPT
                     e.Handled = true; e.SuppressKeyPress = true;
                     return true;
                 case Keys.Tab:
-                    // Tab always completes to the highlighted item (it never sends).
+                    // Tab completes to the highlighted item (it never sends). Nothing to do on an info row.
+                    if (!SelectedIsActionable()) { Hide(); e.Handled = true; e.SuppressKeyPress = true; return true; }
                     AcceptSelected();
                     e.Handled = true; e.SuppressKeyPress = true;
                     return true;
                 case Keys.Enter:
-                    // Send in one keystroke only when the highlighted item is terminal (nothing more to
-                    // complete) AND already equals what's typed. A path-taking command name or a
-                    // directory still has completion to offer, so Enter completes/drills instead -- e.g.
-                    // "/explain" + Enter opens the file list rather than sending an empty path.
+                    // Send in one keystroke when there is nothing to complete: an info row, or a terminal
+                    // item that already equals what's typed. A path-taking command name or a directory
+                    // still has completion to offer, so Enter completes/drills instead -- e.g. "/explain"
+                    // + Enter opens the file list rather than sending an empty path.
                     {
                         Item sel = _list.SelectedItem as Item;
+                        bool actionable = sel != null && sel.Insert != null;
                         bool terminal = (sel == null) || !sel.ContinueCompleting;
-                        if (terminal && TypedTextMatchesSelection())
+                        if (!actionable || (terminal && TypedTextMatchesSelection()))
                         {
                             Hide();
                             return false; // fall through to the normal Enter -> send path
@@ -192,12 +194,12 @@ namespace GxPT
             ISlashCommand cmd;
             if (!registry.TryResolve(commandName, out cmd) || !cmd.TakesPathArgument) { Hide(); return; }
 
-            // Never suggest anything the rule would reject.
-            if (!WorkspacePath.IsValid(arg)) { Hide(); return; }
+            // Surface why no paths are offered instead of silently hiding (also self-diagnosing).
+            if (!WorkspacePath.IsValid(arg)) { ShowInfo("Paths must be relative to the working folder (no \"..\")"); return; }
 
             ISlashCommandContext ctx = _host.GetSlashContext();
             string workdir = ctx != null ? ctx.WorkingDir : null;
-            if (string.IsNullOrEmpty(workdir)) { Hide(); return; }
+            if (string.IsNullOrEmpty(workdir)) { ShowInfo("No working folder set for this conversation"); return; }
 
             // Split the argument into "already-typed directory prefix" + "partial leaf".
             int lastSep = LastSeparator(arg);
@@ -226,6 +228,25 @@ namespace GxPT
                 _items.Add(it);
             }
 
+            if (_items.Count == 0)
+            {
+                ShowInfo(Directory.Exists(baseDirAbs) ? "No matching files" : "Folder not found");
+                return;
+            }
+
+            Populate();
+        }
+
+        // Shows a single, non-selectable informational row (Insert == null) explaining why there are no
+        // path suggestions. Keeps the popup visible so the reason is seen, rather than hiding silently.
+        private void ShowInfo(string text)
+        {
+            _items.Clear();
+            Item it = new Item();
+            it.Display = text;
+            it.Insert = null;           // marks an info row: not actionable
+            it.ContinueCompleting = false;
+            _items.Add(it);
             Populate();
         }
 
@@ -338,10 +359,16 @@ namespace GxPT
             _list.SelectedIndex = idx;
         }
 
+        private bool SelectedIsActionable()
+        {
+            Item it = _list.SelectedItem as Item;
+            return it != null && it.Insert != null;
+        }
+
         private void AcceptSelected()
         {
             Item it = _list.SelectedItem as Item;
-            if (it == null) return;
+            if (it == null || it.Insert == null) return; // info row: nothing to accept
 
             // Keep the popup open when there is more to complete: a directory (drill into children) or a
             // command that takes a path argument (flow straight into path completion). Otherwise close.
