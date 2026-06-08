@@ -46,7 +46,7 @@ namespace GxPT
       ""argument_hint"": ""[path]"",
       ""arg_type"": ""path"",
       ""requires"": [""files""],
-      ""template"": ""Read {args} and explain what it does, its key types, and how it fits into the rest of the project.""
+      ""template"": ""Read `{args}` and explain what it does, its key types, and how it fits into the rest of the project.""
     },
     {
       ""type"": ""prompt"",
