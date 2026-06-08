@@ -1413,6 +1413,10 @@ namespace GxPT
         // Compaction always summarizes with gemini-flash (fast/cheap), regardless of the chat model.
         private const string CompactionModel = "~google/gemini-flash-latest";
 
+        // Chromeless marker shown atop a conversation that /compact created. Persisted via
+        // Conversation.ContinuedFromCompaction, so it re-renders on reopen (see RebuildTranscriptAsync).
+        internal const string CompactionNoteText = "Continued from a compacted conversation.";
+
         internal void SlashCompact()
         {
             var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
@@ -1504,6 +1508,8 @@ namespace GxPT
             // System-role history is sent to the model but never rendered (RebuildTranscript skips it),
             // so the summary rides along as invisible context.
             nctx.Conversation.History.Add(new ChatMessage("system", CompactionContextPrefix + summary));
+            // Persist the "continued from compaction" marker so the note survives reopen.
+            nctx.Conversation.ContinuedFromCompaction = true;
 
             // Continue with the source conversation's model.
             if (sourceCtx != null && !string.IsNullOrEmpty(sourceCtx.SelectedModel))
@@ -1523,7 +1529,7 @@ namespace GxPT
             }
 
             if (nctx.Transcript != null)
-                nctx.Transcript.AddMessage(MessageRole.Tool, "Continued from a compacted conversation.");
+                nctx.Transcript.AddMessage(MessageRole.Tool, CompactionNoteText);
         }
 
         // Pull choices[0].message.content from a chat-completion JSON body (CreateCompletion returns the
@@ -3522,6 +3528,14 @@ namespace GxPT
                 // message (its source history index is at/after the ZDR latch). Tool blocks are false.
                 var itemZdr = new List<bool>();
                 int zdrLatch = convo.ZdrFirstMessageIndex;
+                // A /compact conversation shows a persistent chromeless marker at the very top, rebuilt
+                // from the saved flag (the live note added at creation isn't in history). ToolActivityRole
+                // renders as MessageRole.Tool (chromeless); kept parallel with itemZdr.
+                if (convo.ContinuedFromCompaction)
+                {
+                    items.Add(new ChatMessage(ToolActivityRole, CompactionNoteText));
+                    itemZdr.Add(false);
+                }
                 // Consecutive tool-call runs that aren't separated by real assistant text merge into one
                 // chrome-less block (e.g. reveal_tools followed by the call it enabled), so they read as
                 // tightly as a single multi-call turn instead of two blocks with a gap between them. A

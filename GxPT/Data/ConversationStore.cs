@@ -103,6 +103,7 @@ namespace GxPT
                 SelectedModel = convo.SelectedModel,
                 WorkingDir = convo.WorkingDir,
                 WorkspaceStripDismissed = convo.WorkspaceStripDismissed,
+                ContinuedFromCompaction = convo.ContinuedFromCompaction,
                 Zdr = convo.Zdr,
                 ZdrFirstMessageIndex = convo.ZdrFirstMessageIndex,
                 LastUpdated = convo.LastUpdated,
@@ -166,6 +167,7 @@ namespace GxPT
                 SelectedModel = dto.SelectedModel,
                 WorkingDir = dto.WorkingDir,
                 WorkspaceStripDismissed = dto.WorkspaceStripDismissed,
+                ContinuedFromCompaction = dto.ContinuedFromCompaction,
                 Zdr = dto.Zdr,
                 // Absent in older files -> not latched (-1), never index 0.
                 ZdrFirstMessageIndex = dto.ZdrFirstMessageIndex.HasValue ? dto.ZdrFirstMessageIndex.Value : -1,
@@ -328,6 +330,7 @@ namespace GxPT
             public string SelectedModel { get; set; }
             public string WorkingDir { get; set; }
             public bool WorkspaceStripDismissed { get; set; }
+            public bool ContinuedFromCompaction { get; set; }
             public bool Zdr { get; set; }
             // Nullable so a missing value in older files maps to "not latched" (-1), not index 0.
             public int? ZdrFirstMessageIndex { get; set; }
