@@ -106,9 +106,9 @@ namespace GxPT
                 if (isGlobal)
                 {
                     global.FeatureOff = false;
-                    global.ClearDisabled();
+                    global.ClearSkillOverrides();
                     global.SaveGlobal();
-                    ctx.WriteInfo("Skills: global defaults reset (feature on, none disabled).");
+                    ctx.WriteInfo("Skills: global defaults reset (feature on, no per-skill settings).");
                 }
                 else
                 {
@@ -141,13 +141,14 @@ namespace GxPT
         {
             bool? convFeatureOff = ctx.GetConversationSkillsFeatureOff();
             IDictionary<string, bool> convOv = ctx.GetConversationSkillOverrides();
-            bool featureOn = SkillResolve.FeatureOn(global, convFeatureOff);
 
             StringBuilder sb = new StringBuilder();
-            sb.Append("Skills are ").Append(featureOn ? "on" : "off");
-            if (convFeatureOff.HasValue) sb.Append(" (this conversation)");
-            else if (global.FeatureOff) sb.Append(" (global default)");
-            sb.Append(".");
+            sb.Append("Skills - most specific setting wins.");
+            // The feature toggle (rungs 3-4): the fallback for any skill with no per-skill setting. Worded
+            // as a "fallback" so it doesn't read as "all skills are off" (a per-skill 'on' still wins).
+            sb.Append("\nFallback for unset skills: ").Append(global.FeatureOff ? "off" : "on").Append(" globally");
+            if (convFeatureOff.HasValue)
+                sb.Append(", ").Append(convFeatureOff.Value ? "off" : "on").Append(" in this conversation");
 
             IList<Skill> skills = cat.Skills;
             if (skills == null || skills.Count == 0)
@@ -161,12 +162,26 @@ namespace GxPT
                 Skill s = skills[i];
                 bool v;
                 bool? ov = (convOv != null && convOv.TryGetValue(s.Slug, out v)) ? (bool?)v : null;
-                bool enabled = featureOn && SkillResolve.SkillEnabled(global, s.Slug, ov);
-                string source = ov.HasValue ? "conversation" : (global.IsDisabled(s.Slug) ? "global" : "default");
+                SkillRule rule;
+                bool enabled = SkillResolve.Resolve(global, s.Slug, ov, convFeatureOff, out rule);
                 sb.Append("\n  ").Append(enabled ? "[on] " : "[off] ").Append(s.Slug)
-                  .Append("  (").Append(source).Append(") - ").Append(s.Description);
+                  .Append("  (").Append(ReasonText(rule, enabled)).Append(") - ").Append(s.Description);
             }
             return sb.ToString();
+        }
+
+        // Human-readable form of the rule that decided a skill's state (for the /skills list).
+        private static string ReasonText(SkillRule rule, bool enabled)
+        {
+            string st = enabled ? "on" : "off";
+            switch (rule)
+            {
+                case SkillRule.SkillHere: return st + " here";
+                case SkillRule.SkillGlobal: return st + " globally";
+                case SkillRule.FeatureHere: return "all skills " + st + " here";
+                case SkillRule.FeatureGlobal: return "all skills " + st;
+                default: return "default";
+            }
         }
 
         public IList<ArgCompletion> CompleteArgument(string argText, ISlashCommandContext ctx)
@@ -223,7 +238,8 @@ namespace GxPT
             // Bare "/skill <slug>": toggle the effective state for this conversation.
             if (tok.Length == 1)
             {
-                bool current = SkillResolve.SkillEnabled(global, slug, SkillCommands.ConvOverrideFor(ctx, slug));
+                bool current = SkillResolve.IsEnabled(global, slug,
+                    SkillCommands.ConvOverrideFor(ctx, slug), ctx.GetConversationSkillsFeatureOff());
                 ctx.SetConversationSkillOverride(slug, !current);
                 ctx.WriteInfo("Skill '" + slug + "' " + (!current ? "enabled" : "disabled") + " for this conversation.");
                 return SlashCommandResult.Handled();
@@ -236,7 +252,7 @@ namespace GxPT
             string verb = tok[1].ToLowerInvariant();
             if (verb == "reset")
             {
-                if (isGlobal) { global.SetDisabled(slug, false); global.SaveGlobal(); ctx.WriteInfo("Skill '" + slug + "': global default reset (on)."); }
+                if (isGlobal) { global.SetSkillOverride(slug, null); global.SaveGlobal(); ctx.WriteInfo("Skill '" + slug + "': global setting cleared."); }
                 else { ctx.SetConversationSkillOverride(slug, null); ctx.WriteInfo("Skill '" + slug + "': conversation override cleared."); }
                 return SlashCommandResult.Handled();
             }
@@ -247,7 +263,7 @@ namespace GxPT
 
             bool on = onoff.Value;
             string where = isGlobal ? "globally" : "for this conversation";
-            if (isGlobal) { global.SetDisabled(slug, !on); global.SaveGlobal(); }
+            if (isGlobal) { global.SetSkillOverride(slug, on); global.SaveGlobal(); }
             else { ctx.SetConversationSkillOverride(slug, on); }
             ctx.WriteInfo("Skill '" + slug + "' " + (on ? "enabled" : "disabled") + " " + where + ".");
             return SlashCommandResult.Handled();
@@ -263,13 +279,13 @@ namespace GxPT
                 // First token: skill slugs, annotated with their effective state.
                 SkillCatalog cat = SkillCommands.BuildCatalog(ctx);
                 SkillEnablement global = SkillEnablement.LoadGlobal();
-                bool featureOn = SkillResolve.FeatureOn(global, ctx.GetConversationSkillsFeatureOff());
+                bool? convFeatureOff = ctx.GetConversationSkillsFeatureOff();
                 IList<Skill> skills = cat.Skills;
                 for (int i = 0; i < skills.Count; i++)
                 {
                     string slug = skills[i].Slug;
                     if (a.Length > 0 && !slug.StartsWith(a, StringComparison.OrdinalIgnoreCase)) continue;
-                    bool enabled = featureOn && SkillResolve.SkillEnabled(global, slug, SkillCommands.ConvOverrideFor(ctx, slug));
+                    bool enabled = SkillResolve.IsEnabled(global, slug, SkillCommands.ConvOverrideFor(ctx, slug), convFeatureOff);
                     result.Add(new ArgCompletion(slug + "  (" + (enabled ? "on" : "off") + ")", slug + " ", true));
                 }
             }

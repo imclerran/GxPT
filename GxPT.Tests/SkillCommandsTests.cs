@@ -88,8 +88,33 @@ namespace GxPT.Tests
 
             new SkillCommand().Invoke("greeting off global", _ctx);
 
-            Assert.True(SkillEnablement.LoadGlobal().IsDisabled("greeting"));
+            Assert.Equal((bool?)false, SkillEnablement.LoadGlobal().GetSkillOverride("greeting"));
             Assert.Empty(_ctx.ConvOverrides);   // global scope must not touch the conversation
+        }
+
+        // The transcript scenario: /skills off then /skill greeting on -> greeting still listed ON.
+        [Fact]
+        public void SkillOnHere_OverridesSkillsOffHere_InList()
+        {
+            WriteSkill("greeting", "Be a pirate.", "b");
+
+            new SkillsCommand().Invoke("off", _ctx);          // all skills off here
+            new SkillCommand().Invoke("greeting on", _ctx);   // but this one on here
+            new SkillsCommand().Invoke("", _ctx);             // list
+
+            Assert.Contains("[on] greeting", LastInfo());
+            Assert.Contains("(on here)", LastInfo());
+        }
+
+        [Fact]
+        public void Skill_OnGlobal_ForcesOnOverGlobalFeatureOff()
+        {
+            WriteSkill("pirate", "Always pirate.", "b");
+
+            new SkillsCommand().Invoke("off global", _ctx);   // feature off globally
+            new SkillCommand().Invoke("pirate on global", _ctx);
+
+            Assert.Equal((bool?)true, SkillEnablement.LoadGlobal().GetSkillOverride("pirate"));
         }
 
         [Fact]

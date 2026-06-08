@@ -8,14 +8,15 @@ namespace GxPT
 {
     // Global (app-wide) skill enablement, persisted to its own JSON file beside settings.json - the
     // dedicated-file pattern of recent-workdirs.json / mcp.json (design S6/S10). Written only by the
-    // `... global` slash commands (phase 4b); there is no settings-form surface. The conversation layer
-    // (tri-state per-skill overrides) lives on the Conversation and is combined with this default by
-    // SkillResolve. XP / .NET 3.5 friendly.
+    // `... global` slash commands; there is no settings-form surface. Combined with a conversation's
+    // overrides by SkillResolve under the "most specific setting wins" ladder. XP / .NET 3.5 friendly.
     //
-    //   { "feature_off": false, "disabled": ["noisy-skill"] }
+    //   { "feature_off": false, "skills": { "noisy-skill": false, "always-pirate": true } }
     //
-    // feature_off  -> the whole feature is off everywhere unless a conversation overrides it.
-    // disabled     -> slugs off by default everywhere unless a conversation overrides them.
+    // feature_off  -> the global feature default (rung 4): all skills off everywhere unless a more
+    //                 specific rule (a per-skill setting, or a per-conversation setting) says otherwise.
+    // skills        -> per-skill global setting (rung 2), tri-state: present => force on/off; absent =>
+    //                 inherit. Symmetric with the conversation layer so `/skill X on|off global` works.
     internal sealed class SkillEnablement
     {
         public const string FileName = "skills.json";
@@ -26,11 +27,11 @@ namespace GxPT
         private static readonly object _gate = new object();
 
         private bool _featureOff;
-        private readonly HashSet<string> _disabled;
+        private readonly Dictionary<string, bool> _skills;
 
         public SkillEnablement()
         {
-            _disabled = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            _skills = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         }
 
         public bool FeatureOff
@@ -39,30 +40,26 @@ namespace GxPT
             set { _featureOff = value; }
         }
 
-        public bool IsDisabled(string slug)
+        // The global per-skill setting (rung 2): true/false force, null = inherit.
+        public bool? GetSkillOverride(string slug)
         {
-            return !string.IsNullOrEmpty(slug) && _disabled.Contains(slug);
+            bool v;
+            if (!string.IsNullOrEmpty(slug) && _skills.TryGetValue(slug, out v)) return v;
+            return null;
         }
 
-        public void SetDisabled(string slug, bool disabled)
+        // value null clears the global setting for the slug (back to inherit).
+        public void SetSkillOverride(string slug, bool? value)
         {
             if (string.IsNullOrEmpty(slug)) return;
-            if (disabled) _disabled.Add(slug);
-            else _disabled.Remove(slug);
+            if (value.HasValue) _skills[slug] = value.Value;
+            else _skills.Remove(slug);
         }
 
-        // Clears all per-skill disables (used by `/skills reset global`); does not touch FeatureOff.
-        public void ClearDisabled()
+        // Clears every per-skill global setting (used by `/skills reset global`); leaves FeatureOff.
+        public void ClearSkillOverrides()
         {
-            _disabled.Clear();
-        }
-
-        // Snapshot of the disabled slugs (sorted), for listing/inspection.
-        public List<string> DisabledSlugs()
-        {
-            List<string> list = new List<string>(_disabled);
-            list.Sort(StringComparer.Ordinal);
-            return list;
+            _skills.Clear();
         }
 
         private static string FilePath
@@ -102,6 +99,22 @@ namespace GxPT
                 if (obj.TryGetValue("feature_off", out featureOff) && featureOff != null)
                     result._featureOff = Convert.ToBoolean(featureOff);
 
+                // New schema: a { slug: bool } map.
+                object skills;
+                if (obj.TryGetValue("skills", out skills))
+                {
+                    Dictionary<string, object> map = skills as Dictionary<string, object>;
+                    if (map != null)
+                    {
+                        foreach (KeyValuePair<string, object> kv in map)
+                        {
+                            if (string.IsNullOrEmpty(kv.Key) || kv.Value == null) continue;
+                            result._skills[kv.Key] = Convert.ToBoolean(kv.Value);
+                        }
+                    }
+                }
+
+                // Backward-compat: an older "disabled": [..] array maps to force-off entries.
                 object disabled;
                 if (obj.TryGetValue("disabled", out disabled))
                 {
@@ -112,7 +125,8 @@ namespace GxPT
                         {
                             if (arr[i] == null) continue;
                             string slug = Convert.ToString(arr[i]);
-                            if (!string.IsNullOrEmpty(slug)) result._disabled.Add(slug);
+                            if (!string.IsNullOrEmpty(slug) && !result._skills.ContainsKey(slug))
+                                result._skills[slug] = false;
                         }
                     }
                 }
@@ -127,7 +141,9 @@ namespace GxPT
             {
                 Dictionary<string, object> obj = new Dictionary<string, object>();
                 obj["feature_off"] = e._featureOff;
-                obj["disabled"] = e.DisabledSlugs();
+                Dictionary<string, object> skills = new Dictionary<string, object>();
+                foreach (KeyValuePair<string, bool> kv in e._skills) skills[kv.Key] = kv.Value;
+                obj["skills"] = skills;
 
                 JavaScriptSerializer ser = new JavaScriptSerializer();
                 string json = ser.Serialize(obj);

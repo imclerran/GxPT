@@ -1,6 +1,6 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using GxPT;
 using Xunit;
 
@@ -31,38 +31,45 @@ namespace GxPT.Tests
         {
             SkillEnablement e = SkillEnablement.LoadGlobal();
             Assert.False(e.FeatureOff);
-            Assert.False(e.IsDisabled("anything"));
-            Assert.Empty(e.DisabledSlugs());
+            Assert.Null(e.GetSkillOverride("anything"));   // unset = inherit
         }
 
         [Fact]
-        public void SaveThenLoad_RoundTripsFeatureOffAndDisabled()
+        public void SaveThenLoad_RoundTripsFeatureOffAndSkillOverrides()
         {
             SkillEnablement e = SkillEnablement.LoadGlobal();
             e.FeatureOff = true;
-            e.SetDisabled("noisy-skill", true);
-            e.SetDisabled("other", true);
+            e.SetSkillOverride("noisy-skill", false);    // force off globally
+            e.SetSkillOverride("always-pirate", true);   // force on globally
             e.SaveGlobal();
 
             Assert.True(File.Exists(_file));
 
             SkillEnablement loaded = SkillEnablement.LoadGlobal();
             Assert.True(loaded.FeatureOff);
-            Assert.True(loaded.IsDisabled("noisy-skill"));
-            Assert.True(loaded.IsDisabled("other"));
-            Assert.False(loaded.IsDisabled("kept"));
+            Assert.Equal((bool?)false, loaded.GetSkillOverride("noisy-skill"));
+            Assert.Equal((bool?)true, loaded.GetSkillOverride("always-pirate"));
+            Assert.Null(loaded.GetSkillOverride("kept"));
         }
 
         [Fact]
-        public void SetDisabled_False_RemovesAndIsCaseInsensitive()
+        public void SetSkillOverride_Null_ClearsAndIsCaseInsensitive()
         {
             SkillEnablement e = SkillEnablement.LoadGlobal();
-            e.SetDisabled("Foo-Bar", true);
-            Assert.True(e.IsDisabled("foo-bar"));   // case-insensitive
+            e.SetSkillOverride("Foo-Bar", false);
+            Assert.Equal((bool?)false, e.GetSkillOverride("foo-bar"));   // case-insensitive
 
-            e.SetDisabled("foo-bar", false);
-            Assert.False(e.IsDisabled("Foo-Bar"));
-            Assert.Empty(e.DisabledSlugs());
+            e.SetSkillOverride("foo-bar", null);
+            Assert.Null(e.GetSkillOverride("Foo-Bar"));
+        }
+
+        [Fact]
+        public void Load_BackwardCompat_DisabledArray_ReadsAsForceOff()
+        {
+            File.WriteAllText(_file, "{\"disabled\":[\"old-skill\"]}", new UTF8Encoding(false));
+
+            SkillEnablement loaded = SkillEnablement.LoadGlobal();
+            Assert.Equal((bool?)false, loaded.GetSkillOverride("old-skill"));
         }
     }
 }

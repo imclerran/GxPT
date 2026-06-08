@@ -58,7 +58,7 @@ same idea one level up.
 | S4 | **`SKILL.md` = minimal frontmatter + markdown body**, parsed by a hand-rolled reader | net35 has no YAML parser and the repo keeps exactly one JSON lib (Newtonsoft, D3). A ~20-line `--- … ---` reader for `name`/`description` keeps authoring familiar to Claude Code skills without a new dependency or a JSON sidecar. |
 | S5 | **Folder name = slug = handle**; reuse the memory system's kebab-case `Slug` | No name→path map needed (memory M4). `<workdir>/.gxpt/skills/<slug>/SKILL.md`; the slug is what appears in the manifest, what `open_skill` takes, and what the slash command types. |
 | S6 | **No skills UI in `SettingsForm`; enablement is driven entirely by slash commands** at two scopes — **global default** and **this conversation** — default **all-on** | Skills are a discoverable capability, not a privacy-sensitive opt-in like memory, so they default on and need no settings toggle. Global gives an app-wide default; per-conversation matches the `Zdr`/`WorkingDir` grain (different tabs, different skill sets). |
-| S10 | **Conversation overrides the global default** (tri-state per skill: *inherit / on / off*); global state lives in a dedicated `%AppData%/GxPT/skills.json`, conversation overrides in the conversation JSON | A plain disabled-set can't express "force-on over a global-off", so the conversation layer is tri-state, not a set. A dedicated file keeps global state out of `settings.json` and the settings form (S6) while still persisting it — matching the repo's `recent-workdirs.json` / `mcp.json` dedicated-file pattern. |
+| S10 | **Enablement resolves by "most specific setting wins"** — a 5-rung ladder (skill-here > skill-global > feature-here > feature-global > default-on), **no hard feature gate** (§7). Both the global and conversation per-skill layers are **tri-state** (inherit/on/off); global lives in `skills.json`, conversation on the `Conversation` | A per-skill rule must beat a feature-wide one (specificity) and a conversation rule beat a global one (scope); a hard "feature off" gate violated this (a per-skill *on* couldn't survive `/skills off`). Tri-state on **both** levels so `/skill X on global` can force-on over a global `/skills off`. Dedicated `skills.json` keeps global state out of `settings.json`/the settings form (S6). |
 | S7 | **`open_skill` returns the body as the tool result** (not a separate ephemeral injection) | Returning through the normal tool-loop lands the body in history naturally and keeps it available for the rest of the task — no new injection channel. The always-on **manifest** still rides as an ephemeral system message (S8). |
 | S8 | **Manifest injected as an ephemeral system message**, in the stable→volatile stack | Same treatment as the names manifest and the memory block: rebuilt each request from the live catalog, never persisted. Cheap (names + one-liners), so it sits in front of history every turn when skills are enabled for the conversation. |
 | S9 | **Skill scripts run via a dedicated `run_skill_script(slug, relpath, args[])` tool, *not* `command__run`** | A skill should not make the model compose an arbitrary command or name a path in the user's Program Files. The handle-based tool shrinks the exec surface from "any command string" to "the declared entry of a named skill + literal args" — smaller, auditable, still gated (Destructive/always-confirm). |
@@ -237,42 +237,51 @@ other built-ins.
 
 ## 7. Enablement & persistence
 
-Two layers, resolved per request. Everything defaults to **all-on**, so absence at
-both layers means a skill is enabled — newly-added bundled or project skills appear
-automatically.
+Four independently-settable controls (a 2×2 of **all-skills / one-skill** × **global /
+this-conversation**), resolved per request by **"most specific setting wins"** — there
+is **no hard feature gate** (the old gate let a general rule override a specific one,
+which was the bug). Everything defaults to **on**.
 
-### Layer 1 — global default (`%AppData%/GxPT/skills.json`)
-The app-wide baseline, written only by `… global` slash commands (no settings-form
-surface, S6). A dedicated file like `recent-workdirs.json` / `mcp.json`:
-```json
-{ "feature_off": false, "disabled": ["noisy-skill"] }
-```
-- `feature_off` — whole-feature off everywhere unless a conversation overrides it.
-- `disabled` — slugs off by default everywhere unless a conversation overrides them.
+### The controls (2×2)
+|  | **Global** (`skills.json`) | **This conversation** (`Conversation`) |
+|---|---|---|
+| **All skills** | `/skills on\|off global` → `feature_off` | `/skills on\|off` → `SkillsFeatureOff` |
+| **One skill** | `/skill X on\|off global` → `skills[X]` | `/skill X on\|off` → `SkillOverrides[X]` |
 
-### Layer 2 — conversation override (conversation JSON)
-Stored beside `WorkingDir` / `Zdr`, this layer **overrides** the global default for
-one conversation and is **tri-state per skill** (a set can't force a skill *on* over
-a global *off*, S10):
-```json
-{ "skills_feature_off": null, "skill_overrides": { "release-notes": true, "noisy-skill": false } }
-```
-- `skills_feature_off` — `null` inherits global; `true`/`false` forces the feature
-  off/on for this conversation.
-- `skill_overrides` — `slug → bool` (`true` force-on, `false` force-off); a slug
-  absent here **inherits** the global default. `/skill reset` removes an entry;
-  `/skills reset` clears the map and `skills_feature_off`.
+All four are **tri-state where applicable** (set / unset = inherit). `reset` clears a
+cell so it falls through to the next rule.
 
-### Resolution (each request)
-1. **Feature:** `skills_feature_off` if non-null, else global `feature_off`. If off ⇒
-   no manifest, no `open_skill` exposed, no trace in context (the memory M6 property,
-   here per conversation).
-2. **Per skill** (feature on): conversation `skill_overrides[slug]` if present, else
-   *enabled unless* `slug ∈ global.disabled`.
+### Resolution ladder (effective state of skill X in conversation C)
+Take the first rule that has been set:
 
-Per-tab by construction — concurrent tabs carry their own override layer over the
-shared global default. **No `settings.json` key, no checkbox**; all control is the
-slash commands in §6.
+| # | Rule | Source |
+|---|------|--------|
+| 1 | this skill, **here** | `Conversation.SkillOverrides[X]` |
+| 2 | this skill, **global** | `skills.json` `skills[X]` |
+| 3 | all skills, **here** | `Conversation.SkillsFeatureOff` |
+| 4 | all skills, **global** | `skills.json` `feature_off` |
+| 5 | **default: ON** | — |
+
+Two sub-rules generate the ladder: a **per-skill** rule beats a **feature-wide** rule
+(specificity), and within a level **this conversation** beats **global** (scope). The
+one deliberate tiebreak: rung 2 (skill-global) beats rung 3 (feature-here) — an
+explicit per-skill setting isn't resurrected/killed by a blanket toggle in the other
+scope.
+
+### Persistence
+- **Global** — `%AppData%/GxPT/skills.json`, written only by `… global` commands:
+  ```json
+  { "feature_off": false, "skills": { "noisy-skill": false, "always-pirate": true } }
+  ```
+  `skills` is tri-state (slug → bool; absent = inherit). An older `"disabled": [..]`
+  array is read back-compat as force-off entries.
+- **Conversation** — `SkillsFeatureOff` (`bool?`) + `SkillOverrides` (`slug → bool`)
+  on the `Conversation`, round-tripped by `ConversationStore` (absent = inherit/empty).
+
+Per-tab by construction; **no `settings.json` key, no checkbox** — all control is the
+§6 slash commands. The `/skills` list shows each skill's effective state **and the rung
+that decided it** (e.g. `on here`, `off globally`, `all skills off here`, `default`),
+with a "fallback for unset skills" header showing the feature toggle (rungs 3–4).
 
 ---
 

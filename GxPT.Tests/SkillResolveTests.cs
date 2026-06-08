@@ -31,64 +31,86 @@ namespace GxPT.Tests
                 "---\ndescription: " + description + "\n---\nbody\n", new UTF8Encoding(false));
         }
 
+        // Rung 1: this skill, here -- beats everything (even the feature being off both ways).
         [Fact]
-        public void FeatureOn_ConversationOverridesGlobal()
+        public void SkillHere_BeatsEverything()
         {
-            SkillEnablement global = new SkillEnablement();
-            global.FeatureOff = true;
+            SkillEnablement g = new SkillEnablement();
+            g.FeatureOff = true;
+            g.SetSkillOverride("x", false);
+            Assert.True(SkillResolve.IsEnabled(g, "x", true, true));    // convSkill on wins
+            Assert.False(SkillResolve.IsEnabled(g, "x", false, false)); // convSkill off wins
+        }
 
-            Assert.False(SkillResolve.FeatureOn(global, null));   // inherit global off
-            Assert.True(SkillResolve.FeatureOn(global, false));   // conversation forces on
-            Assert.False(SkillResolve.FeatureOn(global, true));   // conversation forces off
-            Assert.True(SkillResolve.FeatureOn(null, null));      // default on
+        // Rung 2: this skill, global -- beats the feature-level rules (rung 3/4).
+        [Fact]
+        public void SkillGlobal_BeatsFeature()
+        {
+            SkillEnablement g = new SkillEnablement();
+            g.SetSkillOverride("x", false);                 // x off globally
+            Assert.False(SkillResolve.IsEnabled(g, "x", null, false)); // beats "all skills on here"
+
+            g.SetSkillOverride("y", true);                  // y on globally
+            g.FeatureOff = true;                            // all skills off globally
+            Assert.True(SkillResolve.IsEnabled(g, "y", null, null));   // rung 2 on beats rung 4 off
+        }
+
+        // Rung 3 beats rung 4: this conversation's feature setting beats the global feature default.
+        [Fact]
+        public void FeatureHere_BeatsFeatureGlobal()
+        {
+            SkillEnablement g = new SkillEnablement();
+            g.FeatureOff = true;                            // off globally
+            Assert.True(SkillResolve.IsEnabled(g, "z", null, false));  // on here wins
         }
 
         [Fact]
-        public void SkillEnabled_ConversationOverridesGlobalDisable()
+        public void Default_IsOn()
         {
-            SkillEnablement global = new SkillEnablement();
-            global.SetDisabled("x", true);
-
-            Assert.False(SkillResolve.SkillEnabled(global, "x", null));  // inherit global disable
-            Assert.True(SkillResolve.SkillEnabled(global, "x", true));   // force-on over global-off
-            Assert.True(SkillResolve.SkillEnabled(global, "y", null));   // not disabled -> on
-            Assert.False(SkillResolve.SkillEnabled(global, "y", false)); // force-off
+            Assert.True(SkillResolve.IsEnabled(new SkillEnablement(), "z", null, null));
+            Assert.True(SkillResolve.IsEnabled(null, "z", null, null));
         }
 
         [Fact]
-        public void EnabledSkills_FeatureOff_ReturnsEmpty()
+        public void Resolve_ReportsDecidingRule()
         {
-            WriteSkill("a", "A.");
-            WriteSkill("b", "B.");
-            SkillCatalog cat = SkillCatalog.Build(_root, null);
+            SkillEnablement g = new SkillEnablement();
+            SkillRule rule;
 
-            List<Skill> r = SkillResolve.EnabledSkills(cat.Skills, new SkillEnablement(), true, null);
-            Assert.Empty(r);
+            SkillResolve.Resolve(g, "x", true, null, out rule);
+            Assert.Equal(SkillRule.SkillHere, rule);
+
+            g.SetSkillOverride("x", false);
+            SkillResolve.Resolve(g, "x", null, null, out rule);
+            Assert.Equal(SkillRule.SkillGlobal, rule);
+
+            SkillResolve.Resolve(new SkillEnablement(), "y", null, true, out rule);
+            Assert.Equal(SkillRule.FeatureHere, rule);
+
+            SkillEnablement off = new SkillEnablement(); off.FeatureOff = true;
+            SkillResolve.Resolve(off, "y", null, null, out rule);
+            Assert.Equal(SkillRule.FeatureGlobal, rule);
+
+            SkillResolve.Resolve(new SkillEnablement(), "y", null, null, out rule);
+            Assert.Equal(SkillRule.Default, rule);
         }
 
+        // The transcript fix: feature off "here", but a per-skill "on here" keeps that one skill enabled.
         [Fact]
-        public void EnabledSkills_FiltersGlobalDisabled_RespectsConversationForceOn()
+        public void EnabledSkills_PerSkillOnHere_SurvivesFeatureOffHere()
         {
             WriteSkill("a", "A.");
             WriteSkill("b", "B.");
             WriteSkill("c", "C.");
             SkillCatalog cat = SkillCatalog.Build(_root, null);
 
-            SkillEnablement global = new SkillEnablement();
-            global.SetDisabled("a", true);   // a off by default
-            global.SetDisabled("b", true);   // b off by default
+            Dictionary<string, bool> conv = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            conv["a"] = true;   // forced on for this conversation
 
-            Dictionary<string, bool> overrides = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-            overrides["b"] = true;           // but this conversation forces b on
-            overrides["c"] = false;          // and forces c off
+            List<Skill> r = SkillResolve.EnabledSkills(cat.Skills, new SkillEnablement(), true /*feature off here*/, conv);
 
-            List<Skill> r = SkillResolve.EnabledSkills(cat.Skills, global, null, overrides);
-
-            List<string> slugs = new List<string>();
-            for (int i = 0; i < r.Count; i++) slugs.Add(r[i].Slug);
-            slugs.Sort(StringComparer.Ordinal);
-
-            Assert.Equal(new string[] { "b" }, slugs.ToArray());   // a (global off), c (forced off) excluded
+            Assert.Single(r);
+            Assert.Equal("a", r[0].Slug);
         }
     }
 }
