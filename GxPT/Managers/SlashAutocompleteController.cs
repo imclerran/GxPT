@@ -92,26 +92,25 @@ namespace GxPT
                     e.Handled = true; e.SuppressKeyPress = true;
                     return true;
                 case Keys.Tab:
-                    // Tab completes to the highlighted item (it never sends). Nothing to do on an info row.
+                    // Tab always completes/drills the highlighted item one level (never sends). Tab on a
+                    // directory adds its "/" and lists its contents, so you walk the tree one step at a
+                    // time. Nothing to do on an info row.
                     if (!SelectedIsActionable()) { Hide(); e.Handled = true; e.SuppressKeyPress = true; return true; }
                     AcceptSelected();
                     e.Handled = true; e.SuppressKeyPress = true;
                     return true;
                 case Keys.Enter:
-                    // Send in one keystroke when there is nothing to complete: an info row, or a terminal
-                    // item that already equals what's typed. A path-taking command name or a directory
-                    // still has completion to offer, so Enter completes/drills instead -- e.g. "/explain"
-                    // + Enter opens the file list rather than sending an empty path.
+                    // Enter runs what's typed as soon as it's a runnable invocation -- including a folder
+                    // or partial path -- so "/explain src/" + Enter sends the directory instead of being
+                    // forced to keep drilling. When it's not yet runnable (unknown command, or a path
+                    // command with no path yet), Enter completes the highlighted item instead, so
+                    // "/explain" + Enter opens the file list and "/com" + Enter completes to "/commit".
+                    if (CurrentInputIsRunnable())
                     {
-                        Item sel = _list.SelectedItem as Item;
-                        bool actionable = sel != null && sel.Insert != null;
-                        bool terminal = (sel == null) || !sel.ContinueCompleting;
-                        if (!actionable || (terminal && TypedTextMatchesSelection()))
-                        {
-                            Hide();
-                            return false; // fall through to the normal Enter -> send path
-                        }
+                        Hide();
+                        return false; // fall through to the normal Enter -> send path
                     }
+                    if (!SelectedIsActionable()) { Hide(); return false; }
                     AcceptSelected();
                     e.Handled = true; e.SuppressKeyPress = true;
                     return true;
@@ -337,17 +336,32 @@ namespace GxPT
             }
         }
 
-        // True when the field already equals the highlighted completion (ignoring a trailing space), so
-        // accepting would change nothing and Enter should send instead. Works for both modes: a fully
-        // typed "/commit" or "/explain src/Foo.cs" matches its item and sends in one Enter, while a
-        // partial token or a directory step differs and completes first.
-        private bool TypedTextMatchesSelection()
+        // True when the current field is a complete, runnable invocation that Enter should send as-is:
+        // the command resolves and, if it takes a path, a non-empty valid path is present. A path
+        // command with no path yet (e.g. "/explain ") is NOT runnable, so Enter completes/opens the file
+        // list instead; a partial command name ("/com") is likewise not runnable and gets completed.
+        private bool CurrentInputIsRunnable()
         {
-            Item it = _list.SelectedItem as Item;
-            if (it == null) return true; // nothing to complete -> just send
-            string cur = (_txt.Text ?? string.Empty).TrimEnd();
-            string ins = (it.Insert ?? string.Empty).TrimEnd();
-            return string.Equals(cur, ins, StringComparison.Ordinal);
+            string text = _txt != null ? (_txt.Text ?? string.Empty) : string.Empty;
+            if (text.Length == 0 || text[0] != '/') return false;
+
+            string body = text.Substring(1);
+            int sp = IndexOfWhitespace(body);
+            string name = sp < 0 ? body : body.Substring(0, sp);
+            string arg = sp < 0 ? string.Empty : body.Substring(sp + 1);
+            if (name.Length == 0) return false;
+
+            SlashCommandRegistry reg = _host != null ? _host.GetSlashRegistry() : null;
+            ISlashCommand cmd;
+            if (reg == null || !reg.TryResolve(name, out cmd)) return false;
+
+            if (cmd.TakesPathArgument)
+            {
+                string a = arg.Trim();
+                if (a.Length == 0) return false;          // needs a path -> complete instead of send
+                if (!WorkspacePath.IsValid(a)) return false; // let the processor report the bad path
+            }
+            return true;
         }
 
         private void Move(int delta)
