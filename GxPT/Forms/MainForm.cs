@@ -1541,6 +1541,19 @@ namespace GxPT
             nctx.NoSaveUntilUserSend = false;
             try { ConversationStore.Save(nctx.Conversation); }
             catch { }
+
+            // Reflect the name on the tab, and register this tab as the open instance of the persisted
+            // conversation -- so double-clicking its history entry focuses this tab instead of opening a
+            // duplicate (the dedup is keyed on Conversation.Id via TrackOpenConversation).
+            try
+            {
+                string title = string.IsNullOrEmpty(nctx.Conversation.Name) ? "New Conversation" : nctx.Conversation.Name;
+                if (nctx.Page != null) nctx.Page.Text = ZdrTitle(nctx.Conversation, title);
+            }
+            catch { }
+            try { if (_sidebarManager != null) _sidebarManager.TrackOpenConversation(nctx.Conversation.Id, nctx.Page); }
+            catch { }
+
             // Refresh the open history sidebar on a fresh UI message: a synchronous refresh here runs
             // inside the tab-creation/layout call stack and doesn't take, so the new entry would only
             // show after the sidebar is toggled. Deferring lets it settle first.
