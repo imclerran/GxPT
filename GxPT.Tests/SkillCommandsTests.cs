@@ -178,16 +178,30 @@ namespace GxPT.Tests
         }
 
         [Fact]
-        public void Use_KnownSkill_SendsBodyAndText()
+        public void Use_KnownSkill_SendsShortMessage_AttachesBodyAsSystemContext()
         {
             WriteSkill("greeting", "Be a pirate.", "ARRR MATEY");
 
             SlashCommandResult r = new UseCommand().Invoke("greeting say hi", _ctx);
 
+            // The user message is the short ask, with the trailing text - NOT the body.
             Assert.True(r.SendToModel);
-            Assert.Contains("# Skill: greeting", r.TextToSend);
-            Assert.Contains("ARRR MATEY", r.TextToSend);
-            Assert.Contains("say hi", r.TextToSend);
+            Assert.Equal("Use the greeting skill. say hi", r.TextToSend);
+            Assert.DoesNotContain("ARRR MATEY", r.TextToSend);
+
+            // The body rides as a hidden system message instead.
+            Assert.Single(_ctx.AttachedSystemContexts);
+            Assert.Contains("# Skill: greeting", _ctx.AttachedSystemContexts[0]);
+            Assert.Contains("ARRR MATEY", _ctx.AttachedSystemContexts[0]);
+        }
+
+        [Fact]
+        public void Use_NoTrailingText_SendsBareAsk()
+        {
+            WriteSkill("greeting", "Be a pirate.", "ARRR");
+
+            SlashCommandResult r = new UseCommand().Invoke("greeting", _ctx);
+            Assert.Equal("Use the greeting skill.", r.TextToSend);
         }
 
         [Fact]
@@ -199,7 +213,7 @@ namespace GxPT.Tests
             SlashCommandResult r = new UseCommand().Invoke("greeting", _ctx);
 
             Assert.True(r.SendToModel);   // explicit /use ignores enablement
-            Assert.Contains("ARRR", r.TextToSend);
+            Assert.Contains("ARRR", _ctx.AttachedSystemContexts[0]); // body still attached
         }
 
         [Fact]

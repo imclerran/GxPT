@@ -30,6 +30,8 @@ namespace GxPT
         public void ResetConversationSkills() { _form.SlashResetConversationSkills(); }
         public void RefreshSkillsServer() { _form.SlashRefreshSkillsServer(); }
 
+        public void AttachSystemContext(string text) { _form.SlashAttachSystemContext(text); }
+
         public void NewConversation() { _form.SlashNewConversation(); }
         public void ExportConversations() { _form.SlashExportConversations(); }
         public void Compact() { _form.SlashCompact(); }

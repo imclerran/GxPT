@@ -7,8 +7,9 @@ namespace GxPT
     // Slash commands for the skills feature (design sec.6), built on the existing ISlashCommand framework:
     //   /skills [on|off|reset] [here|global]            -- list, or toggle/reset the whole feature
     //   /skill <slug> [on|off|reset] [here|global]      -- toggle/reset one skill (bare slug toggles)
-    //   /use <slug> [text]                              -- load a skill's body inline and send it
-    // Management commands are Client (local, no LLM send); /use is a Prompt command (it sends). Scope
+    //   /use <slug> [text]                              -- use a skill (body attached as hidden context)
+    // Management commands are Client (local, no LLM send); /use sends a short "Use the X skill" ask and
+    // attaches the skill body as a hidden system message (it never enters the transcript). Scope
     // defaults to "here" (this conversation); "global" edits skills.json. Conversation overrides are
     // read/written through ISlashCommandContext; the global default through SkillEnablement directly.
     internal static class SkillCommands
@@ -325,17 +326,19 @@ namespace GxPT
         }
     }
 
-    // /use <slug> [text] -- load the skill's instructions inline and send them (plus any text). A Prompt
-    // command: it returns Send(...). Explicit, so it works regardless of the skill's enabled state.
+    // /use <slug> [text] -- invoke a skill explicitly, regardless of its enabled state. Sends a short
+    // user message ("Use the <slug> skill. [text]") and attaches the skill's full instructions as a
+    // HIDDEN system message (context the model sees but the transcript never shows) - so the body never
+    // clutters the user transcript. Custom behavior, not a generic prompt expansion.
     internal sealed class UseCommand : ISlashCommand, IArgumentCompleter
     {
         private static readonly IList<string> EmptyList = new List<string>().AsReadOnly();
 
         public string Name { get { return "use"; } }
         public IList<string> Aliases { get { return EmptyList; } }
-        public string Description { get { return "Load a skill and send its instructions"; } }
+        public string Description { get { return "Use a skill (loads it as context)"; } }
         public string ArgumentHint { get { return "<slug> [message]"; } }
-        public SlashCommandKind Kind { get { return SlashCommandKind.Prompt; } }
+        public SlashCommandKind Kind { get { return SlashCommandKind.Client; } }
         public IList<string> Requires { get { return EmptyList; } }
         public IList<string> RequiresAny { get { return EmptyList; } }
         public bool TakesPathArgument { get { return false; } }
@@ -355,9 +358,14 @@ namespace GxPT
             if (!SkillCommands.ResolveSkill(cat, slugArg, out skill))
                 return SlashCommandResult.Fail("Unknown skill: " + slugArg);
 
-            string block = SkillTools.RenderSkill(skill);
-            string text = rest.Length > 0 ? block + "\n\n" + rest : block;
-            return SlashCommandResult.Send(text);
+            // The skill body rides as a hidden system message; the transcript shows only the short ask.
+            ctx.AttachSystemContext(
+                "The user invoked this skill with /use. Follow its instructions for their request.\n\n"
+                + SkillTools.RenderSkill(skill));
+
+            string msg = "Use the " + skill.Slug + " skill.";
+            if (rest.Length > 0) msg += " " + rest;
+            return SlashCommandResult.Send(msg);
         }
 
         public IList<ArgCompletion> CompleteArgument(string argText, ISlashCommandContext ctx)

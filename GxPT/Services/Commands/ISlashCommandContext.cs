@@ -47,6 +47,11 @@ namespace GxPT
         void NewConversation();
         void ExportConversations();
 
+        // Append a hidden system message to the active conversation's history: sent to the model as
+        // context but never rendered in the transcript (same channel /compact uses to seed context).
+        // Used by /use to attach a skill's instructions without dumping them into the user transcript.
+        void AttachSystemContext(string text);
+
         // Summarize the current conversation and open the summary as context in a new conversation tab.
         // Runs asynchronously; the original conversation is left untouched.
         void Compact();

@@ -1439,6 +1439,18 @@ namespace GxPT
             return enabled.Count > 0;
         }
 
+        // Append a hidden system message to the active conversation's history - sent to the model but
+        // never rendered (RebuildTranscript skips system roles), the same channel /compact uses to seed
+        // context. /use attaches a skill's instructions this way so the transcript stays clean. The
+        // pending user send (which follows) persists the conversation, so no explicit save here.
+        internal void SlashAttachSystemContext(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            if (c == null || c.Conversation == null || c.Conversation.History == null) return;
+            c.Conversation.History.Add(new ChatMessage("system", text));
+        }
+
         // The Skills MCP server tracks skill enablement; rebuild the host only when that crosses the
         // on/off boundary (so per-skill toggles that don't change whether ANY skill is enabled cost
         // nothing). Called after skills slash-command changes and on tab switches.

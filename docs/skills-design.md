@@ -256,27 +256,29 @@ validate_skill(scope?, slug)                                    -- ReadOnly: doe
 GxPT now has a slash-command framework (`Services/Commands/`: `ISlashCommand`,
 `SlashCommandRegistry`/`Processor`, `commands.json`, gating, autocomplete) — so
 skills register as **commands on it**, not a new router (this supersedes the
-original `SlashCommandRouter` plan). Each command is a `Client` kind (runs locally,
-no LLM send — `WriteInfo` + `Handled()`) except `/use`, which is a `Prompt` kind
-(it returns `Send(...)`). Registered in `SkillCommands.BuiltIns()` alongside the
-other built-ins.
+original `SlashCommandRouter` plan). The management commands are `Client` kind (run
+locally, no LLM send — `WriteInfo` + `Handled()`); `/use` is also `Client` but returns
+`Send(...)` with a short ask while attaching the body as hidden context (below).
+Registered in `SkillCommands.BuiltIns()` alongside the other built-ins.
 
 | Command | Kind | Effect |
 |---------|------|--------|
 | `/skills` | Client | List skills with effective on/off state and source (global default vs. this conversation) |
 | `/skills [on\|off\|reset] [here\|global]` | Client | Toggle/reset the **whole feature** at that scope (default `here`) |
 | `/skill <slug> [on\|off\|reset] [here\|global]` | Client | Toggle/reset **one skill**; bare `/skill <slug>` toggles for this conversation |
-| `/use <slug> [text]` | Prompt | **Invoke**: resolve `<slug>`, render its `SKILL.md` block (via `SkillTools.RenderSkill`) and send it inline + `text` |
+| `/use <slug> [text]` | Client | **Invoke**: resolve `<slug>`, attach its rendered `SKILL.md` block as a **hidden system message** (`AttachSystemContext`), and send the short user ask `Use the <slug> skill. [text]` |
 
 - **Slug-first** for `/skill`, mirroring `/tool <name> [on|off]`; the verb
   (`on|off|reset`) is the optional second token, scope (`here`/`global`) the optional
   third. Scope defaults to `here`; `global` edits `skills.json`.
 - **Invocation is `/use <slug>`**, not a per-skill `/<slug>` command — the framework's
   registry is built once at startup, so one command per dynamically-discovered skill
-  doesn't fit (decision in §11). `/use` renders the skill body **inline into the sent
-  message** (so it pre-loads without an `open_skill` round-trip) and works **regardless
-  of enablement**, since it's an explicit user action. The model's autonomous
-  `open_skill` path remains the primary, manifest-gated route.
+  doesn't fit (decision in §11). `/use` attaches the rendered skill body as a **hidden
+  system message** (sent to the model, never shown in the transcript — the same channel
+  `/compact` uses) and sends only a short `Use the <slug> skill. [text]` user message, so
+  it pre-loads without an `open_skill` round-trip and without dumping the body into the
+  transcript. It works **regardless of enablement**, since it's an explicit user action.
+  The model's autonomous `open_skill` path remains the primary, manifest-gated route.
 - **Conversation overrides vs. global:** management commands read/write the
   per-conversation tri-state through `ISlashCommandContext`
   (`Get/SetConversationSkill…`), persisted on the `Conversation`; `global`-scope
@@ -378,7 +380,8 @@ Same dual-world pattern as the rest of the repo (net48 linked-source via
 - **Skills slash commands** (`SkillCommands`, against a fake `ISlashCommandContext`) —
   `/skills` list/toggle/reset and `/skill <slug>` toggle/reset across `here`/`global`
   scopes; conversation overrides vs. `skills.json`; bare-slug toggle; unknown
-  slug/scope failures; `/use` sends the rendered body and works even when disabled.
+  slug/scope failures; `/use` attaches the body as hidden context + sends a short ask,
+  and works even when disabled.
 - **Conversation override persistence** — `SkillsFeatureOff` + `SkillOverrides`
   round-trip through `ConversationStore`; missing fields default to inherit/empty.
 - **Enablement resolution** — the two-layer precedence: conversation override beats
@@ -436,7 +439,8 @@ Same dual-world pattern as the rest of the repo (net48 linked-source via
 - ~~Slash commands: new router vs. existing framework~~ → built as `ISlashCommand`s on
   `main`'s framework (§6); the `SlashCommandRouter` plan is dropped.
 - ~~User-initiated invocation under the static registry~~ → a single `/use <slug>`
-  Prompt command (renders the body inline), not per-skill `/<slug>` commands (§6).
+  command (body attached as hidden context, short ask sent), not per-skill `/<slug>`
+  commands (§6).
 - ~~Per-skill settings UI~~ → dropped; enablement is slash-command driven, default
   all-on (S6).
 - ~~Whether enablement should be promotable to an app-wide default~~ → yes: two
