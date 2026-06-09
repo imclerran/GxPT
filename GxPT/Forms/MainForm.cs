@@ -3485,6 +3485,12 @@ namespace GxPT
                     header = slugs.Length > 0 ? "Read skill: " + slugs : "Read skill";
                     return true;
                 }
+                case "read_skill_file":
+                {
+                    string rel = Str(args, "relpath");
+                    header = rel.Length > 0 ? "Read skill file: " + rel : "Read skill file";
+                    return true;
+                }
                 default: return false;
             }
         }

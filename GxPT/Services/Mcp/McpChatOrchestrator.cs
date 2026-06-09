@@ -183,6 +183,7 @@ namespace GxPT
                 {
                     if (tools == null) tools = new List<JObject>();
                     tools.Add(SkillTools.OpenSkillDef());
+                    tools.Add(SkillTools.ReadSkillFileDef());
                 }
                 _log.Log("mcp", "[turn " + turnId + "] iteration " + (iter + 1) + "/" + budget
                     + ": requesting model with " + (tools != null ? tools.Count : 0) + " exposed tool(s)");
@@ -393,6 +394,16 @@ namespace GxPT
                 return SkillTools.Open(slugs);
             }
 
+            // read_skill_file is a host meta-tool too (ReadOnly): read a bundled asset by (slug, relpath).
+            if (SkillTools != null && SkillTools.IsReadSkillFile(call.Name))
+            {
+                string skillSlug, relpath;
+                ParseSkillFileArgs(call.ArgumentsJson, out skillSlug, out relpath);
+                _log.Log("mcp", "[turn " + turnId + "] read_skill_file: "
+                    + (skillSlug != null ? skillSlug : "?") + " / " + (relpath != null ? relpath : "?"));
+                return SkillTools.ReadFile(skillSlug, relpath);
+            }
+
             McpServerConnection conn;
             string toolName;
             if (_registry == null || !_registry.TryResolve(call.Name, WorkingDir, out conn, out toolName))
@@ -505,6 +516,26 @@ namespace GxPT
                 // malformed reveal args → no names; Reveal returns an empty def list.
             }
             return names.ToArray();
+        }
+
+        // Extracts { slug, relpath } string args for read_skill_file; missing/invalid -> null (the tool
+        // then returns a short notice the model can read).
+        private static void ParseSkillFileArgs(string argumentsJson, out string slug, out string relpath)
+        {
+            slug = null;
+            relpath = null;
+            try
+            {
+                JObject o = JObject.Parse(argumentsJson);
+                JToken s = o["slug"];
+                if (s != null && s.Type == JTokenType.String) slug = (string)s;
+                JToken r = o["relpath"];
+                if (r != null && r.Type == JTokenType.String) relpath = (string)r;
+            }
+            catch
+            {
+                // malformed args -> nulls; ReadFile reports the problem.
+            }
         }
 
         // CallToolResult.content[] → a single string for the tool message. Text blocks are

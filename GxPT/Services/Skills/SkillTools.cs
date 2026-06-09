@@ -15,9 +15,11 @@ namespace GxPT
     internal sealed class SkillTools
     {
         public const string OpenSkillName = "open_skill";
+        public const string ReadSkillFileName = "read_skill_file";
 
         // Keep a single skill body from blowing up the context if a SKILL.md is huge.
         private const int MaxBodyChars = 32 * 1024;
+        private const int MaxAssetChars = 64 * 1024;
         private const int MaxAssetsListed = 200;
 
         // Indexed by slug over the skills ENABLED for this turn (SkillResolve), so open_skill can only
@@ -46,6 +48,88 @@ namespace GxPT
         public bool IsOpenSkill(string functionName)
         {
             return functionName == OpenSkillName;
+        }
+
+        public bool IsReadSkillFile(string functionName)
+        {
+            return functionName == ReadSkillFileName;
+        }
+
+        // read_skill_file(slug, relpath): read a file bundled with a skill, by a path relative to the
+        // skill folder. ReadOnly - host-handled (no MCP round-trip), so it auto-allows like reveal_tools.
+        public JObject ReadSkillFileDef()
+        {
+            JObject slugP = new JObject(); slugP["type"] = "string";
+            JObject relP = new JObject(); relP["type"] = "string";
+            JObject props = new JObject();
+            props["slug"] = slugP;
+            props["relpath"] = relP;
+            JObject schema = new JObject();
+            schema["type"] = "object";
+            schema["properties"] = props;
+            schema["required"] = new JArray("slug", "relpath");
+
+            JObject fn = new JObject();
+            fn["name"] = ReadSkillFileName;
+            fn["description"] = "Read a file bundled with a skill, by the skill's slug and a path relative "
+                + "to the skill folder (use the paths from open_skill's listing).";
+            fn["parameters"] = schema;
+
+            JObject def = new JObject();
+            def["type"] = "function";
+            def["function"] = fn;
+            return def;
+        }
+
+        // Read one bundled asset by relative handle, sandboxed to the skill's own folder (no absolute,
+        // no drive, no '..' escape). Only enabled skills are reachable (same set as open_skill).
+        public string ReadFile(string slug, string relpath)
+        {
+            if (string.IsNullOrEmpty(slug)) return "No skill specified.";
+            Skill skill;
+            if (!_bySlug.TryGetValue(slug, out skill)) return "Unknown skill: " + slug;
+            if (string.IsNullOrEmpty(relpath)) return "No file path specified.";
+
+            string full;
+            if (!TryResolveAsset(skill.Directory, relpath, out full))
+                return "Invalid path: must be relative to the skill folder (no '..', no absolute path).";
+            if (!File.Exists(full)) return "File not found: " + relpath;
+
+            try
+            {
+                string text = File.ReadAllText(full, Encoding.UTF8);
+                if (text.Length > MaxAssetChars) text = text.Substring(0, MaxAssetChars) + "\n[file truncated]";
+                return text;
+            }
+            catch
+            {
+                return "Could not read file: " + relpath;
+            }
+        }
+
+        // Resolves relpath within root, rejecting absolute paths, drive/ADS colons, and '..' escapes.
+        // Mirrors FilesMcpServer.PathSandbox (which the host can't reference) for the skill folder.
+        private static bool TryResolveAsset(string root, string relpath, out string full)
+        {
+            full = null;
+            if (string.IsNullOrEmpty(root) || string.IsNullOrEmpty(relpath)) return false;
+            if (Path.IsPathRooted(relpath)) return false;   // absolute / UNC
+            if (relpath.IndexOf(':') >= 0) return false;     // drive letter or alternate data stream
+
+            string rootFull, combined;
+            try
+            {
+                rootFull = Path.GetFullPath(root);
+                combined = Path.GetFullPath(Path.Combine(rootFull, relpath));
+            }
+            catch { return false; }
+
+            string r = rootFull.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (string.Equals(combined, r, StringComparison.OrdinalIgnoreCase)) return false; // the dir itself
+            if (!combined.StartsWith(r + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                return false; // escaped the skill folder
+            full = combined;
+            return true;
         }
 
         // The OpenAI-style function definition for open_skill: { names: string[] } (required), mirroring
@@ -109,7 +193,7 @@ namespace GxPT
             string assets = ListAssets(skill.Directory);
             if (!string.IsNullOrEmpty(assets))
             {
-                sb.Append("Bundled files (relative to the skill directory):\n");
+                sb.Append("Bundled files (read one with read_skill_file using its path below):\n");
                 sb.Append(assets).Append('\n');
             }
 

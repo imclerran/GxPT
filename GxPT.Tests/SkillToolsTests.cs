@@ -114,5 +114,73 @@ namespace GxPT.Tests
             Assert.Equal("No skill names provided.", t.Open(null));
             Assert.Equal("No skill names provided.", t.Open(new string[0]));
         }
+
+        // ---- read_skill_file ----
+
+        [Fact]
+        public void ReadSkillFileDef_HasExpectedShape()
+        {
+            WriteSkill("release-notes", "Draft notes.", "body");
+
+            JObject def = Tools().ReadSkillFileDef();
+            JObject fn = (JObject)def["function"];
+            Assert.Equal(SkillTools.ReadSkillFileName, (string)fn["name"]);
+            JObject pars = (JObject)fn["parameters"];
+            Assert.Equal("string", (string)pars["properties"]["slug"]["type"]);
+            Assert.Equal("string", (string)pars["properties"]["relpath"]["type"]);
+            string[] req = ((JArray)pars["required"]).ToObject<string[]>();
+            Assert.Contains("slug", req);
+            Assert.Contains("relpath", req);
+        }
+
+        [Fact]
+        public void IsReadSkillFile_MatchesOnlyTheName()
+        {
+            SkillTools t = Tools();
+            Assert.True(t.IsReadSkillFile("read_skill_file"));
+            Assert.False(t.IsReadSkillFile("open_skill"));
+            Assert.False(t.IsReadSkillFile(null));
+        }
+
+        [Fact]
+        public void ReadFile_KnownSkillNestedAsset_ReturnsContents()
+        {
+            WriteSkill("release-notes", "Draft notes.", "body");
+            WriteAsset("release-notes", Path.Combine("scripts", "gen.bat"), "@echo off\necho hi");
+
+            string r = Tools().ReadFile("release-notes", "scripts/gen.bat");
+
+            Assert.Contains("@echo off", r);
+            Assert.Contains("echo hi", r);
+        }
+
+        [Fact]
+        public void ReadFile_UnknownSkill_ReturnsNote()
+        {
+            WriteSkill("release-notes", "Draft notes.", "body");
+            Assert.StartsWith("Unknown skill:", Tools().ReadFile("nope", "a.txt"));
+        }
+
+        [Fact]
+        public void ReadFile_MissingFile_ReturnsNotFound()
+        {
+            WriteSkill("release-notes", "Draft notes.", "body");
+            Assert.StartsWith("File not found:", Tools().ReadFile("release-notes", "nope.txt"));
+        }
+
+        [Fact]
+        public void ReadFile_EscapeOrAbsolute_IsRejected()
+        {
+            WriteSkill("release-notes", "Draft notes.", "body");
+            WriteAsset("release-notes", "ok.txt", "fine");
+            // A sibling file outside the skill folder that '..' would reach.
+            File.WriteAllText(Path.Combine(_bundled, "secret.txt"), "nope", new UTF8Encoding(false));
+
+            SkillTools t = Tools();
+            Assert.StartsWith("Invalid path:", t.ReadFile("release-notes", "../secret.txt"));
+            Assert.StartsWith("Invalid path:", t.ReadFile("release-notes", Path.Combine(_bundled, "secret.txt")));
+            Assert.StartsWith("Invalid path:", t.ReadFile("release-notes", "scripts/../../secret.txt"));
+            Assert.Contains("fine", t.ReadFile("release-notes", "ok.txt")); // the in-bounds file still works
+        }
     }
 }
