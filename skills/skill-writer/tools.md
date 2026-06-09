@@ -23,8 +23,10 @@ Tools are addressed as `server__tool` (for example `files__read`, `git__commit`)
 
 ## command - run a shell command
 - `command__run` - run a command line on Windows (cmd.exe), capturing stdout, stderr, exit code.
-  Runs in the workspace directory. Use this for anything there isn't a dedicated tool for. **Not
-  for a skill's own bundled script** - that runs through `run_skill_script` (see `scripts.md`).
+  Runs in the workspace directory. Use this for running existing commands and tools (the build, a
+  linter, a script already in the repo) or anything without a dedicated tool. A script *you create
+  as part of a skill*, though, lives in the skill and runs via `run_skill_script` (see
+  `scripts.md`) - not here.
 
 ## git - version control in the workspace
 - Read: `git__status`, `git__diff`, `git__log`

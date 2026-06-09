@@ -5,20 +5,23 @@ A script is for the parts of a task that are deterministic and better done by co
 transforming data, generating a file from a template, running a tool and collecting its output,
 anything tedious or easy to get subtly wrong by hand.
 
-## What a skill script is (and what it is NOT)
+## A script you author for the skill lives in the skill
 
-A skill script is a **bundled asset of the skill**, executed only through the `run_skill_script`
-tool. Two rules, both mandatory:
+This file is about a script *you write as part of the skill*. Such a script is a **bundled asset
+of the skill**, executed through the `run_skill_script` tool. Two rules:
 
 1. **It lives in the skill's own folder**, written with
-   `write_skill_file(slug, "scripts/<name>.bat", ...)`. Do **not** create a script in the user's
-   workspace, and do not have the skill generate one at runtime.
-2. **The `SKILL.md` body runs it with `run_skill_script(slug, "scripts/<name>.bat", [args])`** -
-   never `command__run`, and never an instruction to `cd` into a folder and run a loose `.bat`.
+   `write_skill_file(slug, "scripts/<name>.bat", ...)` - not in the user's workspace (leave a file
+   in the workspace only if the user specifically asks).
+2. **The `SKILL.md` body runs it with `run_skill_script(slug, "scripts/<name>.bat", [args])`.**
 
-If you find yourself writing a skill whose instructions say "run `foo.bat` in the working
-directory" or "use command__run to execute the script," stop - that's the wrong shape. The
-script belongs *in the skill*, and `run_skill_script` is the only way it runs.
+If you find yourself writing a skill that creates a `.bat` and then tells your future self to "run
+`foo.bat` in the working directory" or "`command__run` the script," that's the wrong shape - the
+script you authored belongs *in the skill* and runs via `run_skill_script`.
+
+(Different situation: a skill that just runs things that **already exist** - the build, a repo
+script, git, a one-off command - has nothing to bundle. Its body uses `command__run`/the normal
+tools as usual. The rules above apply only to a script being built as part of the skill.)
 
 ## First, confirm with the user
 

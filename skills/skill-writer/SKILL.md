@@ -53,18 +53,23 @@ good skill (especially how to phrase the description and when to split into mult
 - **Multiple files** when parts are only needed sometimes (separate sub-procedures, long
   reference, templates). The main `SKILL.md` then lays out the overall workflow and tells your
   future self when to read each supporting file with `read_skill_file`. Keep `SKILL.md` lean.
-- **A bundled script** when a step is deterministic, tedious, or error-prone (transform data,
-  generate a file, run a tool). The script becomes **part of the skill**, not a file in the
-  user's project. So:
+- **A bundled script** when you'd automate a deterministic step with a *new* script of your own
+  (transform data, generate a file from a template, run a fixed routine). A script you write as
+  part of the skill is **part of the skill**, so:
   - Write it into the skill's own `scripts/` folder with `write_skill_file(slug,
-    "scripts/<name>.bat", ...)` - never into the user's workspace.
+    "scripts/<name>.bat", ...)` - not into the user's workspace (leave a file in their project
+    only if the user specifically asks for that).
   - In the `SKILL.md` body, tell your future self to run it with
-    `run_skill_script(slug, "scripts/<name>.bat", [args])` - **never** with `command__run`, and
-    never by telling your future self to `cd` somewhere and run a loose `.bat`. The script
-    travels with the skill and only executes through `run_skill_script`.
+    `run_skill_script(slug, "scripts/<name>.bat", [args])`.
 
-  Tell the user you can bundle a script to automate that step, confirm they want it, and read
-  `scripts.md` in this folder before writing it.
+  This is separate from a skill that just runs things that **already exist** - the project's
+  build, a linter, git, a script already in the user's repo, or any one-off command. For those,
+  the body uses the normal tools (`command__run`, etc.) and there's nothing to bundle. The rule is
+  only: a batch/script *you* create as part of the skill lives *in* the skill and runs via
+  `run_skill_script`, rather than being dropped in the workspace.
+
+  If a script is involved, tell the user, confirm they want it, and read `scripts.md` in this
+  folder before writing it.
 
 ## 4. Propose, then confirm
 
