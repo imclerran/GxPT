@@ -35,6 +35,11 @@ You are capturing the domain knowledge a future you would need and not otherwise
 - When the skill should apply (this becomes the description - get it right).
 - Any context, files, commands, or external tools involved.
 
+If the task involves *doing* something - touching files, running commands, building, git, the
+web - read `tools.md` in this folder for the full catalog of built-in tools, so you can propose
+the right one even if it isn't in your context right now. It also covers checking your own
+current tools for anything the user added via `mcp.json`.
+
 Keep going until you could do the task yourself from what they've told you. Capture only what
 is specific to them; don't write down general knowledge you already have. If you don't know
 something you'd need, ask - don't guess.

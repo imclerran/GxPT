@@ -48,7 +48,8 @@ is about release notes."
 - **Don't pad with general knowledge.** Leave out what you already know how to do. Every line
   should be something specific to this user, project, or task.
 - **Point at the real artifacts.** Name the files, commands, and tools involved by their
-  relative path or exact name (see "Bundled files" below).
+  relative path or exact name (see "Bundled files" below, and `tools.md` for the built-in tool
+  catalog and exact tool names).
 - Keep `SKILL.md` lean. If the body is getting long because parts are only sometimes needed,
   that is the signal to split (next section).
 
