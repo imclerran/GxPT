@@ -1043,6 +1043,9 @@ namespace GxPT
                 opts.MemoryEnabled = AppSettings.GetBool("mcp_memory_enabled", false);
                 int memMaxLines = (int)AppSettings.GetDouble("mcp_memory_max_lines", 40);
                 opts.MemoryMaxLines = memMaxLines > 0 ? memMaxLines : 40;
+                // Skills server (authoring/execution tools); off by default like the other powerful
+                // servers. The read-side skills feature is separate (always on when skills exist).
+                opts.SkillsEnabled = AppSettings.GetBool("mcp_skills_enabled", false);
                 opts.WebSearchKey = AppSettings.GetString("mcp_websearch_key");
                 opts.CurlPath = curlPath;
                 // Server exes: dev builds deploy them to a 'mcp-servers' subfolder (AfterBuild copy);
@@ -1341,7 +1344,7 @@ namespace GxPT
             return new List<string>(new string[]
             {
                 McpConfig.WebName, McpConfig.FilesName, McpConfig.GitName,
-                McpConfig.CommandName, McpConfig.MsBuildName, McpConfig.GitHubName
+                McpConfig.CommandName, McpConfig.MsBuildName, McpConfig.SkillsName, McpConfig.GitHubName
             });
         }
 
@@ -1355,6 +1358,7 @@ namespace GxPT
             if (string.Equals(name, McpConfig.CommandName, StringComparison.OrdinalIgnoreCase)) return "mcp_command_enabled";
             if (string.Equals(name, McpConfig.MsBuildName, StringComparison.OrdinalIgnoreCase)) { defaultOn = true; return "mcp_msbuild_enabled"; }
             if (string.Equals(name, McpConfig.MemoryName, StringComparison.OrdinalIgnoreCase)) return "mcp_memory_enabled";
+            if (string.Equals(name, McpConfig.SkillsName, StringComparison.OrdinalIgnoreCase)) return "mcp_skills_enabled";
             if (string.Equals(name, McpConfig.GitHubName, StringComparison.OrdinalIgnoreCase)) return "mcp_github_enabled";
             return null;
         }

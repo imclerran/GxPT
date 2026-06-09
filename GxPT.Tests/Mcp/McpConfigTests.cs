@@ -113,7 +113,7 @@ namespace GxPT.Tests.Mcp
         }
 
         [Fact]
-        public void Builtins_cover_the_six_servers_with_toggles_and_env()
+        public void Builtins_cover_the_seven_servers_with_toggles_and_env()
         {
             var o = new McpConfig.BuiltInOptions
             {
@@ -123,6 +123,7 @@ namespace GxPT.Tests.Mcp
                 CommandEnabled = true,
                 MsBuildEnabled = true,
                 MemoryEnabled = true,
+                SkillsEnabled = true,
                 WebSearchKey = "tav_key",
                 CurlPath = "C:\\curl.exe",
                 GitPath = "git",
@@ -132,7 +133,7 @@ namespace GxPT.Tests.Mcp
             var specs = McpConfig.BuiltInSpecs(o);
             var byName = specs.ToDictionary(s => s.Name);
 
-            Assert.Equal(6, specs.Count);
+            Assert.Equal(7, specs.Count);
             Assert.True(specs.All(s => s.BuiltIn && s.Kind == McpTransportKind.Stdio));
 
             var web = byName["web"];
@@ -165,6 +166,13 @@ namespace GxPT.Tests.Mcp
             Assert.True(memory.WorkdirScoped);
             Assert.Equal(Path.Combine("C:\\app\\servers", "MemoryMcpServer.exe"), memory.Command);
             Assert.Equal("40", memory.Env[McpConfig.EnvMemoryMaxLines]);
+
+            // skills — workdir-scoped authoring/execution server; GXPT_WORKDIR injected at launch.
+            var skills = byName["skills"];
+            Assert.True(skills.Enabled);
+            Assert.True(skills.WorkdirScoped);
+            Assert.Equal(Path.Combine("C:\\app\\servers", "SkillsMcpServer.exe"), skills.Command);
+            Assert.Empty(skills.Env);
         }
     }
 }

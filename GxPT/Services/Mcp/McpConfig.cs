@@ -21,6 +21,7 @@ namespace GxPT
         public const string CommandName = "command";
         public const string MsBuildName = "msbuild";
         public const string MemoryName = "memory";
+        public const string SkillsName = "skills";
         public const string GitHubName = "github";
         public const string GitHubUrl = "https://api.githubcopilot.com/mcp/";
 
@@ -53,6 +54,7 @@ namespace GxPT
             public bool CommandEnabled { get; set; }
             public bool MsBuildEnabled { get; set; }
             public bool MemoryEnabled { get; set; }
+            public bool SkillsEnabled { get; set; }
 
             public string WebSearchKey { get; set; }   // GXPT_WEB_SEARCH_KEY (web)
             public string CurlPath { get; set; }        // GXPT_CURL_PATH (web)
@@ -120,6 +122,10 @@ namespace GxPT
             if (o.MemoryMaxLines > 0)
                 mem.Env[EnvMemoryMaxLines] = o.MemoryMaxLines.ToString(System.Globalization.CultureInfo.InvariantCulture);
             list.Add(mem);
+
+            // skills - author/edit skill files under GXPT_WORKDIR/.gxpt/skills (and, later, run a skill's
+            // bundled .bat); workdir-scoped (GXPT_WORKDIR injected at launch).
+            list.Add(NewBuiltIn(SkillsName, "SkillsMcpServer.exe", o.ServerDir, true, o.SkillsEnabled));
 
             return list;
         }

@@ -60,6 +60,12 @@ namespace GxPT
             t["memory__update_memory"] = new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
             t["memory__forget"] = new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
             t["memory__consolidate"] = new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
+            // Skills authoring (design S16): all Write-tier .gxpt/skills edits. create_skill is per-tool
+            // (each call is a new slug); write/update are argument-scoped on the skill being edited
+            // ("always allow editing skill X"). run_skill_script (Destructive) is added with execution.
+            t["skills__create_skill"] = new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
+            t["skills__write_skill_file"] = new ToolPolicy(ToolTier.Write, RememberScope.Argument, "slug");
+            t["skills__update_skill"] = new ToolPolicy(ToolTier.Write, RememberScope.Argument, "slug");
             return t;
         }
 
