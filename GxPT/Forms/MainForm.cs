@@ -2304,7 +2304,8 @@ namespace GxPT
                         List<Skill> enabledForTurn = enabledSkills;
                         orch.SkillsManifestSystemMessageProvider =
                             delegate { return SkillInjection.BuildManifestMessage(enabledForTurn); };
-                        orch.SkillTools = new SkillTools(enabledForTurn);
+                        // open_skill is enabled-scoped; read_skill_file spans the whole catalog.
+                        orch.SkillTools = new SkillTools(enabledForTurn, skillCatalog);
                     }
 
                     // Assistant text appends to the current assistant bubble; a tool call closes it so

@@ -27,8 +27,13 @@ namespace GxPT
         // catalog directly and is not bound by this set.
         private readonly Dictionary<string, Skill> _bySlug;
 
-        public SkillTools(IList<Skill> enabledSkills)
+        // The full discovered catalog (enabled or not). read_skill_file resolves against this, so an
+        // author can read a disabled skill's files; open_skill stays scoped to the enabled set above.
+        private readonly SkillCatalog _allSkills;
+
+        public SkillTools(IList<Skill> enabledSkills, SkillCatalog allSkills)
         {
+            _allSkills = allSkills;
             _bySlug = new Dictionary<string, Skill>(StringComparer.OrdinalIgnoreCase);
             if (enabledSkills != null)
             {
@@ -87,7 +92,8 @@ namespace GxPT
         {
             if (string.IsNullOrEmpty(slug)) return "No skill specified.";
             Skill skill;
-            if (!_bySlug.TryGetValue(slug, out skill)) return "Unknown skill: " + slug;
+            // Spans any discovered skill (enabled or not) so a disabled skill's files are still readable.
+            if (_allSkills == null || !_allSkills.TryGet(slug, out skill)) return "Unknown skill: " + slug;
             if (string.IsNullOrEmpty(relpath)) return "No file path specified.";
 
             string full;

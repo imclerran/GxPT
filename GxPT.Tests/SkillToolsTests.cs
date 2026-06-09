@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using GxPT;
@@ -42,7 +43,21 @@ namespace GxPT.Tests
 
         private SkillTools Tools()
         {
-            return new SkillTools(SkillCatalog.Build(_bundled, null).Skills);
+            SkillCatalog cat = SkillCatalog.Build(_bundled, null);
+            return new SkillTools(cat.Skills, cat);   // all discovered skills enabled
+        }
+
+        // SkillTools where only `enabled` slugs are in the open_skill set, but the full catalog backs reads.
+        private SkillTools ToolsWithEnabled(params string[] enabledSlugs)
+        {
+            SkillCatalog cat = SkillCatalog.Build(_bundled, null);
+            List<Skill> enabled = new List<Skill>();
+            for (int i = 0; i < enabledSlugs.Length; i++)
+            {
+                Skill s;
+                if (cat.TryGet(enabledSlugs[i], out s)) enabled.Add(s);
+            }
+            return new SkillTools(enabled, cat);
         }
 
         [Fact]
@@ -75,9 +90,11 @@ namespace GxPT.Tests
         [Fact]
         public void HasSkills_ReflectsCatalog()
         {
-            Assert.False(new SkillTools(SkillCatalog.Build(_bundled, null).Skills).HasSkills);
+            SkillCatalog empty = SkillCatalog.Build(_bundled, null);
+            Assert.False(new SkillTools(empty.Skills, empty).HasSkills);
             WriteSkill("a", "A.", "body");
-            Assert.True(new SkillTools(SkillCatalog.Build(_bundled, null).Skills).HasSkills);
+            SkillCatalog one = SkillCatalog.Build(_bundled, null);
+            Assert.True(new SkillTools(one.Skills, one).HasSkills);
         }
 
         [Fact]
@@ -166,6 +183,21 @@ namespace GxPT.Tests
         {
             WriteSkill("release-notes", "Draft notes.", "body");
             Assert.StartsWith("File not found:", Tools().ReadFile("release-notes", "nope.txt"));
+        }
+
+        [Fact]
+        public void ReadFile_SpansDisabledSkills_ButOpenSkillDoesNot()
+        {
+            WriteSkill("on-skill", "Enabled.", "body");
+            WriteSkill("off-skill", "Disabled.", "body");
+            WriteAsset("off-skill", "ref.md", "disabled ref content");
+
+            SkillTools t = ToolsWithEnabled("on-skill");   // off-skill discovered but not enabled
+
+            // read_skill_file reaches the disabled skill's file...
+            Assert.Contains("disabled ref content", t.ReadFile("off-skill", "ref.md"));
+            // ...but open_skill won't load a disabled skill.
+            Assert.Contains("Unknown skill: off-skill", t.Open(new string[] { "off-skill" }));
         }
 
         [Fact]
