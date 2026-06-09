@@ -82,9 +82,9 @@ Editing an existing skill (read it first with `read_skill_file`, or `list_skill_
 see what it contains):
 - `update_skill(slug, ...)` - change the main `SKILL.md`; pass only the fields that change
   (name / description / body), the rest stay as they are.
-- `edit_skill_file(slug, relpath, old_string, new_string)` - a targeted edit to a supporting
-  file or script, replacing an exact span (like a normal file edit). Use this over rewriting the
-  whole file. Not for `SKILL.md` - that's `update_skill`.
+- `edit_skill_file(slug, relpath, old_string, new_string)` - a targeted edit replacing an exact
+  span (like a normal file edit). Use this over rewriting a whole file. Works on `SKILL.md` too,
+  where it edits the instructions body only; change the name/description with `update_skill`.
 - `delete_skill_file(slug, relpath)` removes one file; `delete_skill(slug)` removes the whole
   skill. Both are destructive - the user confirms each time, so only reach for them when asked.
 

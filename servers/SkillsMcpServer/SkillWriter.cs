@@ -101,8 +101,9 @@ namespace SkillsMcpServer
             return "Updated skill '" + slug + "'. Changes apply on your next message.";
         }
 
-        // edit_skill_file (tier 2): targeted string replace in a supporting file (files__edit parity).
-        // SKILL.md is edited only through update_skill, which keeps its frontmatter guaranteed-loadable.
+        // edit_skill_file (tier 2): targeted string replace in a supporting file (files__edit parity). For
+        // SKILL.md the replace is confined to the BODY and the frontmatter is re-assembled, so a granular
+        // edit can't corrupt it; the name/description are still edited through update_skill.
         public string EditFile(string scope, string slugIn, string relpath, string oldString, string newString, bool replaceAll)
         {
             string root = RootFor(scope);
@@ -117,14 +118,40 @@ namespace SkillsMcpServer
             try { full = new PathSandbox(dir).Resolve(relpath); }
             catch (SandboxException ex) { throw new SkillWriteException(ex.Message); }
 
-            if (string.Equals(Path.GetFileName(full), "SKILL.md", StringComparison.OrdinalIgnoreCase))
-                throw new SkillWriteException("edit SKILL.md with update_skill, not edit_skill_file");
             if (!File.Exists(full))
                 throw new SkillWriteException(relpath + " does not exist in skill '" + slug + "'");
 
             string text;
             try { text = File.ReadAllText(full, Encoding.UTF8); }
             catch (Exception ex) { throw new SkillWriteException("could not read " + relpath + ": " + ex.Message); }
+
+            // SKILL.md edits target the BODY only: parse off the frontmatter, replace within the body,
+            // then re-assemble with the server-managed name/description, so the edit can never corrupt the
+            // frontmatter or make the skill unloadable. (Edit the name/description with update_skill.)
+            bool isSkillMd = string.Equals(Path.GetFileName(full), "SKILL.md", StringComparison.OrdinalIgnoreCase);
+            if (isSkillMd)
+            {
+                SkillFrontmatter fm = SkillFrontmatter.Parse(text);
+                if (IsBlank(fm.Description))
+                    throw new SkillWriteException("SKILL.md has no frontmatter description; fix it with update_skill first");
+
+                string body = fm.Body != null ? fm.Body : string.Empty; // Parse already normalizes to LF
+                string oldB = NormalizeNewlines(oldString, "\n");
+                string newB = NormalizeNewlines(newString, "\n");
+
+                int bodyCount = CountOccurrences(body, oldB);
+                if (bodyCount == 0)
+                    throw new SkillWriteException("old_string not found in SKILL.md's body (the body is what "
+                        + "edit_skill_file changes; use update_skill for the name/description)");
+                if (bodyCount > 1 && !replaceAll)
+                    throw new SkillWriteException("old_string is not unique in SKILL.md's body (" + bodyCount
+                        + " matches); make it unique or set replace_all");
+
+                string newBody = replaceAll ? body.Replace(oldB, newB) : ReplaceFirst(body, oldB, newB);
+                AtomicWrite(full, BuildSkillMd(fm.Name != null ? fm.Name : slug, fm.Description, newBody));
+                return "Edited SKILL.md body in skill '" + slug + "' ("
+                    + (replaceAll ? bodyCount + " replacement" + (bodyCount == 1 ? "" : "s") : "1 replacement") + ").";
+            }
 
             // Match against the file's own line endings: read tools normalize CRLF to LF, so an
             // old_string copied from a read is LF-only even when the file on disk is CRLF (same fix as

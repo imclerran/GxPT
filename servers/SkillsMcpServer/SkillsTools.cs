@@ -120,12 +120,13 @@ namespace SkillsMcpServer
                 });
 
             server.AddTool("edit_skill_file",
-                "Make a targeted edit to a supporting file or script in an existing skill, by replacing an "
-                + "exact text span (like files__edit). old_string must match exactly and be unique unless "
-                + "replace_all is set. For SKILL.md use update_skill instead.",
+                "Make a targeted edit to a file in an existing skill by replacing an exact text span (like "
+                + "files__edit). old_string must match exactly and be unique unless replace_all is set. "
+                + "Works on SKILL.md too, where the edit applies to the instructions BODY only - use "
+                + "update_skill to change the name or description.",
                 SchemaBuilder.Object()
                     .Str("slug", true, "The skill's slug (it must already exist).")
-                    .Str("relpath", true, "Path relative to the skill folder, e.g. scripts/gen.bat (not SKILL.md).")
+                    .Str("relpath", true, "Path relative to the skill folder, e.g. SKILL.md or scripts/gen.bat.")
                     .Str("old_string", true, "Exact text to find (must be unique unless replace_all is set).")
                     .Str("new_string", true, "Replacement text.")
                     .Bool("replace_all", false, "Replace every occurrence instead of requiring a unique match.")

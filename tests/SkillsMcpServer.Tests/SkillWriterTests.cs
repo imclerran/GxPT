@@ -216,11 +216,24 @@ namespace SkillsMcpServer.Tests
         }
 
         [Fact]
-        public void EditFile_RejectsSkillMd()
+        public void EditFile_SkillMd_EditsBody_PreservesFrontmatter()
         {
-            _writer.CreateSkill(null, "greeting", "Greeting", "desc", "body");
+            _writer.CreateSkill(null, "greeting", "Greeting", "Be a pirate.", "Say ahoy to everyone.");
+            _writer.EditFile(null, "greeting", "SKILL.md", "ahoy", "AHOY", false);
+
+            SkillFrontmatter fm = SkillFrontmatter.Parse(File.ReadAllText(SkillFile("greeting")));
+            Assert.Equal("Greeting", fm.Name);            // frontmatter untouched
+            Assert.Equal("Be a pirate.", fm.Description);  // frontmatter untouched
+            Assert.Equal("Say AHOY to everyone.", fm.Body); // body edited
+        }
+
+        [Fact]
+        public void EditFile_SkillMd_OldStringInFrontmatter_NotFound()
+        {
+            // The name/description live in frontmatter, which edit_skill_file does not touch.
+            _writer.CreateSkill(null, "greeting", "Greeting", "Be a pirate.", "body text");
             Assert.Throws<SkillWriteException>(() =>
-                _writer.EditFile(null, "greeting", "SKILL.md", "body", "x", false));
+                _writer.EditFile(null, "greeting", "SKILL.md", "Be a pirate.", "Be a ninja.", false));
         }
 
         [Fact]

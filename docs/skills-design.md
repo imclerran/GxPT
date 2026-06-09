@@ -220,7 +220,10 @@ update_skill(scope?, slug, name?, description?, body?) -- structured edit of the
 ```
 **Tier 2 — maintenance:**
 ```
-edit_skill_file(scope?, slug, relpath, old_string, new_string)  -- string-replace (files__edit parity)
+edit_skill_file(scope?, slug, relpath, old_string, new_string)  -- string-replace (files__edit parity);
+                                                                   for SKILL.md the replace is confined to
+                                                                   the BODY + frontmatter re-assembled
+                                                                   (name/description stay update_skill's)
 list_skill_files(scope?, slug)                                  -- ReadOnly enumerate (spans disabled)
 delete_skill_file(scope?, slug, relpath) / delete_skill(scope?, slug)
 validate_skill(scope?, slug)                                    -- ReadOnly: does the SKILL.md load? (its own tool,
