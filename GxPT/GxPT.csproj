@@ -368,6 +368,7 @@
       <McpServerFiles Include="..\servers\WebSearchMcpServer\bin\$(Configuration)\**\*.*" Exclude="..\servers\WebSearchMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\WebSearchMcpServer\bin\$(Configuration)\**\*.xml" />
       <McpServerFiles Include="..\servers\MSBuildMcpServer\bin\$(Configuration)\**\*.*" Exclude="..\servers\MSBuildMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\MSBuildMcpServer\bin\$(Configuration)\**\*.xml" />
       <McpServerFiles Include="..\servers\MemoryMcpServer\bin\$(Configuration)\**\*.*" Exclude="..\servers\MemoryMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\MemoryMcpServer\bin\$(Configuration)\**\*.xml" />
+      <McpServerFiles Include="..\servers\SkillsMcpServer\bin\$(Configuration)\**\*.*" Exclude="..\servers\SkillsMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\SkillsMcpServer\bin\$(Configuration)\**\*.xml" />
     </ItemGroup>
     <Copy SourceFiles="@(McpServerFiles)" DestinationFiles="@(McpServerFiles->'$(OutDir)mcp-servers\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" ContinueOnError="true" />
   </Target>
