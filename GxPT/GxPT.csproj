@@ -372,6 +372,14 @@
       <McpServerFiles Include="..\servers\SkillsMcpServer\bin\$(Configuration)\**\*.*" Exclude="..\servers\SkillsMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\SkillsMcpServer\bin\$(Configuration)\**\*.xml" />
     </ItemGroup>
     <Copy SourceFiles="@(McpServerFiles)" DestinationFiles="@(McpServerFiles->'$(OutDir)mcp-servers\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" ContinueOnError="true" />
+    <!-- Ship the bundled (first-party) skills next to GxPT.exe in a 'skills' folder. The host's
+         SkillInjection.BundledRoot resolves <exe>/skills, and SkillsMcpServer gets the same path as
+         GXPT_SKILLS_BUNDLED_ROOT, so a shipped skill (e.g. skill-writer) is discoverable and its
+         scripts runnable. Mirrors the mcp-servers copy above. -->
+    <ItemGroup>
+      <BundledSkillFiles Include="..\skills\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(BundledSkillFiles)" DestinationFiles="@(BundledSkillFiles->'$(OutDir)skills\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" ContinueOnError="true" />
   </Target>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it.
        Other similar extension points exist, see Microsoft.Common.targets.

@@ -747,6 +747,86 @@
             "IsDependency" = "11:TRUE"
             "IsolateTo" = "8:"
             }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_AEAD08493BAD4918B056AED37CBD650F"
+            {
+            "SourcePath" = "8:..\\skills\\skill-writer\\SKILL.md"
+            "TargetName" = "8:SKILL.md"
+            "Tag" = "8:"
+            "Folder" = "8:_AA812549F7C74E0BB5EA0EC9B751D2EA"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_261EC6B4B260410AAE08F01D2070BA84"
+            {
+            "SourcePath" = "8:..\\skills\\skill-writer\\writing-skills.md"
+            "TargetName" = "8:writing-skills.md"
+            "Tag" = "8:"
+            "Folder" = "8:_AA812549F7C74E0BB5EA0EC9B751D2EA"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_9FC1EE1075E7414A88F7D4D96771F091"
+            {
+            "SourcePath" = "8:..\\skills\\skill-writer\\scripts.md"
+            "TargetName" = "8:scripts.md"
+            "Tag" = "8:"
+            "Folder" = "8:_AA812549F7C74E0BB5EA0EC9B751D2EA"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_68309CE064944D27B0C9F40BEF78CC1C"
+            {
+            "SourcePath" = "8:..\\skills\\skill-writer\\tools.md"
+            "TargetName" = "8:tools.md"
+            "Tag" = "8:"
+            "Folder" = "8:_AA812549F7C74E0BB5EA0EC9B751D2EA"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
         }
         "FileType"
         {
@@ -846,6 +926,28 @@
                             "Condition" = "8:"
                             "Transitive" = "11:FALSE"
                             "Property" = "8:_FFE0724ECE6D430A8AFEF5A9B3E017F3"
+                                "Folders"
+                                {
+                                }
+                            }
+                        }
+                    }
+                    "{9EF0B969-E518-4E46-987F-47570745A589}:_657E502881E04A38B2CE316016FA4865"
+                    {
+                    "Name" = "8:skills"
+                    "AlwaysCreate" = "11:FALSE"
+                    "Condition" = "8:"
+                    "Transitive" = "11:FALSE"
+                    "Property" = "8:_8529735EB21F434F8AB3ED266DBC6DFF"
+                        "Folders"
+                        {
+                            "{9EF0B969-E518-4E46-987F-47570745A589}:_AA812549F7C74E0BB5EA0EC9B751D2EA"
+                            {
+                            "Name" = "8:skill-writer"
+                            "AlwaysCreate" = "11:FALSE"
+                            "Condition" = "8:"
+                            "Transitive" = "11:FALSE"
+                            "Property" = "8:_05251BA566C9478185185AF12C880EAB"
                                 "Folders"
                                 {
                                 }
