@@ -229,5 +229,46 @@ namespace GxPT.Tests
             Assert.Contains("(default)", info);              // build-helper / formatter
             Assert.DoesNotContain("(all skills off here)", info);
         }
+
+        // ---- autocomplete ----
+
+        private static ArgCompletion Find(IList<ArgCompletion> list, string display)
+        {
+            for (int i = 0; i < list.Count; i++)
+                if (list[i] != null && list[i].Display == display) return list[i];
+            return null;
+        }
+
+        [Fact]
+        public void Complete_Skills_Empty_OffersListAndVerbsThatAdvance()
+        {
+            IList<ArgCompletion> c = new SkillsCommand().CompleteArgument("", _ctx);
+
+            Assert.NotNull(Find(c, "(list current skills)"));   // bare-command entry
+
+            ArgCompletion on = Find(c, "on");
+            Assert.NotNull(on);
+            Assert.Equal("on ", on.InsertArg);   // trailing space so the scope level populates next
+            Assert.True(on.ContinueCompleting);
+        }
+
+        [Fact]
+        public void Complete_Skills_AfterVerb_OffersScope()
+        {
+            IList<ArgCompletion> c = new SkillsCommand().CompleteArgument("on ", _ctx);
+
+            Assert.NotNull(Find(c, "here"));
+            Assert.Equal("on here", Find(c, "here").InsertArg);
+            Assert.NotNull(Find(c, "global"));
+        }
+
+        [Fact]
+        public void Complete_Skill_AfterVerb_OffersScope()
+        {
+            IList<ArgCompletion> c = new SkillCommand().CompleteArgument("greeting on ", _ctx);
+
+            Assert.NotNull(Find(c, "here"));
+            Assert.Equal("greeting on here", Find(c, "here").InsertArg);
+        }
     }
 }

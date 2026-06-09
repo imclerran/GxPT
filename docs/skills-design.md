@@ -231,7 +231,9 @@ other built-ins.
   next message (the manifest/enabled set is recomputed per send).
 - **Autocomplete:** `/skill` and `/use` complete slugs (annotated with state) via
   `IArgumentCompleter`; `/skill`/`/skills` then complete `on|off|reset` and
-  `here|global`.
+  `here|global`. Each level's accepted value carries a trailing space so the popup
+  advances to the next level immediately (no manual space needed); `/skills` also
+  offers a `(list current skills)` entry so the bare command is selectable.
 
 ---
 

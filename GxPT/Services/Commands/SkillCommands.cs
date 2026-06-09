@@ -196,6 +196,10 @@ namespace GxPT
             int sp = a.IndexOf(' ');
             if (sp < 0)
             {
+                // Offer "run with no arguments" (list) as the default entry, so the bare /skills command
+                // is selectable from the popup; then the verb choices.
+                if (a.Length == 0)
+                    result.Add(new ArgCompletion("(list current skills)", "", false));
                 AddMatching(result, new string[] { "on", "off", "reset" }, a, "", true);
             }
             else
@@ -207,7 +211,9 @@ namespace GxPT
             return result;
         }
 
-        // Adds choices that match the partial token; InsertArg is prefix + choice.
+        // Adds choices that match the partial token. InsertArg = prefix + choice, plus a trailing space
+        // when there is a further level (cont) so accepting it advances the popup to that next level
+        // immediately (matching name-mode / the /tool completer) instead of waiting for a typed space.
         internal static void AddMatching(List<ArgCompletion> into, string[] choices, string partial,
             string prefix, bool cont)
         {
@@ -215,7 +221,7 @@ namespace GxPT
             {
                 if (partial.Length > 0 && !choices[i].StartsWith(partial, StringComparison.OrdinalIgnoreCase))
                     continue;
-                into.Add(new ArgCompletion(choices[i], prefix + choices[i], cont));
+                into.Add(new ArgCompletion(choices[i], prefix + choices[i] + (cont ? " " : ""), cont));
             }
         }
     }
