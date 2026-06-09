@@ -67,7 +67,7 @@ same idea one level up.
 | S13 | **Assets are read by handle via `read_skill_file(slug, relpath)`** (ReadOnly), not `files__*`; resolves against **any discovered skill, not just enabled** | `files__*` is hard-sandboxed to the workspace and rejects absolute paths, so it can't reach a bundled skill's files. A relative-handle read tool resolves `slug`+`relpath` host-side (within the skill root), works for bundled *and* project skills uniformly, and auto-allows by the ReadOnly tier — mirroring `read_memory`. It spans the whole catalog (not just the enabled set, which `open_skill` uses) so the authoring flow can read a *disabled* skill's files to edit it. |
 | S14 | **cwd is always the workspace; the skill dir is a read-only asset source, never a working/output dir** | Skills operate on and write to the user's project, not their own install location (which, for bundled skills, is often non-writable Program Files anyway). `%~dp0` / `GXPT_SKILL_DIR` locate read-only assets; all output goes to cwd. `run_skill_script` therefore requires a workspace (like `command__run`); a workspace-less self-contained skill would use a temp scratch cwd — deferred, never the skill dir. |
 | S15 | **`run_skill_script` is Destructive but remember-eligible by exact `(slug, relpath)`**; pipelines live *inside* the script | Because the surface is a fixed declared entry (not an arbitrary string), a remembered approval is narrow and auditable — *less* friction than `command__run` while *more* locked down. Args are shown each run but aren't part of the remembered grain. Output filtering belongs inside the batch (`… | findstr …`); a shell pipeline in the tool call would re-import the arbitrary-shell surface the tool exists to remove. |
-| S16 | **Skill *authoring* is a dedicated writer surface on `SkillsMcpServer`** (`create_skill`/`write_skill_file`/`update_skill`, then tier-2 `edit_skill_file`/`list_skill_files`/`delete_*`/`validate_skill`), **not `files__*`**, with a `scope` arg (project/user) from day one | Dedicated tools give skill-aware validation (structured frontmatter → a guaranteed-loadable `SKILL.md`) and extend to the `%AppData%` user-global root that workspace-sandboxed `files__*` can't reach (§5). Writes are Write-tier (by `(scope, slug)`); `delete_*` Destructive; writing a `.bat` is only Write — running it stays the `run_skill_script` gate. Powers a bundled `create-skill` skill (the writer role memory has via `MemoryMcpServer`). |
+| S16 | **Skill *authoring* is a dedicated writer surface on `SkillsMcpServer`** (`create_skill`/`write_skill_file`/`update_skill`, then tier-2 `edit_skill_file`/`list_skill_files`/`delete_*`/`validate_skill`), **not `files__*`**, with a `scope` arg (project/user) from day one | Dedicated tools give skill-aware validation (structured frontmatter → a guaranteed-loadable `SKILL.md`) and extend to the `%AppData%` user-global root that workspace-sandboxed `files__*` can't reach (§5). Writes are Write-tier (by `(scope, slug)`); `delete_*` Destructive; writing a `.bat` is only Write — running it stays the `run_skill_script` gate. Powers a bundled `skill-writer` skill (the writer role memory has via `MemoryMcpServer`). |
 
 ---
 
@@ -200,7 +200,7 @@ run_skill_script(slug, relpath, args[])
 ### Authoring — `SkillsMcpServer` (S16)
 
 The same server hosts the **writer** surface, so the model can create and maintain
-skills (powering a bundled `create-skill` skill — the writer role memory has via
+skills (powering a bundled `skill-writer` skill — the writer role memory has via
 `MemoryMcpServer`). **Dedicated tools, not `files__*`** — chosen for skill-aware
 validation and because they extend to the `%AppData%` user-global root that the
 workspace-sandboxed `files__*` can never reach. All writes target the **writable**
@@ -419,7 +419,7 @@ Same dual-world pattern as the rest of the repo (net48 linked-source via
    arg, structured frontmatter, Write/Destructive tiers.
 8. **Bundled skills + deploy**: ship first-party skills via a `skills/` source folder
    copied next to the exe (`AfterBuild` + setup `.vdproj`) — including the
-   **`create-skill`** skill, which depends on phase 7.
+   **`skill-writer`** skill, which depends on phase 7.
 9. **(Optional/later)** user-global (`%AppData%`) skills + the `scope=user` path; LRU
    cap on opened bodies; the **ephemeral opened-bodies** model (unload `open_skill`
    bodies on disable, instead of persisting them as tool results — see §11).

@@ -10,7 +10,7 @@ namespace GxPT
     internal static class SkillMeta
     {
         // The meta-skill that owns the authoring tools (its slug / folder name).
-        public const string SkillWriterSlug = "create-skill";
+        public const string SkillWriterSlug = "skill-writer";
 
         // Server-qualified authoring tool names gated on the meta-skill.
         public static readonly string[] AuthoringTools = new string[]
