@@ -8,6 +8,9 @@ using Xunit;
 
 namespace GxPT.Tests
 {
+    // Shares a collection with SkillEnablementTests so the static SkillEnablement.FilePathOverride they
+    // both set can't race under xUnit's parallel-by-collection execution.
+    [Collection("SkillsGlobalState")]
     public sealed class SkillCommandsTests : IDisposable
     {
         private readonly string _root;

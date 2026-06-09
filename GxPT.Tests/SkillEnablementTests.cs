@@ -6,6 +6,9 @@ using Xunit;
 
 namespace GxPT.Tests
 {
+    // Serialized with the other class that mutates the static SkillEnablement.FilePathOverride, so the
+    // shared global state can't race under xUnit's parallel-by-collection execution.
+    [Collection("SkillsGlobalState")]
     public sealed class SkillEnablementTests : IDisposable
     {
         private readonly string _root;
