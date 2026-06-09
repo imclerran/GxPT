@@ -138,6 +138,23 @@ namespace GxPT.Tests
         }
 
         [Fact]
+        public void Skills_TrailingTokens_Fail()
+        {
+            SlashCommandResult r = new SkillsCommand().Invoke("on here garbage", _ctx);
+            Assert.NotNull(r.Error);
+            Assert.False(SkillEnablement.LoadGlobal().FeatureOff); // nothing applied
+        }
+
+        [Fact]
+        public void Skill_TrailingTokens_Fail()
+        {
+            WriteSkill("greeting", "Be a pirate.", "b");
+            SlashCommandResult r = new SkillCommand().Invoke("greeting on global junk", _ctx);
+            Assert.NotNull(r.Error);
+            Assert.Null(SkillEnablement.LoadGlobal().GetSkillOverride("greeting")); // nothing applied
+        }
+
+        [Fact]
         public void Skills_AnyEnablementChange_RefreshesSkillsServer()
         {
             // The Skills MCP server follows skill enablement, so every enablement change - global OR

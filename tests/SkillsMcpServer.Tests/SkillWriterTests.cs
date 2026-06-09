@@ -178,6 +178,21 @@ namespace SkillsMcpServer.Tests
                 _writer.CreateSkill("elsewhere", "a", "Name", "Desc", "body"));
         }
 
+        [Fact]
+        public void UpdateSkill_NameLessSkillMd_StaysNameLess()
+        {
+            // Hand-write a SKILL.md with no name line, then update an unrelated field.
+            string dir = Path.Combine(_project, "nameless");
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(Path.Combine(dir, "SKILL.md"), "---\ndescription: Old.\n---\n\nbody\n");
+
+            _writer.UpdateSkill(null, "nameless", null, "New.", null); // description only
+
+            string text = File.ReadAllText(SkillFile("nameless"));
+            Assert.DoesNotContain("name:", text);          // no name forced onto it
+            Assert.Contains("description: New.", text);
+        }
+
         // ---- default scope (the workdir-less instance defaults to user, not project) ----
 
         [Fact]

@@ -92,6 +92,8 @@ namespace GxPT
                 ctx.WriteInfo(BuildList(cat, global, ctx));
                 return SlashCommandResult.Handled();
             }
+            if (tok.Length > 2) // verb + optional scope; reject trailing junk rather than silently ignore
+                return SlashCommandResult.Fail("Usage: /skills [on|off|reset] [here|global]");
 
             bool isGlobal = false;
             if (tok.Length >= 2 && !SkillCommands.TryScope(tok[1], out isGlobal))
@@ -235,7 +237,7 @@ namespace GxPT
         public override SlashCommandResult Invoke(string args, ISlashCommandContext ctx)
         {
             string[] tok = SkillCommands.Tokens(args);
-            if (tok.Length == 0)
+            if (tok.Length == 0 || tok.Length > 3) // slug + optional verb + optional scope; no trailing junk
                 return SlashCommandResult.Fail("Usage: /skill <slug> [on|off|reset] [here|global]");
 
             SkillCatalog cat = SkillCommands.BuildCatalog(ctx);

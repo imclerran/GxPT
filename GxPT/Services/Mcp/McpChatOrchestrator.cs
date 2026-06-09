@@ -199,6 +199,11 @@ namespace GxPT
                     tools = FilterHiddenDefs(tools, HiddenToolNames);
                     manifest = FilterHiddenManifest(manifest, HiddenToolNames);
                 }
+                // If filtering removed every tool line, drop the manifest entirely - otherwise the model
+                // is left with the framing ("The following MCP tools are available... Available tools:")
+                // over an empty list (e.g. a folderless turn whose only resolvable tools are all hidden).
+                if (manifest != null && manifest.IndexOf("\n- ", StringComparison.Ordinal) < 0)
+                    manifest = null;
                 _log.Log("mcp", "[turn " + turnId + "] iteration " + (iter + 1) + "/" + budget
                     + ": requesting model with " + (tools != null ? tools.Count : 0) + " exposed tool(s)");
 

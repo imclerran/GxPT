@@ -101,7 +101,7 @@ namespace SkillsMcpServer
             if (description != null) RequireSingleLine(description, "description");
 
             SkillFrontmatter fm = SkillFrontmatter.Parse(existing);
-            string newName = name != null ? name : (fm.Name != null ? fm.Name : slug);
+            string newName = name != null ? name : fm.Name; // may stay null -> name line omitted (no slug forced)
             string newDesc = description != null ? description : fm.Description;
             string newBody = body != null ? body : fm.Body;
             if (IsBlank(newDesc)) throw new SkillWriteException("description is required");
@@ -156,8 +156,11 @@ namespace SkillsMcpServer
                     throw new SkillWriteException("old_string is not unique in SKILL.md's body (" + bodyCount
                         + " matches); make it unique or set replace_all");
 
+                // Re-assembling through BuildSkillMd canonicalizes the file (frontmatter normalized, body
+                // trimmed of surrounding whitespace via the parser) - same normalization as update_skill,
+                // and the price of keeping SKILL.md always server-assembled / guaranteed-loadable.
                 string newBody = replaceAll ? body.Replace(oldB, newB) : ReplaceFirst(body, oldB, newB);
-                AtomicWrite(full, BuildSkillMd(fm.Name != null ? fm.Name : slug, fm.Description, newBody));
+                AtomicWrite(full, BuildSkillMd(fm.Name, fm.Description, newBody));
                 return "Edited SKILL.md body in skill '" + slug + "' ("
                     + (replaceAll ? bodyCount + " replacement" + (bodyCount == 1 ? "" : "s") : "1 replacement") + ").";
             }
@@ -317,7 +320,10 @@ namespace SkillsMcpServer
         {
             StringBuilder sb = new StringBuilder();
             sb.Append("---\n");
-            sb.Append("name: ").Append(name.Trim()).Append('\n');
+            // Omit the name line when there's no name, rather than synthesizing one - so an update/edit of
+            // a name-less SKILL.md doesn't silently inject `name: <slug>` (the catalog falls back to the
+            // slug for display anyway). create_skill requires a name, so created skills always have one.
+            if (!IsBlank(name)) sb.Append("name: ").Append(name.Trim()).Append('\n');
             sb.Append("description: ").Append(description.Trim()).Append('\n');
             sb.Append("---\n\n");
             string b = body != null ? body : string.Empty;

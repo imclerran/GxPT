@@ -64,6 +64,10 @@ namespace GxPT
             string[] dirs;
             try { dirs = Directory.GetDirectories(root); }
             catch { return; }
+            // Sort so two folders in the SAME root that normalize to the same slug (e.g. "Release Notes"
+            // and "release-notes") resolve deterministically (last in ordinal order wins), not in
+            // filesystem-enumeration order. Cross-root shadowing is handled by the scan order in Build.
+            Array.Sort(dirs, StringComparer.Ordinal);
 
             for (int i = 0; i < dirs.Length; i++)
             {
