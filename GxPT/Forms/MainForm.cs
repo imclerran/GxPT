@@ -1046,6 +1046,12 @@ namespace GxPT
                 // Skills server (authoring/execution tools); off by default like the other powerful
                 // servers. The read-side skills feature is separate (always on when skills exist).
                 opts.SkillsEnabled = AppSettings.GetBool("mcp_skills_enabled", false);
+                // Skill roots the server resolves scripts against: bundled (<exe>/skills, shipped with the
+                // app) and user-global (%AppData%/GxPT/skills). The project root is derived from
+                // GXPT_WORKDIR inside the server. These mirror the read-side roots (SkillInjection).
+                opts.SkillsBundledRoot = SkillInjection.BundledRoot(baseDir);
+                opts.SkillsUserRoot = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GxPT\\skills");
                 opts.WebSearchKey = AppSettings.GetString("mcp_websearch_key");
                 opts.CurlPath = curlPath;
                 // Server exes: dev builds deploy them to a 'mcp-servers' subfolder (AfterBuild copy);
@@ -3498,6 +3504,12 @@ namespace GxPT
                 {
                     string rel = Str(args, "relpath");
                     header = rel.Length > 0 ? "Read skill file: " + rel : "Read skill file";
+                    return true;
+                }
+                case "skills__run_skill_script":
+                {
+                    string rel = Str(args, "relpath");
+                    header = rel.Length > 0 ? "Ran skill script: " + rel : "Ran a skill script";
                     return true;
                 }
                 default: return false;

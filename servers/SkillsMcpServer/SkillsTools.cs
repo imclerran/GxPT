@@ -1,5 +1,8 @@
+using System;
+using System.Collections.Generic;
 using Mcp35.Core.Protocol;
 using Mcp35.Server;
+using Mcp35.Server.Process;
 using Newtonsoft.Json.Linq;
 
 namespace SkillsMcpServer
@@ -13,9 +16,28 @@ namespace SkillsMcpServer
     /// </summary>
     internal static class SkillsTools
     {
+        private const int DefaultTimeoutMs = 60000;
+        private const int MaxTimeoutMs = 600000;
+        private const int OutputCap = 100000; // chars per stream
+
         public static void Register(McpServer server, SkillsConfig config)
         {
             SkillWriter writer = new SkillWriter(config.ProjectRoot, config.UserRoot);
+            SkillScriptRunner scripts = new SkillScriptRunner(config);
+
+            server.AddTool("run_skill_script",
+                "Run a skill's bundled batch script (.bat/.cmd) by (slug, relpath), passing literal "
+                + "arguments. The script runs in the conversation's working directory (the project folder); "
+                + "its own folder is reachable read-only via %~dp0 and %GXPT_SKILL_DIR%. Arguments are passed "
+                + "verbatim - they are not a shell command, so do not chain commands or use shell operators.",
+                SchemaBuilder.Object()
+                    .Str("slug", true, "The skill that owns the script.")
+                    .Str("relpath", true, "Path to the script relative to the skill folder, e.g. scripts/gen.bat.")
+                    .Arr("args", "string", false, "Arguments to pass to the script, each as a separate literal token.")
+                    .Int("timeout_ms", false, "Kill the script after this many milliseconds (default 60000).")
+                    .Build(),
+                ToolAnnotations.Destructive(),
+                delegate(ToolCallContext ctx) { return RunScript(scripts, ctx); });
 
             server.AddTool("create_skill",
                 "Create a NEW skill: writes its SKILL.md from the given fields (the server assembles valid "
@@ -163,6 +185,73 @@ namespace SkillsMcpServer
                     try { return ToolResults.Text(writer.ValidateSkill(Str(ctx, "scope"), Str(ctx, "slug"))); }
                     catch (SkillWriteException ex) { return ToolResults.Error(ex.Message); }
                 });
+        }
+
+        private static CallToolResult RunScript(SkillScriptRunner scripts, ToolCallContext ctx)
+        {
+            string slug = Str(ctx, "slug");
+            string relpath = Str(ctx, "relpath");
+            if (string.IsNullOrEmpty(slug)) return ToolResults.Error("slug is required");
+            if (string.IsNullOrEmpty(relpath)) return ToolResults.Error("relpath is required");
+
+            List<string> args = StrList(ctx, "args");
+            int timeout = IntArg(ctx, "timeout_ms", DefaultTimeoutMs, 1, MaxTimeoutMs);
+
+            SkillScriptTarget target;
+            try { target = scripts.Resolve(slug, relpath); }
+            catch (SkillScriptException ex) { return ToolResults.Error(ex.Message); }
+
+            ProcessResult result;
+            try { result = scripts.RunResolved(target, args, timeout); }
+            catch (SkillScriptException ex) { return ToolResults.Error(ex.Message); } // bad argument token
+            catch (Exception ex) { return ToolResults.Error("failed to run script: " + ex.Message); }
+
+            bool outTrunc, errTrunc;
+            JObject outp = new JObject();
+            outp["exitCode"] = result.ExitCode;
+            outp["stdout"] = Cap(result.StdOut, out outTrunc);
+            outp["stderr"] = Cap(result.StdErr, out errTrunc);
+            outp["timedOut"] = result.TimedOut;
+            if (outTrunc || errTrunc) outp["truncated"] = true;
+            return ToolResults.Json(outp);
+        }
+
+        // The string elements of an array arg (skips nulls); empty list when absent.
+        private static List<string> StrList(ToolCallContext ctx, string key)
+        {
+            List<string> list = new List<string>();
+            JToken t = ctx.Arguments[key];
+            JArray arr = t as JArray;
+            if (arr != null)
+            {
+                foreach (JToken e in arr)
+                {
+                    if (e == null || e.Type == JTokenType.Null) continue;
+                    list.Add(e.Type == JTokenType.String ? (string)e : e.ToString());
+                }
+            }
+            return list;
+        }
+
+        private static int IntArg(ToolCallContext ctx, string key, int fallback, int min, int max)
+        {
+            JToken t = ctx.Arguments[key];
+            if (t == null || t.Type == JTokenType.Null) return fallback;
+            int n;
+            try { n = t.Value<int>(); }
+            catch { return fallback; }
+            if (n < min) return min;
+            if (n > max) return max;
+            return n;
+        }
+
+        private static string Cap(string s, out bool truncated)
+        {
+            truncated = false;
+            if (s == null) return string.Empty;
+            if (s.Length <= OutputCap) return s;
+            truncated = true;
+            return s.Substring(0, OutputCap);
         }
 
         // A bool arg, defaulting to false when absent/null.

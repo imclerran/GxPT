@@ -128,6 +128,8 @@ namespace GxPT.Tests.Mcp
                 CurlPath = "C:\\curl.exe",
                 GitPath = "git",
                 CmdShell = "cmd.exe",
+                SkillsBundledRoot = "C:\\app\\skills",
+                SkillsUserRoot = "C:\\users\\me\\AppData\\Roaming\\GxPT\\skills",
                 ServerDir = "C:\\app\\servers"
             };
             var specs = McpConfig.BuiltInSpecs(o);
@@ -167,12 +169,14 @@ namespace GxPT.Tests.Mcp
             Assert.Equal(Path.Combine("C:\\app\\servers", "MemoryMcpServer.exe"), memory.Command);
             Assert.Equal("40", memory.Env[McpConfig.EnvMemoryMaxLines]);
 
-            // skills — workdir-scoped authoring/execution server; GXPT_WORKDIR injected at launch.
+            // skills — workdir-scoped authoring/execution server; GXPT_WORKDIR injected at launch, the
+            // bundled + user skill roots baked in so run_skill_script can resolve those scopes.
             var skills = byName["skills"];
             Assert.True(skills.Enabled);
             Assert.True(skills.WorkdirScoped);
             Assert.Equal(Path.Combine("C:\\app\\servers", "SkillsMcpServer.exe"), skills.Command);
-            Assert.Empty(skills.Env);
+            Assert.Equal("C:\\app\\skills", skills.Env[McpConfig.EnvSkillsBundledRoot]);
+            Assert.Equal("C:\\users\\me\\AppData\\Roaming\\GxPT\\skills", skills.Env[McpConfig.EnvSkillsUserRoot]);
         }
     }
 }

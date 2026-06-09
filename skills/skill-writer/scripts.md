@@ -33,28 +33,35 @@ if errorlevel 9009 echo Python not found on PATH. Install Python or run the step
 
 You would then also `write_skill_file(slug, "scripts/gen.py", ...)` for the sibling.
 
-## The two locations a script sees at runtime
+## The locations a script sees at runtime
 
-This is the part to get right. A script runs with two distinct places in play, and they never
-collide:
+This is the part to get right. A script runs with the user's project as its working directory,
+while its own files sit somewhere else entirely - and the two never collide:
 
 - **The working directory (cwd) is the user's workspace** - the project the skill operates on.
-  Read inputs and write outputs *here*. This is what the skill is acting on.
-- **`%~dp0` is the skill's own folder** - the read-only home of the script and its bundled
-  siblings (templates, the `.py` it wraps). Reach assets that shipped *with the skill* through
-  `%~dp0`, never by a relative name (a bare name would resolve against the workspace, the wrong
-  place). The same folder is also in `GXPT_SKILL_DIR`.
+  Read inputs and write outputs *here*. This is what the skill is acting on. Never write into the
+  skill's own folder.
+- **`%~dp0` is the script's own folder** - i.e. `scripts/` (with a trailing backslash), wherever
+  the skill was installed. Reach files sitting *next to the script* (the `.py` it wraps, a helper)
+  through `%~dp0`. Never by a bare relative name - that would resolve against the workspace, the
+  wrong place.
+- **`%GXPT_SKILL_DIR%` is the skill's root folder** - the folder that holds `SKILL.md`. Reach
+  assets that live at the skill root (a `template.md`, a reference file) through this. (Since a
+  script under `scripts/` sits one level below the root, `%~dp0` and `%GXPT_SKILL_DIR%` are *not*
+  the same folder - use `%~dp0` for siblings, `%GXPT_SKILL_DIR%` for root-level assets.)
 
-So: **siblings via `%~dp0`, the user's files via the cwd.** A script reads its template from
-`%~dp0template.md` and writes the generated result into the current directory.
+So: **siblings via `%~dp0`, root assets via `%GXPT_SKILL_DIR%`, the user's files via the cwd.** A
+script reads its template from `%GXPT_SKILL_DIR%\template.md` and writes the generated result into
+the current directory.
 
-Environment variables available: `GXPT_SKILL_DIR` (the skill folder, same as `%~dp0`),
-`GXPT_WORKDIR` (the workspace), and `GXPT_SKILL_SLUG`.
+The full set of environment variables: `GXPT_SKILL_DIR` (the skill's root folder), `GXPT_WORKDIR`
+(the workspace), and `GXPT_SKILL_SLUG` (the slug).
 
 ## Never hardcode a path
 
-The skill is installed to a different absolute path on every machine. Locate bundled siblings
-with `%~dp0`; locate the user's files relative to the cwd. Don't write `C:\...` anywhere.
+The skill is installed to a different absolute path on every machine. Locate script-siblings with
+`%~dp0`, root assets with `%GXPT_SKILL_DIR%`, and the user's files relative to the cwd. Don't
+write `C:\...` anywhere.
 
 ## How your future self runs it
 

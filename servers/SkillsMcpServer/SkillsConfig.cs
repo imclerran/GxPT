@@ -14,14 +14,24 @@ namespace SkillsMcpServer
         public readonly string WorkDir;       // conversation workspace (cwd for scripts), or null
         public readonly string ProjectRoot;   // <workdir>/.gxpt/skills, or null when no workspace
         public readonly string UserRoot;      // %AppData%/GxPT/skills, or null until wired
-        public readonly string BundledRoot;   // <exe>/skills, or null (for run_skill_script later)
+        public readonly string BundledRoot;   // <exe>/skills, or null (for run_skill_script)
+        public readonly string Shell;         // cmd.exe (ComSpec / GXPT_CMD_SHELL) for run_skill_script
 
-        private SkillsConfig(string workDir, string projectRoot, string userRoot, string bundledRoot)
+        private SkillsConfig(string workDir, string projectRoot, string userRoot, string bundledRoot, string shell)
         {
             WorkDir = workDir;
             ProjectRoot = projectRoot;
             UserRoot = userRoot;
             BundledRoot = bundledRoot;
+            Shell = shell;
+        }
+
+        // Test-only construction (the production path is FromEnvironment). Internal, so it is reachable
+        // only from the linked-source test assembly.
+        internal static SkillsConfig ForTesting(string workDir, string projectRoot, string userRoot,
+            string bundledRoot, string shell)
+        {
+            return new SkillsConfig(workDir, projectRoot, userRoot, bundledRoot, shell);
         }
 
         public static SkillsConfig FromEnvironment(ILogSink log)
@@ -39,11 +49,16 @@ namespace SkillsMcpServer
             string bundledRoot = Environment.GetEnvironmentVariable("GXPT_SKILLS_BUNDLED_ROOT");
             if (string.IsNullOrEmpty(bundledRoot)) bundledRoot = null;
 
+            string shell = Environment.GetEnvironmentVariable("GXPT_CMD_SHELL");
+            if (string.IsNullOrEmpty(shell)) shell = Environment.GetEnvironmentVariable("ComSpec");
+            if (string.IsNullOrEmpty(shell)) shell = "cmd.exe";
+
             if (log != null)
                 log.Log("skills", "project=" + (projectRoot != null ? projectRoot : "(none)")
-                    + " user=" + (userRoot != null ? userRoot : "(none)"));
+                    + " user=" + (userRoot != null ? userRoot : "(none)")
+                    + " bundled=" + (bundledRoot != null ? bundledRoot : "(none)"));
 
-            return new SkillsConfig(workDir, projectRoot, userRoot, bundledRoot);
+            return new SkillsConfig(workDir, projectRoot, userRoot, bundledRoot, shell);
         }
     }
 }

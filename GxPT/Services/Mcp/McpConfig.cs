@@ -32,6 +32,8 @@ namespace GxPT
         public const string EnvGitPath = "GXPT_GIT_PATH";
         public const string EnvCmdShell = "GXPT_CMD_SHELL";
         public const string EnvMemoryMaxLines = "GXPT_MEMORY_MAX_LINES";
+        public const string EnvSkillsBundledRoot = "GXPT_SKILLS_BUNDLED_ROOT";
+        public const string EnvSkillsUserRoot = "GXPT_SKILLS_USER_ROOT";
 
         // Seeded into a fresh mcp.json so GitHub is discoverable; the user pastes a real PAT.
         public const string SeedJson =
@@ -61,6 +63,8 @@ namespace GxPT
             public string GitPath { get; set; }         // GXPT_GIT_PATH (git)
             public string CmdShell { get; set; }        // GXPT_CMD_SHELL (command)
             public int MemoryMaxLines { get; set; }     // GXPT_MEMORY_MAX_LINES (memory)
+            public string SkillsBundledRoot { get; set; } // GXPT_SKILLS_BUNDLED_ROOT (skills exec: <exe>/skills)
+            public string SkillsUserRoot { get; set; }    // GXPT_SKILLS_USER_ROOT (skills: %AppData%/GxPT/skills)
             public string ServerDir { get; set; }       // directory holding the built server exes
 
             public BuiltInOptions()
@@ -123,9 +127,14 @@ namespace GxPT
                 mem.Env[EnvMemoryMaxLines] = o.MemoryMaxLines.ToString(System.Globalization.CultureInfo.InvariantCulture);
             list.Add(mem);
 
-            // skills - author/edit skill files under GXPT_WORKDIR/.gxpt/skills (and, later, run a skill's
-            // bundled .bat); workdir-scoped (GXPT_WORKDIR injected at launch).
-            list.Add(NewBuiltIn(SkillsName, "SkillsMcpServer.exe", o.ServerDir, true, o.SkillsEnabled));
+            // skills - author/edit skill files under GXPT_WORKDIR/.gxpt/skills and run a skill's bundled
+            // .bat; workdir-scoped (GXPT_WORKDIR injected at launch). The bundled (<exe>/skills) and
+            // user-global (%AppData%) roots are injected so run_skill_script can resolve scripts shipped
+            // with the app or written user-globally, and so scope=user authoring has a target.
+            McpServerSpec skills = NewBuiltIn(SkillsName, "SkillsMcpServer.exe", o.ServerDir, true, o.SkillsEnabled);
+            if (!string.IsNullOrEmpty(o.SkillsBundledRoot)) skills.Env[EnvSkillsBundledRoot] = o.SkillsBundledRoot;
+            if (!string.IsNullOrEmpty(o.SkillsUserRoot)) skills.Env[EnvSkillsUserRoot] = o.SkillsUserRoot;
+            list.Add(skills);
 
             return list;
         }
