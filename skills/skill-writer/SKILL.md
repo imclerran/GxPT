@@ -61,9 +61,15 @@ good skill (especially how to phrase the description and when to split into mult
 
 Summarize back, in plain terms: the name and slug, the one-line description (which states when
 the skill should fire), what the instructions will cover, any supporting files, and any script.
-Let the user correct it. Don't write files until they're happy with the plan.
+Also confirm **where it should live**: just this project (the default), or available in every
+project on this machine. Let the user correct it. Don't write files until they're happy with the
+plan.
 
 ## 5. Write the files
+
+Every write tool takes an optional `scope`: `project` (the default - this workspace's
+`.gxpt/skills`) or `user` (this machine's skills, available in every project). Pass
+`scope: "user"` on every call for a skill the user wants everywhere; otherwise omit it.
 
 Creating a new skill:
 - `create_skill(slug, name, description, body)` - the main `SKILL.md`. Put the workflow /

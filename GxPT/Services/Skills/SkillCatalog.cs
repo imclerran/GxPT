@@ -34,15 +34,23 @@ namespace GxPT
             return _bySlug.TryGetValue(slug, out skill);
         }
 
-        // Scans bundledRoot then projectRoot; a project skill shadows a bundled one of the same slug.
-        // Either root may be null/missing - it is simply skipped.
+        // Convenience: a catalog with no user-global root (bundled + project only).
         public static SkillCatalog Build(string bundledRoot, string projectRoot)
+        {
+            return Build(bundledRoot, null, projectRoot);
+        }
+
+        // Scans bundled, then user, then project; a more specific source shadows a less specific one of
+        // the same slug (project > user > bundled, design S2). Any root may be null/missing - it is
+        // simply skipped.
+        public static SkillCatalog Build(string bundledRoot, string userRoot, string projectRoot)
         {
             Dictionary<string, Skill> bySlug =
                 new Dictionary<string, Skill>(StringComparer.OrdinalIgnoreCase);
 
             ScanRoot(bundledRoot, SkillSource.Bundled, bySlug);
-            ScanRoot(projectRoot, SkillSource.Project, bySlug);   // project overrides bundled
+            ScanRoot(userRoot, SkillSource.User, bySlug);         // user overrides bundled
+            ScanRoot(projectRoot, SkillSource.Project, bySlug);   // project overrides user + bundled
 
             List<Skill> list = new List<Skill>(bySlug.Values);
             list.Sort(delegate(Skill a, Skill b) { return string.CompareOrdinal(a.Slug, b.Slug); });

@@ -29,9 +29,19 @@ namespace GxPT
             return Path.Combine(Path.Combine(workingDir, MemoryInjection.MemoryDirName), SkillsDirName);
         }
 
+        // User-global skills live under %AppData%/GxPT/skills - one set per Windows user, independent of
+        // workspace. The SkillsMcpServer writes/runs them at the same path (GXPT_SKILLS_USER_ROOT), so
+        // read and write stay in sync. Returns null if %AppData% can't be resolved.
+        public static string UserRoot()
+        {
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            if (string.IsNullOrEmpty(appData)) return null;
+            return Path.Combine(Path.Combine(appData, "GxPT"), SkillsDirName);
+        }
+
         public static SkillCatalog BuildCatalog(string exeDir, string workingDir)
         {
-            return SkillCatalog.Build(BundledRoot(exeDir), ProjectRoot(workingDir));
+            return SkillCatalog.Build(BundledRoot(exeDir), UserRoot(), ProjectRoot(workingDir));
         }
 
         // The phase-2 ephemeral block: framing + the slug/description manifest, built from the skills

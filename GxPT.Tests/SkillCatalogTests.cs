@@ -106,6 +106,40 @@ namespace GxPT.Tests
         }
 
         [Fact]
+        public void Build_DiscoversUserSkill()
+        {
+            string user = Path.Combine(_root, "user");
+            WriteSkill(user, "my-skill", "My Skill", "A user-global skill.", "u");
+
+            SkillCatalog cat = SkillCatalog.Build(_bundled, user, _project);
+
+            Skill s;
+            Assert.True(cat.TryGet("my-skill", out s));
+            Assert.Equal(SkillSource.User, s.Source);
+            Assert.Equal("A user-global skill.", s.Description);
+        }
+
+        [Fact]
+        public void Build_UserShadowsBundled_ProjectShadowsUser()
+        {
+            string user = Path.Combine(_root, "user");
+            WriteSkill(_bundled, "shared", null, "From bundled.", "b");
+            WriteSkill(user, "shared", null, "From user.", "u");
+
+            // user shadows bundled
+            Skill s;
+            Assert.True(SkillCatalog.Build(_bundled, user, null).TryGet("shared", out s));
+            Assert.Equal(SkillSource.User, s.Source);
+            Assert.Equal("From user.", s.Description);
+
+            // project shadows user (and bundled)
+            WriteSkill(_project, "shared", null, "From project.", "p");
+            Assert.True(SkillCatalog.Build(_bundled, user, _project).TryGet("shared", out s));
+            Assert.Equal(SkillSource.Project, s.Source);
+            Assert.Equal("From project.", s.Description);
+        }
+
+        [Fact]
         public void Build_MergesBundledAndProject_SortedBySlug()
         {
             WriteSkill(_bundled, "zebra", null, "Z.", "b");

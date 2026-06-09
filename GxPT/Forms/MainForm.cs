@@ -1050,8 +1050,7 @@ namespace GxPT
                 // app) and user-global (%AppData%/GxPT/skills). The project root is derived from
                 // GXPT_WORKDIR inside the server. These mirror the read-side roots (SkillInjection).
                 opts.SkillsBundledRoot = SkillInjection.BundledRoot(baseDir);
-                opts.SkillsUserRoot = System.IO.Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GxPT\\skills");
+                opts.SkillsUserRoot = SkillInjection.UserRoot();
                 opts.WebSearchKey = AppSettings.GetString("mcp_websearch_key");
                 opts.CurlPath = curlPath;
                 // Server exes: dev builds deploy them to a 'mcp-servers' subfolder (AfterBuild copy);

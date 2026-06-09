@@ -2,11 +2,14 @@ using System;
 
 namespace GxPT
 {
-    // Where a discovered skill came from. Project skills shadow bundled skills of the same slug
-    // (design S2). The source is surfaced in the approval prompt for run_skill_script (design S15).
+    // Where a discovered skill came from, in increasing specificity. A more specific source shadows a
+    // less specific one of the same slug: project (this workspace) shadows user (this machine) shadows
+    // bundled (shipped) - design S2. The source is surfaced in the approval prompt for run_skill_script
+    // (design S15).
     internal enum SkillSource
     {
         Bundled,
+        User,
         Project
     }
 
