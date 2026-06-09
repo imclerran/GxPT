@@ -66,6 +66,44 @@ namespace SkillsMcpServer.Tests
         }
 
         [Fact]
+        public void CreateSkill_RejectsNewlineInFrontmatter()
+        {
+            // A newline in name/description could close the --- block early or inject keys.
+            Assert.Throws<SkillWriteException>(() =>
+                _writer.CreateSkill(null, "a", "Name", "ok\n---\nmalicious body", "body"));
+            Assert.Throws<SkillWriteException>(() =>
+                _writer.CreateSkill(null, "a", "Na\nme", "desc", "body"));
+            Assert.Throws<SkillWriteException>(() =>
+                _writer.CreateSkill(null, "a", "Name", "carriage\rreturn", "body"));
+        }
+
+        [Fact]
+        public void UpdateSkill_RejectsNewlineInFrontmatter()
+        {
+            _writer.CreateSkill(null, "greeting", "Greeting", "Be a pirate.", "body");
+            Assert.Throws<SkillWriteException>(() =>
+                _writer.UpdateSkill(null, "greeting", null, "bad\ndesc", null));
+        }
+
+        [Fact]
+        public void WriteFile_RejectsNonAsciiBatch()
+        {
+            _writer.CreateSkill(null, "greeting", "Greeting", "desc", "body");
+            // U+00E9 (e-acute) would be garbled by XP cmd.exe's OEM codepage.
+            Assert.Throws<SkillWriteException>(() =>
+                _writer.WriteFile(null, "greeting", "scripts/gen.bat", "@echo off\necho caf\u00e9"));
+        }
+
+        [Fact]
+        public void WriteFile_AllowsNonAsciiInMarkdown()
+        {
+            _writer.CreateSkill(null, "greeting", "Greeting", "desc", "body");
+            _writer.WriteFile(null, "greeting", "ref.md", "caf\u00e9 \u2014 fine in markdown");
+            string path = Path.Combine(Path.Combine(_project, "greeting"), "ref.md");
+            Assert.Contains("caf\u00e9", File.ReadAllText(path, System.Text.Encoding.UTF8));
+        }
+
+        [Fact]
         public void WriteFile_WritesSupportingScript_AsCrlf()
         {
             _writer.CreateSkill(null, "greeting", "Greeting", "Be a pirate.", "body");

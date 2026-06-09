@@ -111,7 +111,7 @@ namespace GxPT
             foreach (Skill s in skills)
             {
                 if (sb.Length > 0) sb.Append('\n');
-                sb.Append("- ").Append(s.Slug).Append(" \u2014 ").Append(s.Description);
+                sb.Append("- ").Append(s.Slug).Append(" - ").Append(s.Description);
             }
             return sb.ToString();
         }

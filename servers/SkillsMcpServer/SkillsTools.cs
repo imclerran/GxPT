@@ -40,7 +40,7 @@ namespace SkillsMcpServer
                 server.AddTool("run_skill_script",
                     "Run a skill's bundled batch script (.bat/.cmd) by (slug, relpath), passing literal "
                     + "arguments. The script runs in the conversation's working directory (the project folder); "
-                    + "its own folder is reachable read-only via %~dp0 and %GXPT_SKILL_DIR%. Arguments are passed "
+                    + "its own folder is available via %~dp0 and %GXPT_SKILL_DIR% for reading bundled assets. Arguments are passed "
                     + "verbatim - they are not a shell command, so do not chain commands or use shell operators.",
                     SchemaBuilder.Object()
                         .Str("slug", true, "The skill that owns the script.")

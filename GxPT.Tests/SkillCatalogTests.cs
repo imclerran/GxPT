@@ -188,7 +188,7 @@ namespace GxPT.Tests
             SkillCatalog cat = SkillCatalog.Build(_bundled, _project);
 
             string manifest = cat.BuildManifest();
-            string expected = "- alpha \u2014 First.\n- beta \u2014 Second.";
+            string expected = "- alpha - First.\n- beta - Second.";
             Assert.Equal(expected, manifest);
         }
     }

@@ -189,10 +189,10 @@ namespace GxPT.Tests
             Assert.Equal("Use the greeting skill. say hi", r.TextToSend);
             Assert.DoesNotContain("ARRR MATEY", r.TextToSend);
 
-            // The body rides as a hidden system message instead.
-            Assert.Single(_ctx.AttachedSystemContexts);
-            Assert.Contains("# Skill: greeting", _ctx.AttachedSystemContexts[0]);
-            Assert.Contains("ARRR MATEY", _ctx.AttachedSystemContexts[0]);
+            // The body rides as a hidden system message (carried on the result, committed at send).
+            Assert.NotNull(r.SystemContext);
+            Assert.Contains("# Skill: greeting", r.SystemContext);
+            Assert.Contains("ARRR MATEY", r.SystemContext);
         }
 
         [Fact]
@@ -213,7 +213,7 @@ namespace GxPT.Tests
             SlashCommandResult r = new UseCommand().Invoke("greeting", _ctx);
 
             Assert.True(r.SendToModel);   // explicit /use ignores enablement
-            Assert.Contains("ARRR", _ctx.AttachedSystemContexts[0]); // body still attached
+            Assert.Contains("ARRR", r.SystemContext); // body still attached
         }
 
         [Fact]

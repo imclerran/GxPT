@@ -46,6 +46,8 @@ namespace SkillsMcpServer
             string slug = RequireSlug(slugIn);
             if (IsBlank(name)) throw new SkillWriteException("name is required");
             if (IsBlank(description)) throw new SkillWriteException("description is required");
+            RequireSingleLine(name, "name");
+            RequireSingleLine(description, "description");
 
             string file = Path.Combine(Path.Combine(root, slug), "SKILL.md");
             if (File.Exists(file))
@@ -73,7 +75,11 @@ namespace SkillsMcpServer
 
             string text = content != null ? content : string.Empty;
             string ext = (Path.GetExtension(full) ?? string.Empty).ToLowerInvariant();
-            if (ext == ".bat" || ext == ".cmd") text = ToCrlf(text); // XP cmd.exe wants CRLF
+            if (ext == ".bat" || ext == ".cmd")
+            {
+                RequireBatchAscii(text);
+                text = ToCrlf(text); // XP cmd.exe wants CRLF
+            }
             AtomicWrite(full, text);
             return "Wrote " + relpath + " into skill '" + slug + "'.";
         }
@@ -90,6 +96,9 @@ namespace SkillsMcpServer
             string existing;
             try { existing = File.ReadAllText(file, Encoding.UTF8); }
             catch (Exception ex) { throw new SkillWriteException("could not read SKILL.md: " + ex.Message); }
+
+            if (name != null) RequireSingleLine(name, "name");
+            if (description != null) RequireSingleLine(description, "description");
 
             SkillFrontmatter fm = SkillFrontmatter.Parse(existing);
             string newName = name != null ? name : (fm.Name != null ? fm.Name : slug);
@@ -169,7 +178,11 @@ namespace SkillsMcpServer
             string updated = replaceAll ? text.Replace(oldN, newN) : ReplaceFirst(text, oldN, newN);
 
             string ext = (Path.GetExtension(full) ?? string.Empty).ToLowerInvariant();
-            if (ext == ".bat" || ext == ".cmd") updated = ToCrlf(updated); // XP cmd.exe wants CRLF
+            if (ext == ".bat" || ext == ".cmd")
+            {
+                RequireBatchAscii(updated);
+                updated = ToCrlf(updated); // XP cmd.exe wants CRLF
+            }
             AtomicWrite(full, updated);
             return "Edited " + relpath + " in skill '" + slug + "' ("
                 + (replaceAll ? count + " replacement" + (count == 1 ? "" : "s") : "1 replacement") + ").";
@@ -281,6 +294,25 @@ namespace SkillsMcpServer
             return slug;
         }
 
+        // Frontmatter values are single-line by design: a CR/LF would close the "---" block early or
+        // inject keys, producing a forged/unloadable SKILL.md (the very thing these tools exist to prevent).
+        private static void RequireSingleLine(string value, string field)
+        {
+            if (value != null && (value.IndexOf('\n') >= 0 || value.IndexOf('\r') >= 0))
+                throw new SkillWriteException(field + " must be a single line (no line breaks)");
+        }
+
+        // XP cmd.exe reads .bat/.cmd bytes in the OEM/ANSI codepage, not UTF-8, so a non-ASCII character
+        // in a script body would run garbled. Keep scripts ASCII-only (the same constraint as our sources).
+        private static void RequireBatchAscii(string text)
+        {
+            if (text == null) return;
+            for (int i = 0; i < text.Length; i++)
+                if (text[i] > 0x7F)
+                    throw new SkillWriteException("batch/cmd scripts must be ASCII - XP cmd.exe reads them "
+                        + "in the OEM codepage, so non-ASCII characters would be garbled");
+        }
+
         private static string BuildSkillMd(string name, string description, string body)
         {
             StringBuilder sb = new StringBuilder();
@@ -357,18 +389,37 @@ namespace SkillsMcpServer
         }
 
         // Atomic write (mirrors MemoryStore): temp file then replace/move; creates parent dirs.
+        // Write content to a temp file, then swap it into place so a failed write never leaves a
+        // half-written or destroyed target. A leaked temp is cleaned up in finally (it would otherwise
+        // surface in list_skill_files). The fallback path moves the original aside FIRST and restores it
+        // if the swap fails, so the original is never deleted before the new content has landed.
         private static void AtomicWrite(string path, string content)
         {
             string dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
             string tmp = path + "." + Guid.NewGuid().ToString("N").Substring(0, 8) + ".tmp";
-            File.WriteAllText(tmp, content, Utf8NoBom);
-            if (File.Exists(path))
+            try
             {
+                File.WriteAllText(tmp, content, Utf8NoBom);
+
+                if (!File.Exists(path)) { File.Move(tmp, path); return; }
+
+                // Prefer a true atomic replace.
                 try { File.Replace(tmp, path, null); return; }
-                catch { File.Delete(path); }
+                catch { }
+
+                // Replace can fail (cross-volume, AV, lock). Move the original aside, swap in the new
+                // file, and restore the original if that swap fails - so a failed write never loses data.
+                string bak = path + "." + Guid.NewGuid().ToString("N").Substring(0, 8) + ".bak";
+                File.Move(path, bak); // throws here => original untouched
+                try { File.Move(tmp, path); }
+                catch { File.Move(bak, path); throw; } // restore the original, then surface the failure
+                try { File.Delete(bak); } catch { }
             }
-            File.Move(tmp, path);
+            finally
+            {
+                if (File.Exists(tmp)) { try { File.Delete(tmp); } catch { } }
+            }
         }
     }
 }

@@ -71,9 +71,6 @@ namespace GxPT.Tests.Commands
         public int RefreshSkillsServerCount;
         public void RefreshSkillsServer() { RefreshSkillsServerCount++; }
 
-        public readonly List<string> AttachedSystemContexts = new List<string>();
-        public void AttachSystemContext(string text) { AttachedSystemContexts.Add(text); }
-
         public int CompactCount;
         public void NewConversation() { NewConversationCount++; }
         public void ExportConversations() { ExportCount++; }

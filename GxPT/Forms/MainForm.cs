@@ -1439,18 +1439,6 @@ namespace GxPT
             return enabled.Count > 0;
         }
 
-        // Append a hidden system message to the active conversation's history - sent to the model but
-        // never rendered (RebuildTranscript skips system roles), the same channel /compact uses to seed
-        // context. /use attaches a skill's instructions this way so the transcript stays clean. The
-        // pending user send (which follows) persists the conversation, so no explicit save here.
-        internal void SlashAttachSystemContext(string text)
-        {
-            if (string.IsNullOrEmpty(text)) return;
-            var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
-            if (c == null || c.Conversation == null || c.Conversation.History == null) return;
-            c.Conversation.History.Add(new ChatMessage("system", text));
-        }
-
         // The Skills MCP server tracks skill enablement; rebuild the host only when that crosses the
         // on/off boundary (so per-skill toggles that don't change whether ANY skill is enabled cost
         // nothing). Called after skills slash-command changes and on tab switches.
@@ -1749,6 +1737,7 @@ namespace GxPT
             // commands expand in place (the expansion becomes the actual user message), while gated or
             // invalid commands are surfaced without sending. Unknown "/foo" returns null and is sent
             // literally, so ordinary messages that happen to start with "/" are not hijacked.
+            string pendingSystemContext = null; // a slash command's hidden system message, committed at send
             if (baseText.Length > 0 && baseText[0] == '/')
             {
                 EnsureSlashCommands();
@@ -1771,6 +1760,7 @@ namespace GxPT
                     // Prompt expansion: send the template instead of the typed "/command".
                     baseText = slash.TextToSend;
                     text = slash.TextToSend;
+                    pendingSystemContext = slash.SystemContext; // flushed to history at the send commit
                 }
             }
 
@@ -1906,6 +1896,11 @@ namespace GxPT
                         ctx.Transcript.AddMessage(MessageRole.User, textForTranscript, attachmentsSnapshot);
                     else
                         ctx.Transcript.AddMessage(MessageRole.User, textForTranscript);
+                    // A slash command's hidden system context (e.g. /use's skill body) is committed to
+                    // history right before the user message - so it's never orphaned if an earlier path
+                    // returned. It is sent to the model but not rendered (RebuildTranscript skips system).
+                    if (!string.IsNullOrEmpty(pendingSystemContext))
+                        ctx.Conversation.History.Add(new ChatMessage("system", pendingSystemContext));
                     // Store in conversation history
                     ctx.Conversation.AddUserMessage(baseText);
                     try

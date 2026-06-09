@@ -24,9 +24,12 @@ namespace SkillsMcpServer
     /// Runs a skill's declared batch entry (design S9/S11-S15). The model names a (slug, relpath); the
     /// server resolves the slug to a skill folder across all roots (project shadows user shadows bundled),
     /// confines relpath to that folder, allows only .bat/.cmd, runs it via cmd.exe with cwd = the
-    /// workspace and the skill folder reachable read-only through %~dp0 / GXPT_SKILL_DIR. Args are passed
+    /// workspace and the skill folder reachable through %~dp0 / GXPT_SKILL_DIR (for reading its bundled
+    /// assets - by convention; nothing actually prevents the script from writing there). Args are passed
     /// as literal, individually-quoted tokens - no shell metacharacters from the model are honored. A
-    /// workspace is required (like command__run). The host gates this Destructive, always-confirm.
+    /// workspace is required (like command__run). The real safety boundary is the host's Destructive,
+    /// always-confirm gate, NOT a sandbox: the script body is author-written and can do anything the user
+    /// can, so the user approves each run.
     ///
     /// Resolution + quoting are pure and unit-tested; only Run() spawns a process (Windows-only).
     /// </summary>
@@ -135,7 +138,7 @@ namespace SkillsMcpServer
             // first/last-quote stripping).
             req.Arguments = "/s /c \"" + BuildCommandLine(target.BatPath, args) + "\"";
             req.WorkingDirectory = _config.WorkDir;       // cwd = the workspace (S14)
-            req.Environment = BuildEnvironment(target);   // skill folder reachable read-only
+            req.Environment = BuildEnvironment(target);   // skill folder reachable for its bundled assets
             req.TimeoutMs = timeoutMs;
             return _runner.Run(req);
         }
@@ -143,7 +146,7 @@ namespace SkillsMcpServer
         private IDictionary<string, string> BuildEnvironment(SkillScriptTarget target)
         {
             Dictionary<string, string> env = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            env["GXPT_SKILL_DIR"] = target.SkillDir;      // the skill's root folder (read-only assets)
+            env["GXPT_SKILL_DIR"] = target.SkillDir;      // the skill's root folder (read its bundled assets; write to cwd)
             env["GXPT_SKILL_SLUG"] = target.Slug;
             env["GXPT_WORKDIR"] = _config.WorkDir;
             return env;

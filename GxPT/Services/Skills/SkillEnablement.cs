@@ -96,10 +96,12 @@ namespace GxPT
                 if (obj == null) return result;
 
                 object featureOff;
-                if (obj.TryGetValue("feature_off", out featureOff) && featureOff != null)
-                    result._featureOff = Convert.ToBoolean(featureOff);
+                bool fo;
+                if (obj.TryGetValue("feature_off", out featureOff) && TryToBool(featureOff, out fo))
+                    result._featureOff = fo;
 
-                // New schema: a { slug: bool } map.
+                // New schema: a { slug: bool } map. Convert each value defensively and skip a malformed
+                // one (a non-bool JSON value), so one bad entry doesn't abort parsing the rest of the file.
                 object skills;
                 if (obj.TryGetValue("skills", out skills))
                 {
@@ -109,7 +111,9 @@ namespace GxPT
                         foreach (KeyValuePair<string, object> kv in map)
                         {
                             if (string.IsNullOrEmpty(kv.Key) || kv.Value == null) continue;
-                            result._skills[kv.Key] = Convert.ToBoolean(kv.Value);
+                            bool v;
+                            if (!TryToBool(kv.Value, out v)) continue;
+                            result._skills[kv.Key] = v;
                         }
                     }
                 }
@@ -133,6 +137,17 @@ namespace GxPT
             }
             catch { }
             return result;
+        }
+
+        // Coerce a deserialized JSON value to bool without throwing: accepts a real bool, or anything
+        // Convert.ToBoolean handles ("true"/"false", numbers); returns false (skip) for anything else.
+        private static bool TryToBool(object value, out bool result)
+        {
+            result = false;
+            if (value == null) return false;
+            if (value is bool) { result = (bool)value; return true; }
+            try { result = Convert.ToBoolean(value); return true; }
+            catch { return false; }
         }
 
         private static void WriteLocked(SkillEnablement e)

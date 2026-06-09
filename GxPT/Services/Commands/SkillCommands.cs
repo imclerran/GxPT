@@ -358,14 +358,15 @@ namespace GxPT
             if (!SkillCommands.ResolveSkill(cat, slugArg, out skill))
                 return SlashCommandResult.Fail("Unknown skill: " + slugArg);
 
-            // The skill body rides as a hidden system message; the transcript shows only the short ask.
-            ctx.AttachSystemContext(
+            // The skill body rides as a hidden system message (committed at send, not now), so the
+            // transcript shows only the short ask and an early return can't orphan it.
+            string systemContext =
                 "The user invoked this skill with /use. Follow its instructions for their request.\n\n"
-                + SkillTools.RenderSkill(skill));
+                + SkillTools.RenderSkill(skill);
 
             string msg = "Use the " + skill.Slug + " skill.";
             if (rest.Length > 0) msg += " " + rest;
-            return SlashCommandResult.Send(msg);
+            return SlashCommandResult.Send(msg, systemContext);
         }
 
         public IList<ArgCompletion> CompleteArgument(string argText, ISlashCommandContext ctx)
