@@ -23,11 +23,20 @@ namespace SkillsMcpServer
 
         private readonly string _projectRoot; // <workdir>/.gxpt/skills, or null when no workspace
         private readonly string _userRoot;    // %AppData%/GxPT/skills, or null until wired
+        private readonly string _defaultScope; // scope used when a call omits it ("project" or "user")
 
         public SkillWriter(string projectRoot, string userRoot)
+            : this(projectRoot, userRoot, "project")
+        {
+        }
+
+        // defaultScope is the scope applied when a tool call omits `scope`. The workdir instance defaults
+        // to "project"; the workdir-less instance defaults to "user" (project isn't reachable there).
+        public SkillWriter(string projectRoot, string userRoot, string defaultScope)
         {
             _projectRoot = projectRoot;
             _userRoot = userRoot;
+            _defaultScope = string.IsNullOrEmpty(defaultScope) ? "project" : defaultScope;
         }
 
         // create_skill: a NEW skill (refuses if it exists); assembles a guaranteed-loadable SKILL.md.
@@ -221,8 +230,8 @@ namespace SkillsMcpServer
 
         private string RootFor(string scope)
         {
-            string s = (scope == null ? "project" : scope.Trim().ToLowerInvariant());
-            if (s.Length == 0) s = "project";
+            string s = (scope == null ? _defaultScope : scope.Trim().ToLowerInvariant());
+            if (s.Length == 0) s = _defaultScope;
             if (s == "project")
             {
                 if (string.IsNullOrEmpty(_projectRoot))

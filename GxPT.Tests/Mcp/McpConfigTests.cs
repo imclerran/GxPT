@@ -177,6 +177,7 @@ namespace GxPT.Tests.Mcp
             Assert.Equal(Path.Combine("C:\\app\\servers", "SkillsMcpServer.exe"), skills.Command);
             Assert.Equal("C:\\app\\skills", skills.Env[McpConfig.EnvSkillsBundledRoot]);
             Assert.Equal("C:\\users\\me\\AppData\\Roaming\\GxPT\\skills", skills.Env[McpConfig.EnvSkillsUserRoot]);
+            Assert.True(skills.RunsWithoutWorkdir); // also runs a workdir-less instance for global authoring
         }
     }
 }

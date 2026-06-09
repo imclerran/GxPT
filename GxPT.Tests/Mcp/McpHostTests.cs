@@ -69,6 +69,38 @@ namespace GxPT.Tests.Mcp
         }
 
         [Fact]
+        public void Start_opens_workdirless_instance_for_RunsWithoutWorkdir_scoped_server()
+        {
+            FakeServerConnector c; McpToolRegistry reg;
+            var host = NewHost(out c, out reg);
+
+            var skills = Specs.Scoped("skills", true);
+            skills.RunsWithoutWorkdir = true;
+            host.Start(new[] { skills, Specs.Scoped("files", true) });
+
+            // skills got an eager, workdir-less instance at Start; plain scoped files did not.
+            Assert.Equal(new[] { "skills" }, c.CreatedNames.ToArray());
+            Assert.Null(c.Workdirs[c.CreatedNames.IndexOf("skills")]); // created with no workdir
+            Assert.Contains("skills__skills_tool", Manifest(reg)); // usable without ensuring a workdir
+        }
+
+        [Fact]
+        public void RunsWithoutWorkdir_server_also_opens_a_per_workdir_instance()
+        {
+            FakeServerConnector c; McpToolRegistry reg;
+            var host = NewHost(out c, out reg);
+            var skills = Specs.Scoped("skills", true);
+            skills.RunsWithoutWorkdir = true;
+
+            host.Start(new[] { skills });          // eager (null workdir) instance
+            host.EnsureWorkingDir("C:\\proj");     // per-workdir instance
+
+            Assert.Equal(2, c.CreatedNames.FindAll(delegate(string n) { return n == "skills"; }).Count);
+            Assert.Contains(null, c.Workdirs);
+            Assert.Contains("C:\\proj", c.Workdirs);
+        }
+
+        [Fact]
         public void EnsureWorkingDir_is_idempotent_for_the_same_folder()
         {
             FakeServerConnector c; McpToolRegistry reg;

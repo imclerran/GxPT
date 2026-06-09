@@ -22,22 +22,35 @@ namespace SkillsMcpServer
 
         public static void Register(McpServer server, SkillsConfig config)
         {
-            SkillWriter writer = new SkillWriter(config.ProjectRoot, config.UserRoot);
-            SkillScriptRunner scripts = new SkillScriptRunner(config);
+            // Two-mode: with a workspace (GXPT_WORKDIR set) the server offers the full surface and defaults
+            // writes to project scope; without one (the workdir-independent instance) it advertises only the
+            // authoring tools - run_skill_script and project-scope writes can't work without a workspace -
+            // and defaults writes to user (global) scope.
+            bool hasWorkdir = !string.IsNullOrEmpty(config.WorkDir);
+            string defaultScope = hasWorkdir ? "project" : "user";
+            string scopeDesc = hasWorkdir
+                ? "'project' (default, this workspace's .gxpt/skills) or 'user' (this machine's global skills)."
+                : "'user' (default; this conversation has no project folder). 'project' is unavailable here.";
 
-            server.AddTool("run_skill_script",
-                "Run a skill's bundled batch script (.bat/.cmd) by (slug, relpath), passing literal "
-                + "arguments. The script runs in the conversation's working directory (the project folder); "
-                + "its own folder is reachable read-only via %~dp0 and %GXPT_SKILL_DIR%. Arguments are passed "
-                + "verbatim - they are not a shell command, so do not chain commands or use shell operators.",
-                SchemaBuilder.Object()
-                    .Str("slug", true, "The skill that owns the script.")
-                    .Str("relpath", true, "Path to the script relative to the skill folder, e.g. scripts/gen.bat.")
-                    .Arr("args", "string", false, "Arguments to pass to the script, each as a separate literal token.")
-                    .Int("timeout_ms", false, "Kill the script after this many milliseconds (default 60000).")
-                    .Build(),
-                ToolAnnotations.Destructive(),
-                delegate(ToolCallContext ctx) { return RunScript(scripts, ctx); });
+            SkillWriter writer = new SkillWriter(config.ProjectRoot, config.UserRoot, defaultScope);
+
+            if (hasWorkdir)
+            {
+                SkillScriptRunner scripts = new SkillScriptRunner(config);
+                server.AddTool("run_skill_script",
+                    "Run a skill's bundled batch script (.bat/.cmd) by (slug, relpath), passing literal "
+                    + "arguments. The script runs in the conversation's working directory (the project folder); "
+                    + "its own folder is reachable read-only via %~dp0 and %GXPT_SKILL_DIR%. Arguments are passed "
+                    + "verbatim - they are not a shell command, so do not chain commands or use shell operators.",
+                    SchemaBuilder.Object()
+                        .Str("slug", true, "The skill that owns the script.")
+                        .Str("relpath", true, "Path to the script relative to the skill folder, e.g. scripts/gen.bat.")
+                        .Arr("args", "string", false, "Arguments to pass to the script, each as a separate literal token.")
+                        .Int("timeout_ms", false, "Kill the script after this many milliseconds (default 60000).")
+                        .Build(),
+                    ToolAnnotations.Destructive(),
+                    delegate(ToolCallContext ctx) { return RunScript(scripts, ctx); });
+            }
 
             server.AddTool("create_skill",
                 "Create a NEW skill: writes its SKILL.md from the given fields (the server assembles valid "
@@ -49,7 +62,7 @@ namespace SkillsMcpServer
                     .Str("name", true, "Human-readable name (Title Case).")
                     .Str("description", true, "Single line shown in the skills list - phrase it as 'use this when ...'.")
                     .Str("body", true, "The skill's instructions (markdown). Tell the model how to do the task.")
-                    .Str("scope", false, "Where to create it: 'project' (default, this workspace's .gxpt/skills) or 'user'.")
+                    .Str("scope", false, scopeDesc)
                     .Build(),
                 ToolAnnotations.Write(),
                 delegate(ToolCallContext ctx)
@@ -71,7 +84,7 @@ namespace SkillsMcpServer
                     .Str("slug", true, "The skill's slug (it must already exist).")
                     .Str("relpath", true, "Path relative to the skill folder, e.g. scripts/gen.bat or examples/foo.md.")
                     .Str("content", true, "The file's text content.")
-                    .Str("scope", false, "'project' (default) or 'user'.")
+                    .Str("scope", false, scopeDesc)
                     .Build(),
                 ToolAnnotations.Write(),
                 delegate(ToolCallContext ctx)
@@ -92,7 +105,7 @@ namespace SkillsMcpServer
                     .Str("name", false, "New name, or omit to keep.")
                     .Str("description", false, "New description, or omit to keep.")
                     .Str("body", false, "New instructions, or omit to keep.")
-                    .Str("scope", false, "'project' (default) or 'user'.")
+                    .Str("scope", false, scopeDesc)
                     .Build(),
                 ToolAnnotations.Write(),
                 delegate(ToolCallContext ctx)
@@ -116,7 +129,7 @@ namespace SkillsMcpServer
                     .Str("old_string", true, "Exact text to find (must be unique unless replace_all is set).")
                     .Str("new_string", true, "Replacement text.")
                     .Bool("replace_all", false, "Replace every occurrence instead of requiring a unique match.")
-                    .Str("scope", false, "'project' (default) or 'user'.")
+                    .Str("scope", false, scopeDesc)
                     .Build(),
                 ToolAnnotations.Write(),
                 delegate(ToolCallContext ctx)
@@ -135,7 +148,7 @@ namespace SkillsMcpServer
                 + "skill regardless of whether it is enabled.",
                 SchemaBuilder.Object()
                     .Str("slug", true, "The skill's slug (it must already exist).")
-                    .Str("scope", false, "'project' (default) or 'user'.")
+                    .Str("scope", false, scopeDesc)
                     .Build(),
                 ToolAnnotations.ReadOnly(),
                 delegate(ToolCallContext ctx)
@@ -150,7 +163,7 @@ namespace SkillsMcpServer
                 SchemaBuilder.Object()
                     .Str("slug", true, "The skill's slug (it must already exist).")
                     .Str("relpath", true, "Path relative to the skill folder, e.g. scripts/gen.bat (not SKILL.md).")
-                    .Str("scope", false, "'project' (default) or 'user'.")
+                    .Str("scope", false, scopeDesc)
                     .Build(),
                 ToolAnnotations.Destructive(),
                 delegate(ToolCallContext ctx)
@@ -163,7 +176,7 @@ namespace SkillsMcpServer
                 "Delete an entire skill: removes its folder and everything in it. This cannot be undone.",
                 SchemaBuilder.Object()
                     .Str("slug", true, "The skill's slug (it must already exist).")
-                    .Str("scope", false, "'project' (default) or 'user'.")
+                    .Str("scope", false, scopeDesc)
                     .Build(),
                 ToolAnnotations.Destructive(),
                 delegate(ToolCallContext ctx)
@@ -177,7 +190,7 @@ namespace SkillsMcpServer
                 + "description). Reports the parsed name and description, or what is wrong. Read-only.",
                 SchemaBuilder.Object()
                     .Str("slug", true, "The skill's slug (it must already exist).")
-                    .Str("scope", false, "'project' (default) or 'user'.")
+                    .Str("scope", false, scopeDesc)
                     .Build(),
                 ToolAnnotations.ReadOnly(),
                 delegate(ToolCallContext ctx)

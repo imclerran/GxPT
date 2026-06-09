@@ -247,6 +247,15 @@ validate_skill(scope?, slug)                                    -- ReadOnly: doe
 - **Authoring spans all writable skills regardless of enablement** (you'll edit
   disabled skills) — paired with the relaxed `read_skill_file` (S13: any *discovered*
   skill, not just enabled).
+- **Dual-mode launch (no workspace required for global authoring).** The server is
+  workdir-scoped, but the spec is flagged `RunsWithoutWorkdir`, so the host *also*
+  launches one workdir-less instance (no `GXPT_WORKDIR`). The registry's existing
+  per-workdir resolution routes a folder turn to that folder's instance and a
+  folderless turn to the workdir-less one. Each instance tailors its surface to what it
+  can do: **with a workspace** → full set, `scope` defaults to `project`; **without** →
+  authoring tools only (no `run_skill_script`, which needs a cwd), `scope` defaults to
+  `user`. So `/use`-ing skill-writer in a folderless conversation can still author
+  user-global skills, while project authoring + `run_skill_script` stay workspace-bound.
 - **Deferred:** `rename_skill` (folder rename — delete+recreate covers it for now).
 
 ---

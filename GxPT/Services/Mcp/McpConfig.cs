@@ -134,6 +134,9 @@ namespace GxPT
             McpServerSpec skills = NewBuiltIn(SkillsName, "SkillsMcpServer.exe", o.ServerDir, true, o.SkillsEnabled);
             if (!string.IsNullOrEmpty(o.SkillsBundledRoot)) skills.Env[EnvSkillsBundledRoot] = o.SkillsBundledRoot;
             if (!string.IsNullOrEmpty(o.SkillsUserRoot)) skills.Env[EnvSkillsUserRoot] = o.SkillsUserRoot;
+            // Also run a workdir-less instance so user-global authoring works in a folderless conversation
+            // (it advertises authoring tools only; the per-workdir instances add run_skill_script + project).
+            skills.RunsWithoutWorkdir = true;
             list.Add(skills);
 
             return list;

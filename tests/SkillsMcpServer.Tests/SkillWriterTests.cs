@@ -140,6 +140,39 @@ namespace SkillsMcpServer.Tests
                 _writer.CreateSkill("elsewhere", "a", "Name", "Desc", "body"));
         }
 
+        // ---- default scope (the workdir-less instance defaults to user, not project) ----
+
+        [Fact]
+        public void DefaultScope_User_OmittedScope_WritesToUserRoot()
+        {
+            string user = Path.Combine(_root, "user");
+            Directory.CreateDirectory(user);
+            // No project root (folderless), user is the default scope.
+            SkillWriter w = new SkillWriter(null, user, "user");
+
+            w.CreateSkill(null, "vendor-review", "Vendor Review", "desc", "body"); // scope omitted
+
+            Assert.True(File.Exists(Path.Combine(Path.Combine(user, "vendor-review"), "SKILL.md")));
+        }
+
+        [Fact]
+        public void DefaultScope_User_ExplicitProject_StillErrorsWithoutWorkspace()
+        {
+            string user = Path.Combine(_root, "user");
+            Directory.CreateDirectory(user);
+            SkillWriter w = new SkillWriter(null, user, "user");
+            Assert.Throws<SkillWriteException>(() =>
+                w.CreateSkill("project", "x", "X", "desc", "body")); // project unreachable, no workspace
+        }
+
+        [Fact]
+        public void DefaultScope_TwoArgCtor_DefaultsToProject()
+        {
+            // The 2-arg ctor keeps the project default: omitting scope targets the project root.
+            _writer.CreateSkill(null, "proj-skill", "Proj", "desc", "body");
+            Assert.True(File.Exists(SkillFile("proj-skill")));
+        }
+
         // ---- tier 2: maintenance ----
 
         [Fact]
