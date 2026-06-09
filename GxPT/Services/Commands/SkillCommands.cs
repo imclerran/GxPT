@@ -41,11 +41,7 @@ namespace GxPT
         // true = on, false = off, null = not an on/off word.
         internal static bool? ParseOnOff(string token)
         {
-            if (string.IsNullOrEmpty(token)) return null;
-            string t = token.Trim().ToLowerInvariant();
-            if (t == "on" || t == "true" || t == "1" || t == "yes" || t == "enable" || t == "enabled") return true;
-            if (t == "off" || t == "false" || t == "0" || t == "no" || t == "disable" || t == "disabled") return false;
-            return null;
+            return SlashArgs.ParseOnOff(token);
         }
 
         // Recognizes the trailing scope word. Returns false for anything that isn't here/global.

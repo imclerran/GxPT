@@ -20,7 +20,8 @@ namespace GxPT
         // Keep a single skill body from blowing up the context if a SKILL.md is huge.
         private const int MaxBodyChars = 32 * 1024;
         private const int MaxAssetChars = 64 * 1024;
-        private const int MaxAssetsListed = 200;
+        private const int MaxAssetsScanned = 200; // bound the directory walk
+        private const int MaxAssetsShown = 25;    // listed inline on open; the rest are summarized
 
         // Indexed by slug over the skills ENABLED for this turn (SkillResolve), so open_skill can only
         // load a skill the conversation actually has on. Explicit /use (phase 4b) goes through the
@@ -226,7 +227,10 @@ namespace GxPT
             }
         }
 
-        // Lists files under the skill dir (relative, forward-slashed), excluding SKILL.md, capped.
+        // A summarized listing of files under the skill dir (relative, forward-slashed), excluding
+        // SKILL.md. Only the first MaxAssetsShown are listed inline; any beyond that are summarized as a
+        // count, so opening a skill with many bundled assets doesn't pay the whole tree into context every
+        // time (Level-2/3 disclosure boundary). The model reads any of them by path with read_skill_file.
         private static string ListAssets(string dir)
         {
             try
@@ -234,26 +238,32 @@ namespace GxPT
                 if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return null;
                 string[] files = Directory.GetFiles(dir, "*", SearchOption.AllDirectories);
                 List<string> rel = new List<string>();
-                for (int i = 0; i < files.Length && rel.Count < MaxAssetsListed; i++)
+                bool scanCapped = false;
+                for (int i = 0; i < files.Length; i++)
                 {
                     string full = files[i];
                     if (string.Equals(Path.GetFileName(full), "SKILL.md", StringComparison.OrdinalIgnoreCase))
                         continue;
-                    string r = full.Substring(dir.Length)
+                    if (rel.Count >= MaxAssetsScanned) { scanCapped = true; break; }
+                    rel.Add(full.Substring(dir.Length)
                         .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
                         .Replace(Path.DirectorySeparatorChar, '/')
-                        .Replace(Path.AltDirectorySeparatorChar, '/');
-                    rel.Add(r);
+                        .Replace(Path.AltDirectorySeparatorChar, '/'));
                 }
                 if (rel.Count == 0) return null;
                 rel.Sort(StringComparer.Ordinal);
 
+                int shown = Math.Min(rel.Count, MaxAssetsShown);
                 StringBuilder sb = new StringBuilder();
-                for (int i = 0; i < rel.Count; i++)
+                for (int i = 0; i < shown; i++)
                 {
                     if (sb.Length > 0) sb.Append('\n');
                     sb.Append("- ").Append(rel[i]);
                 }
+                int more = rel.Count - shown;
+                if (more > 0 || scanCapped)
+                    sb.Append("\n- ... and ").Append(more).Append(scanCapped ? "+" : "")
+                      .Append(" more file(s) - read any by its relative path with read_skill_file");
                 return sb.ToString();
             }
             catch

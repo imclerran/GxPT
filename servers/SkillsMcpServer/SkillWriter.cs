@@ -22,7 +22,7 @@ namespace SkillsMcpServer
         private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
 
         private readonly string _projectRoot; // <workdir>/.gxpt/skills, or null when no workspace
-        private readonly string _userRoot;    // %AppData%/GxPT/skills, or null until wired
+        private readonly string _userRoot;    // %AppData%/GxPT/skills, or null if no user root is configured
         private readonly string _defaultScope; // scope used when a call omits it ("project" or "user")
 
         public SkillWriter(string projectRoot, string userRoot)
@@ -281,7 +281,7 @@ namespace SkillsMcpServer
             if (s == "user")
             {
                 if (string.IsNullOrEmpty(_userRoot))
-                    throw new SkillWriteException("user-global skills are not enabled yet");
+                    throw new SkillWriteException("no user-global skills root is configured for this conversation");
                 return _userRoot;
             }
             throw new SkillWriteException("unknown scope '" + scope + "' (use 'project' or 'user')");

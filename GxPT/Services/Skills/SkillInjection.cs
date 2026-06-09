@@ -44,6 +44,18 @@ namespace GxPT
             return SkillCatalog.Build(BundledRoot(exeDir), UserRoot(), ProjectRoot(workingDir));
         }
 
+        // True when the conversation (its feature/skill overrides) has at least one enabled skill for the
+        // given roots: build the catalog, apply the global default + conversation overrides, count > 0.
+        // The single shared "is any skill enabled here" check - used by the send-path gate and by the
+        // Skills MCP server's enablement - so the build-catalog/resolve computation lives in one place.
+        public static bool HasAnyEnabledSkills(string exeDir, string workingDir,
+            bool? convFeatureOff, IDictionary<string, bool> convOverrides)
+        {
+            SkillCatalog cat = BuildCatalog(exeDir, workingDir);
+            return SkillResolve.EnabledSkills(
+                cat.Skills, SkillEnablement.LoadGlobal(), convFeatureOff, convOverrides).Count > 0;
+        }
+
         // The phase-2 ephemeral block: framing + the slug/description manifest, built from the skills
         // ENABLED for this conversation (SkillResolve). Returns null when the set is empty, so a
         // skill-less or all-disabled conversation injects nothing (no phantom capability).

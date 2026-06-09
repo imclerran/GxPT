@@ -1432,11 +1432,8 @@ namespace GxPT
         {
             var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
             if (c == null || c.Conversation == null) return false;
-            SkillCatalog cat = SkillInjection.BuildCatalog(AppDomain.CurrentDomain.BaseDirectory, c.WorkingDir);
-            List<Skill> enabled = SkillResolve.EnabledSkills(
-                cat.Skills, SkillEnablement.LoadGlobal(),
+            return SkillInjection.HasAnyEnabledSkills(AppDomain.CurrentDomain.BaseDirectory, c.WorkingDir,
                 c.Conversation.SkillsFeatureOff, c.Conversation.SkillOverrides);
-            return enabled.Count > 0;
         }
 
         // The Skills MCP server tracks skill enablement; rebuild the host only when that crosses the
@@ -2246,12 +2243,11 @@ namespace GxPT
         {
             try
             {
-                string workdir = (ctx != null) ? ctx.WorkingDir : null;
-                SkillCatalog cat = SkillInjection.BuildCatalog(AppDomain.CurrentDomain.BaseDirectory, workdir);
                 Conversation convo = (ctx != null) ? ctx.Conversation : null;
-                return SkillResolve.EnabledSkills(cat.Skills, SkillEnablement.LoadGlobal(),
+                return SkillInjection.HasAnyEnabledSkills(
+                    AppDomain.CurrentDomain.BaseDirectory, (ctx != null) ? ctx.WorkingDir : null,
                     convo != null ? convo.SkillsFeatureOff : null,
-                    convo != null ? convo.SkillOverrides : null).Count > 0;
+                    convo != null ? convo.SkillOverrides : null);
             }
             catch { return false; }
         }
@@ -2358,7 +2354,7 @@ namespace GxPT
                     }
                     // The skill-authoring tools are owned by the skill-writer meta-skill: omit them from
                     // context unless that skill is enabled for this conversation.
-                    ICollection<string> hiddenTools = SkillMeta.HiddenTools(enabledSkills);
+                    ICollection<string> hiddenTools = SkillToolGate.HiddenTools(enabledSkills);
                     if (hiddenTools.Count > 0) orch.HiddenToolNames = hiddenTools;
 
                     // Assistant text appends to the current assistant bubble; a tool call closes it so

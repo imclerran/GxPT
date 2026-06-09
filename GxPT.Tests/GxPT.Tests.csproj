@@ -63,9 +63,10 @@
     <Compile Include="..\GxPT\Services\Skills\SkillTools.cs" Link="Linked\Skills\SkillTools.cs" />
     <Compile Include="..\GxPT\Services\Skills\SkillEnablement.cs" Link="Linked\Skills\SkillEnablement.cs" />
     <Compile Include="..\GxPT\Services\Skills\SkillResolve.cs" Link="Linked\Skills\SkillResolve.cs" />
-    <Compile Include="..\GxPT\Services\Skills\SkillMeta.cs" Link="Linked\Skills\SkillMeta.cs" />
+    <Compile Include="..\GxPT\Services\Skills\SkillToolGate.cs" Link="Linked\Skills\SkillToolGate.cs" />
     <Compile Include="..\GxPT\Services\Commands\SlashCommandKind.cs" Link="Linked\Commands\SlashCommandKind.cs" />
     <Compile Include="..\GxPT\Services\Commands\SlashCommandResult.cs" Link="Linked\Commands\SlashCommandResult.cs" />
+    <Compile Include="..\GxPT\Services\Commands\SlashArgs.cs" Link="Linked\Commands\SlashArgs.cs" />
     <Compile Include="..\GxPT\Services\Commands\ISlashCommandContext.cs" Link="Linked\Commands\ISlashCommandContext.cs" />
     <Compile Include="..\GxPT\Services\Commands\ISlashCommand.cs" Link="Linked\Commands\ISlashCommand.cs" />
     <Compile Include="..\GxPT\Services\Commands\WorkspacePath.cs" Link="Linked\Commands\WorkspacePath.cs" />

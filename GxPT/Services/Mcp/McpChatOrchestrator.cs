@@ -90,7 +90,7 @@ namespace GxPT
         public SkillTools SkillTools { get; set; }
 
         // Server-qualified MCP tool names to omit from this turn's context (names manifest + exposed
-        // defs) and refuse to call. Used to gate the skill-authoring tools on the meta-skill (SkillMeta).
+        // defs) and refuse to call. Used to gate the skill-authoring tools on the meta-skill (SkillToolGate).
         // Set per send (the orchestrator is built fresh each turn), so it's not shared/racy.
         public ICollection<string> HiddenToolNames { get; set; }
 

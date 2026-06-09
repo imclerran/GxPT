@@ -6,14 +6,14 @@ namespace SkillsMcpServer
 {
     /// <summary>
     /// Startup config from the environment (servers-spec sec.1), read once. The writable skill roots:
-    /// project = GXPT_WORKDIR/.gxpt/skills; user = GXPT_SKILLS_USER_ROOT (not wired yet). WorkDir and the
-    /// bundled root (GXPT_SKILLS_BUNDLED_ROOT) are kept for run_skill_script, added later.
+    /// project = GXPT_WORKDIR/.gxpt/skills; user = GXPT_SKILLS_USER_ROOT (user-global, %AppData%). WorkDir
+    /// and the bundled root (GXPT_SKILLS_BUNDLED_ROOT) are used by run_skill_script.
     /// </summary>
     internal sealed class SkillsConfig
     {
         public readonly string WorkDir;       // conversation workspace (cwd for scripts), or null
         public readonly string ProjectRoot;   // <workdir>/.gxpt/skills, or null when no workspace
-        public readonly string UserRoot;      // %AppData%/GxPT/skills, or null until wired
+        public readonly string UserRoot;      // %AppData%/GxPT/skills (user-global), or null if unset
         public readonly string BundledRoot;   // <exe>/skills, or null (for run_skill_script)
         public readonly string Shell;         // cmd.exe (ComSpec / GXPT_CMD_SHELL) for run_skill_script
 

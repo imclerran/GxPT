@@ -5,7 +5,7 @@ using Xunit;
 
 namespace GxPT.Tests
 {
-    public sealed class SkillMetaTests
+    public sealed class SkillToolGateTests
     {
         private static Skill MakeSkill(string slug)
         {
@@ -17,7 +17,7 @@ namespace GxPT.Tests
         {
             // A non-writer skill is enabled: the 8 authoring tools are hidden, but run_skill_script is
             // available (any skill may ship a script).
-            ICollection<string> hidden = SkillMeta.HiddenTools(new List<Skill> { MakeSkill("greeting") });
+            ICollection<string> hidden = SkillToolGate.HiddenTools(new List<Skill> { MakeSkill("greeting") });
             // tier 1
             Assert.Contains("skills__create_skill", hidden);
             Assert.Contains("skills__write_skill_file", hidden);
@@ -35,15 +35,15 @@ namespace GxPT.Tests
         [Fact]
         public void HiddenTools_MetaSkillEnabled_HidesNothing()
         {
-            var enabled = new List<Skill> { MakeSkill("greeting"), MakeSkill(SkillMeta.SkillWriterSlug) };
-            Assert.Empty(SkillMeta.HiddenTools(enabled));
+            var enabled = new List<Skill> { MakeSkill("greeting"), MakeSkill(SkillToolGate.SkillWriterSlug) };
+            Assert.Empty(SkillToolGate.HiddenTools(enabled));
         }
 
         [Fact]
         public void HiddenTools_NoSkillEnabled_HidesEverySkillsTool()
         {
             // No skill enabled at all: authoring AND run_skill_script are hidden.
-            foreach (ICollection<string> hidden in new[] { SkillMeta.HiddenTools(null), SkillMeta.HiddenTools(new List<Skill>()) })
+            foreach (ICollection<string> hidden in new[] { SkillToolGate.HiddenTools(null), SkillToolGate.HiddenTools(new List<Skill>()) })
             {
                 Assert.Contains("skills__create_skill", hidden);
                 Assert.Contains("skills__validate_skill", hidden);

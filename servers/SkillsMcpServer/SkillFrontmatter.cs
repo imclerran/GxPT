@@ -3,9 +3,11 @@ using System.Text;
 namespace SkillsMcpServer
 {
     // Reads a SKILL.md's leading "--- ... ---" frontmatter (name/description) + body, so update_skill can
-    // do partial-field edits. Same hand-rolled reader as the host's SkillFrontmatter (servers are
-    // independent, so it's copied). Lenient: a missing/unterminated block yields no frontmatter and the
-    // whole text as body.
+    // do partial-field edits. A standalone reader: servers don't reference the host assembly, so this is an
+    // independent reimplementation of the same parse, NOT a line-for-line copy - it deliberately omits the
+    // host's HasFrontmatter flag and read-only properties, which the writer doesn't need (it only consumes
+    // Name/Description/Body). The parse rules are intended to match; the host owns the authoritative reader
+    // and its tests. Lenient: a missing/unterminated block yields no frontmatter and the whole text as body.
     internal sealed class SkillFrontmatter
     {
         private const char Bom = '\uFEFF';

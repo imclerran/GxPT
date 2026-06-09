@@ -20,9 +20,9 @@ same idea one level up.
 
 ## 1. Scope & goals
 
-- **Two skill sources from day one: bundled + project.** First-party skills ship
-  beside `GxPT.exe`; project skills live under the conversation's working folder.
-  (User-global `%AppData%` skills are a later addition, not in the initial cut.)
+- **Three skill sources: bundled + project + user-global.** First-party skills ship
+  beside `GxPT.exe`; project skills live under the conversation's working folder;
+  user-global skills live under `%AppData%/GxPT/skills/` (shipped — see S2/S16).
 - **Three disclosure levels.** Only the skill **name + one-line description** is
   always in context (the manifest); the **`SKILL.md` body** loads on demand; the
   **bundled files/scripts** are read/run only when used.
@@ -41,10 +41,10 @@ same idea one level up.
 - **No settings-page UI.** Skill management (global + per-skill on/off) is done with
   slash commands, scoped per conversation. Bundled skills "just work" by default.
 
-### Non-goals (initially)
-- User-global (`%AppData%/GxPT/skills/`) skills; a skills-authoring tool surface
-  (the model writing skills — that would mirror `MemoryMcpServer`'s writer role);
-  a marketplace / remote skill install; per-skill settings UI.
+### Non-goals
+- A marketplace / remote skill install; a per-skill settings-page UI. (User-global
+  skills and the skills-authoring tool surface were initially non-goals but are now
+  shipped — see S2 and S16.)
 
 ---
 
@@ -53,7 +53,7 @@ same idea one level up.
 | # | Decision | Rationale |
 |---|----------|-----------|
 | S1 | **Catalog & reads are host-synthesized meta-tools** (`open_skill`, `read_skill_file`), not a server; **only execution gets a server** (S11) | Discovery and asset reads are just disk reads, so a stdio process buys nothing — they ride the host registry like `reveal_tools`, never routed to a connection (D11). Spawning a *script* is the one concern that genuinely needs process isolation + a per-call timeout, so it (and only it) is a server. |
-| S2 | **Bundled + project scope at launch** (`<exe>/skills/` and `<workdir>/.gxpt/skills/`); user-global deferred | Bundled "starter" skills are the main draw, so unlike memory (project-only by choice) skills lead with bundled. Project skills reuse the `.gxpt/` convention the memory system established. |
+| S2 | **Bundled + project scope at launch** (`<exe>/skills/`, `<workdir>/.gxpt/skills/`, and `%AppData%/GxPT/skills` user-global) | Bundled "starter" skills are the main draw, so unlike memory (project-only by choice) skills lead with bundled. Project skills reuse the `.gxpt/` convention the memory system established. |
 | S3 | **Model-initiated *and* slash-command triggers**, over one catalog | `open_skill` matches GxPT's `reveal_tools` precedent (the model picks from the manifest mid-task); the slash command gives the user a deliberate "run this now" entry point. Both pre-/open the same `SKILL.md`, so there is one load path, not two. |
 | S4 | **`SKILL.md` = minimal frontmatter + markdown body**, parsed by a hand-rolled reader | net35 has no YAML parser and the repo keeps exactly one JSON lib (Newtonsoft, D3). A ~20-line `--- … ---` reader for `name`/`description` keeps authoring familiar to Claude Code skills without a new dependency or a JSON sidecar. |
 | S5 | **Folder name = slug = handle**; reuse the memory system's kebab-case `Slug` | No name→path map needed (memory M4). `<workdir>/.gxpt/skills/<slug>/SKILL.md`; the slug is what appears in the manifest, what `open_skill` takes, and what the slash command types. |
@@ -204,12 +204,12 @@ skills (powering a bundled `skill-writer` skill — the writer role memory has v
 `MemoryMcpServer`). **Dedicated tools, not `files__*`** — chosen for skill-aware
 validation and because they extend to the `%AppData%` user-global root that the
 workspace-sandboxed `files__*` can never reach. All writes target the **writable**
-roots only (project `<workdir>/.gxpt/skills`, later user-global); the bundled install
-dir is never a write target.
+roots only (project `<workdir>/.gxpt/skills` and user-global `%AppData%/GxPT/skills`);
+the bundled install dir is never a write target.
 
-Every write tool takes a **`scope`** arg from day one — `project` (default) | `user`
-(returns "not enabled yet" until user-global lands), so adding `%AppData%` skills is
-not a breaking change.
+Every write tool takes a **`scope`** arg — `project` (default) | `user` (`%AppData%`,
+shipped). The writer errors only if the relevant root isn't configured (e.g. project
+scope with no workspace), not because a scope is unimplemented.
 
 **Tier 1 — the create flow:**
 ```
@@ -446,7 +446,7 @@ Same dual-world pattern as the rest of the repo (net48 linked-source via
 **Resolved (2026-06-08):**
 - ~~`open_skill` host meta-tool vs. `SkillsMcpServer`~~ → catalog & reads are host
   meta-tools; execution is a `SkillsMcpServer` (S1/S11).
-- ~~Scope~~ → bundled + project at launch, user-global deferred (S2).
+- ~~Scope~~ → bundled + project + user-global (`%AppData%`) all shipped (S2).
 - ~~Trigger model~~ → model-initiated (`open_skill`) **and** slash command (S3).
 - ~~Slash commands: new router vs. existing framework~~ → built as `ISlashCommand`s on
   `main`'s framework (§6); the `SlashCommandRouter` plan is dropped.

@@ -10,7 +10,7 @@ namespace GxPT
     //   * ALL skills tools (authoring + run_skill_script) are hidden when NO skill is enabled for the
     //     conversation - the server may still be running (it is shared across the workdir), but its tools
     //     have no business in a turn where skills aren't in play.
-    internal static class SkillMeta
+    internal static class SkillToolGate
     {
         // The meta-skill that owns the authoring tools (its slug / folder name).
         public const string SkillWriterSlug = "skill-writer";
