@@ -5,6 +5,21 @@ A script is for the parts of a task that are deterministic and better done by co
 transforming data, generating a file from a template, running a tool and collecting its output,
 anything tedious or easy to get subtly wrong by hand.
 
+## What a skill script is (and what it is NOT)
+
+A skill script is a **bundled asset of the skill**, executed only through the `run_skill_script`
+tool. Two rules, both mandatory:
+
+1. **It lives in the skill's own folder**, written with
+   `write_skill_file(slug, "scripts/<name>.bat", ...)`. Do **not** create a script in the user's
+   workspace, and do not have the skill generate one at runtime.
+2. **The `SKILL.md` body runs it with `run_skill_script(slug, "scripts/<name>.bat", [args])`** -
+   never `command__run`, and never an instruction to `cd` into a folder and run a loose `.bat`.
+
+If you find yourself writing a skill whose instructions say "run `foo.bat` in the working
+directory" or "use command__run to execute the script," stop - that's the wrong shape. The
+script belongs *in the skill*, and `run_skill_script` is the only way it runs.
+
 ## First, confirm with the user
 
 Before writing any script, tell the user plainly: "I can add a small batch script so this step

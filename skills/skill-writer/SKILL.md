@@ -53,9 +53,18 @@ good skill (especially how to phrase the description and when to split into mult
 - **Multiple files** when parts are only needed sometimes (separate sub-procedures, long
   reference, templates). The main `SKILL.md` then lays out the overall workflow and tells your
   future self when to read each supporting file with `read_skill_file`. Keep `SKILL.md` lean.
-- **A script** when a step is deterministic, tedious, or error-prone (transform data, generate
-  a file, run a tool). If so, tell the user you can add a batch script to automate that step,
-  confirm they want it, and read `scripts.md` in this folder before writing it.
+- **A bundled script** when a step is deterministic, tedious, or error-prone (transform data,
+  generate a file, run a tool). The script becomes **part of the skill**, not a file in the
+  user's project. So:
+  - Write it into the skill's own `scripts/` folder with `write_skill_file(slug,
+    "scripts/<name>.bat", ...)` - never into the user's workspace.
+  - In the `SKILL.md` body, tell your future self to run it with
+    `run_skill_script(slug, "scripts/<name>.bat", [args])` - **never** with `command__run`, and
+    never by telling your future self to `cd` somewhere and run a loose `.bat`. The script
+    travels with the skill and only executes through `run_skill_script`.
+
+  Tell the user you can bundle a script to automate that step, confirm they want it, and read
+  `scripts.md` in this folder before writing it.
 
 ## 4. Propose, then confirm
 
