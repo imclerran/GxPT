@@ -110,6 +110,7 @@
     <Compile Include="Services\Skills\SkillTools.cs" />
     <Compile Include="Services\Skills\SkillEnablement.cs" />
     <Compile Include="Services\Skills\SkillResolve.cs" />
+    <Compile Include="Services\Skills\SkillMeta.cs" />
     <Compile Include="Services\Commands\SlashCommandKind.cs" />
     <Compile Include="Services\Commands\SlashCommandResult.cs" />
     <Compile Include="Services\Commands\ISlashCommandContext.cs" />

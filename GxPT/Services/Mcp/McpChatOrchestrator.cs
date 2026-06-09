@@ -89,6 +89,11 @@ namespace GxPT
         // exposed in the tools array and handled locally without an MCP round-trip, like reveal_tools.
         public SkillTools SkillTools { get; set; }
 
+        // Server-qualified MCP tool names to omit from this turn's context (names manifest + exposed
+        // defs) and refuse to call. Used to gate the skill-authoring tools on the meta-skill (SkillMeta).
+        // Set per send (the orchestrator is built fresh each turn), so it's not shared/racy.
+        public ICollection<string> HiddenToolNames { get; set; }
+
         // Provider data-collection preference applied to every request in the turn. Null leaves
         // it unset (provider default).
         public bool? ProviderDataCollectionAllowed { get; set; }
@@ -184,6 +189,13 @@ namespace GxPT
                     if (tools == null) tools = new List<JObject>();
                     tools.Add(SkillTools.OpenSkillDef());
                     tools.Add(SkillTools.ReadSkillFileDef());
+                }
+                // Hide owned-but-locked tools (e.g. skill-authoring tools when the meta-skill is off):
+                // drop them from the exposed defs and the names manifest so the model can't see or call them.
+                if (HiddenToolNames != null && HiddenToolNames.Count > 0)
+                {
+                    tools = FilterHiddenDefs(tools, HiddenToolNames);
+                    manifest = FilterHiddenManifest(manifest, HiddenToolNames);
                 }
                 _log.Log("mcp", "[turn " + turnId + "] iteration " + (iter + 1) + "/" + budget
                     + ": requesting model with " + (tools != null ? tools.Count : 0) + " exposed tool(s)");
@@ -404,6 +416,14 @@ namespace GxPT
                 return SkillTools.ReadFile(skillSlug, relpath);
             }
 
+            // A hidden (gated-off) tool must not be callable even if the model names it directly.
+            if (HiddenToolNames != null && HiddenToolNames.Contains(call.Name))
+            {
+                isError = true;
+                _log.Log("mcp", "[turn " + turnId + "] blocked hidden tool '" + call.Name + "'");
+                return "[Unknown tool: " + call.Name + "]";
+            }
+
             McpServerConnection conn;
             string toolName;
             if (_registry == null || !_registry.TryResolve(call.Name, WorkingDir, out conn, out toolName))
@@ -536,6 +556,46 @@ namespace GxPT
             {
                 // malformed args -> nulls; ReadFile reports the problem.
             }
+        }
+
+        // Drops any def whose function name is hidden (reveal_tools/open_skill are never in the hidden set).
+        internal static IList<JObject> FilterHiddenDefs(IList<JObject> defs, ICollection<string> hidden)
+        {
+            if (defs == null || hidden == null || hidden.Count == 0) return defs;
+            List<JObject> kept = new List<JObject>(defs.Count);
+            for (int i = 0; i < defs.Count; i++)
+            {
+                string name = DefFunctionName(defs[i]);
+                if (name != null && hidden.Contains(name)) continue;
+                kept.Add(defs[i]);
+            }
+            return kept;
+        }
+
+        private static string DefFunctionName(JObject def)
+        {
+            if (def == null) return null;
+            JToken fn = def["function"];
+            if (fn == null) return null;
+            JToken n = fn["name"];
+            return (n != null && n.Type == JTokenType.String) ? (string)n : null;
+        }
+
+        // Removes the "- <name>" manifest lines for hidden tools, leaving the framing intact.
+        internal static string FilterHiddenManifest(string manifest, ICollection<string> hidden)
+        {
+            if (string.IsNullOrEmpty(manifest) || hidden == null || hidden.Count == 0) return manifest;
+            string[] lines = manifest.Split('\n');
+            List<string> kept = new List<string>(lines.Length);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string trimmed = lines[i].Trim();
+                if (trimmed.Length > 2 && trimmed[0] == '-' && trimmed[1] == ' '
+                    && hidden.Contains(trimmed.Substring(2).Trim()))
+                    continue;
+                kept.Add(lines[i]);
+            }
+            return string.Join("\n", kept.ToArray());
         }
 
         // CallToolResult.content[] → a single string for the tool message. Text blocks are

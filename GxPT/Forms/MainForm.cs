@@ -2311,6 +2311,10 @@ namespace GxPT
                         // open_skill is enabled-scoped; read_skill_file spans the whole catalog.
                         orch.SkillTools = new SkillTools(enabledForTurn, skillCatalog);
                     }
+                    // The skill-authoring tools are owned by the create-skill meta-skill: omit them from
+                    // context unless that skill is enabled for this conversation.
+                    ICollection<string> hiddenTools = SkillMeta.HiddenTools(enabledSkills);
+                    if (hiddenTools.Count > 0) orch.HiddenToolNames = hiddenTools;
 
                     // Assistant text appends to the current assistant bubble; a tool call closes it so
                     // the next run of text starts a fresh bubble below the tool record. Inter-turn
