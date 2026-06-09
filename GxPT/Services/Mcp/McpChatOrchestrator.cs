@@ -181,9 +181,11 @@ namespace GxPT
 
                 // MCP tools (reveal_tools + revealed defs) and their names manifest only when a server
                 // actually contributes tools; a skills-only turn skips both and offers just open_skill.
-                bool hasMcpTools = _registry != null && _registry.HasTools;
-                IList<JObject> tools = hasMcpTools ? _registry.ExposedFunctionDefs() : null;
-                string manifest = hasMcpTools ? _registry.NamesManifestSystemMessage() : null;
+                // Filter by THIS turn's workdir so a folderless turn never advertises another folder's
+                // scoped tools (files/git/run_skill_script, ...) that it couldn't actually call.
+                bool hasMcpTools = _registry != null && _registry.HasToolsForWorkdir(WorkingDir);
+                IList<JObject> tools = hasMcpTools ? _registry.ExposedFunctionDefs(WorkingDir) : null;
+                string manifest = hasMcpTools ? _registry.NamesManifestSystemMessage(WorkingDir) : null;
                 if (SkillTools != null && SkillTools.HasSkills)
                 {
                     if (tools == null) tools = new List<JObject>();

@@ -1959,7 +1959,7 @@ namespace GxPT
                 // answer bubble. BeginToolSend owns the whole turn; the plain path below is unchanged.
                 // Skills also route through the tool loop (they inject a manifest and expose open_skill),
                 // so a conversation with skills but no MCP tools still takes this path.
-                bool hasMcpTools = _mcpRegistry != null && _mcpRegistry.HasTools;
+                bool hasMcpTools = _mcpRegistry != null && _mcpRegistry.HasToolsForWorkdir(ctx.WorkingDir);
                 if (hasMcpTools || ConversationHasSkills(ctx))
                 {
                     BeginToolSend(ctx, modelToUse, zdrForSend);
