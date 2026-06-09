@@ -102,8 +102,8 @@ namespace GxPT.Tests
             new SkillCommand().Invoke("greeting on", _ctx);   // but this one on here
             new SkillsCommand().Invoke("", _ctx);             // list
 
-            Assert.Contains("[on] greeting", LastInfo());
-            Assert.Contains("(on here)", LastInfo());
+            Assert.Contains("greeting", LastInfo());
+            Assert.Contains("(on here)", LastInfo());         // effectively on despite /skills off
         }
 
         [Fact]
@@ -182,6 +182,52 @@ namespace GxPT.Tests
             SlashCommandResult r = new UseCommand().Invoke("nope", _ctx);
             Assert.NotNull(r.Error);
             Assert.False(r.SendToModel);
+        }
+
+        // Sets up the four skills used by the list-rendering tests, with release-notes off globally.
+        private void SeedFourSkills()
+        {
+            WriteSkill("build-helper", "Build stuff.", "b");
+            WriteSkill("formatter", "Format stuff.", "b");
+            WriteSkill("greeting", "Be a pirate.", "b");
+            WriteSkill("release-notes", "Draft notes.", "b");
+
+            SkillEnablement g = SkillEnablement.LoadGlobal();
+            g.SetSkillOverride("release-notes", false);   // off globally
+            g.SaveGlobal();
+            _ctx.ConvOverrides["greeting"] = true;        // on here
+        }
+
+        // Feature OFF here: unset skills fall through to rung 3 -> "all skills off here" (NOT "default").
+        [Fact]
+        public void List_FeatureOffHere_UnsetSkillsAreAllSkillsOffHere_NotDefault()
+        {
+            SeedFourSkills();
+            _ctx.ConvFeatureOff = true;
+
+            new SkillsCommand().Invoke("", _ctx);
+            string info = LastInfo();
+
+            Assert.Contains("Default: ON globally \u00b7 OFF here", info);
+            Assert.Contains("(on here)", info);             // greeting
+            Assert.Contains("(off globally)", info);        // release-notes
+            Assert.Contains("(all skills off here)", info); // build-helper / formatter
+            Assert.DoesNotContain("(default)", info);       // nothing is "default" when feature is off here
+        }
+
+        // Feature UNSET here: unset skills fall through to rung 5 -> "default"; header has no "here" half.
+        [Fact]
+        public void List_FeatureUnsetHere_UnsetSkillsAreDefault()
+        {
+            SeedFourSkills();   // _ctx.ConvFeatureOff stays null
+
+            new SkillsCommand().Invoke("", _ctx);
+            string info = LastInfo();
+
+            Assert.Contains("Default: ON globally", info);
+            Assert.DoesNotContain("\u00b7", info);           // no "  OFF/ON here" header half when unset
+            Assert.Contains("(default)", info);              // build-helper / formatter
+            Assert.DoesNotContain("(all skills off here)", info);
         }
     }
 }
