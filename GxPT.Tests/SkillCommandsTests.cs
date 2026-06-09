@@ -138,19 +138,26 @@ namespace GxPT.Tests
         }
 
         [Fact]
-        public void Skills_GlobalToggle_RefreshesSkillsServer()
+        public void Skills_AnyEnablementChange_RefreshesSkillsServer()
         {
-            // The Skills MCP server follows the global feature flag, so a GLOBAL change must ask the host
-            // to bring it into line. A per-conversation change must not (the server is workdir-shared).
+            // The Skills MCP server follows skill enablement, so every enablement change - global OR
+            // per-conversation - asks the host to bring it into line (a no-op unless it crosses on/off).
             new SkillsCommand().Invoke("off global", _ctx);
             new SkillsCommand().Invoke("on global", _ctx);
             new SkillsCommand().Invoke("reset global", _ctx);
-            Assert.Equal(3, _ctx.ApplyGlobalSkillsFeatureCount);
-
-            int before = _ctx.ApplyGlobalSkillsFeatureCount;
             new SkillsCommand().Invoke("off here", _ctx);
             new SkillsCommand().Invoke("reset", _ctx);
-            Assert.Equal(before, _ctx.ApplyGlobalSkillsFeatureCount); // unchanged
+            Assert.Equal(5, _ctx.RefreshSkillsServerCount);
+        }
+
+        [Fact]
+        public void Skill_EnablementChange_RefreshesSkillsServer()
+        {
+            WriteSkill("greeting", "Be a pirate.", "b");
+            new SkillCommand().Invoke("greeting on here", _ctx);
+            new SkillCommand().Invoke("greeting off global", _ctx);
+            new SkillCommand().Invoke("greeting reset", _ctx);
+            Assert.Equal(3, _ctx.RefreshSkillsServerCount);
         }
 
         [Fact]

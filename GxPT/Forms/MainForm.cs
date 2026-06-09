@@ -20,6 +20,9 @@ namespace GxPT
         private OpenRouterClient _client;
         private McpHost _mcpHost;
         private McpToolRegistry _mcpRegistry;
+        // Last enablement applied to the Skills MCP server spec (it follows skill enablement); used to
+        // rebuild only when the on/off boundary is crossed.
+        private bool _skillsServerEnabled;
         // Slash-command subsystem (built lazily on first send/keystroke; see EnsureSlashCommands).
         private SlashCommandRegistry _slashRegistry;
         private SlashCommandProcessor _slashProcessor;
@@ -830,6 +833,9 @@ namespace GxPT
             // A tab opening/closing changes which working folders are still in use; release the
             // scoped servers of any folder whose last tab just closed.
             SyncMcpWorkingDirFromActiveTab();
+            // The active conversation may differ in whether it has any enabled skills; bring the Skills
+            // MCP server into line (rebuilds only on an actual on/off change).
+            SlashRefreshSkillsServer();
         }
 
         private void OnSidebarToggled()
@@ -1043,11 +1049,12 @@ namespace GxPT
                 opts.MemoryEnabled = AppSettings.GetBool("mcp_memory_enabled", false);
                 int memMaxLines = (int)AppSettings.GetDouble("mcp_memory_max_lines", 40);
                 opts.MemoryMaxLines = memMaxLines > 0 ? memMaxLines : 40;
-                // The Skills MCP server (authoring + execution tools) follows the skills FEATURE: whenever
-                // skills are enabled globally (skills.json feature_off == false, the default), the server is
-                // on, so the model always has the create/edit/validate/run tools wherever skills apply.
-                // There is no separate server toggle - /skills on|off global is the single control.
-                opts.SkillsEnabled = !SkillEnablement.LoadGlobal().FeatureOff;
+                // The Skills MCP server (authoring + execution tools) follows skill enablement: it runs
+                // whenever the active conversation has at least one enabled skill, and is off when none are
+                // (so a skill-less chat pays nothing). SlashRefreshSkillsServer re-applies this when
+                // enablement changes. There is no separate server toggle - /skills is the control.
+                opts.SkillsEnabled = ActiveConversationHasEnabledSkills();
+                _skillsServerEnabled = opts.SkillsEnabled;
                 // Skill roots the server resolves scripts against: bundled (<exe>/skills, shipped with the
                 // app) and user-global (%AppData%/GxPT/skills). The project root is derived from
                 // GXPT_WORKDIR inside the server. These mirror the read-side roots (SkillInjection).
@@ -1418,11 +1425,27 @@ namespace GxPT
             SaveConversationContext(c);
         }
 
-        // The Skills MCP server tracks the global skills feature flag; rebuild the host so it starts/stops
-        // to match after a `/skills ... global` change (mirrors what SlashSetServerEnabled does for /tool).
-        internal void SlashApplyGlobalSkillsFeature()
+        // True when the active conversation has at least one enabled skill - the signal for whether the
+        // Skills MCP server needs to run. Builds the catalog for the active workdir and resolves it
+        // through the same ladder the send path uses, so the answer matches what the model will see.
+        private bool ActiveConversationHasEnabledSkills()
         {
-            RebuildMcpHost();
+            var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            if (c == null || c.Conversation == null) return false;
+            SkillCatalog cat = SkillInjection.BuildCatalog(AppDomain.CurrentDomain.BaseDirectory, c.WorkingDir);
+            List<Skill> enabled = SkillResolve.EnabledSkills(
+                cat.Skills, SkillEnablement.LoadGlobal(),
+                c.Conversation.SkillsFeatureOff, c.Conversation.SkillOverrides);
+            return enabled.Count > 0;
+        }
+
+        // The Skills MCP server tracks skill enablement; rebuild the host only when that crosses the
+        // on/off boundary (so per-skill toggles that don't change whether ANY skill is enabled cost
+        // nothing). Called after skills slash-command changes and on tab switches.
+        internal void SlashRefreshSkillsServer()
+        {
+            if (ActiveConversationHasEnabledSkills() != _skillsServerEnabled)
+                RebuildMcpHost();
         }
 
         internal IDictionary<string, bool> SlashGetConversationSkillOverrides()

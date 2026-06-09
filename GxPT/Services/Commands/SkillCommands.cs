@@ -108,7 +108,6 @@ namespace GxPT
                     global.FeatureOff = false;
                     global.ClearSkillOverrides();
                     global.SaveGlobal();
-                    ctx.ApplyGlobalSkillsFeature(); // the Skills MCP server follows the feature flag
                     ctx.WriteInfo("Skills: global defaults reset (feature on, no per-skill settings).");
                 }
                 else
@@ -116,6 +115,7 @@ namespace GxPT
                     ctx.ResetConversationSkills();
                     ctx.WriteInfo("Skills: cleared this conversation's overrides.");
                 }
+                ctx.RefreshSkillsServer(); // the Skills MCP server follows skill enablement
                 return SlashCommandResult.Handled();
             }
 
@@ -129,12 +129,12 @@ namespace GxPT
             {
                 global.FeatureOff = !on;
                 global.SaveGlobal();
-                ctx.ApplyGlobalSkillsFeature(); // the Skills MCP server follows the feature flag
             }
             else
             {
                 ctx.SetConversationSkillsFeatureOff(on ? (bool?)false : (bool?)true);
             }
+            ctx.RefreshSkillsServer(); // the Skills MCP server follows skill enablement
             ctx.WriteInfo("Skills turned " + (on ? "on" : "off") + " " + where + ".");
             return SlashCommandResult.Handled();
         }
@@ -254,6 +254,7 @@ namespace GxPT
                 bool current = SkillResolve.IsEnabled(global, slug,
                     SkillCommands.ConvOverrideFor(ctx, slug), ctx.GetConversationSkillsFeatureOff());
                 ctx.SetConversationSkillOverride(slug, !current);
+                ctx.RefreshSkillsServer(); // the Skills MCP server follows skill enablement
                 ctx.WriteInfo("Skill '" + slug + "' " + (!current ? "enabled" : "disabled") + " for this conversation.");
                 return SlashCommandResult.Handled();
             }
@@ -267,6 +268,7 @@ namespace GxPT
             {
                 if (isGlobal) { global.SetSkillOverride(slug, null); global.SaveGlobal(); ctx.WriteInfo("Skill '" + slug + "': global setting cleared."); }
                 else { ctx.SetConversationSkillOverride(slug, null); ctx.WriteInfo("Skill '" + slug + "': conversation override cleared."); }
+                ctx.RefreshSkillsServer(); // the Skills MCP server follows skill enablement
                 return SlashCommandResult.Handled();
             }
 
@@ -278,6 +280,7 @@ namespace GxPT
             string where = isGlobal ? "globally" : "for this conversation";
             if (isGlobal) { global.SetSkillOverride(slug, on); global.SaveGlobal(); }
             else { ctx.SetConversationSkillOverride(slug, on); }
+            ctx.RefreshSkillsServer(); // the Skills MCP server follows skill enablement
             ctx.WriteInfo("Skill '" + slug + "' " + (on ? "enabled" : "disabled") + " " + where + ".");
             return SlashCommandResult.Handled();
         }

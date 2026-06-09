@@ -3,14 +3,21 @@ using System.Collections.Generic;
 
 namespace GxPT
 {
-    // The skill-authoring MCP tools (from SkillsMcpServer) are "owned" by a single meta-skill: the
-    // bundled skill-writing skill. They are omitted from the model's context (manifest + reveal + call)
-    // whenever that skill is NOT enabled for the conversation - a deliberate, hardcoded link (NOT a
-    // general per-skill tool-gating feature). run_skill_script (execution) is intentionally not here.
+    // Per-turn visibility of the SkillsMcpServer tools. Two rules, applied to the model's context
+    // (manifest + reveal + call):
+    //   * Authoring tools are "owned" by a single meta-skill, the bundled skill-writer: hidden unless
+    //     that skill is enabled (a deliberate hardcoded link, NOT a general per-skill tool gate).
+    //   * ALL skills tools (authoring + run_skill_script) are hidden when NO skill is enabled for the
+    //     conversation - the server may still be running (it is shared across the workdir), but its tools
+    //     have no business in a turn where skills aren't in play.
     internal static class SkillMeta
     {
         // The meta-skill that owns the authoring tools (its slug / folder name).
         public const string SkillWriterSlug = "skill-writer";
+
+        // The execution tool - available to any skill that ships a script (not owned by the meta-skill),
+        // but still hidden when no skill at all is enabled.
+        public static readonly string RunScriptTool = McpConfig.SkillsName + "__run_skill_script";
 
         // Server-qualified authoring/maintenance tool names gated on the meta-skill (tier 1 + tier 2).
         // The whole authoring surface belongs to the meta-skill - including the ReadOnly list/validate
@@ -27,19 +34,26 @@ namespace GxPT
             McpConfig.SkillsName + "__validate_skill"
         };
 
-        // The tool names to hide this turn: the authoring tools, UNLESS the meta-skill is among the
-        // enabled skills (then nothing is hidden). Empty when the meta-skill is enabled.
+        // The tool names to hide this turn: authoring tools unless skill-writer is enabled, plus
+        // run_skill_script when NO skill is enabled at all (then every skills tool is hidden).
         public static ICollection<string> HiddenTools(IEnumerable<Skill> enabledSkills)
         {
+            bool anyEnabled = false, writerEnabled = false;
             if (enabledSkills != null)
             {
                 foreach (Skill s in enabledSkills)
                 {
-                    if (s != null && string.Equals(s.Slug, SkillWriterSlug, StringComparison.OrdinalIgnoreCase))
-                        return new string[0]; // meta-skill enabled -> authoring tools visible
+                    if (s == null) continue;
+                    anyEnabled = true;
+                    if (string.Equals(s.Slug, SkillWriterSlug, StringComparison.OrdinalIgnoreCase))
+                        writerEnabled = true;
                 }
             }
-            return AuthoringTools;
+
+            List<string> hidden = new List<string>();
+            if (!writerEnabled) hidden.AddRange(AuthoringTools);
+            if (!anyEnabled) hidden.Add(RunScriptTool);
+            return hidden;
         }
     }
 }

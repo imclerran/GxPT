@@ -68,8 +68,8 @@ namespace GxPT.Tests.Commands
         { if (value.HasValue) ConvOverrides[slug] = value.Value; else ConvOverrides.Remove(slug); }
         public void ResetConversationSkills() { ConvFeatureOff = null; ConvOverrides.Clear(); }
 
-        public int ApplyGlobalSkillsFeatureCount;
-        public void ApplyGlobalSkillsFeature() { ApplyGlobalSkillsFeatureCount++; }
+        public int RefreshSkillsServerCount;
+        public void RefreshSkillsServer() { RefreshSkillsServerCount++; }
 
         public int CompactCount;
         public void NewConversation() { NewConversationCount++; }
