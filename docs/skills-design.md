@@ -64,9 +64,10 @@ same idea one level up.
 | S9 | **Skill scripts run via a dedicated `run_skill_script(slug, relpath, args[])` tool, *not* `command__run`** | A skill should not make the model compose an arbitrary command or name a path in the user's Program Files. The handle-based tool shrinks the exec surface from "any command string" to "the declared entry of a named skill + literal args" — smaller, auditable, still gated (Destructive/always-confirm). |
 | S11 | **Execution lives in a first-party `SkillsMcpServer`** (stdio, launched with the skill roots in its env), reusing `Mcp35.Server`'s process-exec helper | **Decisive reason:** the process-spawn + cmd.exe arg-quoting helper (the `^`/`%` footgun) lives in `Mcp35.Server`, and the host references only `Mcp35.Client` — one-way seam (D8) — so a host meta-tool can't reuse it without breaking the boundary or duplicating it; a server consumes it like the other six do. Plus **process isolation** (arbitrary author code stays out of the WinForms UI process; a wedged server is killable while the UI stays responsive), the existing **per-call timeout + Destructive/remember approval path** for server tools (S15), and the **M1 precedent** (`MemoryMcpServer` chose a server for *weaker* reasons). It's the skills analogue of `CommandMcpServer`. Catalog/reads stay host-native because they're in-process-safe disk reads with no child process, timeout, or quoting hazard — nothing to isolate (S1). |
 | S12 | **Entry points are `.bat`/`.cmd` only**; `.py`/`.ps1`/`.exe` are reached *through* the batch via `%~dp0` | One uniform, validatable entry type; the author owns interpreter selection (and graceful failure when it's absent). `%~dp0` (the batch's own dir at runtime) locates bundled siblings install-path-independently, so nothing hardcodes where `<exe>` landed. A user-authored skill with Python/PS installed ships a `.bat` wrapper calling its sibling script. |
-| S13 | **Assets are read by handle via `read_skill_file(slug, relpath)`** (ReadOnly), not `files__*` | `files__*` is hard-sandboxed to the workspace and rejects absolute paths, so it can't reach a bundled skill's files. A relative-handle read tool resolves `slug`+`relpath` host-side (within the skill root), works for bundled *and* project skills uniformly, and auto-allows by the ReadOnly tier — mirroring `read_memory`. |
+| S13 | **Assets are read by handle via `read_skill_file(slug, relpath)`** (ReadOnly), not `files__*`; resolves against **any discovered skill, not just enabled** | `files__*` is hard-sandboxed to the workspace and rejects absolute paths, so it can't reach a bundled skill's files. A relative-handle read tool resolves `slug`+`relpath` host-side (within the skill root), works for bundled *and* project skills uniformly, and auto-allows by the ReadOnly tier — mirroring `read_memory`. It spans the whole catalog (not just the enabled set, which `open_skill` uses) so the authoring flow can read a *disabled* skill's files to edit it. |
 | S14 | **cwd is always the workspace; the skill dir is a read-only asset source, never a working/output dir** | Skills operate on and write to the user's project, not their own install location (which, for bundled skills, is often non-writable Program Files anyway). `%~dp0` / `GXPT_SKILL_DIR` locate read-only assets; all output goes to cwd. `run_skill_script` therefore requires a workspace (like `command__run`); a workspace-less self-contained skill would use a temp scratch cwd — deferred, never the skill dir. |
 | S15 | **`run_skill_script` is Destructive but remember-eligible by exact `(slug, relpath)`**; pipelines live *inside* the script | Because the surface is a fixed declared entry (not an arbitrary string), a remembered approval is narrow and auditable — *less* friction than `command__run` while *more* locked down. Args are shown each run but aren't part of the remembered grain. Output filtering belongs inside the batch (`… | findstr …`); a shell pipeline in the tool call would re-import the arbitrary-shell surface the tool exists to remove. |
+| S16 | **Skill *authoring* is a dedicated writer surface on `SkillsMcpServer`** (`create_skill`/`write_skill_file`/`update_skill`, then tier-2 `edit_skill_file`/`list_skill_files`/`delete_*`/`validate_skill`), **not `files__*`**, with a `scope` arg (project/user) from day one | Dedicated tools give skill-aware validation (structured frontmatter → a guaranteed-loadable `SKILL.md`) and extend to the `%AppData%` user-global root that workspace-sandboxed `files__*` can't reach (§5). Writes are Write-tier (by `(scope, slug)`); `delete_*` Destructive; writing a `.bat` is only Write — running it stays the `run_skill_script` gate. Powers a bundled `create-skill` skill (the writer role memory has via `MemoryMcpServer`). |
 
 ---
 
@@ -195,6 +196,58 @@ run_skill_script(slug, relpath, args[])
 - Returns exit code + stdout + stderr (capped like other tool results).
 - **Requires a workspace** (like `command__run`); no workspace ⇒ the tool isn't
   resolvable (workspace-less self-contained skills → temp scratch cwd, deferred).
+
+### Authoring — `SkillsMcpServer` (S16)
+
+The same server hosts the **writer** surface, so the model can create and maintain
+skills (powering a bundled `create-skill` skill — the writer role memory has via
+`MemoryMcpServer`). **Dedicated tools, not `files__*`** — chosen for skill-aware
+validation and because they extend to the `%AppData%` user-global root that the
+workspace-sandboxed `files__*` can never reach. All writes target the **writable**
+roots only (project `<workdir>/.gxpt/skills`, later user-global); the bundled install
+dir is never a write target.
+
+Every write tool takes a **`scope`** arg from day one — `project` (default) | `user`
+(returns "not enabled yet" until user-global lands), so adding `%AppData%` skills is
+not a breaking change.
+
+**Tier 1 — the create flow:**
+```
+create_skill(scope?, slug, name, description, body)   -- new skill; refuse if it exists;
+                                                         assembles VALIDATED frontmatter from fields
+write_skill_file(scope?, slug, relpath, content)      -- supporting reference files / scripts
+update_skill(scope?, slug, name?, description?, body?) -- structured edit of the main file (null = unchanged)
+```
+**Tier 2 — maintenance:**
+```
+edit_skill_file(scope?, slug, relpath, old_string, new_string)  -- string-replace (files__edit parity)
+list_skill_files(scope?, slug)                                  -- ReadOnly enumerate (spans disabled)
+delete_skill_file(scope?, slug, relpath) / delete_skill(scope?, slug)
+validate_skill(scope?, slug)                                    -- ReadOnly: does the SKILL.md load? (its own tool,
+                                                                   so supporting files/scripts aren't validated)
+```
+
+**Rules:**
+- **Structured frontmatter:** `create_skill`/`update_skill` take `name`/`description`
+  as *fields* (not raw markdown); the server assembles a guaranteed-loadable `SKILL.md`.
+  This is the whole reason for dedicated tools.
+- **Sandbox & text-only:** `relpath` resolved within the skill folder (same containment
+  as `read_skill_file`); `content` is a string, so only text files are authorable
+  (`SKILL.md`, refs, `.bat`/`.ps1`/`.py`) — binaries are shipped, never authored.
+- **Encoding (server-owned):** UTF-8 **no BOM** for `.md`; **CRLF** for `.bat`/`.cmd`
+  (XP `cmd.exe`); atomic writes (FileSafe-style).
+- **Approval:** writes are **Write** tier, remember-eligible by **`(scope, slug)`**;
+  `delete_*` is **Destructive**. Writing a `.bat` is only Write — *running* it is the
+  separate Destructive `run_skill_script` gate, so a freshly-written script can't auto-run.
+- **No validation on `write_skill_file`** — supporting files/scripts don't need it;
+  `validate_skill` is a separate ReadOnly check (and `create_skill`/`update_skill`
+  validate the main file they assemble).
+- **Refresh timing:** a created/edited skill appears on the **next** user turn (the host
+  re-scans per send), so no mid-turn `create_skill → open_skill`; the tool result says so.
+- **Authoring spans all writable skills regardless of enablement** (you'll edit
+  disabled skills) — paired with the relaxed `read_skill_file` (S13: any *discovered*
+  skill, not just enabled).
+- **Deferred:** `rename_skill` (folder rename — delete+recreate covers it for now).
 
 ---
 
@@ -356,14 +409,20 @@ Same dual-world pattern as the rest of the repo (net48 linked-source via
    (`SkillCommands`: `/skills`, `/skill <slug>`, `/use <slug>`) + per-conversation
    override fields on `Conversation`/`ConversationStore` + global `skills.json`
    enablement. *(Split: 4a = enablement core + gating; 4b = the commands.)*
-6. **`SkillsMcpServer` + `run_skill_script`**: batch-only entry, handle resolution +
-   sandbox, literal args, cwd = workspace, always-confirm (remember-eligible by
-   `(slug, relpath)`). Added to `GxPT.sln`, the `AfterBuild` copy, and the setup
-   `.vdproj` (like `MemoryMcpServer`).
-7. **Project skills** (`<workdir>/.gxpt/skills/`) + project-over-bundled shadowing;
-   ship a couple of bundled first-party skills (with a `%~dp0` wrapper) to dogfood.
-8. **(Optional/later)** user-global skills; LRU cap on opened bodies; a
-   model-authored-skills writer surface (mirrors `MemoryMcpServer`'s writer role).
+6. **`SkillsMcpServer` scaffold + `run_skill_script`**: batch-only entry, handle
+   resolution + sandbox, literal args, cwd = workspace, always-confirm
+   (remember-eligible by `(slug, relpath)`). Added to `GxPT.sln`, the `AfterBuild`
+   copy, and the setup `.vdproj` (like `MemoryMcpServer`).
+7. **Authoring tools on `SkillsMcpServer`** (S16): **tier 1** (`create_skill`,
+   `write_skill_file`, `update_skill`) — the create flow — then **tier 2**
+   (`edit_skill_file`, `list_skill_files`, `delete_*`, `validate_skill`). `scope`
+   arg, structured frontmatter, Write/Destructive tiers.
+8. **Bundled skills + deploy**: ship first-party skills via a `skills/` source folder
+   copied next to the exe (`AfterBuild` + setup `.vdproj`) — including the
+   **`create-skill`** skill, which depends on phase 7.
+9. **(Optional/later)** user-global (`%AppData%`) skills + the `scope=user` path; LRU
+   cap on opened bodies; the **ephemeral opened-bodies** model (unload `open_skill`
+   bodies on disable, instead of persisting them as tool results — see §11).
 
 ---
 
@@ -391,14 +450,24 @@ Same dual-world pattern as the rest of the repo (net48 linked-source via
 - ~~Per-machine install path in authored markdown~~ → never author absolute paths;
   `open_skill` returns the resolved skill dir + asset listing, and `%~dp0` locates
   bundled siblings at runtime (S12, §5).
+- ~~Skill authoring: dedicated tools vs. reuse `files__*`~~ → dedicated writer tools on
+  `SkillsMcpServer` (extends to `%AppData%` which `files__*` can't reach; skill-aware
+  validation), `scope` arg from day one, tier 1 then tier 2 (S16, §5).
+- ~~`read_skill_file` scope~~ → relaxed to **any discovered skill** (not just enabled)
+  so authoring can read a disabled skill to edit it (S13). *Implemented.*
+- ~~`validate_skill` baked into writes vs. separate~~ → a separate ReadOnly tool, since
+  supporting files/scripts don't need frontmatter validation (S16).
+- ~~Line-by-line skill edits~~ → frontmatter edits go through structured `update_skill`;
+  a `files__edit`-style `edit_skill_file` (string-replace) is tier 2 for body/large
+  files (S16).
 
 **Deferred:**
-- User-global skills home and precedence (`project > user > bundled`).
-- LRU cap on opened bodies (only if bodies crowd context).
+- User-global (`%AppData%`) skills + the `scope=user` write path; precedence
+  (`project > user > bundled`).
+- LRU cap on opened bodies, and the **ephemeral opened-bodies** model (unload on
+  disable rather than persisting `open_skill` results in history).
 - Workspace-less skill execution via a temp scratch cwd (a workspace is required
   today, S14).
 - Non-batch direct entry types (`.exe`/`.py`/`.ps1`); today they're reached only
   through a `.bat`/`.cmd` wrapper (S12).
-- A model-authored-skills writer surface (mirrors `MemoryMcpServer`'s writer role).
-</content>
-</invoke>
+- `rename_skill` (folder rename); delete + recreate covers it for now.
