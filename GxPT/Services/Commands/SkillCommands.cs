@@ -108,6 +108,7 @@ namespace GxPT
                     global.FeatureOff = false;
                     global.ClearSkillOverrides();
                     global.SaveGlobal();
+                    ctx.ApplyGlobalSkillsFeature(); // the Skills MCP server follows the feature flag
                     ctx.WriteInfo("Skills: global defaults reset (feature on, no per-skill settings).");
                 }
                 else
@@ -128,6 +129,7 @@ namespace GxPT
             {
                 global.FeatureOff = !on;
                 global.SaveGlobal();
+                ctx.ApplyGlobalSkillsFeature(); // the Skills MCP server follows the feature flag
             }
             else
             {

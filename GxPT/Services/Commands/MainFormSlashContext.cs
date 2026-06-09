@@ -28,6 +28,7 @@ namespace GxPT
         public IDictionary<string, bool> GetConversationSkillOverrides() { return _form.SlashGetConversationSkillOverrides(); }
         public void SetConversationSkillOverride(string slug, bool? value) { _form.SlashSetConversationSkillOverride(slug, value); }
         public void ResetConversationSkills() { _form.SlashResetConversationSkills(); }
+        public void ApplyGlobalSkillsFeature() { _form.SlashApplyGlobalSkillsFeature(); }
 
         public void NewConversation() { _form.SlashNewConversation(); }
         public void ExportConversations() { _form.SlashExportConversations(); }

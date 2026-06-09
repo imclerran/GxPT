@@ -38,6 +38,11 @@ namespace GxPT
         void SetConversationSkillOverride(string slug, bool? value); // null clears the slug; persists
         void ResetConversationSkills();                     // clear feature override + all per-skill overrides
 
+        // Bring the Skills MCP server into line with the global skills feature flag (the server follows
+        // it - feature on => server on). Call after a GLOBAL on/off/reset; per-conversation changes don't
+        // affect the server, which is shared across the workdir.
+        void ApplyGlobalSkillsFeature();
+
         // ---- conversation / app actions ----
         void NewConversation();
         void ExportConversations();

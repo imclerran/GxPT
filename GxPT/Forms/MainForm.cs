@@ -1043,9 +1043,11 @@ namespace GxPT
                 opts.MemoryEnabled = AppSettings.GetBool("mcp_memory_enabled", false);
                 int memMaxLines = (int)AppSettings.GetDouble("mcp_memory_max_lines", 40);
                 opts.MemoryMaxLines = memMaxLines > 0 ? memMaxLines : 40;
-                // Skills server (authoring/execution tools); off by default like the other powerful
-                // servers. The read-side skills feature is separate (always on when skills exist).
-                opts.SkillsEnabled = AppSettings.GetBool("mcp_skills_enabled", false);
+                // The Skills MCP server (authoring + execution tools) follows the skills FEATURE: whenever
+                // skills are enabled globally (skills.json feature_off == false, the default), the server is
+                // on, so the model always has the create/edit/validate/run tools wherever skills apply.
+                // There is no separate server toggle - /skills on|off global is the single control.
+                opts.SkillsEnabled = !SkillEnablement.LoadGlobal().FeatureOff;
                 // Skill roots the server resolves scripts against: bundled (<exe>/skills, shipped with the
                 // app) and user-global (%AppData%/GxPT/skills). The project root is derived from
                 // GXPT_WORKDIR inside the server. These mirror the read-side roots (SkillInjection).
@@ -1343,13 +1345,14 @@ namespace GxPT
         }
 
         // Built-in MCP tool servers that can be toggled by name with /tool (custom mcp.json servers are
-        // presence-based; memory is intentionally excluded -- it's a feature toggle, not a tool server).
+        // presence-based). Memory and skills are intentionally excluded -- they are feature toggles, not
+        // tool servers: memory via Settings, skills via /skills (which also drives the skills MCP server).
         internal IList<string> SlashGetServerNames()
         {
             return new List<string>(new string[]
             {
                 McpConfig.WebName, McpConfig.FilesName, McpConfig.GitName,
-                McpConfig.CommandName, McpConfig.MsBuildName, McpConfig.SkillsName, McpConfig.GitHubName
+                McpConfig.CommandName, McpConfig.MsBuildName, McpConfig.GitHubName
             });
         }
 
@@ -1363,7 +1366,7 @@ namespace GxPT
             if (string.Equals(name, McpConfig.CommandName, StringComparison.OrdinalIgnoreCase)) return "mcp_command_enabled";
             if (string.Equals(name, McpConfig.MsBuildName, StringComparison.OrdinalIgnoreCase)) { defaultOn = true; return "mcp_msbuild_enabled"; }
             if (string.Equals(name, McpConfig.MemoryName, StringComparison.OrdinalIgnoreCase)) return "mcp_memory_enabled";
-            if (string.Equals(name, McpConfig.SkillsName, StringComparison.OrdinalIgnoreCase)) return "mcp_skills_enabled";
+            // skills has no independent server key - it follows the skills feature (/skills global).
             if (string.Equals(name, McpConfig.GitHubName, StringComparison.OrdinalIgnoreCase)) return "mcp_github_enabled";
             return null;
         }
@@ -1413,6 +1416,13 @@ namespace GxPT
             if (c == null || c.Conversation == null) return;
             c.Conversation.SkillsFeatureOff = value;
             SaveConversationContext(c);
+        }
+
+        // The Skills MCP server tracks the global skills feature flag; rebuild the host so it starts/stops
+        // to match after a `/skills ... global` change (mirrors what SlashSetServerEnabled does for /tool).
+        internal void SlashApplyGlobalSkillsFeature()
+        {
+            RebuildMcpHost();
         }
 
         internal IDictionary<string, bool> SlashGetConversationSkillOverrides()
