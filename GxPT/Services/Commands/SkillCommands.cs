@@ -168,7 +168,7 @@ namespace GxPT
                 bool? ov = (convOv != null && convOv.TryGetValue(s.Slug, out v)) ? (bool?)v : null;
                 SkillRule rule;
                 bool enabled = SkillResolve.Resolve(global, s.Slug, ov, convFeatureOff, out rule);
-                sb.Append("\n  ").Append((s.Slug != null ? s.Slug : "").PadRight(width)).Append("  ")
+                sb.Append("\n- ").Append((s.Slug != null ? s.Slug : "").PadRight(width)).Append("  ")
                   .Append(enabled ? "ON " : "OFF").Append("  (").Append(ReasonText(rule, enabled)).Append(")");
             }
             return sb.ToString();

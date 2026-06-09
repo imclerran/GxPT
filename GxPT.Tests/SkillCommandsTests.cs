@@ -255,6 +255,21 @@ namespace GxPT.Tests
             Assert.DoesNotContain("(default)", info);       // nothing is "default" when feature is off here
         }
 
+        // Each skill renders as a consistent "- <slug>" bullet (slug-sorted).
+        [Fact]
+        public void List_SkillLines_AreBulleted()
+        {
+            SeedFourSkills();
+
+            new SkillsCommand().Invoke("", _ctx);
+            string info = LastInfo();
+
+            Assert.Contains("\n- build-helper", info);
+            Assert.Contains("\n- formatter", info);
+            Assert.Contains("\n- greeting", info);
+            Assert.Contains("\n- release-notes", info);
+        }
+
         // Feature UNSET here: unset skills fall through to rung 5 -> "default"; header has no "here" half.
         [Fact]
         public void List_FeatureUnsetHere_UnsetSkillsAreDefault()
