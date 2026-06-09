@@ -59,9 +59,9 @@ good skill (especially how to phrase the description and when to split into mult
 
 ## 4. Propose, then confirm
 
-Summarize back, in plain terms: the name and slug, the one-line description (when it applies),
-what the instructions will cover, any supporting files, and any script. Let the user correct
-it. Don't write files until they're happy with the plan.
+Summarize back, in plain terms: the name and slug, the one-line description (which states when
+the skill should fire), what the instructions will cover, any supporting files, and any script.
+Let the user correct it. Don't write files until they're happy with the plan.
 
 ## 5. Write the files
 
