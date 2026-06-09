@@ -12,7 +12,7 @@ namespace GxPT
     // attaches the skill body as a hidden system message (it never enters the transcript). Scope
     // defaults to "here" (this conversation); "global" edits skills.json. Conversation overrides are
     // read/written through ISlashCommandContext; the global default through SkillEnablement directly.
-    internal static class SkillCommands
+    internal static class SkillCommandShared
     {
         public static IList<ISlashCommand> BuiltIns()
         {
@@ -83,8 +83,8 @@ namespace GxPT
 
         public override SlashCommandResult Invoke(string args, ISlashCommandContext ctx)
         {
-            string[] tok = SkillCommands.Tokens(args);
-            SkillCatalog cat = SkillCommands.BuildCatalog(ctx);
+            string[] tok = SkillCommandShared.Tokens(args);
+            SkillCatalog cat = SkillCommandShared.BuildCatalog(ctx);
             SkillEnablement global = SkillEnablement.LoadGlobal();
 
             if (tok.Length == 0)
@@ -96,10 +96,11 @@ namespace GxPT
                 return SlashCommandResult.Fail("Usage: /skills [on|off|reset] [here|global]");
 
             bool isGlobal = false;
-            if (tok.Length >= 2 && !SkillCommands.TryScope(tok[1], out isGlobal))
+            if (tok.Length >= 2 && !SkillCommandShared.TryScope(tok[1], out isGlobal))
                 return SlashCommandResult.Fail("Unknown scope '" + tok[1] + "'. Use 'here' or 'global'.");
 
             string verb = tok[0].ToLowerInvariant();
+            string info;
             if (verb == "reset")
             {
                 if (isGlobal)
@@ -107,34 +108,28 @@ namespace GxPT
                     global.FeatureOff = false;
                     global.ClearSkillOverrides();
                     global.SaveGlobal();
-                    ctx.WriteInfo("Skills: global defaults reset (feature on, no per-skill settings).");
+                    info = "Skills: global defaults reset (feature on, no per-skill settings).";
                 }
                 else
                 {
                     ctx.ResetConversationSkills();
-                    ctx.WriteInfo("Skills: cleared this conversation's overrides.");
+                    info = "Skills: cleared this conversation's overrides.";
                 }
-                ctx.RefreshSkillsServer(); // the Skills MCP server follows skill enablement
-                return SlashCommandResult.Handled();
-            }
-
-            bool? onoff = SkillCommands.ParseOnOff(verb);
-            if (!onoff.HasValue)
-                return SlashCommandResult.Fail("Usage: /skills [on|off|reset] [here|global]");
-
-            bool on = onoff.Value;
-            string where = isGlobal ? "globally" : "for this conversation";
-            if (isGlobal)
-            {
-                global.FeatureOff = !on;
-                global.SaveGlobal();
             }
             else
             {
-                ctx.SetConversationSkillsFeatureOff(on ? (bool?)false : (bool?)true);
+                bool? onoff = SkillCommandShared.ParseOnOff(verb);
+                if (!onoff.HasValue)
+                    return SlashCommandResult.Fail("Usage: /skills [on|off|reset] [here|global]");
+
+                bool on = onoff.Value;
+                if (isGlobal) { global.FeatureOff = !on; global.SaveGlobal(); }
+                else { ctx.SetConversationSkillsFeatureOff(on ? (bool?)false : (bool?)true); }
+                info = "Skills turned " + (on ? "on" : "off") + " " + (isGlobal ? "globally" : "for this conversation") + ".";
             }
-            ctx.RefreshSkillsServer(); // the Skills MCP server follows skill enablement
-            ctx.WriteInfo("Skills turned " + (on ? "on" : "off") + " " + where + ".");
+
+            ctx.RefreshSkillsServer(); // once, after a successful mutation - the server follows enablement
+            ctx.WriteInfo(info);
             return SlashCommandResult.Handled();
         }
 
@@ -236,51 +231,54 @@ namespace GxPT
 
         public override SlashCommandResult Invoke(string args, ISlashCommandContext ctx)
         {
-            string[] tok = SkillCommands.Tokens(args);
+            string[] tok = SkillCommandShared.Tokens(args);
             if (tok.Length == 0 || tok.Length > 3) // slug + optional verb + optional scope; no trailing junk
                 return SlashCommandResult.Fail("Usage: /skill <slug> [on|off|reset] [here|global]");
 
-            SkillCatalog cat = SkillCommands.BuildCatalog(ctx);
+            SkillCatalog cat = SkillCommandShared.BuildCatalog(ctx);
             Skill skill;
-            if (!SkillCommands.ResolveSkill(cat, tok[0], out skill))
+            if (!SkillCommandShared.ResolveSkill(cat, tok[0], out skill))
                 return SlashCommandResult.Fail("Unknown skill: " + tok[0]);
             string slug = skill.Slug;
             SkillEnablement global = SkillEnablement.LoadGlobal();
+
+            string info;
 
             // Bare "/skill <slug>": toggle the effective state for this conversation.
             if (tok.Length == 1)
             {
                 bool current = SkillResolve.IsEnabled(global, slug,
-                    SkillCommands.ConvOverrideFor(ctx, slug), ctx.GetConversationSkillsFeatureOff());
+                    SkillCommandShared.ConvOverrideFor(ctx, slug), ctx.GetConversationSkillsFeatureOff());
                 ctx.SetConversationSkillOverride(slug, !current);
-                ctx.RefreshSkillsServer(); // the Skills MCP server follows skill enablement
-                ctx.WriteInfo("Skill '" + slug + "' " + (!current ? "enabled" : "disabled") + " for this conversation.");
-                return SlashCommandResult.Handled();
+                info = "Skill '" + slug + "' " + (!current ? "enabled" : "disabled") + " for this conversation.";
             }
-
-            bool isGlobal = false;
-            if (tok.Length >= 3 && !SkillCommands.TryScope(tok[2], out isGlobal))
-                return SlashCommandResult.Fail("Unknown scope '" + tok[2] + "'. Use 'here' or 'global'.");
-
-            string verb = tok[1].ToLowerInvariant();
-            if (verb == "reset")
+            else
             {
-                if (isGlobal) { global.SetSkillOverride(slug, null); global.SaveGlobal(); ctx.WriteInfo("Skill '" + slug + "': global setting cleared."); }
-                else { ctx.SetConversationSkillOverride(slug, null); ctx.WriteInfo("Skill '" + slug + "': conversation override cleared."); }
-                ctx.RefreshSkillsServer(); // the Skills MCP server follows skill enablement
-                return SlashCommandResult.Handled();
+                bool isGlobal = false;
+                if (tok.Length >= 3 && !SkillCommandShared.TryScope(tok[2], out isGlobal))
+                    return SlashCommandResult.Fail("Unknown scope '" + tok[2] + "'. Use 'here' or 'global'.");
+
+                string verb = tok[1].ToLowerInvariant();
+                if (verb == "reset")
+                {
+                    if (isGlobal) { global.SetSkillOverride(slug, null); global.SaveGlobal(); info = "Skill '" + slug + "': global setting cleared."; }
+                    else { ctx.SetConversationSkillOverride(slug, null); info = "Skill '" + slug + "': conversation override cleared."; }
+                }
+                else
+                {
+                    bool? onoff = SkillCommandShared.ParseOnOff(verb);
+                    if (!onoff.HasValue)
+                        return SlashCommandResult.Fail("Usage: /skill <slug> [on|off|reset] [here|global]");
+
+                    bool on = onoff.Value;
+                    if (isGlobal) { global.SetSkillOverride(slug, on); global.SaveGlobal(); }
+                    else { ctx.SetConversationSkillOverride(slug, on); }
+                    info = "Skill '" + slug + "' " + (on ? "enabled" : "disabled") + " " + (isGlobal ? "globally" : "for this conversation") + ".";
+                }
             }
 
-            bool? onoff = SkillCommands.ParseOnOff(verb);
-            if (!onoff.HasValue)
-                return SlashCommandResult.Fail("Usage: /skill <slug> [on|off|reset] [here|global]");
-
-            bool on = onoff.Value;
-            string where = isGlobal ? "globally" : "for this conversation";
-            if (isGlobal) { global.SetSkillOverride(slug, on); global.SaveGlobal(); }
-            else { ctx.SetConversationSkillOverride(slug, on); }
-            ctx.RefreshSkillsServer(); // the Skills MCP server follows skill enablement
-            ctx.WriteInfo("Skill '" + slug + "' " + (on ? "enabled" : "disabled") + " " + where + ".");
+            ctx.RefreshSkillsServer(); // once, after a successful mutation - the server follows enablement
+            ctx.WriteInfo(info);
             return SlashCommandResult.Handled();
         }
 
@@ -292,7 +290,7 @@ namespace GxPT
             if (sp < 0)
             {
                 // First token: skill slugs, annotated with their effective state.
-                SkillCatalog cat = SkillCommands.BuildCatalog(ctx);
+                SkillCatalog cat = SkillCommandShared.BuildCatalog(ctx);
                 SkillEnablement global = SkillEnablement.LoadGlobal();
                 bool? convFeatureOff = ctx.GetConversationSkillsFeatureOff();
                 IList<Skill> skills = cat.Skills;
@@ -300,7 +298,7 @@ namespace GxPT
                 {
                     string slug = skills[i].Slug;
                     if (a.Length > 0 && !slug.StartsWith(a, StringComparison.OrdinalIgnoreCase)) continue;
-                    bool enabled = SkillResolve.IsEnabled(global, slug, SkillCommands.ConvOverrideFor(ctx, slug), convFeatureOff);
+                    bool enabled = SkillResolve.IsEnabled(global, slug, SkillCommandShared.ConvOverrideFor(ctx, slug), convFeatureOff);
                     result.Add(new ArgCompletion(slug + "  (" + (enabled ? "on" : "off") + ")", slug + " ", true));
                 }
             }
@@ -328,20 +326,13 @@ namespace GxPT
     // user message ("Use the <slug> skill. [text]") and attaches the skill's full instructions as a
     // HIDDEN system message (context the model sees but the transcript never shows) - so the body never
     // clutters the user transcript. Custom behavior, not a generic prompt expansion.
-    internal sealed class UseCommand : ISlashCommand, IArgumentCompleter
+    internal sealed class UseCommand : ClientCommandBase, IArgumentCompleter
     {
-        private static readonly IList<string> EmptyList = new List<string>().AsReadOnly();
+        public override string Name { get { return "use"; } }
+        public override string Description { get { return "Use a skill (loads it as context)"; } }
+        public override string ArgumentHint { get { return "<slug> [message]"; } }
 
-        public string Name { get { return "use"; } }
-        public IList<string> Aliases { get { return EmptyList; } }
-        public string Description { get { return "Use a skill (loads it as context)"; } }
-        public string ArgumentHint { get { return "<slug> [message]"; } }
-        public SlashCommandKind Kind { get { return SlashCommandKind.Client; } }
-        public IList<string> Requires { get { return EmptyList; } }
-        public IList<string> RequiresAny { get { return EmptyList; } }
-        public bool TakesPathArgument { get { return false; } }
-
-        public SlashCommandResult Invoke(string args, ISlashCommandContext ctx)
+        public override SlashCommandResult Invoke(string args, ISlashCommandContext ctx)
         {
             string a = (args ?? string.Empty).Trim();
             if (a.Length == 0) return SlashCommandResult.Fail("Usage: /use <slug> [message]");
@@ -351,9 +342,9 @@ namespace GxPT
             if (sp < 0) { slugArg = a; rest = string.Empty; }
             else { slugArg = a.Substring(0, sp); rest = a.Substring(sp + 1).Trim(); }
 
-            SkillCatalog cat = SkillCommands.BuildCatalog(ctx);
+            SkillCatalog cat = SkillCommandShared.BuildCatalog(ctx);
             Skill skill;
-            if (!SkillCommands.ResolveSkill(cat, slugArg, out skill))
+            if (!SkillCommandShared.ResolveSkill(cat, slugArg, out skill))
                 return SlashCommandResult.Fail("Unknown skill: " + slugArg);
 
             // The skill body rides as a hidden system message (committed at send, not now), so the
@@ -373,7 +364,7 @@ namespace GxPT
             string a = argText ?? string.Empty;
             if (a.IndexOf(' ') >= 0) return result; // only complete the first token (the slug)
 
-            SkillCatalog cat = SkillCommands.BuildCatalog(ctx);
+            SkillCatalog cat = SkillCommandShared.BuildCatalog(ctx);
             IList<Skill> skills = cat.Skills;
             for (int i = 0; i < skills.Count; i++)
             {

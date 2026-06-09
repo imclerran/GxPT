@@ -44,7 +44,7 @@
     <Compile Include="SkillSlug.cs" />
     <Compile Include="SkillFrontmatter.cs" />
     <Compile Include="SkillWriter.cs" />
-    <Compile Include="SkillsTools.cs" />
+    <Compile Include="SkillsServerTools.cs" />
     <Compile Include="PathSandbox.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

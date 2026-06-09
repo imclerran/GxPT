@@ -18,7 +18,7 @@ namespace SkillsMcpServer
             info.Version = "1.0";
 
             McpServer server = new McpServer(info, log);
-            SkillsTools.Register(server, SkillsConfig.FromEnvironment(log));
+            SkillsServerTools.Register(server, SkillsConfig.FromEnvironment(log));
             server.Run(); // blocks until stdin EOF
             return 0;
         }

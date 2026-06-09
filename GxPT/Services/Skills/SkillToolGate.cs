@@ -50,8 +50,10 @@ namespace GxPT
                 }
             }
 
-            List<string> hidden = new List<string>();
-            if (!writerEnabled) hidden.AddRange(AuthoringTools);
+            // A HashSet so the orchestrator's per-call hidden-tool lookup is O(1) (ordinal, like the
+            // server-qualified names it holds).
+            HashSet<string> hidden = new HashSet<string>(StringComparer.Ordinal);
+            if (!writerEnabled) foreach (string t in AuthoringTools) hidden.Add(t);
             if (!anyEnabled) hidden.Add(RunScriptTool);
             return hidden;
         }

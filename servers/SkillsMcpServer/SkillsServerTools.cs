@@ -14,7 +14,7 @@ namespace SkillsMcpServer
     /// (slug, frontmatter) and owns encoding/atomic writes, so the model never produces an unloadable
     /// SKILL.md. run_skill_script (execution) registers here too once added.
     /// </summary>
-    internal static class SkillsTools
+    internal static class SkillsServerTools
     {
         private const int DefaultTimeoutMs = 60000;
         private const int MaxTimeoutMs = 600000;

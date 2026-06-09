@@ -1282,7 +1282,7 @@ namespace GxPT
             // user commands.json).
             var all = new List<ISlashCommand>();
             all.AddRange(ClientCommands.BuiltIns());
-            all.AddRange(SkillCommands.BuiltIns());
+            all.AddRange(SkillCommandShared.BuiltIns());
             all.AddRange(SlashCommandConfig.LoadMerged(userJson, LoggerSink.Instance));
 
             _slashRegistry = new SlashCommandRegistry(all);
@@ -2334,8 +2334,8 @@ namespace GxPT
                     }
 
                     // Skills: discover bundled (<exe>/skills) + project (<workdir>/.gxpt/skills) skills for
-                    // this turn, resolve which are enabled (global skills.json default; the per-conversation
-                    // override layer lands in phase 4b), then inject the manifest and expose open_skill over
+                    // this turn, resolve which are enabled (global skills.json default + the per-conversation
+                    // override layer), then inject the manifest and expose open_skill over
                     // the enabled set. Rebuilt per send, so on-disk edits take effect on the next turn.
                     SkillCatalog skillCatalog =
                         SkillInjection.BuildCatalog(AppDomain.CurrentDomain.BaseDirectory, ctx.WorkingDir);
