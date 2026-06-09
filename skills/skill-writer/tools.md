@@ -51,7 +51,9 @@ what's available rather than hardcoding one name.
 - `open_skill(names[])` - open a skill and load its body
 - `read_skill_file(slug, relpath)` - read a skill's bundled file
 - `run_skill_script(slug, relpath, args[])` - run a skill's declared `.bat` (see `scripts.md`)
-- `create_skill`, `write_skill_file`, `update_skill` - authoring (what you're using now)
+- Authoring (what you're using now): `create_skill`, `write_skill_file`, `update_skill`,
+  `edit_skill_file`, `list_skill_files`, `delete_skill_file`, `delete_skill`, `validate_skill`.
+  These are only available while this skill-writer skill is enabled.
 
 ## Also check your own current tools - the user may have added their own
 

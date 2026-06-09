@@ -65,13 +65,25 @@ Let the user correct it. Don't write files until they're happy with the plan.
 
 ## 5. Write the files
 
+Creating a new skill:
 - `create_skill(slug, name, description, body)` - the main `SKILL.md`. Put the workflow /
   instructions in the body. If multi-file, have the body describe the overall flow and say
   exactly when to read each supporting file.
 - `write_skill_file(slug, relpath, content)` - each supporting file, and any script (e.g.
   `scripts/<name>.bat`). See `scripts.md` for script conventions.
-- `update_skill(slug, ...)` - when editing an existing skill; pass only the fields that change
-  (read the current `SKILL.md` first with `read_skill_file` if you need to see it).
+
+Editing an existing skill (read it first with `read_skill_file`, or `list_skill_files(slug)` to
+see what it contains):
+- `update_skill(slug, ...)` - change the main `SKILL.md`; pass only the fields that change
+  (name / description / body), the rest stay as they are.
+- `edit_skill_file(slug, relpath, old_string, new_string)` - a targeted edit to a supporting
+  file or script, replacing an exact span (like a normal file edit). Use this over rewriting the
+  whole file. Not for `SKILL.md` - that's `update_skill`.
+- `delete_skill_file(slug, relpath)` removes one file; `delete_skill(slug)` removes the whole
+  skill. Both are destructive - the user confirms each time, so only reach for them when asked.
+
+After writing, run `validate_skill(slug)` to confirm the `SKILL.md` still loads (its description
+is what makes the skill discoverable).
 
 ## 6. Hand off
 

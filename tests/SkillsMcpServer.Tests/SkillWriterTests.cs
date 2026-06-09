@@ -139,5 +139,156 @@ namespace SkillsMcpServer.Tests
             Assert.Throws<SkillWriteException>(() =>
                 _writer.CreateSkill("elsewhere", "a", "Name", "Desc", "body"));
         }
+
+        // ---- tier 2: maintenance ----
+
+        [Fact]
+        public void EditFile_ReplacesUniqueSpan()
+        {
+            _writer.CreateSkill(null, "greeting", "Greeting", "desc", "body");
+            _writer.WriteFile(null, "greeting", "ref.md", "alpha beta gamma");
+            _writer.EditFile(null, "greeting", "ref.md", "beta", "DELTA", false);
+
+            string path = Path.Combine(Path.Combine(_project, "greeting"), "ref.md");
+            Assert.Equal("alpha DELTA gamma", File.ReadAllText(path));
+        }
+
+        [Fact]
+        public void EditFile_NonUnique_WithoutReplaceAll_Throws()
+        {
+            _writer.CreateSkill(null, "greeting", "Greeting", "desc", "body");
+            _writer.WriteFile(null, "greeting", "ref.md", "x x x");
+            Assert.Throws<SkillWriteException>(() =>
+                _writer.EditFile(null, "greeting", "ref.md", "x", "y", false));
+        }
+
+        [Fact]
+        public void EditFile_ReplaceAll_ReplacesEvery()
+        {
+            _writer.CreateSkill(null, "greeting", "Greeting", "desc", "body");
+            _writer.WriteFile(null, "greeting", "ref.md", "x x x");
+            _writer.EditFile(null, "greeting", "ref.md", "x", "y", true);
+
+            string path = Path.Combine(Path.Combine(_project, "greeting"), "ref.md");
+            Assert.Equal("y y y", File.ReadAllText(path));
+        }
+
+        [Fact]
+        public void EditFile_OldStringNotFound_Throws()
+        {
+            _writer.CreateSkill(null, "greeting", "Greeting", "desc", "body");
+            _writer.WriteFile(null, "greeting", "ref.md", "hello");
+            Assert.Throws<SkillWriteException>(() =>
+                _writer.EditFile(null, "greeting", "ref.md", "nope", "y", false));
+        }
+
+        [Fact]
+        public void EditFile_RejectsSkillMd()
+        {
+            _writer.CreateSkill(null, "greeting", "Greeting", "desc", "body");
+            Assert.Throws<SkillWriteException>(() =>
+                _writer.EditFile(null, "greeting", "SKILL.md", "body", "x", false));
+        }
+
+        [Fact]
+        public void EditFile_BatStaysCrlf()
+        {
+            _writer.CreateSkill(null, "greeting", "Greeting", "desc", "body");
+            _writer.WriteFile(null, "greeting", "scripts/gen.bat", "@echo off\necho one\necho two");
+            _writer.EditFile(null, "greeting", "scripts/gen.bat", "echo one", "echo ONE", false);
+
+            string path = Path.Combine(Path.Combine(_project, "greeting"), Path.Combine("scripts", "gen.bat"));
+            string text = File.ReadAllText(path);
+            Assert.Contains("echo ONE", text);
+            Assert.Contains("\r\n", text);              // still CRLF after the edit
+            Assert.DoesNotContain("echo one", text);    // the old line is gone
+        }
+
+        [Fact]
+        public void ListFiles_EnumeratesRelativePaths()
+        {
+            _writer.CreateSkill(null, "greeting", "Greeting", "desc", "body");
+            _writer.WriteFile(null, "greeting", "ref.md", "x");
+            _writer.WriteFile(null, "greeting", "scripts/gen.bat", "@echo off");
+
+            string listing = _writer.ListFiles(null, "greeting");
+            Assert.Contains("SKILL.md", listing);
+            Assert.Contains("ref.md", listing);
+            Assert.Contains("scripts/gen.bat", listing); // forward slashes, relative
+        }
+
+        [Fact]
+        public void DeleteFile_RemovesSupportingFile()
+        {
+            _writer.CreateSkill(null, "greeting", "Greeting", "desc", "body");
+            _writer.WriteFile(null, "greeting", "ref.md", "x");
+            string path = Path.Combine(Path.Combine(_project, "greeting"), "ref.md");
+            Assert.True(File.Exists(path));
+
+            _writer.DeleteFile(null, "greeting", "ref.md");
+            Assert.False(File.Exists(path));
+        }
+
+        [Fact]
+        public void DeleteFile_RejectsSkillMd()
+        {
+            _writer.CreateSkill(null, "greeting", "Greeting", "desc", "body");
+            Assert.Throws<SkillWriteException>(() =>
+                _writer.DeleteFile(null, "greeting", "SKILL.md"));
+        }
+
+        [Fact]
+        public void DeleteFile_RejectsEscape()
+        {
+            _writer.CreateSkill(null, "greeting", "Greeting", "desc", "body");
+            Assert.Throws<SkillWriteException>(() =>
+                _writer.DeleteFile(null, "greeting", "../escape.txt"));
+        }
+
+        [Fact]
+        public void DeleteSkill_RemovesWholeFolder()
+        {
+            _writer.CreateSkill(null, "greeting", "Greeting", "desc", "body");
+            _writer.WriteFile(null, "greeting", "ref.md", "x");
+            string dir = Path.Combine(_project, "greeting");
+            Assert.True(Directory.Exists(dir));
+
+            _writer.DeleteSkill(null, "greeting");
+            Assert.False(Directory.Exists(dir));
+        }
+
+        [Fact]
+        public void DeleteSkill_Nonexistent_Throws()
+        {
+            Assert.Throws<SkillWriteException>(() => _writer.DeleteSkill(null, "nope"));
+        }
+
+        [Fact]
+        public void ValidateSkill_Loadable_ReportsOk()
+        {
+            _writer.CreateSkill(null, "greeting", "Greeting", "Be a pirate.", "body");
+            string result = _writer.ValidateSkill(null, "greeting");
+            Assert.StartsWith("OK", result);
+            Assert.Contains("Greeting", result);
+            Assert.Contains("Be a pirate.", result);
+        }
+
+        [Fact]
+        public void ValidateSkill_MissingDescription_ReportsInvalid()
+        {
+            // Hand-write a SKILL.md with no description (bypassing create_skill's validation).
+            string dir = Path.Combine(_project, "broken");
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(Path.Combine(dir, "SKILL.md"), "---\nname: Broken\n---\n\nbody\n");
+
+            string result = _writer.ValidateSkill(null, "broken");
+            Assert.StartsWith("INVALID", result);
+        }
+
+        [Fact]
+        public void ValidateSkill_Nonexistent_Throws()
+        {
+            Assert.Throws<SkillWriteException>(() => _writer.ValidateSkill(null, "nope"));
+        }
     }
 }

@@ -16,9 +16,16 @@ namespace GxPT.Tests
         public void HiddenTools_MetaSkillDisabled_HidesAuthoringTools()
         {
             ICollection<string> hidden = SkillMeta.HiddenTools(new List<Skill> { MakeSkill("greeting") });
+            // tier 1
             Assert.Contains("skills__create_skill", hidden);
             Assert.Contains("skills__write_skill_file", hidden);
             Assert.Contains("skills__update_skill", hidden);
+            // tier 2 (maintenance)
+            Assert.Contains("skills__edit_skill_file", hidden);
+            Assert.Contains("skills__list_skill_files", hidden);
+            Assert.Contains("skills__delete_skill_file", hidden);
+            Assert.Contains("skills__delete_skill", hidden);
+            Assert.Contains("skills__validate_skill", hidden);
         }
 
         [Fact]

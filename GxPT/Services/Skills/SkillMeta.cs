@@ -12,12 +12,19 @@ namespace GxPT
         // The meta-skill that owns the authoring tools (its slug / folder name).
         public const string SkillWriterSlug = "skill-writer";
 
-        // Server-qualified authoring tool names gated on the meta-skill.
+        // Server-qualified authoring/maintenance tool names gated on the meta-skill (tier 1 + tier 2).
+        // The whole authoring surface belongs to the meta-skill - including the ReadOnly list/validate
+        // tools, which are only meaningful while writing skills.
         public static readonly string[] AuthoringTools = new string[]
         {
             McpConfig.SkillsName + "__create_skill",
             McpConfig.SkillsName + "__write_skill_file",
-            McpConfig.SkillsName + "__update_skill"
+            McpConfig.SkillsName + "__update_skill",
+            McpConfig.SkillsName + "__edit_skill_file",
+            McpConfig.SkillsName + "__list_skill_files",
+            McpConfig.SkillsName + "__delete_skill_file",
+            McpConfig.SkillsName + "__delete_skill",
+            McpConfig.SkillsName + "__validate_skill"
         };
 
         // The tool names to hide this turn: the authoring tools, UNLESS the meta-skill is among the

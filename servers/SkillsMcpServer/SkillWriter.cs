@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
@@ -91,6 +92,131 @@ namespace SkillsMcpServer
             return "Updated skill '" + slug + "'. Changes apply on your next message.";
         }
 
+        // edit_skill_file (tier 2): targeted string replace in a supporting file (files__edit parity).
+        // SKILL.md is edited only through update_skill, which keeps its frontmatter guaranteed-loadable.
+        public string EditFile(string scope, string slugIn, string relpath, string oldString, string newString, bool replaceAll)
+        {
+            string root = RootFor(scope);
+            string slug = RequireSlug(slugIn);
+            string dir = Path.Combine(root, slug);
+            if (!File.Exists(Path.Combine(dir, "SKILL.md")))
+                throw new SkillWriteException("skill '" + slug + "' does not exist; create_skill first");
+            if (IsBlank(oldString)) throw new SkillWriteException("old_string is required");
+            if (newString == null) throw new SkillWriteException("new_string is required");
+
+            string full;
+            try { full = new PathSandbox(dir).Resolve(relpath); }
+            catch (SandboxException ex) { throw new SkillWriteException(ex.Message); }
+
+            if (string.Equals(Path.GetFileName(full), "SKILL.md", StringComparison.OrdinalIgnoreCase))
+                throw new SkillWriteException("edit SKILL.md with update_skill, not edit_skill_file");
+            if (!File.Exists(full))
+                throw new SkillWriteException(relpath + " does not exist in skill '" + slug + "'");
+
+            string text;
+            try { text = File.ReadAllText(full, Encoding.UTF8); }
+            catch (Exception ex) { throw new SkillWriteException("could not read " + relpath + ": " + ex.Message); }
+
+            // Match against the file's own line endings: read tools normalize CRLF to LF, so an
+            // old_string copied from a read is LF-only even when the file on disk is CRLF (same fix as
+            // files__edit). Normalize old/new to the file's dominant newline before matching.
+            string nl = DetectNewline(text);
+            string oldN = NormalizeNewlines(oldString, nl);
+            string newN = NormalizeNewlines(newString, nl);
+
+            int count = CountOccurrences(text, oldN);
+            if (count == 0) throw new SkillWriteException("old_string not found in " + relpath);
+            if (count > 1 && !replaceAll)
+                throw new SkillWriteException("old_string is not unique in " + relpath + " (" + count
+                    + " matches); make it unique or set replace_all");
+
+            string updated = replaceAll ? text.Replace(oldN, newN) : ReplaceFirst(text, oldN, newN);
+
+            string ext = (Path.GetExtension(full) ?? string.Empty).ToLowerInvariant();
+            if (ext == ".bat" || ext == ".cmd") updated = ToCrlf(updated); // XP cmd.exe wants CRLF
+            AtomicWrite(full, updated);
+            return "Edited " + relpath + " in skill '" + slug + "' ("
+                + (replaceAll ? count + " replacement" + (count == 1 ? "" : "s") : "1 replacement") + ").";
+        }
+
+        // list_skill_files (tier 2, ReadOnly): every file in the skill folder, by path relative to it.
+        public string ListFiles(string scope, string slugIn)
+        {
+            string root = RootFor(scope);
+            string slug = RequireSlug(slugIn);
+            string dir = Path.Combine(root, slug);
+            if (!File.Exists(Path.Combine(dir, "SKILL.md")))
+                throw new SkillWriteException("skill '" + slug + "' does not exist");
+
+            List<string> rels = new List<string>();
+            CollectFiles(dir, dir, rels);
+            rels.Sort(StringComparer.OrdinalIgnoreCase);
+
+            StringBuilder sb = new StringBuilder();
+            sb.Append("Files in skill '").Append(slug).Append("':");
+            foreach (string r in rels) sb.Append('\n').Append("- ").Append(r);
+            return sb.ToString();
+        }
+
+        // delete_skill_file (tier 2, Destructive): remove one supporting file (never SKILL.md).
+        public string DeleteFile(string scope, string slugIn, string relpath)
+        {
+            string root = RootFor(scope);
+            string slug = RequireSlug(slugIn);
+            string dir = Path.Combine(root, slug);
+            if (!File.Exists(Path.Combine(dir, "SKILL.md")))
+                throw new SkillWriteException("skill '" + slug + "' does not exist");
+
+            string full;
+            try { full = new PathSandbox(dir).Resolve(relpath); }
+            catch (SandboxException ex) { throw new SkillWriteException(ex.Message); }
+
+            if (string.Equals(Path.GetFileName(full), "SKILL.md", StringComparison.OrdinalIgnoreCase))
+                throw new SkillWriteException("cannot delete SKILL.md; use delete_skill to remove the whole skill");
+            if (!File.Exists(full))
+                throw new SkillWriteException(relpath + " does not exist in skill '" + slug + "'");
+
+            File.Delete(full);
+            return "Deleted " + relpath + " from skill '" + slug + "'.";
+        }
+
+        // delete_skill (tier 2, Destructive): remove the whole skill folder.
+        public string DeleteSkill(string scope, string slugIn)
+        {
+            string root = RootFor(scope);
+            string slug = RequireSlug(slugIn);
+            string dir = Path.Combine(root, slug);
+            if (!File.Exists(Path.Combine(dir, "SKILL.md")))
+                throw new SkillWriteException("skill '" + slug + "' does not exist");
+
+            try { Directory.Delete(dir, true); }
+            catch (Exception ex) { throw new SkillWriteException("could not delete skill '" + slug + "': " + ex.Message); }
+            return "Deleted skill '" + slug + "'. It is gone from the list on your next message.";
+        }
+
+        // validate_skill (tier 2, ReadOnly): would this skill's SKILL.md load? (mirrors host discovery:
+        // frontmatter must declare a non-empty description). Supporting files/scripts aren't validated.
+        public string ValidateSkill(string scope, string slugIn)
+        {
+            string root = RootFor(scope);
+            string slug = RequireSlug(slugIn);
+            string file = Path.Combine(Path.Combine(root, slug), "SKILL.md");
+            if (!File.Exists(file))
+                throw new SkillWriteException("skill '" + slug + "' does not exist");
+
+            string text;
+            try { text = File.ReadAllText(file, Encoding.UTF8); }
+            catch (Exception ex) { throw new SkillWriteException("could not read SKILL.md: " + ex.Message); }
+
+            SkillFrontmatter fm = SkillFrontmatter.Parse(text);
+            if (fm == null || IsBlank(fm.Description))
+                return "INVALID: skill '" + slug + "' would not load - its SKILL.md frontmatter has no "
+                    + "'description'. Add one with update_skill.";
+
+            string name = !IsBlank(fm.Name) ? fm.Name : slug;
+            return "OK: skill '" + slug + "' loads. name: " + name + "; description: " + fm.Description;
+        }
+
         // ---- internals ----
 
         private string RootFor(string scope)
@@ -135,6 +261,58 @@ namespace SkillsMcpServer
         private static string ToCrlf(string s)
         {
             return s.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
+        }
+
+        private static string DetectNewline(string text)
+        {
+            return text.IndexOf("\r\n", StringComparison.Ordinal) >= 0 ? "\r\n" : "\n";
+        }
+
+        private static string NormalizeNewlines(string s, string nl)
+        {
+            if (s == null) return null;
+            string lf = s.Replace("\r\n", "\n").Replace("\r", "\n");
+            return nl == "\n" ? lf : lf.Replace("\n", nl);
+        }
+
+        private static int CountOccurrences(string text, string sub)
+        {
+            if (string.IsNullOrEmpty(sub)) return 0;
+            int count = 0, idx = 0;
+            while ((idx = text.IndexOf(sub, idx, StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                idx += sub.Length;
+            }
+            return count;
+        }
+
+        private static string ReplaceFirst(string text, string oldS, string newS)
+        {
+            int idx = text.IndexOf(oldS, StringComparison.Ordinal);
+            if (idx < 0) return text;
+            return text.Substring(0, idx) + newS + text.Substring(idx + oldS.Length);
+        }
+
+        private static void CollectFiles(string baseDir, string dir, List<string> rels)
+        {
+            string[] files;
+            try { files = Directory.GetFiles(dir); }
+            catch { files = new string[0]; }
+            foreach (string f in files) rels.Add(ToRel(baseDir, f));
+
+            string[] subs;
+            try { subs = Directory.GetDirectories(dir); }
+            catch { subs = new string[0]; }
+            foreach (string sub in subs) CollectFiles(baseDir, sub, rels);
+        }
+
+        private static string ToRel(string baseDir, string full)
+        {
+            string b = baseDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                + Path.DirectorySeparatorChar;
+            string rel = full.StartsWith(b, StringComparison.OrdinalIgnoreCase) ? full.Substring(b.Length) : full;
+            return rel.Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/');
         }
 
         private static bool IsBlank(string s)
