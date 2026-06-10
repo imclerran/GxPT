@@ -188,8 +188,40 @@ namespace GxPT.Tests
             SkillCatalog cat = SkillCatalog.Build(_bundled, _project);
 
             string manifest = cat.BuildManifest();
-            string expected = "- alpha - First.\n- beta - Second.";
+            string expected = "- alpha [bundled] - First.\n- beta [bundled] - Second.";
             Assert.Equal(expected, manifest);
+        }
+
+        [Fact]
+        public void BuildManifest_LabelsEachSkillWithItsScope()
+        {
+            string user = Path.Combine(_root, "user");
+            Directory.CreateDirectory(user);
+            WriteSkill(_bundled, "ships", null, "Bundled.", "b");
+            WriteSkill(user, "mine", null, "User.", "b");
+            WriteSkill(_project, "local", null, "Project.", "b");
+
+            SkillCatalog cat = SkillCatalog.Build(_bundled, user, _project);
+
+            string manifest = cat.BuildManifest();
+            // The label is the literal `scope` token (user/project) so the model can edit in place;
+            // bundled is read-only.
+            string expected = "- local [project] - Project.\n- mine [user] - User.\n- ships [bundled] - Bundled.";
+            Assert.Equal(expected, manifest);
+        }
+
+        [Fact]
+        public void BuildManifest_ShadowedSkill_LabeledByWinningScope()
+        {
+            string user = Path.Combine(_root, "user");
+            Directory.CreateDirectory(user);
+            // Same slug in user and project: project shadows user, so the label reflects project.
+            WriteSkill(user, "dup", null, "User copy.", "b");
+            WriteSkill(_project, "dup", null, "Project copy.", "b");
+
+            SkillCatalog cat = SkillCatalog.Build(_bundled, user, _project);
+
+            Assert.Equal("- dup [project] - Project copy.", cat.BuildManifest());
         }
     }
 }
