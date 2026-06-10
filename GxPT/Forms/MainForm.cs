@@ -3637,6 +3637,18 @@ namespace GxPT
                     header = rel.Length > 0 ? "Read skill file: " + rel : "Read skill file";
                     return true;
                 }
+                case "skills__edit_skill_file":
+                {
+                    // Mirror files__edit: a colored, collapsible line-diff. The skill file lives under the
+                    // skill folder, so the header carries the slug + relpath for context.
+                    string slug = Str(args, "slug");
+                    string rel = Str(args, "relpath");
+                    LineDiffResult diff = DiffUtil.BuildLineDiff(Str(args, "old_string"), Str(args, "new_string"));
+                    string target = (slug.Length > 0 && rel.Length > 0) ? (slug + "/" + rel)
+                                  : (rel.Length > 0 ? rel : (slug.Length > 0 ? slug : "(skill file)"));
+                    header = "edited " + target;
+                    body = diff.Body; language = "diff"; added = diff.Added; removed = diff.Removed; return true;
+                }
                 case "skills__run_skill_script":
                 {
                     string rel = Str(args, "relpath");
