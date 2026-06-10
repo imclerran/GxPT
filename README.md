@@ -25,7 +25,11 @@ A native chatbot client and coding agent for Windows XP. GxPT aims to provide a 
    - Ada, ASM, Bash, Basic, Batch, C, Clojure, C++, C#, CSS, CSV, Dart, EBNF, Elixir, Erlang, F#, Fortran, Go, Haskell, HTML, Java, JavaScript, JSON, Kotlin, Lisp (Common, Scheme/Racket, Clojure, Emacs), Lua, OCaml, Pascal, Perl, PHP, PowerShell, Properties, Python, Ruby, Regex, Rust, Scala, SQL, Swift, TypeScript, Visual Basic, XML, YAML, Zig
 - **Conversation Management**: Tabbed conversations and conversation history.
 - **Agentic Workflows**: GxPT autonomously chains tool calls until your task is done, powering **agentic coding** (file/git/shell), **web search**, and **GitHub** access. Tools connect via the [Model Context Protocol](https://modelcontextprotocol.io/); add custom servers in `mcp.json`.
+- **Skills**: Teach GxPT reusable workflows. Skills bundle instructions (and optional scripts) the model can pull in on demand. A built-in **skill-writer** helps you author your own, and you can enable skills per conversation or globally with the `/skills`, `/skill`, and `/use` commands.
+- **Persistent Memory**: GxPT can record durable facts about each workspace and recall them in later conversations, so context carries over without re-explaining your project. Toggle it and set a size limit in settings.
 - **Tool Approval & Sandboxing**: Every tool call is gated by an in-app approval prompt showing the exact tool and arguments before it runs, with approvals remembered per session. File/git/command tools are confined to the working folder you choose.
+- **Slash Commands**: Type `/` for quick actions with autocomplete, including `/model` (switch models), `/tool` (toggle MCP servers), `/new`, `/export`, and `/compact`.
+- **Recent Working Folders**: Quickly reattach to the working directories you used most recently.
 - **File Attachments**: Add text file attachments to your messages to avoid cluttering up the conversation with long pasted text.
 - **Conversation Editing**: Don't like the response a model gave you? Go back and edit your message and get a new response.
 - **Privacy & Local Storage**: Conversations are stored locally and can be exported/imported to migrate across machines. Enforce **Zero Data Retention (ZDR)** per conversation to route only to providers that won't store your prompts or responses.
