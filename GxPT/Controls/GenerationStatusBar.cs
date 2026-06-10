@@ -114,6 +114,7 @@ namespace GxPT
 
             public Color GlyphColor = Color.Black;
             public Color HoverBack = Color.Gainsboro;
+            public Color BorderColor = Color.Gray;
 
             public StopGlyphButton()
             {
@@ -146,6 +147,11 @@ namespace GxPT
                 using (SolidBrush sb = new SolidBrush(GlyphColor))
                 using (GraphicsPath sp = Rounded(new Rectangle(x, y, side, side), 2))
                     g.FillPath(sb, sp);
+
+                // Thin dark-grey border around the button.
+                using (Pen bp = new Pen(BorderColor))
+                using (GraphicsPath bdr = Rounded(new Rectangle(0, 0, Width - 1, Height - 1), 4))
+                    g.DrawPath(bp, bdr);
             }
 
             private static GraphicsPath Rounded(Rectangle r, int radius)
