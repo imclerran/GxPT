@@ -18,6 +18,12 @@ namespace GxPT
         private static readonly Color TextColor = Color.FromArgb(55, 55, 55);
         private static readonly Color LinkColor = Color.FromArgb(0, 90, 158);
 
+        // Folder glyphs shown at the left of the strip; green when a folder is set, yellow when not.
+        // Loaded once and shared across all strip instances (null if the resource is missing).
+        private static readonly Image SetIcon = ResourceManager.TryGetAssemblyImage("WorkspaceSet.png");
+        private static readonly Image UnsetIcon = ResourceManager.TryGetAssemblyImage("WorkspaceUnset.png");
+
+        private readonly PictureBox _icon;
         private readonly Label _text;
         private readonly FlowLayoutPanel _links;
         private readonly LinkLabel _change;
@@ -50,15 +56,25 @@ namespace GxPT
             _links.Controls.Add(_clear);
             _links.Controls.Add(_dismiss);
 
+            // Small folder icon at the far left; the image is swapped per state in SetWorkingDir.
+            _icon = new PictureBox();
+            _icon.Dock = DockStyle.Left;
+            _icon.Width = 22;
+            _icon.SizeMode = PictureBoxSizeMode.Zoom;
+            _icon.Margin = new Padding(0);
+
             _text = new Label();
             _text.Dock = DockStyle.Fill;
             _text.AutoEllipsis = true;
             _text.TextAlign = ContentAlignment.MiddleLeft;
             _text.ForeColor = TextColor;
+            // Small gap between the icon and the text.
+            _text.Padding = new Padding(6, 0, 0, 0);
 
             // Fill first, edge-docked controls after — matches the app's working docking order.
             this.Controls.Add(_text);
             this.Controls.Add(_links);
+            this.Controls.Add(_icon);
 
             SetWorkingDir(null);
         }
@@ -85,6 +101,7 @@ namespace GxPT
         public void SetWorkingDir(string dir)
         {
             bool has = !string.IsNullOrEmpty(dir);
+            _icon.Image = has ? SetIcon : UnsetIcon;
             if (has)
             {
                 this.BackColor = SetBack;
