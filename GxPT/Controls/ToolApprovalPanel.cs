@@ -144,6 +144,22 @@ namespace GxPT
                     _previewLabel.Text = "Diff:";
                     handled = true;
                 }
+                else if (string.Equals(req.FunctionName, "skills__edit_skill_file", StringComparison.Ordinal))
+                {
+                    // Same treatment as files__edit: a colored diff of the change. The skill file lives
+                    // outside the workspace, so there's no live file context to fold in - diff the
+                    // old/new spans directly. Header carries the slug + relpath.
+                    string slug = req.Arguments.Value<string>("slug") ?? string.Empty;
+                    string rel = req.Arguments.Value<string>("relpath") ?? string.Empty;
+                    string oldS = req.Arguments.Value<string>("old_string") ?? string.Empty;
+                    string newS = req.Arguments.Value<string>("new_string") ?? string.Empty;
+                    string target = (slug.Length > 0 && rel.Length > 0) ? (slug + "/" + rel)
+                                  : (rel.Length > 0 ? rel : slug);
+                    LineDiffResult diff = DiffUtil.BuildLineDiff(oldS, newS);
+                    _diffPanel.SetContent(target, diff.Body, "diff", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                    _previewLabel.Text = "Diff:";
+                    handled = true;
+                }
                 else if (string.Equals(req.FunctionName, "command__run", StringComparison.Ordinal))
                 {
                     string cmd = req.Arguments.Value<string>("command") ?? string.Empty;
