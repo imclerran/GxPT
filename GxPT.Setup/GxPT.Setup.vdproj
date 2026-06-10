@@ -595,7 +595,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:Mcp35.Client.dll"
+            "SourcePath" = "8:..\\src\\Mcp35.Client\\bin\\Release\\Mcp35.Client.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_A249DCF40CCD4A129F140A8AAEBBA6B7"
@@ -626,7 +626,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:Mcp35.Server.dll"
+            "SourcePath" = "8:..\\src\\Mcp35.Server\\bin\\Release\\Mcp35.Server.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_A249DCF40CCD4A129F140A8AAEBBA6B7"
@@ -677,7 +677,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:Mcp35.Core.dll"
+            "SourcePath" = "8:..\\src\\Mcp35.Core\\bin\\Release\\Mcp35.Core.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_A249DCF40CCD4A129F140A8AAEBBA6B7"
