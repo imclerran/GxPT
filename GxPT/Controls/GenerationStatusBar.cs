@@ -48,7 +48,7 @@ namespace GxPT
             // Docked Right gives the button the full padded height; pinning Width to that same value
             // makes it a square (StripHeight minus the top+bottom padding).
             _stop.Width = StripHeight - (VPad * 2);
-            _stop.Margin = new Padding(6, 0, 0, 0); // small gap from the bar
+            _stop.Margin = new Padding(2, 0, 0, 0); // 2px gap from the bar
             _stop.Click += delegate
             {
                 EventHandler h = StopRequested;
