@@ -260,39 +260,58 @@ namespace GxPT
                 {
                     List<string> names = new List<string>(_byFunctionName.Keys);
                     names.Sort(StringComparer.Ordinal); // server__ prefix groups visually
-
-                    StringBuilder sb = new StringBuilder();
-                    sb.Append("The following MCP tools are available, listed by name only. ");
-                    sb.Append("You CANNOT call any of these tools directly from this list. ");
-                    sb.Append("Before calling a tool, you MUST first call reveal_tools({\"names\":[...]}) ");
-                    sb.Append("with the exact names you intend to use; that loads their full definitions ");
-                    sb.Append("and makes them callable on the next step. You may reveal several at once. ");
-                    sb.Append("Only reveal_tools and tools you have already revealed can be called.");
-                    sb.Append("\n\nAvailable tools:");
-                    bool hasGit = false, hasCommand = false;
-                    for (int i = 0; i < names.Count; i++)
-                    {
-                        sb.Append("\n- ").Append(names[i]);
-                        if (!hasGit && names[i].StartsWith("git__", StringComparison.Ordinal)) hasGit = true;
-                        if (!hasCommand && names[i].StartsWith("command__", StringComparison.Ordinal)) hasCommand = true;
-                    }
-
-                    // When both the git and command toolsets are available, steer the model to the
-                    // dedicated git tools: each git operation is a separately approvable tool (finer-
-                    // grained, auditable permissions), whereas the command tool needs a broad "git"
-                    // command approval. Command stays a fallback for git functionality git__ lacks.
-                    if (hasGit && hasCommand)
-                    {
-                        sb.Append("\n\nFor Git operations, prefer the dedicated git__ tools over the ");
-                        sb.Append("command tool. Only fall back to the command tool for Git functionality ");
-                        sb.Append("the git__ tools do not provide.");
-                    }
-
-                    _manifestCache = sb.ToString();
+                    _manifestCache = BuildManifestText(names);
                     _manifestDirty = false;
                 }
                 return _manifestCache;
             }
+        }
+
+        // Workdir-aware manifest: only the tools usable on a turn with this working directory (an exact
+        // workdir match or a workdir-independent tool). Keeps a folderless turn from advertising another
+        // folder's scoped tools (files/git/run_skill_script, ...), which would only fail at call time.
+        public string NamesManifestSystemMessage(string workdir)
+        {
+            lock (_lock)
+            {
+                List<string> names = new List<string>();
+                foreach (KeyValuePair<string, List<CatalogEntry>> kv in _byFunctionName)
+                    if (ResolvableForWorkdirLocked(kv.Value, workdir)) names.Add(kv.Key);
+                names.Sort(StringComparer.Ordinal);
+                return BuildManifestText(names);
+            }
+        }
+
+        // Builds the manifest text from an already-sorted, server-qualified name list.
+        private static string BuildManifestText(List<string> names)
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.Append("The following MCP tools are available, listed by name only. ");
+            sb.Append("You CANNOT call any of these tools directly from this list. ");
+            sb.Append("Before calling a tool, you MUST first call reveal_tools({\"names\":[...]}) ");
+            sb.Append("with the exact names you intend to use; that loads their full definitions ");
+            sb.Append("and makes them callable on the next step. You may reveal several at once. ");
+            sb.Append("Only reveal_tools and tools you have already revealed can be called.");
+            sb.Append("\n\nAvailable tools:");
+            bool hasGit = false, hasCommand = false;
+            for (int i = 0; i < names.Count; i++)
+            {
+                sb.Append("\n- ").Append(names[i]);
+                if (!hasGit && names[i].StartsWith("git__", StringComparison.Ordinal)) hasGit = true;
+                if (!hasCommand && names[i].StartsWith("command__", StringComparison.Ordinal)) hasCommand = true;
+            }
+
+            // When both the git and command toolsets are available, steer the model to the
+            // dedicated git tools: each git operation is a separately approvable tool (finer-
+            // grained, auditable permissions), whereas the command tool needs a broad "git"
+            // command approval. Command stays a fallback for git functionality git__ lacks.
+            if (hasGit && hasCommand)
+            {
+                sb.Append("\n\nFor Git operations, prefer the dedicated git__ tools over the ");
+                sb.Append("command tool. Only fall back to the command tool for Git functionality ");
+                sb.Append("the git__ tools do not provide.");
+            }
+            return sb.ToString();
         }
 
         public IList<JObject> ExposedFunctionDefs()
@@ -312,6 +331,51 @@ namespace GxPT
                 }
             }
             return result;
+        }
+
+        // The exposed defs (reveal_tools + revealed tools) usable on a turn with this working directory.
+        // A revealed tool that only exists for another folder is dropped, so it can't be sent then fail.
+        public IList<JObject> ExposedFunctionDefs(string workdir)
+        {
+            List<JObject> result = new List<JObject>();
+            result.Add(RevealToolsDef());
+            lock (_lock)
+            {
+                List<string> fns = new List<string>(_revealed.Keys);
+                fns.Sort(delegate(string a, string b) { return _revealed[a].CompareTo(_revealed[b]); });
+                for (int i = 0; i < fns.Count; i++)
+                {
+                    List<CatalogEntry> list;
+                    if (!_byFunctionName.TryGetValue(fns[i], out list)) continue;
+                    if (!ResolvableForWorkdirLocked(list, workdir)) continue;
+                    CatalogEntry e;
+                    if (TryFirstEntryLocked(fns[i], out e))
+                        result.Add(FunctionDef(e.FunctionName, e.Description, CloneSchema(e.Schema)));
+                }
+            }
+            return result;
+        }
+
+        // Any tool usable on a turn with this working directory (an exact workdir match or a workdir-
+        // independent tool). Workdir-aware counterpart of HasTools, for gating the tool-loop per turn.
+        public bool HasToolsForWorkdir(string workdir)
+        {
+            lock (_lock)
+            {
+                foreach (KeyValuePair<string, List<CatalogEntry>> kv in _byFunctionName)
+                    if (ResolvableForWorkdirLocked(kv.Value, workdir)) return true;
+            }
+            return false;
+        }
+
+        // A function name is usable on a turn with `workdir` when it has an exact-workdir candidate or a
+        // workdir-independent (null) one - exactly TryResolve's selection.
+        private bool ResolvableForWorkdirLocked(List<CatalogEntry> list, string workdir)
+        {
+            if (list == null) return false;
+            for (int i = 0; i < list.Count; i++)
+                if (list[i].Workdir == null || WorkdirEquals(list[i].Workdir, workdir)) return true;
+            return false;
         }
 
         // ---- tool_call handling ----

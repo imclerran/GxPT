@@ -174,17 +174,9 @@ namespace GxPT
             return result;
         }
 
-        private static bool IsOn(string s)
-        {
-            s = s.Trim().ToLowerInvariant();
-            return s == "on" || s == "true" || s == "1" || s == "yes" || s == "enable" || s == "enabled";
-        }
+        private static bool IsOn(string s) { return SlashArgs.ParseOnOff(s) == true; }
 
-        private static bool IsOff(string s)
-        {
-            s = s.Trim().ToLowerInvariant();
-            return s == "off" || s == "false" || s == "0" || s == "no" || s == "disable" || s == "disabled";
-        }
+        private static bool IsOff(string s) { return SlashArgs.ParseOnOff(s) == false; }
     }
 
     // /new -- open a fresh conversation tab.

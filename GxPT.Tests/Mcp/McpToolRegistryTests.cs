@@ -30,6 +30,61 @@ namespace GxPT.Tests.Mcp
             return names;
         }
 
+        private static List<string> ManifestNamesFor(McpToolRegistry reg, string workdir)
+        {
+            var names = new List<string>();
+            foreach (var line in reg.NamesManifestSystemMessage(workdir).Split('\n'))
+                if (line.StartsWith("- ")) names.Add(line.Substring(2));
+            return names;
+        }
+
+        private static List<string> ExposedNamesFor(McpToolRegistry reg, string workdir)
+        {
+            var names = new List<string>();
+            foreach (JObject def in reg.ExposedFunctionDefs(workdir))
+                names.Add((string)def["function"]["name"]);
+            return names;
+        }
+
+        // ---- workdir-aware advertisement (a folderless turn must not see another folder's tools) ----
+
+        [Fact]
+        public void WorkdirManifest_FolderlessTurn_OmitsScopedTools_KeepsIndependent()
+        {
+            var reg = NewRegistry(24);
+            reg.AddConnection(FakeConn.Ready("web", new ToolDef("search")), null);       // workdir-independent
+            reg.AddConnection(FakeConn.Ready("files", new ToolDef("read")), "C:\\proj"); // scoped to a folder
+
+            var folderless = ManifestNamesFor(reg, null);
+            Assert.Contains("web__search", folderless);
+            Assert.DoesNotContain("files__read", folderless); // the other folder's tool is hidden
+
+            var inFolder = ManifestNamesFor(reg, "C:\\proj");
+            Assert.Contains("web__search", inFolder);
+            Assert.Contains("files__read", inFolder);
+
+            Assert.True(reg.HasToolsForWorkdir(null));         // web (independent) is usable folderless
+            Assert.True(reg.HasToolsForWorkdir("C:\\proj"));
+            // A different folder still sees the independent web tool, but not C:\proj's scoped files tool.
+            var other = ManifestNamesFor(reg, "C:\\other");
+            Assert.Contains("web__search", other);
+            Assert.DoesNotContain("files__read", other);
+        }
+
+        [Fact]
+        public void WorkdirExposedDefs_DropsRevealedScopedTool_OnFolderlessTurn()
+        {
+            var reg = NewRegistry(24);
+            reg.AddConnection(FakeConn.Ready("files", new ToolDef("read")), "C:\\proj");
+            reg.Reveal(new[] { "files__read" }); // revealed during a folder turn
+
+            var folderless = ExposedNamesFor(reg, null);
+            Assert.Contains("reveal_tools", folderless);
+            Assert.DoesNotContain("files__read", folderless); // not usable folderless -> not sent
+
+            Assert.Contains("files__read", ExposedNamesFor(reg, "C:\\proj")); // exposed in its folder
+        }
+
         // ---- munging / bijection ----
 
         [Fact]

@@ -1,0 +1,78 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+
+namespace GxPT
+{
+    // Host side of the skills feature (phase 2): resolves the bundled (<exe>/skills) and project
+    // (<workdir>/.gxpt/skills) roots, builds the SkillCatalog, and frames the always-on skills manifest
+    // for injection as an ephemeral system message (McpChatOrchestrator.SkillsManifestSystemMessageProvider),
+    // ordered right after the memory block and before the MCP names manifest (design sec.5). All skills
+    // framing lives here, so when no skills are present nothing is injected and the feature leaves no
+    // trace in context.
+    internal static class SkillInjection
+    {
+        public const string SkillsDirName = "skills";
+
+        // Bundled skills ship beside GxPT.exe (deployed by the AfterBuild copy like mcp-servers).
+        public static string BundledRoot(string exeDir)
+        {
+            if (string.IsNullOrEmpty(exeDir)) return null;
+            return Path.Combine(exeDir, SkillsDirName);
+        }
+
+        // Project skills live under the conversation's working folder, reusing the memory system's .gxpt.
+        public static string ProjectRoot(string workingDir)
+        {
+            if (string.IsNullOrEmpty(workingDir)) return null;
+            return Path.Combine(Path.Combine(workingDir, MemoryInjection.MemoryDirName), SkillsDirName);
+        }
+
+        // User-global skills live under %AppData%/GxPT/skills - one set per Windows user, independent of
+        // workspace. The SkillsMcpServer writes/runs them at the same path (GXPT_SKILLS_USER_ROOT), so
+        // read and write stay in sync. Returns null if %AppData% can't be resolved.
+        public static string UserRoot()
+        {
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            if (string.IsNullOrEmpty(appData)) return null;
+            return Path.Combine(Path.Combine(appData, "GxPT"), SkillsDirName);
+        }
+
+        public static SkillCatalog BuildCatalog(string exeDir, string workingDir)
+        {
+            return SkillCatalog.Build(BundledRoot(exeDir), UserRoot(), ProjectRoot(workingDir));
+        }
+
+        // True when the conversation (its feature/skill overrides) has at least one enabled skill for the
+        // given roots: build the catalog, apply the global default + conversation overrides, count > 0.
+        // The single shared "is any skill enabled here" check - used by the send-path gate and by the
+        // Skills MCP server's enablement - so the build-catalog/resolve computation lives in one place.
+        public static bool HasAnyEnabledSkills(string exeDir, string workingDir,
+            bool? convFeatureOff, IDictionary<string, bool> convOverrides)
+        {
+            SkillCatalog cat = BuildCatalog(exeDir, workingDir);
+            return SkillResolve.EnabledSkills(
+                cat.Skills, SkillEnablement.LoadGlobal(), convFeatureOff, convOverrides).Count > 0;
+        }
+
+        // The phase-2 ephemeral block: framing + the slug/description manifest, built from the skills
+        // ENABLED for this conversation (SkillResolve). Returns null when the set is empty, so a
+        // skill-less or all-disabled conversation injects nothing (no phantom capability).
+        public static string BuildManifestMessage(IList<Skill> enabledSkills)
+        {
+            if (enabledSkills == null || enabledSkills.Count == 0) return null;
+
+            StringBuilder sb = new StringBuilder();
+            sb.Append("# Skills\n\n");
+            sb.Append("Skills are reusable procedures available for this conversation, listed below as ");
+            sb.Append("`- <slug> - <description>`. When a task matches one, load its full instructions by ");
+            sb.Append("calling open_skill({\"names\":[\"<slug>\"]}) and then follow them. open_skill is ");
+            sb.Append("directly callable - you do NOT need to reveal it first - and you may open several ");
+            sb.Append("skills at once. Do not mention skills unless they are relevant to the request.\n\n");
+            sb.Append("Available skills:\n");
+            sb.Append(SkillCatalog.BuildManifest(enabledSkills));
+            return sb.ToString();
+        }
+    }
+}

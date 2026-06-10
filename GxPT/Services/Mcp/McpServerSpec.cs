@@ -22,6 +22,12 @@ namespace GxPT
         // workdir-independent and may be launched once.
         public bool WorkdirScoped;
 
+        // For a WorkdirScoped server, also run ONE workdir-independent instance (no GXPT_WORKDIR), so its
+        // workdir-less features work in a folderless conversation. The skills server uses this: the
+        // workdir-less instance handles user-global authoring (and advertises a reduced tool set), while
+        // the per-workdir instances handle project authoring + run_skill_script. Ignored when not scoped.
+        public bool RunsWithoutWorkdir;
+
         // True for the four bundled first-party servers (hardcoded launch, never in mcp.json, D15).
         public bool BuiltIn;
 

@@ -60,6 +60,22 @@ namespace GxPT
             t["memory__update_memory"] = new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
             t["memory__forget"] = new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
             t["memory__consolidate"] = new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
+            // Skills authoring (design S16): .gxpt/skills edits. create_skill is per-tool (each call is a
+            // new slug); the Write edits are argument-scoped on the skill being edited ("always allow
+            // editing skill X"). list/validate are ReadOnly (auto-allowed); delete_* are Destructive and
+            // confirmed every time.
+            t["skills__create_skill"] = new ToolPolicy(ToolTier.Write, RememberScope.Tool, null);
+            t["skills__write_skill_file"] = new ToolPolicy(ToolTier.Write, RememberScope.Argument, "slug");
+            t["skills__update_skill"] = new ToolPolicy(ToolTier.Write, RememberScope.Argument, "slug");
+            t["skills__edit_skill_file"] = new ToolPolicy(ToolTier.Write, RememberScope.Argument, "slug");
+            t["skills__list_skill_files"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
+            t["skills__validate_skill"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
+            t["skills__delete_skill_file"] = new ToolPolicy(ToolTier.Destructive, RememberScope.None, null);
+            t["skills__delete_skill"] = new ToolPolicy(ToolTier.Destructive, RememberScope.None, null);
+            // Skills execution (design S9/S11): running a skill's batch is Destructive and confirmed every
+            // time (like git push / command__run's heavier siblings) - the model can run only a named
+            // skill's declared .bat with literal args, never an arbitrary command.
+            t["skills__run_skill_script"] = new ToolPolicy(ToolTier.Destructive, RememberScope.None, null);
             return t;
         }
 

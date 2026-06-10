@@ -20,6 +20,9 @@ namespace GxPT
         private OpenRouterClient _client;
         private McpHost _mcpHost;
         private McpToolRegistry _mcpRegistry;
+        // Last enablement applied to the Skills MCP server spec (it follows skill enablement); used to
+        // rebuild only when the on/off boundary is crossed.
+        private bool _skillsServerEnabled;
         // Slash-command subsystem (built lazily on first send/keystroke; see EnsureSlashCommands).
         private SlashCommandRegistry _slashRegistry;
         private SlashCommandProcessor _slashProcessor;
@@ -830,6 +833,9 @@ namespace GxPT
             // A tab opening/closing changes which working folders are still in use; release the
             // scoped servers of any folder whose last tab just closed.
             SyncMcpWorkingDirFromActiveTab();
+            // The active conversation may differ in whether it has any enabled skills; bring the Skills
+            // MCP server into line (rebuilds only on an actual on/off change).
+            SlashRefreshSkillsServer();
         }
 
         private void OnSidebarToggled()
@@ -1043,6 +1049,17 @@ namespace GxPT
                 opts.MemoryEnabled = AppSettings.GetBool("mcp_memory_enabled", false);
                 int memMaxLines = (int)AppSettings.GetDouble("mcp_memory_max_lines", 40);
                 opts.MemoryMaxLines = memMaxLines > 0 ? memMaxLines : 40;
+                // The Skills MCP server (authoring + execution tools) follows skill enablement: it runs
+                // whenever the active conversation has at least one enabled skill, and is off when none are
+                // (so a skill-less chat pays nothing). SlashRefreshSkillsServer re-applies this when
+                // enablement changes. There is no separate server toggle - /skills is the control.
+                opts.SkillsEnabled = ActiveConversationHasEnabledSkills();
+                _skillsServerEnabled = opts.SkillsEnabled;
+                // Skill roots the server resolves scripts against: bundled (<exe>/skills, shipped with the
+                // app) and user-global (%AppData%/GxPT/skills). The project root is derived from
+                // GXPT_WORKDIR inside the server. These mirror the read-side roots (SkillInjection).
+                opts.SkillsBundledRoot = SkillInjection.BundledRoot(baseDir);
+                opts.SkillsUserRoot = SkillInjection.UserRoot();
                 opts.WebSearchKey = AppSettings.GetString("mcp_websearch_key");
                 opts.CurlPath = curlPath;
                 // Server exes: dev builds deploy them to a 'mcp-servers' subfolder (AfterBuild copy);
@@ -1261,9 +1278,11 @@ namespace GxPT
             }
             catch { }
 
-            // Built-in client commands first, then prompt commands (built-in + user commands.json).
+            // Built-in client commands first, then skills commands, then prompt commands (built-in +
+            // user commands.json).
             var all = new List<ISlashCommand>();
             all.AddRange(ClientCommands.BuiltIns());
+            all.AddRange(SkillCommandShared.BuiltIns());
             all.AddRange(SlashCommandConfig.LoadMerged(userJson, LoggerSink.Instance));
 
             _slashRegistry = new SlashCommandRegistry(all);
@@ -1333,7 +1352,8 @@ namespace GxPT
         }
 
         // Built-in MCP tool servers that can be toggled by name with /tool (custom mcp.json servers are
-        // presence-based; memory is intentionally excluded -- it's a feature toggle, not a tool server).
+        // presence-based). Memory and skills are intentionally excluded -- they are feature toggles, not
+        // tool servers: memory via Settings, skills via /skills (which also drives the skills MCP server).
         internal IList<string> SlashGetServerNames()
         {
             return new List<string>(new string[]
@@ -1353,6 +1373,7 @@ namespace GxPT
             if (string.Equals(name, McpConfig.CommandName, StringComparison.OrdinalIgnoreCase)) return "mcp_command_enabled";
             if (string.Equals(name, McpConfig.MsBuildName, StringComparison.OrdinalIgnoreCase)) { defaultOn = true; return "mcp_msbuild_enabled"; }
             if (string.Equals(name, McpConfig.MemoryName, StringComparison.OrdinalIgnoreCase)) return "mcp_memory_enabled";
+            // skills has no independent server key - it follows the skills feature (/skills global).
             if (string.Equals(name, McpConfig.GitHubName, StringComparison.OrdinalIgnoreCase)) return "mcp_github_enabled";
             return null;
         }
@@ -1386,6 +1407,88 @@ namespace GxPT
             AppSettings.SetBool(key, enabled);
             RebuildMcpHost(); // reconnects with the new server set (connects on a background thread)
             return null;
+        }
+
+        // ---- skills: per-conversation override accessors backed by the active tab's Conversation ----
+
+        internal bool? SlashGetConversationSkillsFeatureOff()
+        {
+            var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            return (c != null && c.Conversation != null) ? c.Conversation.SkillsFeatureOff : null;
+        }
+
+        internal void SlashSetConversationSkillsFeatureOff(bool? value)
+        {
+            var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            if (c == null || c.Conversation == null) return;
+            c.Conversation.SkillsFeatureOff = value;
+            SaveConversationContext(c);
+        }
+
+        // True when the active conversation has at least one enabled skill - the signal for whether the
+        // Skills MCP server needs to run. Builds the catalog for the active workdir and resolves it
+        // through the same ladder the send path uses, so the answer matches what the model will see.
+        private bool ActiveConversationHasEnabledSkills()
+        {
+            var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            Conversation convo = (c != null) ? c.Conversation : null;
+            // When there's no active conversation yet (early startup: RebuildMcpHost runs in the ctor
+            // before the first tab is set up), fall back to the global defaults a fresh conversation
+            // would inherit - null feature-off / no per-skill overrides. Otherwise the server stays OFF
+            // at launch even with default-on skills, until something later (a /skill toggle, a tab
+            // switch) happens to trigger a rebuild. A default conversation resolves identically to this
+            // fallback, so it's the right "we don't know the conversation yet" answer.
+            bool? convFeatureOff = (convo != null) ? convo.SkillsFeatureOff : null;
+            IDictionary<string, bool> convOverrides = (convo != null) ? convo.SkillOverrides : null;
+            string workdir = (c != null) ? c.WorkingDir : null;
+            return SkillInjection.HasAnyEnabledSkills(
+                AppDomain.CurrentDomain.BaseDirectory, workdir, convFeatureOff, convOverrides);
+        }
+
+        // The Skills MCP server tracks skill enablement; rebuild the host only when that crosses the
+        // on/off boundary (so per-skill toggles that don't change whether ANY skill is enabled cost
+        // nothing). Called after skills slash-command changes and on tab switches.
+        internal void SlashRefreshSkillsServer()
+        {
+            if (ActiveConversationHasEnabledSkills() != _skillsServerEnabled)
+                RebuildMcpHost();
+        }
+
+        internal IDictionary<string, bool> SlashGetConversationSkillOverrides()
+        {
+            var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            var src = (c != null && c.Conversation != null) ? c.Conversation.SkillOverrides : null;
+            return src != null
+                ? new Dictionary<string, bool>(src, StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        internal void SlashSetConversationSkillOverride(string slug, bool? value)
+        {
+            if (string.IsNullOrEmpty(slug)) return;
+            var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            if (c == null || c.Conversation == null) return;
+            if (c.Conversation.SkillOverrides == null)
+                c.Conversation.SkillOverrides = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            if (value.HasValue) c.Conversation.SkillOverrides[slug] = value.Value;
+            else c.Conversation.SkillOverrides.Remove(slug);
+            SaveConversationContext(c);
+        }
+
+        internal void SlashResetConversationSkills()
+        {
+            var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
+            if (c == null || c.Conversation == null) return;
+            c.Conversation.SkillsFeatureOff = null;
+            if (c.Conversation.SkillOverrides != null) c.Conversation.SkillOverrides.Clear();
+            SaveConversationContext(c);
+        }
+
+        // Persist a conversation after a slash-command edit, honoring the help-template no-save guard.
+        private static void SaveConversationContext(TabManager.ChatTabContext c)
+        {
+            try { if (c != null && !c.NoSaveUntilUserSend) ConversationStore.Save(c.Conversation); }
+            catch { }
         }
 
         internal void SlashNewConversation()
@@ -1640,6 +1743,7 @@ namespace GxPT
             // commands expand in place (the expansion becomes the actual user message), while gated or
             // invalid commands are surfaced without sending. Unknown "/foo" returns null and is sent
             // literally, so ordinary messages that happen to start with "/" are not hijacked.
+            string pendingSystemContext = null; // a slash command's hidden system message, committed at send
             if (baseText.Length > 0 && baseText[0] == '/')
             {
                 EnsureSlashCommands();
@@ -1662,6 +1766,7 @@ namespace GxPT
                     // Prompt expansion: send the template instead of the typed "/command".
                     baseText = slash.TextToSend;
                     text = slash.TextToSend;
+                    pendingSystemContext = slash.SystemContext; // flushed to history at the send commit
                 }
             }
 
@@ -1797,6 +1902,11 @@ namespace GxPT
                         ctx.Transcript.AddMessage(MessageRole.User, textForTranscript, attachmentsSnapshot);
                     else
                         ctx.Transcript.AddMessage(MessageRole.User, textForTranscript);
+                    // A slash command's hidden system context (e.g. /use's skill body) is committed to
+                    // history right before the user message - so it's never orphaned if an earlier path
+                    // returned. It is sent to the model but not rendered (RebuildTranscript skips system).
+                    if (!string.IsNullOrEmpty(pendingSystemContext))
+                        ctx.Conversation.History.Add(new ChatMessage("system", pendingSystemContext));
                     // Store in conversation history
                     ctx.Conversation.AddUserMessage(baseText);
                     try
@@ -1848,7 +1958,10 @@ namespace GxPT
 
                 // Tool-enabled turn: tool activity renders as a separate chrome-less message above the
                 // answer bubble. BeginToolSend owns the whole turn; the plain path below is unchanged.
-                if (_mcpRegistry != null && _mcpRegistry.HasTools)
+                // Skills also route through the tool loop (they inject a manifest and expose open_skill),
+                // so a conversation with skills but no MCP tools still takes this path.
+                bool hasMcpTools = _mcpRegistry != null && _mcpRegistry.HasToolsForWorkdir(ctx.WorkingDir);
+                if (hasMcpTools || ConversationHasSkills(ctx))
                 {
                     BeginToolSend(ctx, modelToUse, zdrForSend);
                     return;
@@ -2131,6 +2244,23 @@ namespace GxPT
             catch { }
         }
 
+        // True when this conversation has at least one ENABLED skill (bundled or project). Used to route
+        // the turn through the tool loop even with no MCP tools, since skills inject a manifest and expose
+        // open_skill there. Cheap (a couple of directory scans + skills.json); BeginToolSend re-resolves
+        // the enabled set it actually uses, so this is just the gate.
+        private static bool ConversationHasSkills(TabManager.ChatTabContext ctx)
+        {
+            try
+            {
+                Conversation convo = (ctx != null) ? ctx.Conversation : null;
+                return SkillInjection.HasAnyEnabledSkills(
+                    AppDomain.CurrentDomain.BaseDirectory, (ctx != null) ? ctx.WorkingDir : null,
+                    convo != null ? convo.SkillsFeatureOff : null,
+                    convo != null ? convo.SkillOverrides : null);
+            }
+            catch { return false; }
+        }
+
         // Owns a tool-enabled chat turn. Tool activity streams into a chrome-less "Tool" message and
         // the model's answer into a separate Assistant bubble below it. Both bubbles are created
         // lazily (in the render timer) so they appear in the order content arrives — tool calls
@@ -2211,6 +2341,30 @@ namespace GxPT
                         string memWorkdir = ctx.WorkingDir;
                         orch.MemorySystemMessageProvider = delegate { return MemoryInjection.Build(memWorkdir); };
                     }
+
+                    // Skills: discover bundled (<exe>/skills) + project (<workdir>/.gxpt/skills) skills for
+                    // this turn, resolve which are enabled (global skills.json default + the per-conversation
+                    // override layer), then inject the manifest and expose open_skill over
+                    // the enabled set. Rebuilt per send, so on-disk edits take effect on the next turn.
+                    SkillCatalog skillCatalog =
+                        SkillInjection.BuildCatalog(AppDomain.CurrentDomain.BaseDirectory, ctx.WorkingDir);
+                    Conversation skillConvo = ctx.Conversation;
+                    List<Skill> enabledSkills = SkillResolve.EnabledSkills(
+                        skillCatalog.Skills, SkillEnablement.LoadGlobal(),
+                        skillConvo != null ? skillConvo.SkillsFeatureOff : null,
+                        skillConvo != null ? skillConvo.SkillOverrides : null);
+                    if (enabledSkills.Count > 0)
+                    {
+                        List<Skill> enabledForTurn = enabledSkills;
+                        orch.SkillsManifestSystemMessageProvider =
+                            delegate { return SkillInjection.BuildManifestMessage(enabledForTurn); };
+                        // open_skill is enabled-scoped; read_skill_file spans the whole catalog.
+                        orch.SkillTools = new SkillTools(enabledForTurn, skillCatalog);
+                    }
+                    // The skill-authoring tools are owned by the skill-writer meta-skill: omit them from
+                    // context unless that skill is enabled for this conversation.
+                    ICollection<string> hiddenTools = SkillToolGate.HiddenTools(enabledSkills);
+                    if (hiddenTools.Count > 0) orch.HiddenToolNames = hiddenTools;
 
                     // Assistant text appends to the current assistant bubble; a tool call closes it so
                     // the next run of text starts a fresh bubble below the tool record. Inter-turn
@@ -3383,6 +3537,25 @@ namespace GxPT
                     return true;
                 }
                 case "reveal_tools": header = "Checking available tools"; return true;
+                case "open_skill":
+                {
+                    // Post-flight (completed) record label, so past tense like the other records.
+                    string slugs = JoinPaths(args, "names"); // generic string-array joiner
+                    header = slugs.Length > 0 ? "Read skill: " + slugs : "Read skill";
+                    return true;
+                }
+                case "read_skill_file":
+                {
+                    string rel = Str(args, "relpath");
+                    header = rel.Length > 0 ? "Read skill file: " + rel : "Read skill file";
+                    return true;
+                }
+                case "skills__run_skill_script":
+                {
+                    string rel = Str(args, "relpath");
+                    header = rel.Length > 0 ? "Ran skill script: " + rel : "Ran a skill script";
+                    return true;
+                }
                 default: return false;
             }
         }

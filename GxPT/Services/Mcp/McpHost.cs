@@ -102,7 +102,14 @@ namespace GxPT
                     foreach (McpServerSpec spec in specs)
                     {
                         if (spec == null) continue;
-                        if (spec.WorkdirScoped) { scoped.Add(spec); continue; }
+                        if (spec.WorkdirScoped)
+                        {
+                            scoped.Add(spec);
+                            // A scoped server flagged RunsWithoutWorkdir also gets ONE eager, workdir-less
+                            // instance (no GXPT_WORKDIR) so its folderless features work without a workspace.
+                            if (spec.Enabled && spec.RunsWithoutWorkdir) eagerToOpen.Add(spec);
+                            continue;
+                        }
                         if (!spec.Enabled) continue;
                         eagerToOpen.Add(spec);
                     }

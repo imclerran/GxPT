@@ -26,7 +26,7 @@
     <UpdateRequired>false</UpdateRequired>
     <MapFileExtensions>true</MapFileExtensions>
     <ApplicationRevision>0</ApplicationRevision>
-    <ApplicationVersion>0.17.0.%2a</ApplicationVersion>
+    <ApplicationVersion>0.18.0.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
   </PropertyGroup>
@@ -102,13 +102,24 @@
     <Compile Include="Managers\ImportExportManager.cs" />
     <Compile Include="Services\AppSettings.cs" />
     <Compile Include="Services\RecentWorkDirs.cs" />
+    <Compile Include="Services\Skills\SkillSlug.cs" />
+    <Compile Include="Services\Skills\SkillFrontmatter.cs" />
+    <Compile Include="Services\Skills\Skill.cs" />
+    <Compile Include="Services\Skills\SkillCatalog.cs" />
+    <Compile Include="Services\Skills\SkillInjection.cs" />
+    <Compile Include="Services\Skills\SkillTools.cs" />
+    <Compile Include="Services\Skills\SkillEnablement.cs" />
+    <Compile Include="Services\Skills\SkillResolve.cs" />
+    <Compile Include="Services\Skills\SkillToolGate.cs" />
     <Compile Include="Services\Commands\SlashCommandKind.cs" />
     <Compile Include="Services\Commands\SlashCommandResult.cs" />
+    <Compile Include="Services\Commands\SlashArgs.cs" />
     <Compile Include="Services\Commands\ISlashCommandContext.cs" />
     <Compile Include="Services\Commands\ISlashCommand.cs" />
     <Compile Include="Services\Commands\WorkspacePath.cs" />
     <Compile Include="Services\Commands\IArgumentCompleter.cs" />
     <Compile Include="Services\Commands\ClientCommands.cs" />
+    <Compile Include="Services\Commands\SkillCommands.cs" />
     <Compile Include="Services\Commands\MainFormSlashContext.cs" />
     <Compile Include="Services\Commands\PromptCommand.cs" />
     <Compile Include="Services\Commands\SlashCommandGate.cs" />
@@ -359,8 +370,17 @@
       <McpServerFiles Include="..\servers\WebSearchMcpServer\bin\$(Configuration)\**\*.*" Exclude="..\servers\WebSearchMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\WebSearchMcpServer\bin\$(Configuration)\**\*.xml" />
       <McpServerFiles Include="..\servers\MSBuildMcpServer\bin\$(Configuration)\**\*.*" Exclude="..\servers\MSBuildMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\MSBuildMcpServer\bin\$(Configuration)\**\*.xml" />
       <McpServerFiles Include="..\servers\MemoryMcpServer\bin\$(Configuration)\**\*.*" Exclude="..\servers\MemoryMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\MemoryMcpServer\bin\$(Configuration)\**\*.xml" />
+      <McpServerFiles Include="..\servers\SkillsMcpServer\bin\$(Configuration)\**\*.*" Exclude="..\servers\SkillsMcpServer\bin\$(Configuration)\**\*.pdb;..\servers\SkillsMcpServer\bin\$(Configuration)\**\*.xml" />
     </ItemGroup>
     <Copy SourceFiles="@(McpServerFiles)" DestinationFiles="@(McpServerFiles->'$(OutDir)mcp-servers\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" ContinueOnError="true" />
+    <!-- Ship the bundled (first-party) skills next to GxPT.exe in a 'skills' folder. The host's
+         SkillInjection.BundledRoot resolves <exe>/skills, and SkillsMcpServer gets the same path as
+         GXPT_SKILLS_BUNDLED_ROOT, so a shipped skill (e.g. skill-writer) is discoverable and its
+         scripts runnable. Mirrors the mcp-servers copy above. -->
+    <ItemGroup>
+      <BundledSkillFiles Include="..\skills\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(BundledSkillFiles)" DestinationFiles="@(BundledSkillFiles->'$(OutDir)skills\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" ContinueOnError="true" />
   </Target>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it.
        Other similar extension points exist, see Microsoft.Common.targets.

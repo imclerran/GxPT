@@ -79,6 +79,21 @@ namespace GxPT
         // so a disabled memory system leaves no trace in context (design M5/M6).
         public Func<string> MemorySystemMessageProvider { get; set; }
 
+        // Optional provider of the skills manifest system block (the always-on slug/description list plus
+        // its framing), rebuilt each request and injected as an ephemeral system message ordered after
+        // the memory block and before the MCP names manifest (design sec.5). Null/empty => no skills
+        // block, so a skill-less conversation leaves no trace in context.
+        public Func<string> SkillsManifestSystemMessageProvider { get; set; }
+
+        // Optional skills meta-tool surface (open_skill). When set and it has skills, open_skill is
+        // exposed in the tools array and handled locally without an MCP round-trip, like reveal_tools.
+        public SkillTools SkillTools { get; set; }
+
+        // Server-qualified MCP tool names to omit from this turn's context (names manifest + exposed
+        // defs) and refuse to call. Used to gate the skill-authoring tools on the meta-skill (SkillToolGate).
+        // Set per send (the orchestrator is built fresh each turn), so it's not shared/racy.
+        public ICollection<string> HiddenToolNames { get; set; }
+
         // Provider data-collection preference applied to every request in the turn. Null leaves
         // it unset (provider default).
         public bool? ProviderDataCollectionAllowed { get; set; }
@@ -164,8 +179,31 @@ namespace GxPT
                     }
                 }
 
-                IList<JObject> tools = _registry != null ? _registry.ExposedFunctionDefs() : null;
-                string manifest = _registry != null ? _registry.NamesManifestSystemMessage() : null;
+                // MCP tools (reveal_tools + revealed defs) and their names manifest only when a server
+                // actually contributes tools; a skills-only turn skips both and offers just open_skill.
+                // Filter by THIS turn's workdir so a folderless turn never advertises another folder's
+                // scoped tools (files/git/run_skill_script, ...) that it couldn't actually call.
+                bool hasMcpTools = _registry != null && _registry.HasToolsForWorkdir(WorkingDir);
+                IList<JObject> tools = hasMcpTools ? _registry.ExposedFunctionDefs(WorkingDir) : null;
+                string manifest = hasMcpTools ? _registry.NamesManifestSystemMessage(WorkingDir) : null;
+                if (SkillTools != null && SkillTools.HasSkills)
+                {
+                    if (tools == null) tools = new List<JObject>();
+                    tools.Add(SkillTools.OpenSkillDef());
+                    tools.Add(SkillTools.ReadSkillFileDef());
+                }
+                // Hide owned-but-locked tools (e.g. skill-authoring tools when the meta-skill is off):
+                // drop them from the exposed defs and the names manifest so the model can't see or call them.
+                if (HiddenToolNames != null && HiddenToolNames.Count > 0)
+                {
+                    tools = FilterHiddenDefs(tools, HiddenToolNames);
+                    manifest = FilterHiddenManifest(manifest, HiddenToolNames);
+                }
+                // If filtering removed every tool line, drop the manifest entirely - otherwise the model
+                // is left with the framing ("The following MCP tools are available... Available tools:")
+                // over an empty list (e.g. a folderless turn whose only resolvable tools are all hidden).
+                if (manifest != null && manifest.IndexOf("\n- ", StringComparison.Ordinal) < 0)
+                    manifest = null;
                 _log.Log("mcp", "[turn " + turnId + "] iteration " + (iter + 1) + "/" + budget
                     + ": requesting model with " + (tools != null ? tools.Count : 0) + " exposed tool(s)");
 
@@ -173,8 +211,8 @@ namespace GxPT
                 // persisted (rebuilt each request from the live catalog).
                 // Ephemeral system messages, ordered stable -> volatile for prompt-cache reuse:
                 // constant agent prompt, then the workspace block (constant for the turn), then
-                // memory (changes rarely within a turn), then the names manifest (rebuilt every
-                // request). None are persisted into history.
+                // memory (changes rarely within a turn), then the skills manifest, then the MCP names
+                // manifest (rebuilt every request). None are persisted into history.
                 List<ChatMessage> requestMessages = new List<ChatMessage>();
                 requestMessages.Add(new ChatMessage("system", AgentSystemPrompt));
                 string workspaceBlock = WorkspaceSystemMessage(WorkingDir);
@@ -185,6 +223,12 @@ namespace GxPT
                     string memoryBlock = MemorySystemMessageProvider();
                     if (!string.IsNullOrEmpty(memoryBlock))
                         requestMessages.Add(new ChatMessage("system", memoryBlock));
+                }
+                if (SkillsManifestSystemMessageProvider != null)
+                {
+                    string skillsBlock = SkillsManifestSystemMessageProvider();
+                    if (!string.IsNullOrEmpty(skillsBlock))
+                        requestMessages.Add(new ChatMessage("system", skillsBlock));
                 }
                 if (!string.IsNullOrEmpty(manifest))
                     requestMessages.Add(new ChatMessage("system", manifest));
@@ -360,6 +404,33 @@ namespace GxPT
                 return _registry.Reveal(names);
             }
 
+            // open_skill is a host meta-tool (no MCP round-trip): load skill bodies by slug. Same
+            // {names:[...]} argument shape as reveal_tools, so the parser is reused.
+            if (SkillTools != null && SkillTools.IsOpenSkill(call.Name))
+            {
+                string[] slugs = ParseRevealNames(call.ArgumentsJson);
+                _log.Log("mcp", "[turn " + turnId + "] open_skill: " + slugs.Length + " name(s)");
+                return SkillTools.Open(slugs);
+            }
+
+            // read_skill_file is a host meta-tool too (ReadOnly): read a bundled asset by (slug, relpath).
+            if (SkillTools != null && SkillTools.IsReadSkillFile(call.Name))
+            {
+                string skillSlug, relpath;
+                ParseSkillFileArgs(call.ArgumentsJson, out skillSlug, out relpath);
+                _log.Log("mcp", "[turn " + turnId + "] read_skill_file: "
+                    + (skillSlug != null ? skillSlug : "?") + " / " + (relpath != null ? relpath : "?"));
+                return SkillTools.ReadFile(skillSlug, relpath);
+            }
+
+            // A hidden (gated-off) tool must not be callable even if the model names it directly.
+            if (HiddenToolNames != null && HiddenToolNames.Contains(call.Name))
+            {
+                isError = true;
+                _log.Log("mcp", "[turn " + turnId + "] blocked hidden tool '" + call.Name + "'");
+                return "[Unknown tool: " + call.Name + "]";
+            }
+
             McpServerConnection conn;
             string toolName;
             if (_registry == null || !_registry.TryResolve(call.Name, WorkingDir, out conn, out toolName))
@@ -472,6 +543,66 @@ namespace GxPT
                 // malformed reveal args → no names; Reveal returns an empty def list.
             }
             return names.ToArray();
+        }
+
+        // Extracts { slug, relpath } string args for read_skill_file; missing/invalid -> null (the tool
+        // then returns a short notice the model can read).
+        private static void ParseSkillFileArgs(string argumentsJson, out string slug, out string relpath)
+        {
+            slug = null;
+            relpath = null;
+            try
+            {
+                JObject o = JObject.Parse(argumentsJson);
+                JToken s = o["slug"];
+                if (s != null && s.Type == JTokenType.String) slug = (string)s;
+                JToken r = o["relpath"];
+                if (r != null && r.Type == JTokenType.String) relpath = (string)r;
+            }
+            catch
+            {
+                // malformed args -> nulls; ReadFile reports the problem.
+            }
+        }
+
+        // Drops any def whose function name is hidden (reveal_tools/open_skill are never in the hidden set).
+        internal static IList<JObject> FilterHiddenDefs(IList<JObject> defs, ICollection<string> hidden)
+        {
+            if (defs == null || hidden == null || hidden.Count == 0) return defs;
+            List<JObject> kept = new List<JObject>(defs.Count);
+            for (int i = 0; i < defs.Count; i++)
+            {
+                string name = DefFunctionName(defs[i]);
+                if (name != null && hidden.Contains(name)) continue;
+                kept.Add(defs[i]);
+            }
+            return kept;
+        }
+
+        private static string DefFunctionName(JObject def)
+        {
+            if (def == null) return null;
+            JToken fn = def["function"];
+            if (fn == null) return null;
+            JToken n = fn["name"];
+            return (n != null && n.Type == JTokenType.String) ? (string)n : null;
+        }
+
+        // Removes the "- <name>" manifest lines for hidden tools, leaving the framing intact.
+        internal static string FilterHiddenManifest(string manifest, ICollection<string> hidden)
+        {
+            if (string.IsNullOrEmpty(manifest) || hidden == null || hidden.Count == 0) return manifest;
+            string[] lines = manifest.Split('\n');
+            List<string> kept = new List<string>(lines.Length);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string trimmed = lines[i].Trim();
+                if (trimmed.Length > 2 && trimmed[0] == '-' && trimmed[1] == ' '
+                    && hidden.Contains(trimmed.Substring(2).Trim()))
+                    continue;
+                kept.Add(lines[i]);
+            }
+            return string.Join("\n", kept.ToArray());
         }
 
         // CallToolResult.content[] → a single string for the tool message. Text blocks are

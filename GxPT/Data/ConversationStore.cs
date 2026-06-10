@@ -106,6 +106,10 @@ namespace GxPT
                 ContinuedFromCompaction = convo.ContinuedFromCompaction,
                 Zdr = convo.Zdr,
                 ZdrFirstMessageIndex = convo.ZdrFirstMessageIndex,
+                SkillsFeatureOff = convo.SkillsFeatureOff,
+                // Omit an empty map so untouched conversations stay clean (NullValueHandling.Ignore).
+                SkillOverrides = (convo.SkillOverrides != null && convo.SkillOverrides.Count > 0)
+                    ? convo.SkillOverrides : null,
                 LastUpdated = convo.LastUpdated,
                 Messages = convo.History.Select(m => ToMessageDto(m)).ToList()
             };
@@ -171,6 +175,10 @@ namespace GxPT
                 Zdr = dto.Zdr,
                 // Absent in older files -> not latched (-1), never index 0.
                 ZdrFirstMessageIndex = dto.ZdrFirstMessageIndex.HasValue ? dto.ZdrFirstMessageIndex.Value : -1,
+                SkillsFeatureOff = dto.SkillsFeatureOff,
+                SkillOverrides = dto.SkillOverrides != null
+                    ? new Dictionary<string, bool>(dto.SkillOverrides, StringComparer.OrdinalIgnoreCase)
+                    : new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase),
                 LastUpdated = dto.LastUpdated == default(DateTime) && !string.IsNullOrEmpty(path)
                     ? File.GetLastWriteTimeUtc(path)
                     : (dto.LastUpdated == default(DateTime) ? DateTime.Now : dto.LastUpdated)
@@ -334,6 +342,10 @@ namespace GxPT
             public bool Zdr { get; set; }
             // Nullable so a missing value in older files maps to "not latched" (-1), not index 0.
             public int? ZdrFirstMessageIndex { get; set; }
+            // Per-conversation skill overrides (null/absent in older files -> inherit global). Omitted
+            // from JSON when null/empty via NullValueHandling.Ignore.
+            public bool? SkillsFeatureOff { get; set; }
+            public Dictionary<string, bool> SkillOverrides { get; set; }
             public DateTime LastUpdated { get; set; }
             public List<MessageDto> Messages { get; set; }
         }

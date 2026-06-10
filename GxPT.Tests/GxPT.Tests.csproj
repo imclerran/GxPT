@@ -54,13 +54,25 @@
     <Compile Include="..\GxPT\Services\Logger.cs" Link="Linked\Logger.cs" />
     <Compile Include="..\GxPT\Services\AppSettings.cs" Link="Linked\AppSettings.cs" />
     <Compile Include="..\GxPT\Services\RecentWorkDirs.cs" Link="Linked\RecentWorkDirs.cs" />
+    <Compile Include="..\GxPT\Services\Skills\SkillSlug.cs" Link="Linked\Skills\SkillSlug.cs" />
+    <Compile Include="..\GxPT\Services\Skills\SkillFrontmatter.cs" Link="Linked\Skills\SkillFrontmatter.cs" />
+    <Compile Include="..\GxPT\Services\Skills\Skill.cs" Link="Linked\Skills\Skill.cs" />
+    <Compile Include="..\GxPT\Services\Skills\SkillCatalog.cs" Link="Linked\Skills\SkillCatalog.cs" />
+    <Compile Include="..\GxPT\Services\Mcp\MemoryInjection.cs" Link="Linked\Mcp\MemoryInjection.cs" />
+    <Compile Include="..\GxPT\Services\Skills\SkillInjection.cs" Link="Linked\Skills\SkillInjection.cs" />
+    <Compile Include="..\GxPT\Services\Skills\SkillTools.cs" Link="Linked\Skills\SkillTools.cs" />
+    <Compile Include="..\GxPT\Services\Skills\SkillEnablement.cs" Link="Linked\Skills\SkillEnablement.cs" />
+    <Compile Include="..\GxPT\Services\Skills\SkillResolve.cs" Link="Linked\Skills\SkillResolve.cs" />
+    <Compile Include="..\GxPT\Services\Skills\SkillToolGate.cs" Link="Linked\Skills\SkillToolGate.cs" />
     <Compile Include="..\GxPT\Services\Commands\SlashCommandKind.cs" Link="Linked\Commands\SlashCommandKind.cs" />
     <Compile Include="..\GxPT\Services\Commands\SlashCommandResult.cs" Link="Linked\Commands\SlashCommandResult.cs" />
+    <Compile Include="..\GxPT\Services\Commands\SlashArgs.cs" Link="Linked\Commands\SlashArgs.cs" />
     <Compile Include="..\GxPT\Services\Commands\ISlashCommandContext.cs" Link="Linked\Commands\ISlashCommandContext.cs" />
     <Compile Include="..\GxPT\Services\Commands\ISlashCommand.cs" Link="Linked\Commands\ISlashCommand.cs" />
     <Compile Include="..\GxPT\Services\Commands\WorkspacePath.cs" Link="Linked\Commands\WorkspacePath.cs" />
     <Compile Include="..\GxPT\Services\Commands\IArgumentCompleter.cs" Link="Linked\Commands\IArgumentCompleter.cs" />
     <Compile Include="..\GxPT\Services\Commands\ClientCommands.cs" Link="Linked\Commands\ClientCommands.cs" />
+    <Compile Include="..\GxPT\Services\Commands\SkillCommands.cs" Link="Linked\Commands\SkillCommands.cs" />
     <Compile Include="..\GxPT\Services\Commands\PromptCommand.cs" Link="Linked\Commands\PromptCommand.cs" />
     <Compile Include="..\GxPT\Services\Commands\SlashCommandGate.cs" Link="Linked\Commands\SlashCommandGate.cs" />
     <Compile Include="..\GxPT\Services\Commands\SlashCommandRegistry.cs" Link="Linked\Commands\SlashCommandRegistry.cs" />

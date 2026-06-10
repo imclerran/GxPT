@@ -55,6 +55,22 @@ namespace GxPT.Tests.Commands
             return null;
         }
 
+        // ---- skills: per-conversation override state ----
+        public bool? ConvFeatureOff;
+        public Dictionary<string, bool> ConvOverrides =
+            new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+        public bool? GetConversationSkillsFeatureOff() { return ConvFeatureOff; }
+        public void SetConversationSkillsFeatureOff(bool? value) { ConvFeatureOff = value; }
+        public IDictionary<string, bool> GetConversationSkillOverrides()
+        { return new Dictionary<string, bool>(ConvOverrides, StringComparer.OrdinalIgnoreCase); }
+        public void SetConversationSkillOverride(string slug, bool? value)
+        { if (value.HasValue) ConvOverrides[slug] = value.Value; else ConvOverrides.Remove(slug); }
+        public void ResetConversationSkills() { ConvFeatureOff = null; ConvOverrides.Clear(); }
+
+        public int RefreshSkillsServerCount;
+        public void RefreshSkillsServer() { RefreshSkillsServerCount++; }
+
         public int CompactCount;
         public void NewConversation() { NewConversationCount++; }
         public void ExportConversations() { ExportCount++; }

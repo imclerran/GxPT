@@ -21,6 +21,7 @@ namespace GxPT
         public const string CommandName = "command";
         public const string MsBuildName = "msbuild";
         public const string MemoryName = "memory";
+        public const string SkillsName = "skills";
         public const string GitHubName = "github";
         public const string GitHubUrl = "https://api.githubcopilot.com/mcp/";
 
@@ -31,6 +32,8 @@ namespace GxPT
         public const string EnvGitPath = "GXPT_GIT_PATH";
         public const string EnvCmdShell = "GXPT_CMD_SHELL";
         public const string EnvMemoryMaxLines = "GXPT_MEMORY_MAX_LINES";
+        public const string EnvSkillsBundledRoot = "GXPT_SKILLS_BUNDLED_ROOT";
+        public const string EnvSkillsUserRoot = "GXPT_SKILLS_USER_ROOT";
 
         // Seeded into a fresh mcp.json so GitHub is discoverable; the user pastes a real PAT.
         public const string SeedJson =
@@ -53,12 +56,15 @@ namespace GxPT
             public bool CommandEnabled { get; set; }
             public bool MsBuildEnabled { get; set; }
             public bool MemoryEnabled { get; set; }
+            public bool SkillsEnabled { get; set; }
 
             public string WebSearchKey { get; set; }   // GXPT_WEB_SEARCH_KEY (web)
             public string CurlPath { get; set; }        // GXPT_CURL_PATH (web)
             public string GitPath { get; set; }         // GXPT_GIT_PATH (git)
             public string CmdShell { get; set; }        // GXPT_CMD_SHELL (command)
             public int MemoryMaxLines { get; set; }     // GXPT_MEMORY_MAX_LINES (memory)
+            public string SkillsBundledRoot { get; set; } // GXPT_SKILLS_BUNDLED_ROOT (skills exec: <exe>/skills)
+            public string SkillsUserRoot { get; set; }    // GXPT_SKILLS_USER_ROOT (skills: %AppData%/GxPT/skills)
             public string ServerDir { get; set; }       // directory holding the built server exes
 
             public BuiltInOptions()
@@ -120,6 +126,18 @@ namespace GxPT
             if (o.MemoryMaxLines > 0)
                 mem.Env[EnvMemoryMaxLines] = o.MemoryMaxLines.ToString(System.Globalization.CultureInfo.InvariantCulture);
             list.Add(mem);
+
+            // skills - author/edit skill files under GXPT_WORKDIR/.gxpt/skills and run a skill's bundled
+            // .bat; workdir-scoped (GXPT_WORKDIR injected at launch). The bundled (<exe>/skills) and
+            // user-global (%AppData%) roots are injected so run_skill_script can resolve scripts shipped
+            // with the app or written user-globally, and so scope=user authoring has a target.
+            McpServerSpec skills = NewBuiltIn(SkillsName, "SkillsMcpServer.exe", o.ServerDir, true, o.SkillsEnabled);
+            if (!string.IsNullOrEmpty(o.SkillsBundledRoot)) skills.Env[EnvSkillsBundledRoot] = o.SkillsBundledRoot;
+            if (!string.IsNullOrEmpty(o.SkillsUserRoot)) skills.Env[EnvSkillsUserRoot] = o.SkillsUserRoot;
+            // Also run a workdir-less instance so user-global authoring works in a folderless conversation
+            // (it advertises authoring tools only; the per-workdir instances add run_skill_script + project).
+            skills.RunsWithoutWorkdir = true;
+            list.Add(skills);
 
             return list;
         }
