@@ -41,7 +41,7 @@ namespace GxPT
             this.Height = 26;
             this.Padding = new Padding(8, 0, 8, 0);
 
-            _change = MakeLink("Set folder...", delegate { Raise(ChangeRequested); });
+            _change = MakeLink("Set workspace...", delegate { Raise(ChangeRequested); });
             _clear = MakeLink("Clear", delegate { Raise(ClearRequested); });
             _dismiss = MakeLink("Dismiss", delegate { Raise(DismissRequested); });
 
@@ -107,7 +107,7 @@ namespace GxPT
             {
                 this.BackColor = SetBack;
                 _text.ForeColor = SetText;
-                _text.Text = "Working folder:  " + dir;
+                _text.Text = "Workspace:  " + dir;
                 _change.Text = "Change...";
                 _clear.Visible = true;
                 _dismiss.Visible = false; // can't dismiss while a folder is set (use Clear)
@@ -116,8 +116,8 @@ namespace GxPT
             {
                 this.BackColor = UnsetBack;
                 _text.ForeColor = UnsetText;
-                _text.Text = "No working folder — file, git, and command tools are disabled for this conversation.";
-                _change.Text = "Set folder...";
+                _text.Text = "No workspace — file, git, and command tools are disabled for this conversation.";
+                _change.Text = "Set workspace...";
                 _clear.Visible = false;
                 _dismiss.Visible = true;
             }
