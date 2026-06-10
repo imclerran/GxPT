@@ -53,6 +53,10 @@ namespace GxPT
             t["web__search"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
             // extract only fetches and returns page content (no state change) -> ReadOnly/auto-allow.
             t["web__extract"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);
+            // http issues an arbitrary HTTP request (any method/headers/body to any http(s) URL): a
+            // remote-mutation + data-egress + SSRF surface, so Destructive and confirmed EVERY time
+            // (Scope=None, like git__push) - the user sees the exact method+URL before anything leaves.
+            t["web__http"] = new ToolPolicy(ToolTier.Destructive, RememberScope.None, null);
             // Memory: reads auto-allow; writes are low-risk local .gxpt edits -> Write (prompt once,
             // remember-eligible per tool). forget stays Write rather than Destructive (design M7/sec.8).
             t["memory__read_memory"] = new ToolPolicy(ToolTier.ReadOnly, RememberScope.Tool, null);

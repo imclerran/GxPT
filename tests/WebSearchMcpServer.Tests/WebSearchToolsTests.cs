@@ -69,7 +69,7 @@ namespace WebSearchMcpServer.Tests
         // ---- listing ----
 
         [Fact]
-        public void Lists_search_and_extract_tools()
+        public void Lists_search_extract_and_http_tools()
         {
             var server = Harness.NewWebServer("k", FakeCurl(SearchResponse, 200));
             var msgs = Harness.Exchange(server, Harness.ToolsList(1));
@@ -79,7 +79,8 @@ namespace WebSearchMcpServer.Tests
             foreach (JToken t in tools) names.Add((string)t["name"]);
             Assert.Contains("search", names);
             Assert.Contains("extract", names);
-            Assert.Equal(2, names.Count);
+            Assert.Contains("http", names);
+            Assert.Equal(3, names.Count);
         }
 
         // ---- search handler ----
@@ -161,6 +162,77 @@ namespace WebSearchMcpServer.Tests
         {
             var server = Harness.NewWebServer("k", FakeCurl(ExtractResponse, 200));
             var msgs = Harness.Exchange(server, Harness.ToolsCall(1, "extract", new JObject()));
+            Assert.True(Harness.IsError(msgs[0]));
+        }
+
+        // ---- http handler ----
+
+        [Fact]
+        public void Http_happy_path_returns_status_and_body()
+        {
+            var server = Harness.NewWebServer("k", FakeCurl("{\"ok\":true}", 200));
+            var msgs = Harness.Exchange(server, Harness.ToolsCall(1, "http", Harness.Args("url", "https://api.test/v1")));
+
+            Assert.False(Harness.IsError(msgs[0]));
+            JObject s = Harness.Structured(msgs[0]);
+            Assert.Equal(200, (int)s["status"]);
+            Assert.Contains("\"ok\":true", (string)s["body"]);
+        }
+
+        [Fact]
+        public void Http_works_without_tavily_key()
+        {
+            // The raw HTTP tool talks to arbitrary URLs, not Tavily, so it needs no GXPT_WEB_SEARCH_KEY.
+            var server = Harness.NewWebServer(null, FakeCurl("hello", 200));
+            var msgs = Harness.Exchange(server, Harness.ToolsCall(1, "http", Harness.Args("url", "https://api.test/")));
+            Assert.False(Harness.IsError(msgs[0]));
+            Assert.Equal("hello", (string)Harness.Structured(msgs[0])["body"]);
+        }
+
+        [Fact]
+        public void Http_error_status_is_returned_as_data_not_error()
+        {
+            var server = Harness.NewWebServer("k", FakeCurl("{\"error\":\"not found\"}", 404));
+            var msgs = Harness.Exchange(server, Harness.ToolsCall(1, "http", Harness.Args("url", "https://api.test/missing")));
+
+            Assert.False(Harness.IsError(msgs[0])); // 4xx is data, not a tool failure
+            JObject s = Harness.Structured(msgs[0]);
+            Assert.Equal(404, (int)s["status"]);
+            Assert.Contains("not found", (string)s["body"]);
+        }
+
+        [Fact]
+        public void Http_missing_curl_returns_error()
+        {
+            var server = Harness.NewWebServer("k", null);
+            var msgs = Harness.Exchange(server, Harness.ToolsCall(1, "http", Harness.Args("url", "https://api.test/")));
+            Assert.True(Harness.IsError(msgs[0]));
+            Assert.Contains("curl", Harness.Text(msgs[0]));
+        }
+
+        [Fact]
+        public void Http_non_http_url_returns_error()
+        {
+            var server = Harness.NewWebServer("k", FakeCurl("x", 200));
+            var msgs = Harness.Exchange(server, Harness.ToolsCall(1, "http", Harness.Args("url", "file:///etc/passwd")));
+            Assert.True(Harness.IsError(msgs[0]));
+            Assert.Contains("http", Harness.Text(msgs[0]));
+        }
+
+        [Fact]
+        public void Http_missing_url_returns_error()
+        {
+            var server = Harness.NewWebServer("k", FakeCurl("x", 200));
+            var msgs = Harness.Exchange(server, Harness.ToolsCall(1, "http", new JObject()));
+            Assert.True(Harness.IsError(msgs[0]));
+        }
+
+        [Fact]
+        public void Http_unsupported_method_returns_error()
+        {
+            var server = Harness.NewWebServer("k", FakeCurl("x", 200));
+            var msgs = Harness.Exchange(server, Harness.ToolsCall(1, "http",
+                Harness.Args("url", "https://api.test/", "method", "TRACE")));
             Assert.True(Harness.IsError(msgs[0]));
         }
 

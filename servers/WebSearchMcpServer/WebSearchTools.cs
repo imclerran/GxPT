@@ -1,22 +1,36 @@
 using System;
+using System.Collections.Generic;
 using Mcp35.Core.Protocol;
+using Mcp35.Core.Transport;
 using Mcp35.Server;
 using Newtonsoft.Json.Linq;
 
 namespace WebSearchMcpServer
 {
     /// <summary>
-    /// The web server's two tools over the Tavily API:
-    ///   web__search  (ReadOnly) — query the web, condensed results + optional answer.
-    ///   web__extract (ReadOnly) — fetch and return full page content for given URLs.
+    /// The web server's three tools:
+    ///   web__search  (ReadOnly)    — query the web (Tavily), condensed results + optional answer.
+    ///   web__extract (ReadOnly)    — fetch and return clean page content for given URLs (Tavily).
+    ///   web__http    (Destructive) — make a raw HTTP request (any method/headers/body) over curl,
+    ///                                returning the status, response headers, and body verbatim.
     /// Request builders and response condensers are pure functions (unit-tested directly); the
-    /// handlers add the network call. Failures are Error values; the API key never appears in output.
-    /// See servers-spec §3.
+    /// handlers add the network call. Failures are Error values; the Tavily API key never appears in
+    /// output. See servers-spec §3.
     /// </summary>
     internal static class WebSearchTools
     {
         private const int DefaultMaxResults = 5;
         private const int MaxMaxResults = 20;
+
+        // web__http limits. Body is capped so a huge response can't blow up the model context; the
+        // timeout is the per-request curl --max-time (with a hard cap).
+        private const int HttpBodyCap = 100000;          // chars returned to the model
+        private const int HttpDefaultTimeoutMs = 30000;
+        private const int HttpMaxTimeoutMs = 120000;
+
+        // The methods web__http will issue. HEAD is intentionally omitted: `curl -X HEAD` waits for a
+        // response body that never arrives and hangs until the timeout; callers wanting headers can use GET.
+        private static readonly string[] HttpMethods = new string[] { "GET", "POST", "PUT", "PATCH", "DELETE" };
 
         public static void Register(McpServer server, WebSearchConfig config)
         {
@@ -35,6 +49,16 @@ namespace WebSearchMcpServer
                 BuildExtractSchema(),
                 ToolAnnotations.ReadOnly(),
                 delegate(ToolCallContext ctx) { return Extract(config, client, ctx); });
+
+            server.AddTool("http",
+                "Make a raw HTTP request to a URL or API and get back the status code, response headers, and body VERBATIM. " +
+                "Use this for REST/JSON APIs or any request that needs a specific method, custom headers, or a request body — " +
+                "NOT for reading article or page text (use web__extract for that; it returns clean, readable content instead of raw HTML/JSON). " +
+                "Only http(s) URLs are allowed and redirects are not followed automatically (a 3xx is returned to you with its Location header). " +
+                "An HTTP error status (4xx/5xx) is reported as data, not a failure.",
+                BuildHttpSchema(),
+                ToolAnnotations.Destructive(),
+                delegate(ToolCallContext ctx) { return Http(config, ctx); });
         }
 
         // ---- schemas ----
@@ -72,6 +96,28 @@ namespace WebSearchMcpServer
                 .Raw("extract_depth", depth, false)
                 .Raw("format", fmt, false)
                 .Bool("include_images", false, "Include image URLs found on the pages")
+                .Build();
+        }
+
+        private static JObject BuildHttpSchema()
+        {
+            JObject method = StrEnum("HTTP method (default GET).", HttpMethods);
+
+            // A free-form header map: { "Accept": "application/json", ... }. SchemaBuilder has no
+            // object-of-strings helper, so build the fragment directly (additionalProperties: string).
+            JObject headers = new JObject();
+            headers["type"] = "object";
+            headers["description"] = "Optional request headers as a flat name->value map, e.g. {\"Accept\": \"application/json\"}.";
+            JObject headerVal = new JObject();
+            headerVal["type"] = "string";
+            headers["additionalProperties"] = headerVal;
+
+            return SchemaBuilder.Object()
+                .Str("url", true, "Required. The absolute http(s) URL to request.")
+                .Raw("method", method, false)
+                .Raw("headers", headers, false)
+                .Str("body", false, "Optional request body, sent verbatim (e.g. a JSON string). Set a matching Content-Type header.")
+                .Int("timeout_ms", false, "Abort the request after this many milliseconds (default 30000, max 120000).")
                 .Build();
         }
 
@@ -216,6 +262,134 @@ namespace WebSearchMcpServer
                 }
             }
             return result;
+        }
+
+        // ---- http ----
+
+        private static CallToolResult Http(WebSearchConfig config, ToolCallContext ctx)
+        {
+            if (!config.HasCurl) return ToolResults.Error("curl path not configured.");
+
+            string url = ctx.Arguments.Value<string>("url");
+            string urlError = ValidateHttpUrl(url);
+            if (urlError != null) return ToolResults.Error(urlError);
+
+            string method = NormalizeMethod(ctx.Arguments.Value<string>("method"));
+            if (method == null) return ToolResults.Error("unsupported method; use one of: " + string.Join(", ", HttpMethods));
+
+            CurlRequest req = BuildHttpRequest(ctx, url, method);
+            CurlRunner runner = new CurlRunner(config.CurlPath, config.CaBundle, null);
+
+            CurlResult result;
+            try
+            {
+                result = runner.Run(req);
+            }
+            catch (Exception ex)
+            {
+                return ToolResults.Error("request failed: " + ex.Message);
+            }
+
+            // No HTTP status AND curl wrote to stderr => a transport-level failure (DNS, TLS, connection
+            // refused, timeout). A real HTTP error status (4xx/5xx) carries a status and is returned as
+            // data, not an Error — the model often needs to read the error body.
+            if (result.HttpStatus == 0 && !string.IsNullOrEmpty(result.Stderr))
+                return ToolResults.Error("request failed: " + FirstLine(result.Stderr));
+
+            return ToolResults.Json(CondenseHttp(result));
+        }
+
+        /// <summary>Validate that a URL is an absolute http(s) URL. Returns an error string, or null if ok. Pure.</summary>
+        public static string ValidateHttpUrl(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return "url is required";
+            Uri uri;
+            if (!Uri.TryCreate(url, UriKind.Absolute, out uri))
+                return "url must be an absolute http(s) URL";
+            // Uri lowercases the scheme. Anything other than http/https (file://, ftp://, …) is rejected
+            // so this tool can't be steered into reading local files or other protocols.
+            if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+                return "only http and https URLs are allowed";
+            return null;
+        }
+
+        /// <summary>Uppercase + allowlist the method (default GET). Returns null for an unsupported method. Pure.</summary>
+        public static string NormalizeMethod(string method)
+        {
+            if (string.IsNullOrEmpty(method)) return "GET";
+            string up = method.Trim().ToUpperInvariant();
+            for (int i = 0; i < HttpMethods.Length; i++)
+                if (HttpMethods[i] == up) return up;
+            return null;
+        }
+
+        /// <summary>Map tool arguments onto a CurlRequest for web__http. Pure (no network).</summary>
+        public static CurlRequest BuildHttpRequest(ToolCallContext ctx, string url, string method)
+        {
+            CurlRequest req = new CurlRequest();
+            req.Url = url;
+            req.Method = method;
+            req.TimeoutMs = ClampInt(ctx, "timeout_ms", HttpDefaultTimeoutMs, 1, HttpMaxTimeoutMs);
+            req.Headers = BuildHttpHeaders(ctx.Arguments["headers"]);
+
+            string body = ctx.Arguments.Value<string>("body");
+            // BodyJson is just the raw request body (written via --data-binary @file); the name is
+            // historical. Only attach it when present so GET stays a bodyless request.
+            if (!string.IsNullOrEmpty(body)) req.BodyJson = body;
+            return req;
+        }
+
+        /// <summary>Turn the optional 'headers' object argument into a name->value map. Pure.</summary>
+        public static IDictionary<string, string> BuildHttpHeaders(JToken headers)
+        {
+            Dictionary<string, string> map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            JObject obj = headers as JObject;
+            if (obj == null) return map;
+            foreach (KeyValuePair<string, JToken> kv in obj)
+            {
+                if (string.IsNullOrEmpty(kv.Key)) continue;
+                if (kv.Value == null || kv.Value.Type == JTokenType.Null) continue;
+                string v = kv.Value.Type == JTokenType.String ? (string)kv.Value : kv.Value.ToString();
+                map[kv.Key] = v;
+            }
+            return map;
+        }
+
+        /// <summary>Condense a CurlResult into {status, headers?, body, truncated?}. Pure.</summary>
+        public static JObject CondenseHttp(CurlResult result)
+        {
+            JObject outp = new JObject();
+            outp["status"] = result.HttpStatus;
+
+            if (result.Headers != null && result.Headers.Count > 0)
+            {
+                JObject h = new JObject();
+                foreach (KeyValuePair<string, string> kv in result.Headers)
+                    h[kv.Key] = kv.Value;
+                outp["headers"] = h;
+            }
+
+            bool truncated;
+            outp["body"] = Cap(result.Body, HttpBodyCap, out truncated);
+            if (truncated) outp["truncated"] = true;
+            return outp;
+        }
+
+        private static string Cap(string s, int max, out bool truncated)
+        {
+            truncated = false;
+            if (s == null) return string.Empty;
+            if (s.Length <= max) return s;
+            truncated = true;
+            return s.Substring(0, max);
+        }
+
+        private static string FirstLine(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return s;
+            string t = s.Replace("\r\n", "\n").Trim();
+            int nl = t.IndexOf('\n');
+            return nl < 0 ? t : t.Substring(0, nl);
         }
 
         // ---- helpers ----
