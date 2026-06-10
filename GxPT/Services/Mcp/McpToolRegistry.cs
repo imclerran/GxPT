@@ -224,6 +224,30 @@ namespace GxPT
             return false;
         }
 
+        // The candidate whose metadata the model should see for a turn with `workdir`: the SAME one
+        // TryResolve would route the call to (exact-workdir match first, then a workdir-independent
+        // candidate). This keeps the advertised/revealed schema in lockstep with the connection that
+        // will actually execute the call. It matters when one server is offered as BOTH a workdir-
+        // scoped and a workdir-less instance (skills): those two carry DIFFERENT schemas (e.g. the
+        // default `scope` they apply), so picking list[0] could show the model the schema of an
+        // instance the call never reaches. Falls back to list[0] only when nothing matches (the caller
+        // has already filtered to resolvable names, so a match is guaranteed in practice).
+        private bool TryBestEntryLocked(string fn, string workdir, out CatalogEntry e)
+        {
+            List<CatalogEntry> list;
+            if (fn != null && _byFunctionName.TryGetValue(fn, out list) && list.Count > 0)
+            {
+                for (int i = 0; i < list.Count; i++)
+                    if (WorkdirEquals(list[i].Workdir, workdir)) { e = list[i]; return true; }
+                for (int i = 0; i < list.Count; i++)
+                    if (list[i].Workdir == null) { e = list[i]; return true; }
+                e = list[0];
+                return true;
+            }
+            e = null;
+            return false;
+        }
+
         // ---- per-request (from the orchestrator) ----
 
         // True when at least one connected server has contributed a tool — the host uses this to
@@ -349,7 +373,7 @@ namespace GxPT
                     if (!_byFunctionName.TryGetValue(fns[i], out list)) continue;
                     if (!ResolvableForWorkdirLocked(list, workdir)) continue;
                     CatalogEntry e;
-                    if (TryFirstEntryLocked(fns[i], out e))
+                    if (TryBestEntryLocked(fns[i], workdir, out e))
                         result.Add(FunctionDef(e.FunctionName, e.Description, CloneSchema(e.Schema)));
                 }
             }
@@ -385,7 +409,16 @@ namespace GxPT
             return functionName == RevealToolsName;
         }
 
+        // Workdir-agnostic reveal (independent tools, or tests that don't run a folder turn).
         public string Reveal(string[] names)
+        {
+            return Reveal(names, null);
+        }
+
+        // Reveal the named tools' full defs for a turn with `workdir`, choosing each tool's schema from
+        // the candidate that turn will actually call (TryBestEntryLocked) so the revealed schema matches
+        // the executing connection — see TryBestEntryLocked.
+        public string Reveal(string[] names, string workdir)
         {
             JArray defs = new JArray();
             List<string> notes = new List<string>();
@@ -398,7 +431,7 @@ namespace GxPT
                     {
                         string n = names[i];
                         CatalogEntry e;
-                        if (n != null && TryFirstEntryLocked(n, out e))
+                        if (n != null && TryBestEntryLocked(n, workdir, out e))
                         {
                             _revealed[n] = ++_tick; // add or bump recency
                             JObject d = new JObject();

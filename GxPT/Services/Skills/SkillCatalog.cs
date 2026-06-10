@@ -102,7 +102,12 @@ namespace GxPT
             return new Skill(slug, name, fm.Description, dir, file, source);
         }
 
-        // The manifest body the model sees: one "- <slug> - <description>" line per skill, slug-ordered.
+        // The manifest body the model sees: one "- <slug> [<scope>] - <description>" line per skill,
+        // slug-ordered. The scope label is the skill's source, spelled as the literal `scope` argument
+        // the authoring tools (edit_skill_file/update_skill/...) take - "user" or "project" - so the
+        // model can edit a skill in the right scope on the first call instead of guessing the default
+        // and failing on a cross-scope skill. "bundled" skills are shipped read-only (the writer targets
+        // only the project/user roots), so the label doubles as a "not editable in place" signal.
         // The surrounding system-message framing + enable filtering is a later phase; this is the list.
         public string BuildManifest()
         {
@@ -115,9 +120,23 @@ namespace GxPT
             foreach (Skill s in skills)
             {
                 if (sb.Length > 0) sb.Append('\n');
-                sb.Append("- ").Append(s.Slug).Append(" - ").Append(s.Description);
+                sb.Append("- ").Append(s.Slug)
+                    .Append(" [").Append(ScopeLabel(s.Source)).Append("]")
+                    .Append(" - ").Append(s.Description);
             }
             return sb.ToString();
+        }
+
+        // The skill's source as the literal `scope` token the authoring tools accept (user/project);
+        // bundled skills have no writable scope, so they're labeled "bundled".
+        private static string ScopeLabel(SkillSource source)
+        {
+            switch (source)
+            {
+                case SkillSource.Project: return "project";
+                case SkillSource.User: return "user";
+                default: return "bundled";
+            }
         }
     }
 }
