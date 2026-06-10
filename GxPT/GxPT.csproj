@@ -147,6 +147,7 @@
     <Compile Include="Services\Logger.cs" />
     <Compile Include="Services\OpenRouterClient.cs">
     </Compile>
+    <Compile Include="Services\RequestCancellation.cs" />
     <Compile Include="Services\Mcp\IChatStreamer.cs" />
     <Compile Include="Services\Mcp\IToolApprovalPolicy.cs" />
     <Compile Include="Services\Mcp\ToolApproval.cs" />
@@ -156,6 +157,9 @@
     <Compile Include="Services\Mcp\TranscriptApprovalPrompt.cs" />
     <Compile Include="Services\Mcp\TranscriptContinuationPrompt.cs" />
     <Compile Include="Controls\ToolApprovalPanel.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Controls\GenerationStatusBar.cs">
       <SubType>Component</SubType>
     </Compile>
     <Compile Include="Controls\WorkspaceContextStrip.cs">

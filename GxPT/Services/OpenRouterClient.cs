@@ -209,22 +209,24 @@ namespace GxPT
         // IChatStreamer: build the body (with tools) then stream parsed chunks. Used by the
         // McpChatOrchestrator; the assembler reassembles tool_calls and forwards text deltas.
         public void StreamChat(string model, IList<ChatMessage> messages, IList<JObject> tools,
-                               ClientProperties props, Action<ChatCompletionChunk> onChunk, Action<string> onError)
+                               ClientProperties props, Action<ChatCompletionChunk> onChunk, Action<string> onError,
+                               RequestCancellation cancel)
         {
             if (props == null) props = new ClientProperties();
             if (!props.Stream.HasValue) props.Stream = true;
             string body = BuildRequestBody(model, messages, tools, props);
-            StreamRawChunks(body, onChunk, onError);
+            StreamRawChunks(body, onChunk, onError, cancel);
         }
 
         public void CreateCompletionStream(string model, IList<ChatMessage> messages, Action<string> onDelta, Action onDone, Action<string> onError)
         {
             // Backward-compatible API: defaults to stream
-            CreateCompletionStream(model, messages, null, onDelta, onDone, onError);
+            CreateCompletionStream(model, messages, null, onDelta, onDone, onError, null);
         }
 
         // Text-only streaming wrapper over StreamRawChunks (no tools): forwards content deltas.
-        public void CreateCompletionStream(string model, IList<ChatMessage> messages, ClientProperties props, Action<string> onDelta, Action onDone, Action<string> onError)
+        // cancel (may be null) lets the caller kill the in-flight request mid-stream.
+        public void CreateCompletionStream(string model, IList<ChatMessage> messages, ClientProperties props, Action<string> onDelta, Action onDone, Action<string> onError, RequestCancellation cancel)
         {
             if (props == null) props = new ClientProperties();
             if (!props.Stream.HasValue) props.Stream = true;
@@ -243,15 +245,21 @@ namespace GxPT
                         }
                     }
                 },
-                delegate(string err) { failed = true; if (onError != null) onError(err); });
+                delegate(string err) { failed = true; if (onError != null) onError(err); },
+                cancel);
 
+            // A user-initiated stop returns from StreamRawChunks without an error (the connection was
+            // dropped on purpose). onDone still fires so the caller finalizes whatever text streamed;
+            // it inspects the cancel handle to decide how to treat an empty result.
             if (!failed && onDone != null) onDone();
         }
 
         // The shared curl + SSE streaming loop. Each "data:" line is parsed (Newtonsoft) into a
         // ChatCompletionChunk and handed to onChunk; if the whole stream yields no chunks, the body
-        // is inspected for a JSON error and onError is called.
-        public void StreamRawChunks(string body, Action<ChatCompletionChunk> onChunk, Action<string> onError)
+        // is inspected for a JSON error and onError is called. When cancel is non-null its curl
+        // process is registered so a Stop click can kill it; a kill is reported as a clean stop (no
+        // onError) rather than a request failure.
+        public void StreamRawChunks(string body, Action<ChatCompletionChunk> onChunk, Action<string> onError, RequestCancellation cancel)
         {
             List<string> tempFiles;
             string args = BuildCurlArgs(body, out tempFiles);
@@ -272,6 +280,9 @@ namespace GxPT
                 proc.StartInfo = psi;
                 proc.EnableRaisingEvents = false;
                 proc.Start();
+                // Register the live process so a Stop click can kill it (dropping the connection,
+                // which unblocks the ReadLine loop below). If Cancel already fired, this kills now.
+                if (cancel != null) cancel.Attach(proc);
 
                 // Read lines as they arrive (SSE: lines like "data: {...}") with explicit UTF-8 decoding
                 var utf8 = new UTF8Encoding(false, false);
@@ -332,6 +343,18 @@ namespace GxPT
                 try { Logger.Log("Stream", "curl exit=" + exitCode + " chunks=" + chunkCount + (sawAnyChunk ? string.Empty : " (no chunks)")); }
                 catch { }
 
+                // User-initiated stop: killing curl makes it exit non-zero / end without [DONE], which
+                // would otherwise look like a failure. Treat it as a clean stop - keep whatever
+                // streamed, raise no error - so the caller finalizes the partial answer.
+                if (cancel != null && cancel.IsCancelled)
+                {
+                    try { Logger.Log("Stream", "stream cancelled by user (chunks=" + chunkCount + ")"); }
+                    catch { }
+                    cancel.Detach();
+                    CleanupTempFiles(tempFiles);
+                    return;
+                }
+
                 // Treat the request as failed if curl reported a non-zero exit (--fail-with-body makes
                 // it exit non-zero on every HTTP error), if no content chunks arrived at all, or if the
                 // body carried a JSON error payload. Any of these means the user got no real answer.
@@ -357,16 +380,22 @@ namespace GxPT
                                 : (exitCode != 0 ? ("Request failed (curl exit " + exitCode + ")") : "Request failed"));
                         onError(msg.Trim());
                     }
+                    if (cancel != null) cancel.Detach();
                     CleanupTempFiles(tempFiles);
                     return;
                 }
 
+                if (cancel != null) cancel.Detach();
                 CleanupTempFiles(tempFiles);
             }
             catch (Exception ex)
             {
                 Logger.Log("Stream", "Exception: " + ex.Message);
+                if (cancel != null) cancel.Detach();
                 CleanupTempFiles(tempFiles);
+                // A kill mid-read can surface as an IOException here; if the user asked to stop, that's
+                // expected - swallow it rather than reporting a request failure.
+                if (cancel != null && cancel.IsCancelled) return;
                 if (onError != null) onError(ex.Message);
             }
         }
