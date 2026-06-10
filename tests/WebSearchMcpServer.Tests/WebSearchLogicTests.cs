@@ -169,21 +169,22 @@ namespace WebSearchMcpServer.Tests
         }
 
         [Fact]
-        public void NormalizeMethod_defaults_to_get_and_uppercases()
+        public void NormalizeMutatingMethod_defaults_to_post_and_uppercases()
         {
-            Assert.Equal("GET", WebSearchTools.NormalizeMethod(null));
-            Assert.Equal("GET", WebSearchTools.NormalizeMethod(""));
-            Assert.Equal("POST", WebSearchTools.NormalizeMethod("post"));
-            Assert.Equal("DELETE", WebSearchTools.NormalizeMethod("  delete "));
+            Assert.Equal("POST", WebSearchTools.NormalizeMutatingMethod(null));
+            Assert.Equal("POST", WebSearchTools.NormalizeMutatingMethod(""));
+            Assert.Equal("PUT", WebSearchTools.NormalizeMutatingMethod("put"));
+            Assert.Equal("DELETE", WebSearchTools.NormalizeMutatingMethod("  delete "));
         }
 
         [Theory]
+        [InlineData("GET")]    // GET belongs to the ReadOnly web__get tool, not web__http
         [InlineData("HEAD")]   // intentionally unsupported (curl -X HEAD hangs)
         [InlineData("TRACE")]
         [InlineData("bogus")]
-        public void NormalizeMethod_rejects_unsupported(string method)
+        public void NormalizeMutatingMethod_rejects_non_mutating(string method)
         {
-            Assert.Null(WebSearchTools.NormalizeMethod(method));
+            Assert.Null(WebSearchTools.NormalizeMutatingMethod(method));
         }
 
         [Fact]
@@ -252,6 +253,53 @@ namespace WebSearchMcpServer.Tests
             JObject c = WebSearchTools.CondenseHttp(r);
             Assert.True((bool)c["truncated"]);
             Assert.Equal(100000, ((string)c["body"]).Length);
+        }
+
+        // ---- SSRF guard (web__get public-only) ----
+
+        [Theory]
+        [InlineData("8.8.8.8")]
+        [InlineData("1.1.1.1")]
+        [InlineData("93.184.216.34")] // example.com
+        public void IsPublicIp_true_for_routable_addresses(string ip)
+        {
+            Assert.True(WebSearchTools.IsPublicIp(System.Net.IPAddress.Parse(ip)));
+        }
+
+        [Theory]
+        [InlineData("127.0.0.1")]        // loopback
+        [InlineData("10.0.0.1")]         // RFC1918
+        [InlineData("172.16.5.4")]       // RFC1918
+        [InlineData("192.168.0.1")]      // RFC1918
+        [InlineData("169.254.169.254")]  // link-local / cloud metadata
+        [InlineData("100.64.0.1")]       // CGNAT
+        [InlineData("0.0.0.0")]          // this-network
+        [InlineData("224.0.0.1")]        // multicast
+        [InlineData("::1")]              // IPv6 loopback
+        [InlineData("fe80::1")]          // IPv6 link-local
+        [InlineData("fc00::1")]          // IPv6 unique-local
+        [InlineData("::ffff:127.0.0.1")] // IPv4-mapped loopback
+        public void IsPublicIp_false_for_non_public_addresses(string ip)
+        {
+            Assert.False(WebSearchTools.IsPublicIp(System.Net.IPAddress.Parse(ip)));
+        }
+
+        [Fact]
+        public void ValidatePublicHost_allows_public_ip_literal_and_blocks_private()
+        {
+            Assert.Null(WebSearchTools.ValidatePublicHost("https://8.8.8.8/path"));
+
+            string err = WebSearchTools.ValidatePublicHost("http://192.168.1.1/admin");
+            Assert.NotNull(err);
+            Assert.Contains("public", err);
+        }
+
+        [Fact]
+        public void ValidatePublicHost_blocks_localhost_hostname()
+        {
+            // "localhost" resolves via the hosts file (no network) to a loopback address.
+            string err = WebSearchTools.ValidatePublicHost("http://localhost:8080/");
+            Assert.NotNull(err);
         }
     }
 }

@@ -93,6 +93,7 @@ public interface IToolClassifier {
    | `command__run` | Destructive | **Argument(`command`)** |
    | `web__search` | ReadOnly | Tool |
    | `web__extract` | ReadOnly | Tool |
+   | `web__get` | ReadOnly | Tool |
    | `web__http` | Destructive | None |
 3. **Third-party → annotations** (advisory): `destructiveHint:true` →
    Destructive/None; `readOnlyHint:true` → ReadOnly/Tool; otherwise → Write/Tool.

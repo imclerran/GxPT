@@ -140,46 +140,62 @@ string Resolve(string root, string rel) {
 
 ## 3. WebSearchMcpServer (server name `web`)
 
-Three tools over **curl** (net35's `WebRequest`/`ServicePointManager` can't
+Four tools over **curl** (net35's `WebRequest`/`ServicePointManager` can't
 reliably negotiate TLS 1.2). `search`/`extract` are backed by the **Tavily API**;
-`http` is a general-purpose request tool. All reuse **`Mcp35.Core`'s `CurlRunner`**
-(the shared curl-exec helper lives in Core precisely so this server and the
-client's `HttpTransport` share it — D9, architecture §3).
+`get`/`http` are general-purpose request tools. All reuse **`Mcp35.Core`'s
+`CurlRunner`** (the shared curl-exec helper lives in Core precisely so this server
+and the client's `HttpTransport` share it — D9, architecture §3).
 
 | Tool | Approval | Schema (required *) | Behavior |
 |------|----------|---------------------|----------|
 | `search` (→ `web__search`) | ReadOnly | `query*`, `max_results?` (default 5, cap 20), `topic?`, `search_depth?`, `chunks_per_source?`, `include_answer?`, `include_raw_content?`, `time_range?`, `start_date?`, `end_date?`, `country?`, `include_domains?`, `exclude_domains?` | `POST /search`; condensed results + optional answer. |
 | `extract` (→ `web__extract`) | ReadOnly | `urls*` (string or array), `extract_depth?`, `format?`, `include_images?` | `POST /extract`; fetch and return full page content for the given URLs. |
-| `http` (→ `web__http`) | Destructive (Scope=None) | `url*`, `method?` (GET/POST/PUT/PATCH/DELETE, default GET), `headers?` (name→value map), `body?`, `timeout_ms?` (default 30000, cap 120000) | Issue a raw HTTP request; return `{status, headers?, body, truncated?}` verbatim. |
+| `get` (→ `web__get`) | ReadOnly | `url*`, `headers?` (name→value map), `timeout_ms?` (default 30000, cap 120000) | HTTP GET a **public** URL; return `{status, headers?, body, truncated?}` verbatim. |
+| `http` (→ `web__http`) | Destructive (Scope=None) | `url*`, `method?` (POST/PUT/PATCH/DELETE, default POST), `headers?` (name→value map), `body?`, `timeout_ms?` (default 30000, cap 120000) | Issue a state-changing HTTP request; return `{status, headers?, body, truncated?}` verbatim. |
 
 `extract` is classified **ReadOnly** (auto-allowed, like `web__search`): it only
 fetches and returns page content for URLs the model already has, without changing
 any local or remote state (`mcp35-approval-spec.md`).
 
-`http` is the escape hatch for talking to **APIs** (REST/JSON) that `extract`
-(clean *page reading*) and `search` don't cover. It is classified **Destructive,
-Scope=None** — confirmed every time, like `git__push` — because an arbitrary
-method/headers/body to an arbitrary URL is a remote-mutation + data-egress + SSRF
-surface; the user sees the exact method+URL before anything leaves. Server-side
-safe construction (the gate is the policy layer; this is the sandbox layer,
-architecture §9):
+`get`/`http` are the escape hatch for talking to **APIs** (REST/JSON) that
+`extract` (clean *page reading*) and `search` don't cover. They're **split by side
+effect** so a read can be cheap while a mutation stays gated:
+
+- `web__get` (GET only, no body) is **ReadOnly / auto-allowed**, like `extract`.
+  But unlike Tavily-proxied `extract`, it runs curl **directly from this machine**,
+  so it carries an **SSRF guard**: the host must be a public address — loopback,
+  private (RFC1918), CGNAT, link-local (incl. the `169.254.169.254` cloud-metadata
+  endpoint), and any **hostname that DNS-resolves** to one of those are rejected
+  (v4 and v6, unwrapping IPv4-mapped IPv6). Best-effort (DNS rebinding/TOCTOU
+  remains, since curl re-resolves), but it closes the obvious localhost/LAN/metadata
+  vectors; combined with "no redirects followed," a 3xx can't bounce inward either.
+- `web__http` (POST/PUT/PATCH/DELETE) is **Destructive, Scope=None** — confirmed
+  every time, like `git__push` — because a state-changing request to an arbitrary
+  URL is a remote-mutation + egress surface; the user sees the exact method+URL
+  before anything leaves. It has **no** public-only restriction: it's gated, so
+  approving the exact URL is how localhost / internal dev targets are reached.
+
+Server-side safe construction shared by both (the gate is the policy layer; this is
+the sandbox layer, architecture §9):
 
 - **Scheme allowlist:** only `http`/`https` absolute URLs (parsed via `Uri`);
-  `file://`, `ftp://`, etc. are rejected so the tool can't read local files or
+  `file://`, `ftp://`, etc. are rejected so the tools can't read local files or
   other protocols.
-- **Method allowlist:** GET/POST/PUT/PATCH/DELETE. `HEAD` is deliberately omitted
-  (`curl -X HEAD` waits for a body that never arrives and hangs to the timeout —
-  use GET for headers).
+- **Method split:** `web__get` is GET-only; `web__http` allows POST/PUT/PATCH/
+  DELETE and rejects GET (pointing the model at `web__get`). `HEAD` is unsupported
+  everywhere (`curl -X HEAD` waits for a body that never arrives and hangs).
 - **Redirects are NOT followed** (`CurlRunner` adds no `-L`): a 3xx returns to the
   model with its `Location` header, so a redirect can't silently bounce a request
-  to an internal host. The model must issue a new (re-prompted) request to follow.
+  to an internal host. The model must issue a new request to follow.
 - **HTTP errors are data, not failures:** a 4xx/5xx carries a status and body and
   is returned via `ToolResults.Json` (the model usually needs the error body).
   Only a *transport* failure (no status + curl stderr: DNS/TLS/refused/timeout) is
   an `Error`.
 - **Body cap** (100000 chars, `truncated:true` when hit) bounds context cost; a
-  per-request `timeout_ms` (capped) bounds time. No Tavily key is required (it
-  isn't a Tavily endpoint) — only `GXPT_CURL_PATH`.
+  per-request `timeout_ms` (capped) bounds time. No Tavily key is required (they
+  aren't Tavily endpoints) — only `GXPT_CURL_PATH`.
+- Both descriptions **nudge toward `web__extract`** when the goal is just the
+  readable content of a web page (clean text vs. raw HTML).
 
 - Auth: `Authorization: Bearer <GXPT_WEB_SEARCH_KEY>`, passed to curl via a
   **`-K` config file**, never the command line (same discipline as

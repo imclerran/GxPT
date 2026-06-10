@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Net;
+using System.Net.Sockets;
 using Mcp35.Core.Protocol;
 using Mcp35.Core.Transport;
 using Mcp35.Server;
@@ -8,29 +10,34 @@ using Newtonsoft.Json.Linq;
 namespace WebSearchMcpServer
 {
     /// <summary>
-    /// The web server's three tools:
+    /// The web server's four tools:
     ///   web__search  (ReadOnly)    — query the web (Tavily), condensed results + optional answer.
     ///   web__extract (ReadOnly)    — fetch and return clean page content for given URLs (Tavily).
-    ///   web__http    (Destructive) — make a raw HTTP request (any method/headers/body) over curl,
-    ///                                returning the status, response headers, and body verbatim.
-    /// Request builders and response condensers are pure functions (unit-tested directly); the
-    /// handlers add the network call. Failures are Error values; the Tavily API key never appears in
-    /// output. See servers-spec §3.
+    ///   web__get     (ReadOnly)    — HTTP GET a PUBLIC URL over curl; status, response headers, body verbatim.
+    ///   web__http    (Destructive) — state-changing HTTP request (POST/PUT/PATCH/DELETE) over curl.
+    /// The two raw-HTTP tools are split by side effect so GET can be auto-allowed (ReadOnly, like
+    /// extract) while the mutating verbs stay behind the approval gate. Because web__get is auto-allowed
+    /// and (unlike Tavily-proxied extract) runs curl DIRECTLY from this machine, it carries an SSRF
+    /// guard: it refuses non-public hosts (loopback/private/link-local, incl. DNS-resolved), so it can
+    /// only reach the public internet. web__http has no such restriction — it's gated, so the user sees
+    /// and approves the exact URL (which is how localhost/dev targets are reached). Request builders and
+    /// response condensers are pure functions (unit-tested directly); the handlers add the network call.
+    /// Failures are Error values; the Tavily API key never appears in output. See servers-spec §3.
     /// </summary>
     internal static class WebSearchTools
     {
         private const int DefaultMaxResults = 5;
         private const int MaxMaxResults = 20;
 
-        // web__http limits. Body is capped so a huge response can't blow up the model context; the
-        // timeout is the per-request curl --max-time (with a hard cap).
+        // web__get / web__http limits. Body is capped so a huge response can't blow up the model
+        // context; the timeout is the per-request curl --max-time (with a hard cap).
         private const int HttpBodyCap = 100000;          // chars returned to the model
         private const int HttpDefaultTimeoutMs = 30000;
         private const int HttpMaxTimeoutMs = 120000;
 
-        // The methods web__http will issue. HEAD is intentionally omitted: `curl -X HEAD` waits for a
-        // response body that never arrives and hangs until the timeout; callers wanting headers can use GET.
-        private static readonly string[] HttpMethods = new string[] { "GET", "POST", "PUT", "PATCH", "DELETE" };
+        // The state-changing methods web__http will issue. GET is excluded (it's the ReadOnly web__get
+        // tool); HEAD is excluded too (`curl -X HEAD` waits for a body that never arrives and hangs).
+        private static readonly string[] MutatingMethods = new string[] { "POST", "PUT", "PATCH", "DELETE" };
 
         public static void Register(McpServer server, WebSearchConfig config)
         {
@@ -50,11 +57,23 @@ namespace WebSearchMcpServer
                 ToolAnnotations.ReadOnly(),
                 delegate(ToolCallContext ctx) { return Extract(config, client, ctx); });
 
+            server.AddTool("get",
+                "HTTP GET a URL and return the status code, response headers, and body VERBATIM. " +
+                "Use this to read JSON/REST API responses or any raw GET resource. " +
+                "For turning an article or web page into clean, readable text use web__extract instead; " +
+                "to SEND data (POST/PUT/PATCH/DELETE) use web__http. " +
+                "Only http(s) URLs are allowed and redirects are not followed automatically (a 3xx is returned with its Location header). " +
+                "Only PUBLIC hosts are reachable — to request localhost or an internal/LAN address use web__http instead. " +
+                "An HTTP error status (4xx/5xx) is reported as data, not a failure.",
+                BuildGetSchema(),
+                ToolAnnotations.ReadOnly(),
+                delegate(ToolCallContext ctx) { return Get(config, ctx); });
+
             server.AddTool("http",
-                "Make a raw HTTP request to a URL or API and get back the status code, response headers, and body VERBATIM. " +
-                "Use this for REST/JSON APIs or any request that needs a specific method, custom headers, or a request body — " +
-                "NOT for reading article or page text (use web__extract for that; it returns clean, readable content instead of raw HTML/JSON). " +
-                "Only http(s) URLs are allowed and redirects are not followed automatically (a 3xx is returned to you with its Location header). " +
+                "Send a STATE-CHANGING HTTP request (POST, PUT, PATCH, or DELETE) with an optional body and custom headers; " +
+                "returns the status code, response headers, and body VERBATIM. " +
+                "For a plain GET use web__get; for reading article/page text use web__extract. " +
+                "Only http(s) URLs are allowed and redirects are not followed automatically (a 3xx is returned with its Location header). " +
                 "An HTTP error status (4xx/5xx) is reported as data, not a failure.",
                 BuildHttpSchema(),
                 ToolAnnotations.Destructive(),
@@ -99,26 +118,39 @@ namespace WebSearchMcpServer
                 .Build();
         }
 
+        private static JObject BuildGetSchema()
+        {
+            return SchemaBuilder.Object()
+                .Str("url", true, "Required. The absolute http(s) URL to GET.")
+                .Raw("headers", BuildHeadersSchema(), false)
+                .Int("timeout_ms", false, "Abort the request after this many milliseconds (default 30000, max 120000).")
+                .Build();
+        }
+
         private static JObject BuildHttpSchema()
         {
-            JObject method = StrEnum("HTTP method (default GET).", HttpMethods);
+            JObject method = StrEnum("Request method (default POST). For a GET request use web__get instead.", MutatingMethods);
 
-            // A free-form header map: { "Accept": "application/json", ... }. SchemaBuilder has no
-            // object-of-strings helper, so build the fragment directly (additionalProperties: string).
+            return SchemaBuilder.Object()
+                .Str("url", true, "Required. The absolute http(s) URL to request.")
+                .Raw("method", method, false)
+                .Raw("headers", BuildHeadersSchema(), false)
+                .Str("body", false, "Optional request body, sent verbatim (e.g. a JSON string). Set a matching Content-Type header.")
+                .Int("timeout_ms", false, "Abort the request after this many milliseconds (default 30000, max 120000).")
+                .Build();
+        }
+
+        /// <summary>A free-form header map schema: { "Accept": "application/json", ... }. SchemaBuilder
+        /// has no object-of-strings helper, so build the fragment directly (additionalProperties: string).</summary>
+        private static JObject BuildHeadersSchema()
+        {
             JObject headers = new JObject();
             headers["type"] = "object";
             headers["description"] = "Optional request headers as a flat name->value map, e.g. {\"Accept\": \"application/json\"}.";
             JObject headerVal = new JObject();
             headerVal["type"] = "string";
             headers["additionalProperties"] = headerVal;
-
-            return SchemaBuilder.Object()
-                .Str("url", true, "Required. The absolute http(s) URL to request.")
-                .Raw("method", method, false)
-                .Raw("headers", headers, false)
-                .Str("body", false, "Optional request body, sent verbatim (e.g. a JSON string). Set a matching Content-Type header.")
-                .Int("timeout_ms", false, "Abort the request after this many milliseconds (default 30000, max 120000).")
-                .Build();
+            return headers;
         }
 
         // ---- search ----
@@ -264,9 +296,26 @@ namespace WebSearchMcpServer
             return result;
         }
 
-        // ---- http ----
+        // ---- http (web__get / web__http) ----
+
+        private static CallToolResult Get(WebSearchConfig config, ToolCallContext ctx)
+        {
+            // GET only (never mutates -> ReadOnly) and, because it's auto-allowed, public hosts only.
+            return RunHttp(config, ctx, "GET", true);
+        }
 
         private static CallToolResult Http(WebSearchConfig config, ToolCallContext ctx)
+        {
+            string method = NormalizeMutatingMethod(ctx.Arguments.Value<string>("method"));
+            if (method == null)
+                return ToolResults.Error("web__http handles state-changing requests (POST, PUT, PATCH, DELETE); for a GET request use web__get instead.");
+            // No public-only restriction: web__http is gated, so the user approves the exact URL
+            // (this is how localhost / internal dev targets are reached).
+            return RunHttp(config, ctx, method, false);
+        }
+
+        /// <summary>Shared core for web__get / web__http: validate, build, run, condense.</summary>
+        private static CallToolResult RunHttp(WebSearchConfig config, ToolCallContext ctx, string method, bool publicOnly)
         {
             if (!config.HasCurl) return ToolResults.Error("curl path not configured.");
 
@@ -274,8 +323,11 @@ namespace WebSearchMcpServer
             string urlError = ValidateHttpUrl(url);
             if (urlError != null) return ToolResults.Error(urlError);
 
-            string method = NormalizeMethod(ctx.Arguments.Value<string>("method"));
-            if (method == null) return ToolResults.Error("unsupported method; use one of: " + string.Join(", ", HttpMethods));
+            if (publicOnly)
+            {
+                string hostError = ValidatePublicHost(url);
+                if (hostError != null) return ToolResults.Error(hostError);
+            }
 
             CurlRequest req = BuildHttpRequest(ctx, url, method);
             CurlRunner runner = new CurlRunner(config.CurlPath, config.CaBundle, null);
@@ -307,20 +359,102 @@ namespace WebSearchMcpServer
             if (!Uri.TryCreate(url, UriKind.Absolute, out uri))
                 return "url must be an absolute http(s) URL";
             // Uri lowercases the scheme. Anything other than http/https (file://, ftp://, …) is rejected
-            // so this tool can't be steered into reading local files or other protocols.
+            // so these tools can't be steered into reading local files or other protocols.
             if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
                 return "only http and https URLs are allowed";
             return null;
         }
 
-        /// <summary>Uppercase + allowlist the method (default GET). Returns null for an unsupported method. Pure.</summary>
-        public static string NormalizeMethod(string method)
+        /// <summary>Uppercase + allowlist a state-changing method (default POST). Returns null for GET,
+        /// HEAD, or any unsupported method (web__http rejects those — GET belongs to web__get). Pure.</summary>
+        public static string NormalizeMutatingMethod(string method)
         {
-            if (string.IsNullOrEmpty(method)) return "GET";
+            if (string.IsNullOrEmpty(method)) return "POST";
             string up = method.Trim().ToUpperInvariant();
-            for (int i = 0; i < HttpMethods.Length; i++)
-                if (HttpMethods[i] == up) return up;
+            for (int i = 0; i < MutatingMethods.Length; i++)
+                if (MutatingMethods[i] == up) return up;
             return null;
+        }
+
+        /// <summary>
+        /// SSRF guard for the auto-allowed web__get: reject a URL whose host is not a public address —
+        /// loopback, private (RFC1918), carrier-grade NAT, link-local (incl. the 169.254.169.254 cloud
+        /// metadata endpoint), or a hostname that RESOLVES to one of those. Returns an error string, or
+        /// null if the host is public. Best-effort: DNS can change between this check and curl's own
+        /// resolution (rebinding/TOCTOU), but it closes the obvious localhost/LAN/metadata vectors, and
+        /// redirects aren't followed so a 3xx can't bounce into the internal network.
+        /// </summary>
+        public static string ValidatePublicHost(string url)
+        {
+            Uri uri;
+            if (!Uri.TryCreate(url, UriKind.Absolute, out uri)) return "url must be an absolute http(s) URL";
+            string host = uri.Host;
+            if (string.IsNullOrEmpty(host)) return "url has no host";
+
+            IPAddress[] addrs;
+            IPAddress literal;
+            if (IPAddress.TryParse(host, out literal))
+            {
+                addrs = new IPAddress[] { literal };
+            }
+            else
+            {
+                try { addrs = Dns.GetHostAddresses(host); }
+                catch { return "could not resolve host: " + host; }
+                if (addrs == null || addrs.Length == 0) return "could not resolve host: " + host;
+            }
+
+            for (int i = 0; i < addrs.Length; i++)
+            {
+                if (!IsPublicIp(addrs[i]))
+                    return "refusing to request a non-public address (" + addrs[i] +
+                           "); web__get only reaches public hosts — use web__http for localhost or internal/LAN targets";
+            }
+            return null;
+        }
+
+        /// <summary>True only for a routable public IP. Blocks loopback/private/link-local/reserved
+        /// (v4 and v6), unwrapping IPv4-mapped IPv6 to check the embedded address. Pure.</summary>
+        public static bool IsPublicIp(IPAddress ip)
+        {
+            if (ip == null) return false;
+            if (IPAddress.IsLoopback(ip)) return false; // 127.0.0.0/8 and ::1
+
+            if (ip.AddressFamily == AddressFamily.InterNetwork)
+            {
+                byte[] b = ip.GetAddressBytes(); // 4 bytes, network order
+                if (b[0] == 0) return false;                                  // 0.0.0.0/8 ("this network")
+                if (b[0] == 10) return false;                                 // 10.0.0.0/8
+                if (b[0] == 100 && b[1] >= 64 && b[1] <= 127) return false;   // 100.64.0.0/10 (CGNAT)
+                if (b[0] == 127) return false;                                // 127.0.0.0/8 (loopback)
+                if (b[0] == 169 && b[1] == 254) return false;                 // 169.254.0.0/16 (link-local + metadata)
+                if (b[0] == 172 && b[1] >= 16 && b[1] <= 31) return false;    // 172.16.0.0/12
+                if (b[0] == 192 && b[1] == 168) return false;                 // 192.168.0.0/16
+                if (b[0] >= 224) return false;                                // 224.0.0.0/4 multicast + 240.0.0.0/4 reserved
+                return true;
+            }
+
+            if (ip.AddressFamily == AddressFamily.InterNetworkV6)
+            {
+                if (ip.IsIPv6LinkLocal || ip.IsIPv6SiteLocal) return false;   // fe80::/10, fec0::/10
+                byte[] b = ip.GetAddressBytes(); // 16 bytes
+                bool allZero = true;
+                for (int i = 0; i < b.Length; i++) if (b[i] != 0) { allZero = false; break; }
+                if (allZero) return false;                                    // :: (unspecified)
+                if ((b[0] & 0xFE) == 0xFC) return false;                      // fc00::/7 (unique local)
+                if (IsV4Mapped(b))                                            // ::ffff:a.b.c.d -> check embedded v4
+                    return IsPublicIp(new IPAddress(new byte[] { b[12], b[13], b[14], b[15] }));
+                return true;
+            }
+
+            return false; // unknown address family -> treat as non-public
+        }
+
+        // ::ffff:0:0/96 — an IPv4 address mapped into IPv6.
+        private static bool IsV4Mapped(byte[] b)
+        {
+            for (int i = 0; i < 10; i++) if (b[i] != 0) return false;
+            return b[10] == 0xFF && b[11] == 0xFF;
         }
 
         /// <summary>Map tool arguments onto a CurlRequest for web__http. Pure (no network).</summary>

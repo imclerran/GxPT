@@ -69,8 +69,13 @@ namespace GxPT.Tests.Mcp
             Assert.Equal(ToolTier.ReadOnly, extract.Tier);
             Assert.Equal(RememberScope.Tool, extract.Scope);
 
-            // web__http makes arbitrary HTTP requests (egress/SSRF/remote-mutation surface): Destructive,
-            // Scope=None -> confirmed every time, never remembered (like git__push).
+            // web__get is an HTTP GET (no remote mutation) -> ReadOnly/auto-allow, like extract.
+            var get = c.Classify("web__get", null, true);
+            Assert.Equal(ToolTier.ReadOnly, get.Tier);
+            Assert.Equal(RememberScope.Tool, get.Scope);
+
+            // web__http makes state-changing HTTP requests (egress/SSRF/remote-mutation surface):
+            // Destructive, Scope=None -> confirmed every time, never remembered (like git__push).
             var http = c.Classify("web__http", null, true);
             Assert.Equal(ToolTier.Destructive, http.Tier);
             Assert.Equal(RememberScope.None, http.Scope);
@@ -198,11 +203,12 @@ namespace GxPT.Tests.Mcp
         [Fact]
         public void Auto_allowed_read_only_tools_never_prompt()
         {
-            // The read-only built-ins (and web__search / web__extract) are always allowed without a prompt.
+            // The read-only built-ins (and web__search / web__extract / web__get) are always allowed without a prompt.
             var prompt = new ScriptedPrompt { Next = ApprovalChoice.Deny };
             var pol = Policy(prompt, new InMemoryApprovalStore());
             Assert.Equal(ApprovalDecision.Allow, pol.Check("web__search", Args("{\"query\":\"x\"}")));
             Assert.Equal(ApprovalDecision.Allow, pol.Check("web__extract", Args("{\"urls\":[\"x\"]}")));
+            Assert.Equal(ApprovalDecision.Allow, pol.Check("web__get", Args("{\"url\":\"https://api.test/\"}")));
             Assert.Equal(ApprovalDecision.Allow, pol.Check("files__read", Args("{\"path\":\"a\"}")));
             Assert.Equal(ApprovalDecision.Allow, pol.Check("git__status", Args("{}")));
             Assert.Equal(0, prompt.Calls);

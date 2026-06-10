@@ -185,8 +185,9 @@ namespace GxPT
                 }
                 else if (string.Equals(req.FunctionName, "web__http", StringComparison.Ordinal))
                 {
-                    string method = (req.Arguments.Value<string>("method") ?? "GET").Trim().ToUpperInvariant();
-                    if (method.Length == 0) method = "GET";
+                    // web__http is the state-changing tool (GET lives in the auto-allowed web__get).
+                    string method = (req.Arguments.Value<string>("method") ?? "POST").Trim().ToUpperInvariant();
+                    if (method.Length == 0) method = "POST";
                     string url = req.Arguments.Value<string>("url") ?? string.Empty;
                     string body = req.Arguments.Value<string>("body") ?? string.Empty;
                     string text = method + " " + url;
