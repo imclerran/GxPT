@@ -21,8 +21,20 @@
         }
         "Entry"
         {
+        "MsmKey" = "8:_1F515FDCDCC54A81B1A7984BE9561853"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
         "MsmKey" = "8:_233A41B509EE377D3539F831E7F0C67D"
         "OwnerKey" = "8:_7E3A6FA0A21D2C2AFAC5DA8698579058"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_233A41B509EE377D3539F831E7F0C67D"
+        "OwnerKey" = "8:_1F515FDCDCC54A81B1A7984BE9561853"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -106,6 +118,12 @@
         "Entry"
         {
         "MsmKey" = "8:_5EAF61B5A6C4B6FDBAF6DE42BC48BF23"
+        "OwnerKey" = "8:_1F515FDCDCC54A81B1A7984BE9561853"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_5EAF61B5A6C4B6FDBAF6DE42BC48BF23"
         "OwnerKey" = "8:_FFFB44874122465591E1DC6C44D1245E"
         "MsmSig" = "8:_UNDEFINED"
         }
@@ -131,6 +149,12 @@
         {
         "MsmKey" = "8:_7E3A6FA0A21D2C2AFAC5DA8698579058"
         "OwnerKey" = "8:_10650E4BA14F4EB39F7DB44C8656F217"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_7E3A6FA0A21D2C2AFAC5DA8698579058"
+        "OwnerKey" = "8:_1F515FDCDCC54A81B1A7984BE9561853"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -245,6 +269,12 @@
         {
         "MsmKey" = "8:_UNDEFINED"
         "OwnerKey" = "8:_E0499EB368C445EBB017CB750C98F6FD"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_UNDEFINED"
+        "OwnerKey" = "8:_1F515FDCDCC54A81B1A7984BE9561853"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -461,6 +491,26 @@
             "IsDependency" = "11:TRUE"
             "IsolateTo" = "8:"
             }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_261EC6B4B260410AAE08F01D2070BA84"
+            {
+            "SourcePath" = "8:..\\skills\\skill-writer\\writing-skills.md"
+            "TargetName" = "8:writing-skills.md"
+            "Tag" = "8:"
+            "Folder" = "8:_AA812549F7C74E0BB5EA0EC9B751D2EA"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_2AAA6C4759D147E4A13DB05D55EAC4EE"
             {
             "SourcePath" = "8:..\\GxPT\\resources\\Licenses\\LICENSE-newtonsoft-json.md"
@@ -594,6 +644,26 @@
             "IsDependency" = "11:TRUE"
             "IsolateTo" = "8:"
             }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_68309CE064944D27B0C9F40BEF78CC1C"
+            {
+            "SourcePath" = "8:..\\skills\\skill-writer\\tools.md"
+            "TargetName" = "8:tools.md"
+            "Tag" = "8:"
+            "Folder" = "8:_AA812549F7C74E0BB5EA0EC9B751D2EA"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
             "{9F6F8455-1EF1-4B85-886A-4223BCC8E7F7}:_7E3A6FA0A21D2C2AFAC5DA8698579058"
             {
             "AssemblyRegister" = "3:1"
@@ -645,6 +715,26 @@
             "IsDependency" = "11:FALSE"
             "IsolateTo" = "8:"
             }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_9FC1EE1075E7414A88F7D4D96771F091"
+            {
+            "SourcePath" = "8:..\\skills\\skill-writer\\scripts.md"
+            "TargetName" = "8:scripts.md"
+            "Tag" = "8:"
+            "Folder" = "8:_AA812549F7C74E0BB5EA0EC9B751D2EA"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_A180D69227FE4B7083CE9AD87CFDF823"
             {
             "SourcePath" = "8:..\\GxPT\\Resources\\Images\\GxPT-banner-install.bmp"
@@ -662,6 +752,26 @@
             "PackageAs" = "3:1"
             "Register" = "3:1"
             "Exclude" = "11:TRUE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_AEAD08493BAD4918B056AED37CBD650F"
+            {
+            "SourcePath" = "8:..\\skills\\skill-writer\\SKILL.md"
+            "TargetName" = "8:SKILL.md"
+            "Tag" = "8:"
+            "Folder" = "8:_AA812549F7C74E0BB5EA0EC9B751D2EA"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
             "IsDependency" = "11:FALSE"
             "IsolateTo" = "8:"
             }
@@ -745,86 +855,6 @@
             "Register" = "3:1"
             "Exclude" = "11:FALSE"
             "IsDependency" = "11:TRUE"
-            "IsolateTo" = "8:"
-            }
-            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_AEAD08493BAD4918B056AED37CBD650F"
-            {
-            "SourcePath" = "8:..\\skills\\skill-writer\\SKILL.md"
-            "TargetName" = "8:SKILL.md"
-            "Tag" = "8:"
-            "Folder" = "8:_AA812549F7C74E0BB5EA0EC9B751D2EA"
-            "Condition" = "8:"
-            "Transitive" = "11:FALSE"
-            "Vital" = "11:TRUE"
-            "ReadOnly" = "11:FALSE"
-            "Hidden" = "11:FALSE"
-            "System" = "11:FALSE"
-            "Permanent" = "11:FALSE"
-            "SharedLegacy" = "11:FALSE"
-            "PackageAs" = "3:1"
-            "Register" = "3:1"
-            "Exclude" = "11:FALSE"
-            "IsDependency" = "11:FALSE"
-            "IsolateTo" = "8:"
-            }
-            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_261EC6B4B260410AAE08F01D2070BA84"
-            {
-            "SourcePath" = "8:..\\skills\\skill-writer\\writing-skills.md"
-            "TargetName" = "8:writing-skills.md"
-            "Tag" = "8:"
-            "Folder" = "8:_AA812549F7C74E0BB5EA0EC9B751D2EA"
-            "Condition" = "8:"
-            "Transitive" = "11:FALSE"
-            "Vital" = "11:TRUE"
-            "ReadOnly" = "11:FALSE"
-            "Hidden" = "11:FALSE"
-            "System" = "11:FALSE"
-            "Permanent" = "11:FALSE"
-            "SharedLegacy" = "11:FALSE"
-            "PackageAs" = "3:1"
-            "Register" = "3:1"
-            "Exclude" = "11:FALSE"
-            "IsDependency" = "11:FALSE"
-            "IsolateTo" = "8:"
-            }
-            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_9FC1EE1075E7414A88F7D4D96771F091"
-            {
-            "SourcePath" = "8:..\\skills\\skill-writer\\scripts.md"
-            "TargetName" = "8:scripts.md"
-            "Tag" = "8:"
-            "Folder" = "8:_AA812549F7C74E0BB5EA0EC9B751D2EA"
-            "Condition" = "8:"
-            "Transitive" = "11:FALSE"
-            "Vital" = "11:TRUE"
-            "ReadOnly" = "11:FALSE"
-            "Hidden" = "11:FALSE"
-            "System" = "11:FALSE"
-            "Permanent" = "11:FALSE"
-            "SharedLegacy" = "11:FALSE"
-            "PackageAs" = "3:1"
-            "Register" = "3:1"
-            "Exclude" = "11:FALSE"
-            "IsDependency" = "11:FALSE"
-            "IsolateTo" = "8:"
-            }
-            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_68309CE064944D27B0C9F40BEF78CC1C"
-            {
-            "SourcePath" = "8:..\\skills\\skill-writer\\tools.md"
-            "TargetName" = "8:tools.md"
-            "Tag" = "8:"
-            "Folder" = "8:_AA812549F7C74E0BB5EA0EC9B751D2EA"
-            "Condition" = "8:"
-            "Transitive" = "11:FALSE"
-            "Vital" = "11:TRUE"
-            "ReadOnly" = "11:FALSE"
-            "Hidden" = "11:FALSE"
-            "System" = "11:FALSE"
-            "Permanent" = "11:FALSE"
-            "SharedLegacy" = "11:FALSE"
-            "PackageAs" = "3:1"
-            "Register" = "3:1"
-            "Exclude" = "11:FALSE"
-            "IsDependency" = "11:FALSE"
             "IsolateTo" = "8:"
             }
         }
@@ -972,14 +1002,14 @@
         {
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:GxPT"
-        "ProductCode" = "8:{BC72F238-6C4A-42F2-B3C5-3C90512CF809}"
-        "PackageCode" = "8:{6C3FB9C2-642F-4245-9A2E-8792BF72AD68}"
+        "ProductCode" = "8:{3995F76B-5855-458C-ACC8-404322B7269E}"
+        "PackageCode" = "8:{EF2FD3F3-BFD8-414A-BDA1-0D5A5EA50B1E}"
         "UpgradeCode" = "8:{18C05863-8BD9-4273-B9E8-061F771066DF}"
         "RestartWWWService" = "11:FALSE"
         "RemovePreviousVersions" = "11:TRUE"
         "DetectNewerInstalledVersion" = "11:TRUE"
         "InstallAllUsers" = "11:TRUE"
-        "ProductVersion" = "8:0.17.0"
+        "ProductVersion" = "8:0.18.0"
         "Manufacturer" = "8:IFM Innovations"
         "ARPHELPTELEPHONE" = "8:"
         "ARPHELPLINK" = "8:"
@@ -1684,6 +1714,34 @@
             "OutputConfiguration" = "8:"
             "OutputGroupCanonicalName" = "8:Built"
             "OutputProjectGuid" = "8:{C7E1B2A4-3D5F-4A6B-8E9C-1F2A3B4C5D6E}"
+            "ShowKeyOutput" = "11:TRUE"
+                "ExcludeFilters"
+                {
+                }
+            }
+            "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_1F515FDCDCC54A81B1A7984BE9561853"
+            {
+            "SourcePath" = "8:..\\servers\\SkillsMcpServer\\obj\\Release\\SkillsMcpServer.exe"
+            "TargetName" = "8:"
+            "Tag" = "8:"
+            "Folder" = "8:_A249DCF40CCD4A129F140A8AAEBBA6B7"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            "ProjectOutputGroupRegister" = "3:1"
+            "OutputConfiguration" = "8:"
+            "OutputGroupCanonicalName" = "8:Built"
+            "OutputProjectGuid" = "8:{B0E7C3F2-9A41-4D6E-8B2C-5F1A3E7D9C04}"
             "ShowKeyOutput" = "11:TRUE"
                 "ExcludeFilters"
                 {
