@@ -135,7 +135,7 @@ namespace GxPT
             {
                 this.BackColor = UnsetBack;
                 _text.ForeColor = UnsetText;
-                _text.Text = "No workspace: file, git, command, and msbuild tools are disabled for this conversation.";
+                _text.Text = "No workspace: some tools are disabled for this conversation.";
                 _change.Text = "Set workspace...";
                 _clear.Visible = false;
                 _dismiss.Visible = true;
