@@ -16,15 +16,15 @@ namespace GxPT
     // app-wide in Program.cs), available on Windows XP and later; without them it renders static.
     //
     // The stop glyph is owner-drawn (not a font character) so it stays a crisp, true square at any
-    // DPI - a Unicode glyph in a stock Button clips vertically and reads as a rectangle.
+    // DPI - a Unicode glyph in a stock Button clips vertically and reads as a rectangle. The button is
+    // docked Right with its width pinned to the padded strip height, so it lays out as a real square.
     internal sealed class GenerationStatusBar : Panel
     {
         private readonly ProgressBar _bar;
         private readonly StopGlyphButton _stop;
 
-        private const int BarVPad = 5;   // vertical inset for both children
-        private const int SideHPad = 6;  // gap from the panel's left/right edges
-        private const int Gap = 6;       // gap between the progress bar and the stop button
+        private const int StripHeight = 28;
+        private const int VPad = 5; // top/bottom inset; also fixes the (square) button's side length
 
         // Raised on the UI thread when the user clicks Stop. The host cancels the in-flight request.
         public event EventHandler StopRequested;
@@ -33,15 +33,22 @@ namespace GxPT
         {
             this.Dock = DockStyle.Bottom;
             this.Visible = false;
-            this.Height = 28;
+            this.Height = StripHeight;
+            this.Padding = new Padding(8, VPad, 6, VPad);
 
-            // Children are positioned manually (Relayout) so the stop button can be a centered square
-            // rather than a full-height docked rectangle.
+            // Fill bar added before the docked button so it occupies the space to the button's left
+            // (WinForms lays the Fill child into whatever the docked siblings leave).
             _bar = new ProgressBar();
+            _bar.Dock = DockStyle.Fill;
             _bar.Style = ProgressBarStyle.Marquee;
             _bar.MarqueeAnimationSpeed = 30;
 
             _stop = new StopGlyphButton();
+            _stop.Dock = DockStyle.Right;
+            // Docked Right gives the button the full padded height; pinning Width to that same value
+            // makes it a square (StripHeight minus the top+bottom padding).
+            _stop.Width = StripHeight - (VPad * 2);
+            _stop.Margin = new Padding(6, 0, 0, 0); // small gap from the bar
             _stop.Click += delegate
             {
                 EventHandler h = StopRequested;
@@ -53,7 +60,6 @@ namespace GxPT
 
             this.Controls.Add(_bar);
             this.Controls.Add(_stop);
-            Relayout();
         }
 
         // Show the strip and start the marquee. Pulls current theme colors so it blends in dark mode.
@@ -61,7 +67,6 @@ namespace GxPT
         {
             ApplyTheme();
             _bar.MarqueeAnimationSpeed = 30; // (re)start the animation if it had been stopped
-            Relayout();
             this.Visible = true;
             // Keep this Bottom-docked strip behind the Fill transcript in z-order, so the transcript
             // shrinks above it rather than the strip overlaying the transcript's bottom edge.
@@ -73,31 +78,6 @@ namespace GxPT
         {
             this.Visible = false;
             _bar.MarqueeAnimationSpeed = 0;
-        }
-
-        protected override void OnSizeChanged(EventArgs e)
-        {
-            base.OnSizeChanged(e);
-            Relayout();
-        }
-
-        // The stop button is a square sized to the strip's height; the progress bar fills the rest.
-        private void Relayout()
-        {
-            int w = this.ClientSize.Width;
-            int h = this.ClientSize.Height;
-            if (w <= 0 || h <= 0) return;
-
-            int side = h - (BarVPad * 2);
-            if (side < 12) side = 12;
-            int stopX = w - SideHPad - side;
-            _stop.SetBounds(stopX, (h - side) / 2, side, side);
-
-            int barLeft = SideHPad;
-            int barWidth = stopX - Gap - barLeft;
-            if (barWidth < 0) barWidth = 0;
-            int barHeight = side; // align the bar's height with the button for a balanced row
-            _bar.SetBounds(barLeft, (h - barHeight) / 2, barWidth, barHeight);
         }
 
         private void ApplyTheme()
