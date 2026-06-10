@@ -15,16 +15,18 @@ namespace GxPT
     // self-docks Bottom and starts hidden. The marquee animation needs visual styles (enabled
     // app-wide in Program.cs), available on Windows XP and later; without them it renders static.
     //
-    // The stop glyph is owner-drawn (not a font character) so it stays a crisp, true square at any
-    // DPI - a Unicode glyph in a stock Button clips vertically and reads as a rectangle. The button is
-    // docked Right with its width pinned to the padded strip height, so it lays out as a real square.
+    // The stop button matches the tab strip's new/close glyph buttons (GlyphToolStripButton): an
+    // owner-drawn dark-grey glyph with a light-grey hover/press fill, so it reads as part of the same
+    // family. The glyph is painted (not a font character) so it stays a crisp square and never clips.
     internal sealed class GenerationStatusBar : Panel
     {
         private readonly ProgressBar _bar;
+        private readonly Panel _stopHolder;
         private readonly StopGlyphButton _stop;
 
         private const int StripHeight = 28;
-        private const int VPad = 5; // top/bottom inset; also fixes the (square) button's side length
+        private const int VPad = 5;      // top/bottom inset; also fixes the (square) button's side
+        private const int BarGap = 2;    // gap between the progress bar and the stop button
 
         // Raised on the UI thread when the user clicks Stop. The host cancels the in-flight request.
         public event EventHandler StopRequested;
@@ -36,30 +38,35 @@ namespace GxPT
             this.Height = StripHeight;
             this.Padding = new Padding(8, VPad, 6, VPad);
 
-            // Fill bar added before the docked button so it occupies the space to the button's left
-            // (WinForms lays the Fill child into whatever the docked siblings leave).
+            int side = StripHeight - (VPad * 2); // square button side
+
+            // Fill bar added before the docked holder so it occupies the space to the holder's left.
             _bar = new ProgressBar();
             _bar.Dock = DockStyle.Fill;
             _bar.Style = ProgressBarStyle.Marquee;
             _bar.MarqueeAnimationSpeed = 30;
 
+            // A docked Right-edge holder whose left padding provides a reliable gap between the bar and
+            // the button (a docked control's own Margin is ignored by the layout, so the gap lives here).
             _stop = new StopGlyphButton();
-            _stop.Dock = DockStyle.Right;
-            // Docked Right gives the button the full padded height; pinning Width to that same value
-            // makes it a square (StripHeight minus the top+bottom padding).
-            _stop.Width = StripHeight - (VPad * 2);
-            _stop.Margin = new Padding(2, 0, 0, 0); // 2px gap from the bar
+            _stop.Dock = DockStyle.Fill;
             _stop.Click += delegate
             {
                 EventHandler h = StopRequested;
                 if (h != null) h(this, EventArgs.Empty);
             };
 
+            _stopHolder = new Panel();
+            _stopHolder.Dock = DockStyle.Right;
+            _stopHolder.Width = side + BarGap;
+            _stopHolder.Padding = new Padding(BarGap, 0, 0, 0);
+            _stopHolder.Controls.Add(_stop);
+
             ToolTip tip = new ToolTip();
             tip.SetToolTip(_stop, "Stop generating");
 
             this.Controls.Add(_bar);
-            this.Controls.Add(_stop);
+            this.Controls.Add(_stopHolder);
         }
 
         // Show the strip and start the marquee. Pulls current theme colors so it blends in dark mode.
@@ -88,33 +95,25 @@ namespace GxPT
                 bool dark = !string.IsNullOrEmpty(th) && th.Trim().Equals("dark", StringComparison.OrdinalIgnoreCase);
                 ThemeColors tc = ThemeService.GetColors(dark);
                 this.BackColor = tc.UiBackground;
+                _stopHolder.BackColor = tc.UiBackground;
                 _stop.BackColor = tc.UiBackground;
-                _stop.GlyphColor = tc.UiForeground;
-                // Subtle hover wash: nudge the background toward the foreground.
-                _stop.HoverBack = Blend(tc.UiBackground, tc.UiForeground, dark ? 0.22f : 0.12f);
             }
             catch { }
         }
 
-        private static Color Blend(Color a, Color b, float t)
-        {
-            if (t < 0f) t = 0f; else if (t > 1f) t = 1f;
-            int r = (int)(a.R + (b.R - a.R) * t);
-            int g = (int)(a.G + (b.G - a.G) * t);
-            int bl = (int)(a.B + (b.B - a.B) * t);
-            return Color.FromArgb(r, g, bl);
-        }
-
-        // A flat, square stop button that paints a centered filled square (slightly rounded) instead
-        // of relying on a font glyph - so it never clips and always reads as a square. Hover paints a
-        // soft rounded background for feedback. Control already raises Click on mouse click.
+        // A flat, square stop button styled to match the tab strip's new/close buttons
+        // (GlyphToolStripButton): a dark-grey filled-square glyph, a light-grey hover/press fill with a
+        // matching border, and a thin resting border. Owner-drawn so the glyph never clips. Control
+        // already raises Click on mouse click.
         private sealed class StopGlyphButton : Control
         {
             private bool _hover;
+            private bool _pressed;
 
-            public Color GlyphColor = Color.Black;
-            public Color HoverBack = Color.Gainsboro;
-            public Color BorderColor = Color.Gray;
+            // Mirrors GlyphToolStripButton's palette so the two button families look identical.
+            private static readonly Color GlyphColor = Color.FromArgb(80, 80, 80);
+            private static readonly Color HoverBorder = Color.FromArgb(210, 210, 210);
+            private static readonly Color RestBorder = Color.FromArgb(128, 128, 128); // thin dark-grey resting border
 
             public StopGlyphButton()
             {
@@ -125,50 +124,39 @@ namespace GxPT
             }
 
             protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
-            protected override void OnMouseLeave(EventArgs e) { _hover = false; Invalidate(); base.OnMouseLeave(e); }
+            protected override void OnMouseLeave(EventArgs e) { _hover = false; _pressed = false; Invalidate(); base.OnMouseLeave(e); }
+            protected override void OnMouseDown(MouseEventArgs e) { if (e.Button == MouseButtons.Left) { _pressed = true; Invalidate(); } base.OnMouseDown(e); }
+            protected override void OnMouseUp(MouseEventArgs e) { _pressed = false; Invalidate(); base.OnMouseUp(e); }
 
             protected override void OnPaint(PaintEventArgs e)
             {
                 Graphics g = e.Graphics;
                 g.Clear(this.BackColor);
-                g.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle r = new Rectangle(0, 0, this.Width - 1, this.Height - 1);
 
-                if (_hover)
+                // Hover/press fill + border, matching the tab glyph buttons.
+                if (_hover || _pressed)
                 {
-                    using (SolidBrush hb = new SolidBrush(HoverBack))
-                    using (GraphicsPath hp = Rounded(new Rectangle(0, 0, Width - 1, Height - 1), 4))
-                        g.FillPath(hb, hp);
+                    int shade = _pressed ? 210 : 230;
+                    using (SolidBrush sb = new SolidBrush(Color.FromArgb(shade, shade, shade)))
+                        g.FillRectangle(sb, r);
+                    using (Pen hp = new Pen(HoverBorder))
+                        g.DrawRectangle(hp, r);
+                }
+                else
+                {
+                    // Thin dark-grey resting border.
+                    using (Pen rp = new Pen(RestBorder))
+                        g.DrawRectangle(rp, r);
                 }
 
-                int side = (int)(Math.Min(Width, Height) * 0.5f);
+                // Centered filled square (the "stop" glyph), in the tab buttons' glyph colour.
+                int side = Math.Min(r.Width, r.Height) - 8;
                 if (side < 6) side = 6;
-                int x = (Width - side) / 2;
-                int y = (Height - side) / 2;
-                using (SolidBrush sb = new SolidBrush(GlyphColor))
-                using (GraphicsPath sp = Rounded(new Rectangle(x, y, side, side), 2))
-                    g.FillPath(sb, sp);
-
-                // Thin dark-grey border around the button.
-                using (Pen bp = new Pen(BorderColor))
-                using (GraphicsPath bdr = Rounded(new Rectangle(0, 0, Width - 1, Height - 1), 4))
-                    g.DrawPath(bp, bdr);
-            }
-
-            private static GraphicsPath Rounded(Rectangle r, int radius)
-            {
-                GraphicsPath p = new GraphicsPath();
-                int d = radius * 2;
-                if (d <= 0 || r.Width <= d || r.Height <= d)
-                {
-                    p.AddRectangle(r);
-                    return p;
-                }
-                p.AddArc(r.X, r.Y, d, d, 180, 90);
-                p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
-                p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
-                p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
-                p.CloseFigure();
-                return p;
+                int x = r.Left + (r.Width - side) / 2;
+                int y = r.Top + (r.Height - side) / 2;
+                using (SolidBrush gb = new SolidBrush(GlyphColor))
+                    g.FillRectangle(gb, new Rectangle(x, y, side, side));
             }
         }
     }
