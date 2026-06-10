@@ -1431,9 +1431,18 @@ namespace GxPT
         private bool ActiveConversationHasEnabledSkills()
         {
             var c = _tabManager != null ? _tabManager.GetActiveContext() : null;
-            if (c == null || c.Conversation == null) return false;
-            return SkillInjection.HasAnyEnabledSkills(AppDomain.CurrentDomain.BaseDirectory, c.WorkingDir,
-                c.Conversation.SkillsFeatureOff, c.Conversation.SkillOverrides);
+            Conversation convo = (c != null) ? c.Conversation : null;
+            // When there's no active conversation yet (early startup: RebuildMcpHost runs in the ctor
+            // before the first tab is set up), fall back to the global defaults a fresh conversation
+            // would inherit - null feature-off / no per-skill overrides. Otherwise the server stays OFF
+            // at launch even with default-on skills, until something later (a /skill toggle, a tab
+            // switch) happens to trigger a rebuild. A default conversation resolves identically to this
+            // fallback, so it's the right "we don't know the conversation yet" answer.
+            bool? convFeatureOff = (convo != null) ? convo.SkillsFeatureOff : null;
+            IDictionary<string, bool> convOverrides = (convo != null) ? convo.SkillOverrides : null;
+            string workdir = (c != null) ? c.WorkingDir : null;
+            return SkillInjection.HasAnyEnabledSkills(
+                AppDomain.CurrentDomain.BaseDirectory, workdir, convFeatureOff, convOverrides);
         }
 
         // The Skills MCP server tracks skill enablement; rebuild the host only when that crosses the
