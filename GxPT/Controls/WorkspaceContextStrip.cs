@@ -60,7 +60,7 @@ namespace GxPT
             // Small folder icon at the far left; the image is swapped per state in SetWorkingDir.
             _icon = new PictureBox();
             _icon.Dock = DockStyle.Left;
-            _icon.Width = 16;
+            _icon.Width = 20;
             _icon.SizeMode = PictureBoxSizeMode.Zoom;
             _icon.Margin = new Padding(0);
 
