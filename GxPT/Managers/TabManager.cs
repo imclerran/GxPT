@@ -45,6 +45,12 @@ namespace GxPT
             // The per-tab tool-approval panel docked at the bottom of this tab's transcript (set by
             // MainForm). A pending approval shows only on the conversation that requested it.
             public ToolApprovalPanel ApprovalPanel;
+            // The per-tab status strip (marquee progress bar + stop button) docked below the transcript,
+            // shown only while this tab has a request in flight (set by MainForm).
+            public GenerationStatusBar GenerationStatusBar;
+            // The in-flight request's cancellation handle (null when idle). The status strip's Stop
+            // button calls Cancel() on it to kill the model request.
+            public RequestCancellation Cancellation;
             // True when this tab's conversation has been opened but its transcript has NOT yet been
             // built (deferred at startup so only the visible tab pays the cost; built on first view).
             public bool NeedsTranscriptRebuild;

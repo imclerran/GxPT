@@ -678,6 +678,7 @@ namespace GxPT
                 // Bottom approval panel. Add the docked siblings, then send the transcript to front.
                 ctx.Page.Controls.Add(strip);
                 AttachApprovalPanel(ctx);
+                AttachGenerationStatusBar(ctx);
                 if (ctx.Transcript != null) ctx.Transcript.BringToFront();
                 strip.SetWorkingDir(ctx.WorkingDir);
                 // Honor a persisted dismissal (only meaningful when no folder is set; setting one
@@ -704,6 +705,57 @@ namespace GxPT
                 ctx.Page.Controls.Add(panel); // self-docks Bottom, starts hidden
             }
             catch { }
+        }
+
+        // Create this tab's generation status strip (marquee progress bar + stop button, docked below
+        // the transcript, hidden until a request is in flight). Each conversation gets its own strip so
+        // the bar and Stop button track the tab that's actually generating; Stop cancels that tab's
+        // in-flight request.
+        internal void AttachGenerationStatusBar(TabManager.ChatTabContext ctx)
+        {
+            if (ctx == null || ctx.Page == null) return;
+            try
+            {
+                var bar = new GenerationStatusBar();
+                ctx.GenerationStatusBar = bar;
+                var ctxRef = ctx;
+                bar.StopRequested += delegate { CancelActiveRequest(ctxRef); };
+                ctx.Page.Controls.Add(bar); // self-docks Bottom, starts hidden
+            }
+            catch { }
+        }
+
+        // Stop button on a tab's status strip: cancel that tab's in-flight model request. Killing the
+        // curl process drops the connection so the API stops generating; the streaming/orchestrator
+        // paths then finalize the turn cleanly (keeping any partial text) and hide the strip.
+        private void CancelActiveRequest(TabManager.ChatTabContext ctx)
+        {
+            if (ctx == null) return;
+            try
+            {
+                RequestCancellation c = ctx.Cancellation;
+                if (c != null)
+                {
+                    Logger.Log("Send", "User requested stop.");
+                    c.Cancel();
+                }
+            }
+            catch { }
+        }
+
+        // Show/hide this tab's generation status strip. Safe to call when the strip isn't present.
+        private void ShowGenerationBar(TabManager.ChatTabContext ctx)
+        {
+            if (ctx != null && ctx.GenerationStatusBar != null)
+                try { ctx.GenerationStatusBar.ShowBusy(); }
+                catch { }
+        }
+
+        private void HideGenerationBar(TabManager.ChatTabContext ctx)
+        {
+            if (ctx != null && ctx.GenerationStatusBar != null)
+                try { ctx.GenerationStatusBar.HideBusy(); }
+                catch { }
         }
 
         private void DismissWorkspaceStripForContext(TabManager.ChatTabContext ctx)
@@ -1877,6 +1929,11 @@ namespace GxPT
 
             // Lock sending immediately to avoid duplicate sends from rapid clicks/Enter
             ctx.IsSending = true;
+            // Fresh cancellation handle for this turn, and show the in-flight status strip (covers both
+            // the plain stream below and the tool-loop path in BeginToolSend, including the wait before
+            // the first token while the model thinks / assembles a long tool call).
+            ctx.Cancellation = new RequestCancellation();
+            ShowGenerationBar(ctx);
 
             try
             {
@@ -1972,6 +2029,9 @@ namespace GxPT
                 if (zdrForSend) ctx.Transcript.SetMessageZdrTag(assistantIndex, true);
                 Logger.Log("Send", "Assistant placeholder index=" + assistantIndex);
                 var assistantBuilder = new StringBuilder();
+                // Capture this turn's cancellation handle for the streaming callbacks (the field is
+                // cleared to null when the turn finalizes).
+                RequestCancellation cancel = ctx.Cancellation;
 
                 // Throttle UI updates with a WinForms timer (coalesces rapid deltas)
                 var sbLock = new object();
@@ -2042,16 +2102,31 @@ namespace GxPT
                                     catch { }
                                     try { ctx.Transcript.StickToBottomDuringStreaming = false; }
                                     catch { }
-                                    ctx.Transcript.UpdateMessageAt(assistantIndex, finalText);
-                                    ctx.Conversation.AddAssistantMessage(finalText);
-                                    ctx.Conversation.SelectedModel = ctx.SelectedModel;
-                                    // Save assistant completion if allowed
-                                    if (!ctx.NoSaveUntilUserSend)
-                                        ConversationStore.Save(ctx.Conversation); // save only after streaming completes
-                                    try { Logger.Log("Transcript", "Final assistant message at index=" + assistantIndex + ":\n" + (finalText ?? string.Empty)); }
-                                    catch { }
-                                    Logger.Log("Send", "Assistant finalized at index=" + assistantIndex + ", chars=" + (finalText != null ? finalText.Length : 0));
+                                    // A user stop ends the stream via onDone (no error). If nothing
+                                    // streamed yet, drop the empty placeholder rather than committing an
+                                    // empty assistant message; otherwise keep the partial text as normal.
+                                    bool cancelled = (cancel != null && cancel.IsCancelled);
+                                    if (cancelled && finalText.Trim().Length == 0)
+                                    {
+                                        if (assistantIndex == ctx.Transcript.MessageCount - 1)
+                                            ctx.Transcript.RemoveLastMessage();
+                                        Logger.Log("Send", "Stream stopped by user before any output at index=" + assistantIndex);
+                                    }
+                                    else
+                                    {
+                                        ctx.Transcript.UpdateMessageAt(assistantIndex, finalText);
+                                        ctx.Conversation.AddAssistantMessage(finalText);
+                                        ctx.Conversation.SelectedModel = ctx.SelectedModel;
+                                        // Save assistant completion if allowed
+                                        if (!ctx.NoSaveUntilUserSend)
+                                            ConversationStore.Save(ctx.Conversation); // save only after streaming completes
+                                        try { Logger.Log("Transcript", "Final assistant message at index=" + assistantIndex + ":\n" + (finalText ?? string.Empty)); }
+                                        catch { }
+                                        Logger.Log("Send", "Assistant finalized at index=" + assistantIndex + ", chars=" + (finalText != null ? finalText.Length : 0) + (cancelled ? " (stopped by user)" : string.Empty));
+                                    }
                                     ctx.IsSending = false;
+                                    ctx.Cancellation = null;
+                                    HideGenerationBar(ctx);
                                     if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
                                 });
                             },
@@ -2075,9 +2150,12 @@ namespace GxPT
                                     ShowTranscriptError(ctx.Transcript, err);
                                     Logger.Log("Send", "Stream error at index=" + assistantIndex + ": " + err);
                                     ctx.IsSending = false;
+                                    ctx.Cancellation = null;
+                                    HideGenerationBar(ctx);
                                     // don't save on failure; no new assistant content
                                 });
-                            }
+                            },
+                            cancel
                         );
                     }
                     catch (Exception ex)
@@ -2097,6 +2175,8 @@ namespace GxPT
                             ShowTranscriptError(ctx.Transcript, ex.Message);
                             Logger.Log("Send", "Exception in streaming worker: " + ex.Message);
                             ctx.IsSending = false;
+                            ctx.Cancellation = null;
+                            HideGenerationBar(ctx);
                         });
                     }
                 });
@@ -2105,6 +2185,8 @@ namespace GxPT
             {
                 Logger.Log("Send", "Send failed unexpectedly; unlocking.");
                 ctx.IsSending = false;
+                ctx.Cancellation = null;
+                HideGenerationBar(ctx);
                 throw;
             }
         }
@@ -2319,6 +2401,9 @@ namespace GxPT
                                                        model, LoggerSink.Instance);
                     orch.WorkingDir = ctx.WorkingDir;
                     orch.Zdr = zdr ? true : (bool?)null;
+                    // Stop button cancellation: kills the in-flight model stream and lets the loop bail
+                    // out cleanly between steps. Set once before the turn runs (read-only thereafter).
+                    orch.Cancellation = ctx.Cancellation;
                     // At the tool-call cap, confirm in-transcript (like a tool-approval prompt) whether
                     // to continue: Continue grants another batch, Stop has the model wrap up and ask how
                     // to proceed. Needs this tab's panel to host the prompt; without one the orchestrator
@@ -2497,6 +2582,8 @@ namespace GxPT
                 if (!ctx.NoSaveUntilUserSend) ConversationStore.Save(ctx.Conversation);
             }
             ctx.IsSending = false;
+            ctx.Cancellation = null;
+            HideGenerationBar(ctx);
             if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
         }
 

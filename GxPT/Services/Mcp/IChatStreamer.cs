@@ -10,9 +10,12 @@ namespace GxPT
     // stub stream, with no network and no JSON wire format.
     internal interface IChatStreamer
     {
+        // cancel (may be null) lets the host kill the in-flight request: the implementation registers
+        // its curl process on the handle so a Stop click drops the connection mid-stream.
         void StreamChat(string model, IList<ChatMessage> messages, IList<JObject> tools,
                         ClientProperties props,
-                        Action<ChatCompletionChunk> onChunk, Action<string> onError);
+                        Action<ChatCompletionChunk> onChunk, Action<string> onError,
+                        RequestCancellation cancel);
     }
 
     // The orchestrator's view of the transcript UI. Phase 4 ships a minimal representation: text

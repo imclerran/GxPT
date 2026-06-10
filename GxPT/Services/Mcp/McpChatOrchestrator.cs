@@ -109,6 +109,13 @@ namespace GxPT
         // user answers, which is correct (the user is present).
         public Func<int, bool> ContinuationDecider { get; set; }
 
+        // Per-turn cancellation handle for the in-flight model request (may be null). When the user
+        // stops the turn, Cancel() kills the current model stream via the streamer; this loop also
+        // reads IsCancelled to bail out cleanly between steps - the partial assistant text is kept and
+        // the turn is Completed (not surfaced as an error). Graceful by design: a stop that lands while
+        // a tool is executing lets that one call finish, then stops before the next model call.
+        public RequestCancellation Cancellation { get; set; }
+
         // The working directory of the conversation running this turn. Resolution of workdir-scoped
         // tools (files/git/command) is routed to the server bound to THIS folder, so concurrent turns
         // in different tabs hit their own folders' servers. Null = no workspace (scoped tools won't
@@ -161,6 +168,14 @@ namespace GxPT
             int budget = _maxIterations;
             for (int iter = 0; ; iter++)
             {
+                // Stop requested between iterations (e.g. while the previous iteration's tools ran):
+                // don't call the model again - finalize the turn cleanly.
+                if (CancelRequested())
+                {
+                    FinishCancelled(history, null, ui, turnId);
+                    return;
+                }
+
                 if (iter >= budget)
                 {
                     bool cont = (ContinuationDecider != null) && ContinuationDecider(iter);
@@ -266,6 +281,15 @@ namespace GxPT
                     LogResponse(turnId, iter, asm);
                 }
 
+                // Stop requested during (or just after) the model stream: the stream was killed, so its
+                // tool calls are partial/unexecutable. Keep any text it produced and finalize - never
+                // act on a half-streamed tool call.
+                if (CancelRequested())
+                {
+                    FinishCancelled(history, asm, ui, turnId);
+                    return;
+                }
+
                 if (!asm.ProducedToolCalls)
                 {
                     if (IsEmptyText(asm.Text))
@@ -326,7 +350,8 @@ namespace GxPT
             string emsg = null;
             _streamer.StreamChat(_model, requestMessages, tools, props,
                 asm.OnChunk,
-                delegate(string e) { err = true; emsg = e; });
+                delegate(string e) { err = true; emsg = e; },
+                Cancellation);
             asm.Finish();
             errored = err;
             errMessage = emsg;
@@ -388,6 +413,26 @@ namespace GxPT
         private static bool IsEmptyText(string s)
         {
             return s == null || s.Trim().Length == 0;
+        }
+
+        private bool CancelRequested()
+        {
+            return Cancellation != null && Cancellation.IsCancelled;
+        }
+
+        // Cancellation landed: finalize the turn cleanly. Persist any partial assistant text (so the
+        // streamed bubble isn't lost), then signal completion - never an error, since the user asked
+        // to stop. asm may be null (cancel between iterations, before this iteration streamed). Only
+        // plain text is recorded: a partial tool call is dropped so history can't end on a tool_call
+        // with no matching result, which the next request would reject.
+        private void FinishCancelled(IList<ChatMessage> history, ToolCallAssembler asm, IToolLoopUi ui, string turnId)
+        {
+            string partial = (asm != null) ? asm.Text : null;
+            if (!IsEmptyText(partial))
+                history.Add(new ChatMessage("assistant", partial));
+            _log.Log("mcp", "[turn " + turnId + "] cancelled by user"
+                + (IsEmptyText(partial) ? string.Empty : " (kept " + partial.Length + " chars of partial text)"));
+            if (ui != null) ui.Complete();
         }
 
         // Executes one tool call, returning the text to feed back as the tool message content.

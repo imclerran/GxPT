@@ -65,7 +65,8 @@ namespace GxPT.Tests.Mcp
         public readonly List<IList<JObject>> SeenTools = new List<IList<JObject>>();
 
         public void StreamChat(string model, IList<ChatMessage> messages, IList<JObject> tools,
-                               ClientProperties props, Action<ChatCompletionChunk> onChunk, Action<string> onError)
+                               ClientProperties props, Action<ChatCompletionChunk> onChunk, Action<string> onError,
+                               RequestCancellation cancel)
         {
             int idx = Calls++;
             SeenMessages.Add(messages);
