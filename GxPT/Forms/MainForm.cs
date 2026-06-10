@@ -833,13 +833,16 @@ namespace GxPT
             SyncZdrCheckboxFromActiveTab();
         }
 
-        // Opens a fresh conversation tab whose working folder is preset to 'dir'. Mirrors the
-        // load flow (create tab -> set working dir -> persist -> adopt onto strip + MCP host),
-        // and (via ApplyLoadedWorkingDir) bumps 'dir' to the top of the recent list.
+        // Opens a conversation tab whose working folder is preset to 'dir'. Mirrors the
+        // load flow (set working dir -> persist -> adopt onto strip + MCP host), and (via
+        // ApplyLoadedWorkingDir) bumps 'dir' to the top of the recent list. Like opening a
+        // conversation from history, this reuses a blank tab (no messages) when one exists
+        // instead of stacking a new tab.
         private void OpenNewTabWithWorkingDir(string dir)
         {
             if (_tabManager == null || string.IsNullOrEmpty(dir)) return;
-            TabManager.ChatTabContext ctx = _tabManager.CreateConversationTab();
+            TabManager.ChatTabContext ctx = FindBlankTabPreferActive();
+            if (ctx == null) ctx = _tabManager.CreateConversationTab();
             if (ctx == null) return;
             ctx.WorkingDir = dir;
             if (ctx.Conversation != null)
@@ -849,6 +852,7 @@ namespace GxPT
             }
             PersistWorkingDir(ctx);
             ApplyLoadedWorkingDir(ctx); // shows the workspace strip + binds MCP; also re-adds to recents
+            try { SelectTab(ctx.Page); } catch { }
         }
 
         // After a conversation is loaded into a tab, adopt its persisted working folder onto the tab
@@ -2752,7 +2756,7 @@ namespace GxPT
             if (_tabManager != null) _tabManager.CreateConversationTab();
         }
 
-        // Rebuilds the "Open Recent Work Dir" submenu each time the File menu opens. Lists each
+        // Rebuilds the "Open Recent Workspace" submenu each time the File menu opens. Lists each
         // remembered dir (full path) that still exists; silently drops missing ones. Disables the
         // parent when nothing valid remains.
         private void PopulateRecentWorkDirsMenu()

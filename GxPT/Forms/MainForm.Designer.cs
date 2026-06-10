@@ -145,7 +145,7 @@
             // 
             this.miOpenRecentWorkDir.Name = "miOpenRecentWorkDir";
             this.miOpenRecentWorkDir.Size = new System.Drawing.Size(221, 22);
-            this.miOpenRecentWorkDir.Text = "Open Recent Work &Dir";
+            this.miOpenRecentWorkDir.Text = "Open Recent &Workspace";
             // 
             // miCloseConversation
             // 
