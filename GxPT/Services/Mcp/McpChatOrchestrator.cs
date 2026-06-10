@@ -401,7 +401,7 @@ namespace GxPT
             {
                 string[] names = ParseRevealNames(call.ArgumentsJson);
                 _log.Log("mcp", "[turn " + turnId + "] reveal_tools: " + names.Length + " name(s)");
-                return _registry.Reveal(names);
+                return _registry.Reveal(names, WorkingDir);
             }
 
             // open_skill is a host meta-tool (no MCP round-trip): load skill bodies by slug. Same

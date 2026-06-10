@@ -85,6 +85,48 @@ namespace GxPT.Tests.Mcp
             Assert.Contains("files__read", ExposedNamesFor(reg, "C:\\proj")); // exposed in its folder
         }
 
+        // ---- workdir-aware schema selection across a scoped/independent name collision (skills) ----
+
+        // The skills server runs as TWO instances under one server name: an eager workdir-less one
+        // (default scope "user") and a per-folder workdir-scoped one (default scope "project"). They
+        // collide on one function name, so the model must be shown — and must reveal — the schema of the
+        // instance its call will actually reach. Before the fix the surface always used list[0] (the
+        // eager workdir-less entry), so a folder turn read "default user" but its call ran against the
+        // project-default instance.
+        private static string DescOf(string revealJson)
+        {
+            JArray defs = JArray.Parse(revealJson.Split('\n')[0]);
+            return (string)defs[0]["description"];
+        }
+
+        [Fact]
+        public void WorkdirReveal_PicksSchemaOfTheInstanceTheCallWillReach()
+        {
+            var reg = NewRegistry(24);
+            // Eager workdir-less instance registers FIRST, so it is list[0] (reproduces the collision).
+            reg.AddConnection(FakeConn.Ready("skills", new ToolDef("edit", "scope default user", null)), null);
+            reg.AddConnection(FakeConn.Ready("skills", new ToolDef("edit", "scope default project", null)), "C:\\proj");
+
+            // A folder turn reveals the workdir-scoped instance's schema (the one TryResolve will call).
+            Assert.Equal("scope default project", DescOf(reg.Reveal(new[] { "skills__edit" }, "C:\\proj")));
+            // A folderless turn reveals the workdir-less instance's schema.
+            Assert.Equal("scope default user", DescOf(reg.Reveal(new[] { "skills__edit" }, null)));
+        }
+
+        [Fact]
+        public void WorkdirExposedDefs_UsesSchemaOfTheInstanceTheCallWillReach()
+        {
+            var reg = NewRegistry(24);
+            reg.AddConnection(FakeConn.Ready("skills", new ToolDef("edit", "scope default user", null)), null);
+            reg.AddConnection(FakeConn.Ready("skills", new ToolDef("edit", "scope default project", null)), "C:\\proj");
+            reg.Reveal(new[] { "skills__edit" }, "C:\\proj");
+
+            string desc = null;
+            foreach (JObject def in reg.ExposedFunctionDefs("C:\\proj"))
+                if ((string)def["function"]["name"] == "skills__edit") desc = (string)def["function"]["description"];
+            Assert.Equal("scope default project", desc);
+        }
+
         // ---- munging / bijection ----
 
         [Fact]
