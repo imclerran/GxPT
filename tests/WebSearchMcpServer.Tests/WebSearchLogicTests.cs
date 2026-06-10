@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using Mcp35.Core.Transport;
 using Mcp35.Server;
 using Newtonsoft.Json.Linq;
 using WebSearchMcpServer;
@@ -142,6 +144,162 @@ namespace WebSearchMcpServer.Tests
             JObject raw = JObject.Parse("{\"results\":[{\"url\":\"https://a.test\",\"raw_content\":\"x\"}]}");
             JObject c = WebSearchTools.CondenseExtract(raw);
             Assert.Null(c["failed_results"]);
+        }
+
+        // ---- http ----
+
+        [Theory]
+        [InlineData("https://api.test/v1")]
+        [InlineData("http://example.com")]
+        public void ValidateHttpUrl_accepts_http_and_https(string url)
+        {
+            Assert.Null(WebSearchTools.ValidateHttpUrl(url));
+        }
+
+        [Theory]
+        [InlineData("", "required")]
+        [InlineData("/relative/path", "absolute")]
+        [InlineData("file:///etc/passwd", "http")]
+        [InlineData("ftp://host/file", "http")]
+        public void ValidateHttpUrl_rejects_non_http(string url, string fragment)
+        {
+            string err = WebSearchTools.ValidateHttpUrl(url);
+            Assert.NotNull(err);
+            Assert.Contains(fragment, err);
+        }
+
+        [Fact]
+        public void NormalizeMutatingMethod_defaults_to_post_and_uppercases()
+        {
+            Assert.Equal("POST", WebSearchTools.NormalizeMutatingMethod(null));
+            Assert.Equal("POST", WebSearchTools.NormalizeMutatingMethod(""));
+            Assert.Equal("PUT", WebSearchTools.NormalizeMutatingMethod("put"));
+            Assert.Equal("DELETE", WebSearchTools.NormalizeMutatingMethod("  delete "));
+        }
+
+        [Theory]
+        [InlineData("GET")]    // GET belongs to the ReadOnly web__get tool, not web__http
+        [InlineData("HEAD")]   // intentionally unsupported (curl -X HEAD hangs)
+        [InlineData("TRACE")]
+        [InlineData("bogus")]
+        public void NormalizeMutatingMethod_rejects_non_mutating(string method)
+        {
+            Assert.Null(WebSearchTools.NormalizeMutatingMethod(method));
+        }
+
+        [Fact]
+        public void BuildHttpHeaders_maps_strings_and_skips_nulls()
+        {
+            JObject h = JObject.Parse("{\"Accept\":\"application/json\",\"X-Empty\":null}");
+            IDictionary<string, string> map = WebSearchTools.BuildHttpHeaders(h);
+            Assert.Equal("application/json", map["Accept"]);
+            Assert.False(map.ContainsKey("X-Empty"));
+        }
+
+        [Fact]
+        public void BuildHttpHeaders_null_is_empty()
+        {
+            Assert.Empty(WebSearchTools.BuildHttpHeaders(null));
+        }
+
+        [Fact]
+        public void BuildHttpRequest_sets_fields_and_attaches_body_when_present()
+        {
+            JObject args = new JObject();
+            args["headers"] = JObject.Parse("{\"Content-Type\":\"application/json\"}");
+            args["body"] = "{\"a\":1}";
+            CurlRequest req = WebSearchTools.BuildHttpRequest(Ctx(args), "https://api.test/", "POST");
+
+            Assert.Equal("https://api.test/", req.Url);
+            Assert.Equal("POST", req.Method);
+            Assert.Equal("{\"a\":1}", req.BodyJson);
+            Assert.Equal("application/json", req.Headers["Content-Type"]);
+            Assert.Equal(30000, req.TimeoutMs); // default
+        }
+
+        [Fact]
+        public void BuildHttpRequest_get_has_no_body_and_clamps_timeout()
+        {
+            JObject args = new JObject();
+            args["timeout_ms"] = 999999; // over the 120000 cap
+            CurlRequest req = WebSearchTools.BuildHttpRequest(Ctx(args), "https://api.test/", "GET");
+
+            Assert.Null(req.BodyJson);
+            Assert.Equal(120000, req.TimeoutMs);
+        }
+
+        [Fact]
+        public void CondenseHttp_projects_status_headers_and_body()
+        {
+            CurlResult r = new CurlResult();
+            r.HttpStatus = 201;
+            r.Body = "created";
+            r.Headers = new Dictionary<string, string> { { "Location", "https://api.test/1" } };
+
+            JObject c = WebSearchTools.CondenseHttp(r);
+            Assert.Equal(201, (int)c["status"]);
+            Assert.Equal("created", (string)c["body"]);
+            Assert.Equal("https://api.test/1", (string)c["headers"]["Location"]);
+            Assert.Null(c["truncated"]);
+        }
+
+        [Fact]
+        public void CondenseHttp_flags_truncation_for_large_body()
+        {
+            CurlResult r = new CurlResult();
+            r.HttpStatus = 200;
+            r.Body = new string('x', 100001); // one over the 100000 cap
+
+            JObject c = WebSearchTools.CondenseHttp(r);
+            Assert.True((bool)c["truncated"]);
+            Assert.Equal(100000, ((string)c["body"]).Length);
+        }
+
+        // ---- SSRF guard (web__get public-only) ----
+
+        [Theory]
+        [InlineData("8.8.8.8")]
+        [InlineData("1.1.1.1")]
+        [InlineData("93.184.216.34")] // example.com
+        public void IsPublicIp_true_for_routable_addresses(string ip)
+        {
+            Assert.True(WebSearchTools.IsPublicIp(System.Net.IPAddress.Parse(ip)));
+        }
+
+        [Theory]
+        [InlineData("127.0.0.1")]        // loopback
+        [InlineData("10.0.0.1")]         // RFC1918
+        [InlineData("172.16.5.4")]       // RFC1918
+        [InlineData("192.168.0.1")]      // RFC1918
+        [InlineData("169.254.169.254")]  // link-local / cloud metadata
+        [InlineData("100.64.0.1")]       // CGNAT
+        [InlineData("0.0.0.0")]          // this-network
+        [InlineData("224.0.0.1")]        // multicast
+        [InlineData("::1")]              // IPv6 loopback
+        [InlineData("fe80::1")]          // IPv6 link-local
+        [InlineData("fc00::1")]          // IPv6 unique-local
+        [InlineData("::ffff:127.0.0.1")] // IPv4-mapped loopback
+        public void IsPublicIp_false_for_non_public_addresses(string ip)
+        {
+            Assert.False(WebSearchTools.IsPublicIp(System.Net.IPAddress.Parse(ip)));
+        }
+
+        [Fact]
+        public void ValidatePublicHost_allows_public_ip_literal_and_blocks_private()
+        {
+            Assert.Null(WebSearchTools.ValidatePublicHost("https://8.8.8.8/path"));
+
+            string err = WebSearchTools.ValidatePublicHost("http://192.168.1.1/admin");
+            Assert.NotNull(err);
+            Assert.Contains("public", err);
+        }
+
+        [Fact]
+        public void ValidatePublicHost_blocks_localhost_hostname()
+        {
+            // "localhost" resolves via the hosts file (no network) to a loopback address.
+            string err = WebSearchTools.ValidatePublicHost("http://localhost:8080/");
+            Assert.NotNull(err);
         }
     }
 }

@@ -183,6 +183,19 @@ namespace GxPT
                         handled = true;
                     }
                 }
+                else if (string.Equals(req.FunctionName, "web__http", StringComparison.Ordinal))
+                {
+                    // web__http is the state-changing tool (GET lives in the auto-allowed web__get).
+                    string method = (req.Arguments.Value<string>("method") ?? "POST").Trim().ToUpperInvariant();
+                    if (method.Length == 0) method = "POST";
+                    string url = req.Arguments.Value<string>("url") ?? string.Empty;
+                    string body = req.Arguments.Value<string>("body") ?? string.Empty;
+                    string text = method + " " + url;
+                    if (body.Trim().Length > 0) text += "\r\n\r\n" + body;
+                    _diffPanel.SetContent(string.Empty, text, "text", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                    _previewLabel.Text = "HTTP request:";
+                    handled = true;
+                }
                 else if (string.Equals(req.FunctionName, "files__delete", StringComparison.Ordinal))
                 {
                     string path = req.Arguments.Value<string>("path") ?? string.Empty;

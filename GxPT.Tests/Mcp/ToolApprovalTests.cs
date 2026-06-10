@@ -69,6 +69,17 @@ namespace GxPT.Tests.Mcp
             Assert.Equal(ToolTier.ReadOnly, extract.Tier);
             Assert.Equal(RememberScope.Tool, extract.Scope);
 
+            // web__get is an HTTP GET (no remote mutation) -> ReadOnly/auto-allow, like extract.
+            var get = c.Classify("web__get", null, true);
+            Assert.Equal(ToolTier.ReadOnly, get.Tier);
+            Assert.Equal(RememberScope.Tool, get.Scope);
+
+            // web__http makes state-changing HTTP requests (egress/SSRF/remote-mutation surface):
+            // Destructive, Scope=None -> confirmed every time, never remembered (like git__push).
+            var http = c.Classify("web__http", null, true);
+            Assert.Equal(ToolTier.Destructive, http.Tier);
+            Assert.Equal(RememberScope.None, http.Scope);
+
             // MSBuild tools are named per discovered engine, so they're matched by the msbuild__ prefix
             // (not a static table entry) and gated as Destructive, argument-scoped on the project built.
             var build = c.Classify("msbuild__build_17_0", null, true);
@@ -151,6 +162,17 @@ namespace GxPT.Tests.Mcp
             Assert.Equal(1, prompt.Calls); // still gated (Destructive), not auto-allowed
         }
 
+        [Fact]
+        public void Web_http_prompts_every_time_and_is_never_remembered()
+        {
+            var prompt = new ScriptedPrompt { Next = ApprovalChoice.RememberTool }; // even if user tries to remember
+            var pol = Policy(prompt, new InMemoryApprovalStore(), new FakeAnnotations());
+
+            pol.Check("web__http", Args("{\"url\":\"https://api.test/\"}"));
+            pol.Check("web__http", Args("{\"url\":\"https://api.test/\"}"));
+            Assert.Equal(2, prompt.Calls); // Destructive/None -> always prompts
+        }
+
         // ---- decision model (spec §3) ----
 
         [Fact]
@@ -181,11 +203,12 @@ namespace GxPT.Tests.Mcp
         [Fact]
         public void Auto_allowed_read_only_tools_never_prompt()
         {
-            // The read-only built-ins (and web__search / web__extract) are always allowed without a prompt.
+            // The read-only built-ins (and web__search / web__extract / web__get) are always allowed without a prompt.
             var prompt = new ScriptedPrompt { Next = ApprovalChoice.Deny };
             var pol = Policy(prompt, new InMemoryApprovalStore());
             Assert.Equal(ApprovalDecision.Allow, pol.Check("web__search", Args("{\"query\":\"x\"}")));
             Assert.Equal(ApprovalDecision.Allow, pol.Check("web__extract", Args("{\"urls\":[\"x\"]}")));
+            Assert.Equal(ApprovalDecision.Allow, pol.Check("web__get", Args("{\"url\":\"https://api.test/\"}")));
             Assert.Equal(ApprovalDecision.Allow, pol.Check("files__read", Args("{\"path\":\"a\"}")));
             Assert.Equal(ApprovalDecision.Allow, pol.Check("git__status", Args("{}")));
             Assert.Equal(0, prompt.Calls);
