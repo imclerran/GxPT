@@ -94,11 +94,12 @@ Creating a new skill:
 
 Editing an existing skill (read it first with `read_skill_file`, or `list_skill_files(slug)` to
 see what it contains):
-- `update_skill(slug, ...)` - change the main `SKILL.md`; pass only the fields that change
-  (name / description / body), the rest stay as they are.
-- `edit_skill_file(slug, relpath, old_string, new_string)` - a targeted edit replacing an exact
-  span (like a normal file edit). Use this over rewriting a whole file. Works on `SKILL.md` too,
-  where it edits the instructions body only; change the name/description with `update_skill`.
+- `edit_skill_file(slug, relpath, old_string, new_string)` - **your default for changing
+  content.** A targeted edit that replaces an exact span and leaves everything else untouched.
+  Use it for any focused change - to a supporting file, or to the `SKILL.md` body. Don't re-send a
+  whole file (or a whole `SKILL.md` body) just to change a few lines.
+- `update_skill(slug, ...)` - for the `SKILL.md` **frontmatter** (its `name` / `description`), or
+  when you're genuinely replacing the whole body. Pass only the fields that change; the rest stay.
 - `delete_skill_file(slug, relpath)` removes one file; `delete_skill(slug)` removes the whole
   skill. Both are destructive - the user confirms each time, so only reach for them when asked.
 
