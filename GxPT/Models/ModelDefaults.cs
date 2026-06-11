@@ -34,7 +34,10 @@ namespace GxPT
             "deepseek/deepseek-v4-pro",
             "deepseek/deepseek-v4-flash",
             "moonshotai/kimi-k2.6",
-            "qwen/qwen3.7-max"
+            "qwen/qwen3.7-max",
+            "qwen/qwen3.7-plus",
+            "minimax/minimax-m3",
+            "stepfun/step-3.7-flash"
         };
 
         // Convenience copy as a List (callers that mutate or store a List).
