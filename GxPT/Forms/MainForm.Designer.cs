@@ -577,7 +577,9 @@
             // tslCost
             //
             this.tslCost.BorderSides = System.Windows.Forms.ToolStripStatusLabelBorderSides.Left;
+            this.tslCost.Margin = new System.Windows.Forms.Padding(5, 3, 0, 2);
             this.tslCost.Name = "tslCost";
+            this.tslCost.Padding = new System.Windows.Forms.Padding(5, 0, 0, 0);
             this.tslCost.Size = new System.Drawing.Size(0, 17);
             //
             // tslCostValue
@@ -589,7 +591,9 @@
             // tslSaved
             //
             this.tslSaved.BorderSides = System.Windows.Forms.ToolStripStatusLabelBorderSides.Left;
+            this.tslSaved.Margin = new System.Windows.Forms.Padding(5, 3, 0, 2);
             this.tslSaved.Name = "tslSaved";
+            this.tslSaved.Padding = new System.Windows.Forms.Padding(5, 0, 0, 0);
             this.tslSaved.Size = new System.Drawing.Size(0, 17);
             //
             // tslSavedValue
