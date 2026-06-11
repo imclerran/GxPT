@@ -291,6 +291,110 @@ namespace GxPT
             }
         }
 
+        // Fetches the authoritative accounting for a completed generation (GET /api/v1/generation).
+        // The streamed usage.cost is the pre-cache-discount estimate and cache_discount never rides
+        // the stream, so on cache-hit requests the stream-time numbers overstate cost and report no
+        // savings; this record carries the billed total_cost and the net cache_discount. The record
+        // materializes shortly after the stream ends - the retry loop covers that gap. Runs a
+        // blocking curl GET; call from a background thread.
+        public bool TryFetchGenerationStats(string generationId, out decimal? totalCost, out decimal? cacheDiscount)
+        {
+            totalCost = null;
+            cacheDiscount = null;
+            if (string.IsNullOrEmpty(generationId) || !IsConfigured) return false;
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                if (attempt > 0) System.Threading.Thread.Sleep(750);
+                string body = HttpGet("https://openrouter.ai/api/v1/generation?id="
+                    + Uri.EscapeDataString(generationId));
+                if (string.IsNullOrEmpty(body)) continue;
+                if (TryExtractGenerationStats(SafeParse(body), out totalCost, out cacheDiscount))
+                {
+                    try
+                    {
+                        Logger.Log("Usage", "generation " + generationId + ": total_cost="
+                            + (totalCost.HasValue ? totalCost.Value.ToString() : "?")
+                            + " cache_discount=" + (cacheDiscount.HasValue ? cacheDiscount.Value.ToString() : "?"));
+                    }
+                    catch { }
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // { "data": { "total_cost": 0.0585, "cache_discount": 0.0559, ... } } -> the billed cost and
+        // net cache savings. True when at least one of the two is present.
+        internal static bool TryExtractGenerationStats(JObject root, out decimal? totalCost, out decimal? cacheDiscount)
+        {
+            totalCost = null;
+            cacheDiscount = null;
+            if (root == null) return false;
+            JToken data = root["data"];
+            if (data == null || data.Type != JTokenType.Object) return false;
+            totalCost = AsDecimal(data["total_cost"]);
+            cacheDiscount = AsDecimal(data["cache_discount"]);
+            return totalCost.HasValue || cacheDiscount.HasValue;
+        }
+
+        private static decimal? AsDecimal(JToken t)
+        {
+            if (t == null) return null;
+            if (t.Type != JTokenType.Float && t.Type != JTokenType.Integer) return null;
+            try { return (decimal)t; }
+            catch { return null; }
+        }
+
+        // Authenticated GET via curl (the API key rides the temp config file, off the command
+        // line, mirroring the POST paths). Returns the body, or null on any failure.
+        private string HttpGet(string url)
+        {
+            var tempFiles = new List<string>();
+            try
+            {
+                var utf8NoBom = new UTF8Encoding(false);
+                string configPath = Path.Combine(Path.GetTempPath(), "gxpt_cfg_" + Guid.NewGuid().ToString("N") + ".txt");
+                string args;
+                try
+                {
+                    File.WriteAllText(configPath,
+                        "header = \"Authorization: Bearer " + EscapeForCurlConfig(_apiKey) + "\"\n", utf8NoBom);
+                    tempFiles.Add(configPath);
+                    args = "-sS --fail-with-body \"" + url + "\" -K \"" + configPath + "\"";
+                }
+                catch
+                {
+                    args = "-sS --fail-with-body \"" + url + "\" -H \"Authorization: Bearer " + _apiKey + "\"";
+                }
+
+                var psi = new ProcessStartInfo
+                {
+                    FileName = _curlPath,
+                    Arguments = args,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                using (var p = Process.Start(psi))
+                {
+                    var utf8 = new UTF8Encoding(false, false);
+                    string output;
+                    using (var outReader = new StreamReader(p.StandardOutput.BaseStream, utf8, false))
+                        output = outReader.ReadToEnd();
+                    try { p.StandardError.ReadToEnd(); }
+                    catch { }
+                    p.WaitForExit();
+                    int exitCode = -1;
+                    try { exitCode = p.ExitCode; }
+                    catch { }
+                    return exitCode == 0 ? output : null;
+                }
+            }
+            catch { return null; }
+            finally { CleanupTempFiles(tempFiles); }
+        }
+
         // IChatStreamer: build the body (with tools) then stream parsed chunks. Used by the
         // McpChatOrchestrator; the assembler reassembles tool_calls and forwards text deltas.
         public void StreamChat(string model, IList<ChatMessage> messages, IList<JObject> tools,
@@ -314,6 +418,7 @@ namespace GxPT
             Action<ResponseUsage> report = props.ResponseUsageCallback;
             bool[] reported = new bool[1];      // closure-mutable state (C# 3.5: no local functions)
             string[] provider = new string[1];
+            string[] genId = new string[1];
             // cache_discount may ride a different chunk than usage; remember the latest seen.
             decimal?[] discount = new decimal?[1];
             return delegate(ChatCompletionChunk chunk)
@@ -321,11 +426,12 @@ namespace GxPT
                 if (chunk != null)
                 {
                     if (!string.IsNullOrEmpty(chunk.provider)) provider[0] = chunk.provider;
+                    if (!string.IsNullOrEmpty(chunk.id)) genId[0] = chunk.id;
                     if (chunk.cache_discount.HasValue) discount[0] = chunk.cache_discount;
                     if (!reported[0] && chunk.usage != null)
                     {
                         reported[0] = true;
-                        try { report(BuildResponseUsage(provider[0], chunk.usage, discount[0])); }
+                        try { report(BuildResponseUsage(genId[0], provider[0], chunk.usage, discount[0])); }
                         catch { }
                     }
                 }
@@ -334,9 +440,10 @@ namespace GxPT
         }
 
         private static ResponseUsage BuildResponseUsage(
-            string provider, ChatCompletionChunk.UsageInfo u, decimal? cacheDiscount)
+            string generationId, string provider, ChatCompletionChunk.UsageInfo u, decimal? cacheDiscount)
         {
             ResponseUsage r = new ResponseUsage();
+            r.Id = generationId;
             r.Provider = provider;
             r.PromptTokens = u.prompt_tokens.HasValue ? u.prompt_tokens.Value : 0;
             r.CompletionTokens = u.completion_tokens.HasValue ? u.completion_tokens.Value : 0;
@@ -495,7 +602,8 @@ namespace GxPT
                         Logger.Log("Usage", "prompt=" + (usage.prompt_tokens.HasValue ? usage.prompt_tokens.Value.ToString() : "?")
                             + " cached=" + (cached.HasValue ? cached.Value.ToString() : "?")
                             + " cacheWrite=" + (written.HasValue ? written.Value.ToString() : "?")
-                            + " completion=" + (usage.completion_tokens.HasValue ? usage.completion_tokens.Value.ToString() : "?"));
+                            + " completion=" + (usage.completion_tokens.HasValue ? usage.completion_tokens.Value.ToString() : "?")
+                            + " cost=" + (usage.cost.HasValue ? usage.cost.Value.ToString() : "?") + " (pre-discount estimate)");
                     }
                 }
                 catch { }
@@ -730,6 +838,12 @@ namespace GxPT
         // prompt size, and CachedTokens / CacheWriteTokens are subsets of it (unlike Anthropic's
         // native API, where input_tokens is the uncached remainder). PromptTokens is therefore the
         // conversation's "context size" gauge as-is; never add the cache counters to it.
+        //
+        // Cost is the STREAM-TIME estimate, which is pre-cache-discount (and CacheDiscount is, in
+        // practice, never present on SSE chunks) - on a cache-hit request it overstates the billed
+        // amount by the discount. Treat it as provisional and reconcile against the authoritative
+        // generation record (TryFetchGenerationStats) keyed by Id.
+        public string Id;              // OpenRouter generation id (chunk.id); keys the generation record
         public string Provider;        // serving endpoint (e.g. "Anthropic"); null when not reported
         public int PromptTokens;       // total prompt tokens (cached + written + uncached)
         public int CompletionTokens;   // output tokens, reasoning included

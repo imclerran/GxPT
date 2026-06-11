@@ -89,11 +89,17 @@ So requests on cache-supported models carry `provider.order = [<cache-warm provi
 "cache-warm" means **confirmed by a demonstrated hit**, not merely "served last":
 
 - OpenRouter reports the serving provider on response chunks (`chunk.provider`) and the usage
-  accounting (cache counters, billed cost, cache discount) on the final usage chunk; the client
-  surfaces it once per request as a `ResponseUsage` via `ClientProperties.ResponseUsageCallback`.
-  The same callback feeds the status bar's per-conversation cost/savings accounting
+  accounting (cache counters, cost estimate) on the final usage chunk; the client surfaces it
+  once per request as a `ResponseUsage` via `ClientProperties.ResponseUsageCallback`. The same
+  callback feeds the status bar's per-conversation cost/savings accounting
   (`Conversation.RecordUsage`), which runs on every model - only the stickiness gate inside it is
   caching-model-gated.
+- **The streamed `usage.cost` is the pre-cache-discount estimate, and `cache_discount` does not
+  ride the SSE stream.** On a cache-hit request the stream-time cost overstates billing by the
+  discount. Requests with cache activity are therefore reconciled post-stream against the
+  authoritative generation record (`GET /api/v1/generation?id=` -> `total_cost`,
+  `cache_discount`; `OpenRouterClient.TryFetchGenerationStats` +
+  `Conversation.ReconcileUsage`), which is also where the Saved figure comes from.
 - Semantics note: OpenRouter normalizes usage to OpenAI conventions - `prompt_tokens` is the
   TOTAL prompt size and the cache counters are subsets of it (unlike Anthropic's native API,
   where `input_tokens` is the uncached remainder). Never add the counters to `prompt_tokens`.

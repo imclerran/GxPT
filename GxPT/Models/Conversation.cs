@@ -111,6 +111,24 @@ namespace GxPT
             LastUpdated = DateTime.Now;
         }
 
+        // Replaces a request's streamed estimate with the authoritative generation record (see
+        // MainForm.RecordUsageAndReconcile): the streamed usage.cost is pre-cache-discount and
+        // cache_discount never rides the stream, so without this every cache hit inflates TotalCost
+        // and Saved never moves. Deltas against what RecordUsage already added for this request, so
+        // totals land on billed reality regardless of what the stream carried.
+        internal void ReconcileUsage(ResponseUsage original, decimal? totalCost, decimal? cacheDiscount)
+        {
+            if (original == null) return;
+            lock (_usageGate)
+            {
+                if (totalCost.HasValue)
+                    TotalCost += totalCost.Value - (original.Cost.HasValue ? original.Cost.Value : 0);
+                if (cacheDiscount.HasValue)
+                    TotalCacheDiscount += cacheDiscount.Value
+                        - (original.CacheDiscount.HasValue ? original.CacheDiscount.Value : 0);
+            }
+        }
+
         // A consistent copy for the UI thread (decimal/long reads aren't atomic on x86).
         internal UsageStats GetUsageStats()
         {

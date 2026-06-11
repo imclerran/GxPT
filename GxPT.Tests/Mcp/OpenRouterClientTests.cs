@@ -271,6 +271,26 @@ namespace GxPT.Tests.Mcp
             Assert.Equal(0.0031m, chunk.cache_discount);
         }
 
+        [Fact]
+        public void Extracts_generation_stats_for_cost_reconciliation()
+        {
+            var root = JObject.Parse("{\"data\":{\"id\":\"gen-x\",\"total_cost\":0.0585,\"cache_discount\":0.0559}}");
+            decimal? cost, discount;
+            Assert.True(OpenRouterClient.TryExtractGenerationStats(root, out cost, out discount));
+            Assert.Equal(0.0585m, cost);
+            Assert.Equal(0.0559m, discount);
+
+            // negative discount = net write premium; still extracted
+            var writeHeavy = JObject.Parse("{\"data\":{\"total_cost\":0.138,\"cache_discount\":-0.0225}}");
+            Assert.True(OpenRouterClient.TryExtractGenerationStats(writeHeavy, out cost, out discount));
+            Assert.Equal(-0.0225m, discount);
+
+            // malformed / missing data -> false, nothing extracted
+            Assert.False(OpenRouterClient.TryExtractGenerationStats(JObject.Parse("{\"error\":{}}"), out cost, out discount));
+            Assert.Null(cost);
+            Assert.False(OpenRouterClient.TryExtractGenerationStats(null, out cost, out discount));
+        }
+
         // ---- streaming chunk parsing under Newtonsoft ----
 
         [Fact]

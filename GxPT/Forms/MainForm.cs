@@ -2112,8 +2112,7 @@ namespace GxPT
                                 if (cachingModel && !string.IsNullOrEmpty(u.Provider)
                                     && (u.CachedTokens > 0 || u.CacheWriteTokens > 0))
                                     usageConvo.CacheWarmProvider = u.Provider;
-                                usageConvo.RecordUsage(u);
-                                NotifyUsageUpdated(usageConvo);
+                                RecordUsageAndReconcile(usageConvo, u);
                             };
                         }
                         _client.CreateCompletionStream(
@@ -2452,12 +2451,10 @@ namespace GxPT
                         orch.PreferredProvider = revealConvo.CacheWarmProvider;
                         orch.ProviderServed = delegate(string served)
                         { revealConvo.CacheWarmProvider = served; };
-                        // Per-response usage/cost accounting for the status bar (every iteration).
+                        // Per-response usage/cost accounting for the status bar (every iteration),
+                        // with post-stream reconciliation against the billed generation record.
                         orch.UsageReported = delegate(ResponseUsage u)
-                        {
-                            revealConvo.RecordUsage(u);
-                            NotifyUsageUpdated(revealConvo);
-                        };
+                        { RecordUsageAndReconcile(revealConvo, u); };
                     }
                     // Stop button cancellation: kills the in-flight model stream and lets the loop bail
                     // out cleanly between steps. Set once before the turn runs (read-only thereafter).
@@ -4708,6 +4705,35 @@ namespace GxPT
                 UpdateUsageStatusStrip(act != null ? act.Conversation : null);
             }
             catch { }
+        }
+
+        // Records a response's streamed usage (instant feedback), then reconciles it against
+        // OpenRouter's authoritative generation record on a background thread. The streamed
+        // usage.cost is the pre-cache-discount estimate and cache_discount never arrives on the
+        // stream, so without reconciliation every cache hit inflates Cost and pins Saved at $0.00.
+        // Fetched only when the request showed cache activity or reported no cost at all - for
+        // plain uncached requests the streamed figure already matches billing.
+        private void RecordUsageAndReconcile(Conversation convo, ResponseUsage u)
+        {
+            if (convo == null || u == null) return;
+            convo.RecordUsage(u);
+            NotifyUsageUpdated(convo);
+
+            if (string.IsNullOrEmpty(u.Id) || _client == null) return;
+            if (u.CachedTokens <= 0 && u.CacheWriteTokens <= 0 && u.Cost.HasValue) return;
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    decimal? totalCost, cacheDiscount;
+                    if (_client.TryFetchGenerationStats(u.Id, out totalCost, out cacheDiscount))
+                    {
+                        convo.ReconcileUsage(u, totalCost, cacheDiscount);
+                        NotifyUsageUpdated(convo);
+                    }
+                }
+                catch { }
+            });
         }
 
         // Marshals a usage update from a send worker thread to the UI thread, refreshing the strip
