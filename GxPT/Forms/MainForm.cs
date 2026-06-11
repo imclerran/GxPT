@@ -4834,27 +4834,27 @@ namespace GxPT
 
         // The hover breakdown: cache percentages with their time windows labeled explicitly (the
         // glanceable panes deliberately omit them - "last request" vs "lifetime" is ambiguous at a
-        // glance next to running totals).
+        // glance next to running totals). Short bulleted lines on purpose: the native tooltip
+        // word-wraps long lines at an arbitrary width, which mangled the prose layout.
         internal static string BuildUsageTooltip(UsageStats s)
         {
             var inv = System.Globalization.CultureInfo.InvariantCulture;
             var sb = new System.Text.StringBuilder();
-            sb.Append("Last request: ").Append(s.LastCachedTokens.ToString("N0", inv))
-              .Append(" of ").Append(s.LastPromptTokens.ToString("N0", inv))
-              .Append(" prompt tokens read from cache");
+            sb.Append("Last request:");
+            sb.Append("\r\n- ").Append(s.LastPromptTokens.ToString("N0", inv)).Append(" prompt tokens");
+            sb.Append("\r\n- ").Append(s.LastCachedTokens.ToString("N0", inv)).Append(" read from cache");
             if (s.LastPromptTokens > 0)
                 sb.Append(" (").Append((100.0 * s.LastCachedTokens / s.LastPromptTokens).ToString("0", inv)).Append("%)");
             if (s.LastCacheWriteTokens > 0)
-                sb.Append("\r\n").Append("              ")
-                  .Append(s.LastCacheWriteTokens.ToString("N0", inv)).Append(" written to cache");
-            sb.Append("\r\nLifetime: ").Append(s.TotalCachedTokens.ToString("N0", inv))
-              .Append(" cached / ").Append(s.TotalPromptTokens.ToString("N0", inv))
-              .Append(" prompt tokens");
+                sb.Append("\r\n- ").Append(s.LastCacheWriteTokens.ToString("N0", inv)).Append(" written to cache");
+            sb.Append("\r\n\r\nLifetime:");
+            sb.Append("\r\n- ").Append(s.TotalPromptTokens.ToString("N0", inv)).Append(" prompt tokens");
+            sb.Append("\r\n- ").Append(s.TotalCachedTokens.ToString("N0", inv)).Append(" read from cache");
             if (s.TotalPromptTokens > 0)
                 sb.Append(" (").Append((100.0 * s.TotalCachedTokens / s.TotalPromptTokens).ToString("0", inv)).Append("%)");
-            sb.Append("\r\nOutput: ").Append(s.TotalCompletionTokens.ToString("N0", inv)).Append(" tokens");
+            sb.Append("\r\n- ").Append(s.TotalCompletionTokens.ToString("N0", inv)).Append(" output tokens");
             if (s.TotalReasoningTokens > 0)
-                sb.Append(" (reasoning: ").Append(s.TotalReasoningTokens.ToString("N0", inv)).Append(")");
+                sb.Append(" (").Append(s.TotalReasoningTokens.ToString("N0", inv)).Append(" reasoning)");
             return sb.ToString();
         }
 
