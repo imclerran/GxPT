@@ -64,12 +64,14 @@ namespace GxPT
         // McpChatOrchestrator.RevealedToolNames). Stale names (server removed/disabled) are skipped
         // by the registry at request time, so the list never needs pruning here.
         public List<string> RevealedTools { get; set; }
-        // The OpenRouter provider endpoint that served this conversation's most recent request
-        // (e.g. "Anthropic", "Amazon Bedrock"). Prompt caches live per provider, so on cache-
-        // supported models the next request prefers this provider via provider.order - routing
-        // follows the warm cache instead of flapping between endpoints. Null until first observed;
-        // harmless when stale (it's a preference with fallback, and any consistent choice works).
-        public string LastServedProvider { get; set; }
+        // The OpenRouter provider endpoint that last demonstrated a prompt-cache hit for this
+        // conversation (cached_tokens > 0 on its response; e.g. "Anthropic", "Amazon Bedrock").
+        // Prompt caches live per provider, so on cache-supported models the next request prefers
+        // this provider via provider.order - routing follows the warm cache instead of flapping
+        // between endpoints. Confirmation-gated: providers that merely served a request (or don't
+        // cache at all) never land here. Null until a hit is observed; harmless when stale (it's a
+        // preference with fallback, and after TTL expiry any consistent choice works).
+        public string CacheWarmProvider { get; set; }
         public DateTime LastUpdated { get; set; }
         public event Action<string> NameGenerated;
 

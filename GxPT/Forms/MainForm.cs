@@ -2092,17 +2092,22 @@ namespace GxPT
 
                         var sendProps = new ClientProperties { Stream = true, Zdr = zdrForSend ? true : (bool?)null };
                         // Sticky provider routing on cache-supported models: prefer (provider.order,
-                        // preference with fallback) the endpoint that served this conversation last,
-                        // since prompt caches live per provider; remember whoever serves this one.
+                        // preference with fallback) the endpoint that last demonstrated a cache hit
+                        // for this conversation, since prompt caches live per provider. Stickiness is
+                        // confirmation-gated - only a response reporting cached_tokens > 0 sets or
+                        // moves the preference; merely serving a request proves nothing.
                         if (OpenRouterClient.ModelSupportsPromptCaching(modelToUse))
                         {
                             Conversation stickyConvo = ctx.Conversation;
                             if (stickyConvo != null)
                             {
-                                if (!string.IsNullOrEmpty(stickyConvo.LastServedProvider))
-                                    sendProps.ProviderOrder = new List<string> { stickyConvo.LastServedProvider };
-                                sendProps.ProviderServedCallback = delegate(string served)
-                                { stickyConvo.LastServedProvider = served; };
+                                if (!string.IsNullOrEmpty(stickyConvo.CacheWarmProvider))
+                                    sendProps.ProviderOrder = new List<string> { stickyConvo.CacheWarmProvider };
+                                sendProps.ProviderServedCallback = delegate(string served, int cachedTokens)
+                                {
+                                    if (cachedTokens > 0 && !string.IsNullOrEmpty(served))
+                                        stickyConvo.CacheWarmProvider = served;
+                                };
                             }
                         }
                         _client.CreateCompletionStream(
@@ -2435,11 +2440,12 @@ namespace GxPT
                             revealConvo.RevealedTools = new List<string>();
                         orch.RevealedToolNames = revealConvo.RevealedTools;
                         // Sticky provider routing: seed the orchestrator with the provider that
-                        // served this conversation last, and persist whatever serves this turn, so
-                        // requests keep landing on the endpoint holding the warm prompt cache.
-                        orch.PreferredProvider = revealConvo.LastServedProvider;
+                        // last demonstrated a cache hit for this conversation, and persist any
+                        // newly confirmed one, so requests keep landing on the endpoint holding
+                        // the warm prompt cache (the orchestrator gates updates on cached > 0).
+                        orch.PreferredProvider = revealConvo.CacheWarmProvider;
                         orch.ProviderServed = delegate(string served)
-                        { revealConvo.LastServedProvider = served; };
+                        { revealConvo.CacheWarmProvider = served; };
                     }
                     // Stop button cancellation: kills the in-flight model stream and lets the loop bail
                     // out cleanly between steps. Set once before the turn runs (read-only thereafter).

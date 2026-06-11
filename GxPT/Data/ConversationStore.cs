@@ -114,8 +114,8 @@ namespace GxPT
                 // with the same tools array instead of silently starting cold. Omitted when empty.
                 RevealedTools = (convo.RevealedTools != null && convo.RevealedTools.Count > 0)
                     ? convo.RevealedTools : null,
-                LastServedProvider = string.IsNullOrEmpty(convo.LastServedProvider)
-                    ? null : convo.LastServedProvider,
+                CacheWarmProvider = string.IsNullOrEmpty(convo.CacheWarmProvider)
+                    ? null : convo.CacheWarmProvider,
                 LastUpdated = convo.LastUpdated,
                 Messages = convo.History.Select(m => ToMessageDto(m)).ToList()
             };
@@ -188,7 +188,7 @@ namespace GxPT
                 // Absent in older files -> empty list (nothing revealed yet).
                 RevealedTools = dto.RevealedTools != null
                     ? new List<string>(dto.RevealedTools) : new List<string>(),
-                LastServedProvider = dto.LastServedProvider,
+                CacheWarmProvider = dto.CacheWarmProvider,
                 LastUpdated = dto.LastUpdated == default(DateTime) && !string.IsNullOrEmpty(path)
                     ? File.GetLastWriteTimeUtc(path)
                     : (dto.LastUpdated == default(DateTime) ? DateTime.Now : dto.LastUpdated)
@@ -358,8 +358,9 @@ namespace GxPT
             public Dictionary<string, bool> SkillOverrides { get; set; }
             // Revealed MCP tool names (prompt caching; null/absent in older files -> none revealed).
             public List<string> RevealedTools { get; set; }
-            // Sticky cache-routing provider (null/absent in older files -> none observed yet).
-            public string LastServedProvider { get; set; }
+            // Sticky cache-routing provider: the endpoint that last demonstrated a cache hit
+            // (null/absent in older files -> none observed yet).
+            public string CacheWarmProvider { get; set; }
             public DateTime LastUpdated { get; set; }
             public List<MessageDto> Messages { get; set; }
         }

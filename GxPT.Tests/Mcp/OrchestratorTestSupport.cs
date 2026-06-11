@@ -60,8 +60,11 @@ namespace GxPT.Tests.Mcp
         public string ErrorMessage;   // when set, signal onError instead of streaming
         public int ErrorOnCall = -1;  // -1 = every call; otherwise only this call index
         // When set, reports this provider name via props.ProviderServedCallback (mimicking the real
-        // client, which reports the serving provider off the first response chunk that carries it).
+        // client, which reports the serving provider + cached-token count off the response's final
+        // usage-bearing chunk). ServeCachedTokens is the cached_tokens value reported alongside it;
+        // 0 simulates a response with no cache read (cold write / non-caching endpoint).
         public string ServeAs;
+        public int ServeCachedTokens;
 
         public int Calls;
         public readonly List<IList<ChatMessage>> SeenMessages = new List<IList<ChatMessage>>();
@@ -78,7 +81,7 @@ namespace GxPT.Tests.Mcp
             SeenProps.Add(props);
 
             if (ServeAs != null && props != null && props.ProviderServedCallback != null)
-                props.ProviderServedCallback(ServeAs);
+                props.ProviderServedCallback(ServeAs, ServeCachedTokens);
 
             if (ErrorMessage != null && (ErrorOnCall < 0 || ErrorOnCall == idx))
             {

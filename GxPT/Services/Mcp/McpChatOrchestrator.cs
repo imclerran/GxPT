@@ -120,17 +120,24 @@ namespace GxPT
         // Set per send (the orchestrator is built fresh each turn), so it's not shared/racy.
         public ICollection<string> HiddenToolNames { get; set; }
 
-        // Sticky provider routing (prompt caching): the provider endpoint that served this
-        // conversation's previous request, seeded by the host from Conversation.LastServedProvider.
-        // Prompt caches live per provider, so on cache-supported models each request emits
-        // provider.order = [PreferredProvider] - a preference with fallback, not a pin - and the
-        // value updates from the response so mid-turn loop iterations follow the warm cache too.
-        // Ignored (no emission, no tracking) on models without prompt caching, where stickiness
-        // would only constrain load balancing for no benefit.
+        // Sticky provider routing (prompt caching): the provider endpoint that last DEMONSTRATED a
+        // cache hit for this conversation (cached_tokens > 0 on its response), seeded by the host
+        // from Conversation.CacheWarmProvider. Prompt caches live per provider, so on
+        // cache-supported models each request emits provider.order = [PreferredProvider] - a
+        // preference with fallback, not a pin. Confirmation-gated on purpose: merely serving a
+        // request proves nothing (the endpoint may not cache at all - e.g. a third-party host of an
+        // open-weights model - and pinning there would constrain load balancing for no benefit),
+        // while a cache read proves this is where the conversation's warm cache lives. A later
+        // cached=0 from the confirmed provider does NOT clear the preference - that is usually TTL
+        // expiry between turns, where keeping the rebuild on one provider is exactly the point; the
+        // preference moves only when a different provider demonstrates a hit. Cold start: the first
+        // request of a conversation is a cache write (cached=0), so stickiness latches on the first
+        // observed hit - typically iteration 2 of a tool loop. Ignored entirely on models without
+        // prompt caching.
         public string PreferredProvider { get; set; }
 
-        // Notifies the host whenever the serving provider is observed on a response, so it can
-        // persist the value to the conversation for the next turn. Invoked from the worker thread.
+        // Notifies the host when a provider demonstrates a cache hit, so it can persist the value
+        // to the conversation for the next turn. Invoked from the worker thread.
         public Action<string> ProviderServed { get; set; }
 
         // Provider data-collection preference applied to every request in the turn. Null leaves
@@ -411,13 +418,16 @@ namespace GxPT
             props.Zdr = Zdr;
             props.ToolChoice = toolChoice;
 
-            // Sticky provider routing on cache-supported models (see PreferredProvider).
+            // Sticky provider routing on cache-supported models (see PreferredProvider). Stickiness
+            // is confirmation-gated: only a response that demonstrates a cache read (cached > 0)
+            // establishes or moves the preference.
             if (OpenRouterClient.ModelSupportsPromptCaching(_model))
             {
                 if (!string.IsNullOrEmpty(PreferredProvider))
                     props.ProviderOrder = new List<string> { PreferredProvider };
-                props.ProviderServedCallback = delegate(string served)
+                props.ProviderServedCallback = delegate(string served, int cachedTokens)
                 {
+                    if (cachedTokens <= 0 || string.IsNullOrEmpty(served)) return;
                     PreferredProvider = served;
                     Action<string> cb = ProviderServed;
                     if (cb != null) cb(served);

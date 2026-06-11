@@ -103,7 +103,7 @@ namespace GxPT.Tests.Mcp
         }
 
         [Fact]
-        public void Sticky_provider_routing_follows_the_serving_provider_on_caching_models()
+        public void Sticky_provider_routing_latches_on_a_demonstrated_cache_hit()
         {
             RegistryFakeTransport ft;
             var reg = RegistryWith(out ft, "files", new ToolDef("read"));
@@ -111,6 +111,7 @@ namespace GxPT.Tests.Mcp
 
             var streamer = new ScriptedStreamer();
             streamer.ServeAs = "Amazon Bedrock";
+            streamer.ServeCachedTokens = 1500; // response demonstrates a cache read
             streamer.Turns.Add(Chunks.OneToolCall("c1", "files__read", "{}"));
             streamer.Turns.Add(Chunks.Text("done"));
 
@@ -120,9 +121,55 @@ namespace GxPT.Tests.Mcp
             orch.ProviderServed = delegate(string p) { persisted = p; };
             orch.RunTurn(new List<ChatMessage>(), "go", new RecordingUi());
 
-            Assert.Null(streamer.SeenProps[0].ProviderOrder);            // nothing observed yet
+            Assert.Null(streamer.SeenProps[0].ProviderOrder);            // no hit observed yet
             Assert.Equal("Amazon Bedrock", streamer.SeenProps[1].ProviderOrder[0]); // iteration 2 follows the cache
             Assert.Equal("Amazon Bedrock", persisted);                   // host persistence hook fired
+        }
+
+        [Fact]
+        public void Uncached_responses_do_not_create_provider_stickiness()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            ft.OnCall = delegate(string name, JObject args) { return RegistryFakeTransport.TextResult("x"); };
+
+            var streamer = new ScriptedStreamer();
+            streamer.ServeAs = "SomeHost";
+            streamer.ServeCachedTokens = 0; // served, but no cache read demonstrated
+            streamer.Turns.Add(Chunks.OneToolCall("c1", "files__read", "{}"));
+            streamer.Turns.Add(Chunks.Text("done"));
+
+            var orch = new McpChatOrchestrator(streamer, reg, null, "anthropic/claude-sonnet-4.5", null);
+            string persisted = null;
+            orch.ProviderServed = delegate(string p) { persisted = p; };
+            orch.RunTurn(new List<ChatMessage>(), "go", new RecordingUi());
+
+            Assert.Null(streamer.SeenProps[0].ProviderOrder);
+            Assert.Null(streamer.SeenProps[1].ProviderOrder); // still load-balanced: no hit, no stick
+            Assert.Null(persisted);
+        }
+
+        [Fact]
+        public void Confirmed_provider_preference_survives_an_uncached_response()
+        {
+            // A cached=0 response from the confirmed provider is usually TTL expiry - keeping the
+            // preference makes the cache rebuild land on the same provider, so it must not clear.
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            ft.OnCall = delegate(string name, JObject args) { return RegistryFakeTransport.TextResult("x"); };
+
+            var streamer = new ScriptedStreamer();
+            streamer.ServeAs = "Anthropic";
+            streamer.ServeCachedTokens = 0;
+            streamer.Turns.Add(Chunks.OneToolCall("c1", "files__read", "{}"));
+            streamer.Turns.Add(Chunks.Text("done"));
+
+            var orch = new McpChatOrchestrator(streamer, reg, null, "anthropic/claude-sonnet-4.5", null);
+            orch.PreferredProvider = "Amazon Bedrock"; // confirmed on an earlier turn
+            orch.RunTurn(new List<ChatMessage>(), "go", new RecordingUi());
+
+            Assert.Equal("Amazon Bedrock", streamer.SeenProps[0].ProviderOrder[0]);
+            Assert.Equal("Amazon Bedrock", streamer.SeenProps[1].ProviderOrder[0]); // not cleared
         }
 
         [Fact]

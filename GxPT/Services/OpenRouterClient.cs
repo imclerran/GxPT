@@ -303,21 +303,33 @@ namespace GxPT
             StreamRawChunks(body, WrapWithProviderReport(props, onChunk), onError, cancel);
         }
 
-        // Decorates a chunk sink to report the serving provider (once, from the first chunk that
-        // carries it) via props.ProviderServedCallback. Identity when no callback is registered.
+        // Decorates a chunk sink to report (once, on the final usage-bearing chunk) the serving
+        // provider together with the response's cached-token count, via
+        // props.ProviderServedCallback. The provider name arrives on the first chunk but
+        // cached_tokens only on the last, so the report waits for usage. Identity when no callback
+        // is registered.
         private static Action<ChatCompletionChunk> WrapWithProviderReport(
             ClientProperties props, Action<ChatCompletionChunk> onChunk)
         {
             if (props == null || props.ProviderServedCallback == null) return onChunk;
-            Action<string> report = props.ProviderServedCallback;
-            bool[] reported = new bool[1]; // closure-mutable flag (C# 3.5: no local functions)
+            Action<string, int> report = props.ProviderServedCallback;
+            bool[] reported = new bool[1];    // closure-mutable state (C# 3.5: no local functions)
+            string[] provider = new string[1];
             return delegate(ChatCompletionChunk chunk)
             {
-                if (!reported[0] && chunk != null && !string.IsNullOrEmpty(chunk.provider))
+                if (chunk != null)
                 {
-                    reported[0] = true;
-                    try { report(chunk.provider); }
-                    catch { }
+                    if (!string.IsNullOrEmpty(chunk.provider)) provider[0] = chunk.provider;
+                    if (!reported[0] && chunk.usage != null && provider[0] != null)
+                    {
+                        reported[0] = true;
+                        int cached = 0;
+                        if (chunk.usage.prompt_tokens_details != null
+                            && chunk.usage.prompt_tokens_details.cached_tokens.HasValue)
+                            cached = chunk.usage.prompt_tokens_details.cached_tokens.Value;
+                        try { report(provider[0], cached); }
+                        catch { }
+                    }
                 }
                 if (onChunk != null) onChunk(chunk);
             };
@@ -672,11 +684,12 @@ namespace GxPT
         // not a pin like `only`. Callers put the provider that served the conversation's previous
         // request at the head so routing follows the warm prompt cache (caches are per provider).
         public IList<string> ProviderOrder { get; set; }
-        // Invoked (at most once per request, from the stream-reading thread) with the name of the
-        // provider that served the request, as reported by OpenRouter on the response chunks. Hosts
-        // use it to remember the conversation's cache-warm provider for the next request's
-        // ProviderOrder. Never invoked when OpenRouter omits the field.
-        public Action<string> ProviderServedCallback { get; set; }
+        // Invoked (at most once per request, from the stream-reading thread) with the provider that
+        // served the request and the cached_tokens count from its usage accounting (0 when the
+        // response reported no cache read). Fires on the final SSE chunk - the one carrying usage -
+        // so callers can make stickiness conditional on a demonstrated cache hit; never fires when
+        // the endpoint omits usage (no cache evidence -> no stickiness signal).
+        public Action<string, int> ProviderServedCallback { get; set; }
         public decimal? ProviderMaxPricePrompt { get; set; }
         public decimal? ProviderMaxPriceCompletion { get; set; }
         // tool_choice for the request ("none", "auto", ...). Null leaves it at the provider default.
