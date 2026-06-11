@@ -72,6 +72,11 @@ namespace GxPT
         private const int InlineCodePaddingX = 3;
         private const int InlineCodePaddingY = 1;
 
+        // Retry button drawn under a trailing error notice (re-runs the failed turn)
+        private const int RetryBtnPadX = 8;   // horizontal padding around the label
+        private const int RetryBtnPadY = 3;   // vertical padding around the label
+        private const int RetryBtnGapTop = 4; // gap between the error text and the button
+
         // Bounded central content area width (designer-configurable)
         private int _maxContentWidth = 1000; // default maximum central area width
 
@@ -204,11 +209,16 @@ namespace GxPT
 
         // Raised when the user selects Edit… on a user message via context menu
         public event Action<int, string> UserMessageEditRequested;
+        // Raised when the user clicks the Retry button on a trailing error notice
+        public event Action RetryRequested;
         // Hover/drag state for code block UI
         private MessageItem _hoverCopyItem;
         private int _hoverCopyCodeIndex = -1;
         private MessageItem _copyPressedItem;
         private int _copyPressedCodeIndex = -1;
+        // Hover/pressed state for the Retry button on a trailing error notice
+        private MessageItem _hoverRetryItem;
+        private MessageItem _retryPressedItem;
         private bool _draggingHScroll;
         private MessageItem _dragScrollItem;
         private int _dragScrollCodeIndex = -1;
@@ -251,6 +261,8 @@ namespace GxPT
             // When true, a tiny "zdr" tag is drawn in the bubble's top-right corner (zero-retention
             // message). Only meaningful for User/Assistant bubbles; tool blocks never show it.
             public bool ShowZdrTag;
+            // Retry button rect captured at draw time (virtual coords); Empty when not drawn
+            public Rectangle RetryRect;
 
         }
 
@@ -729,6 +741,49 @@ namespace GxPT
             ReflowSoon();
         }
 
+        // Remove trailing error-notice messages (sentinel-only messages added by the form when a turn
+        // fails) so a retried turn streams in their place. Safe no-op when none.
+        public void RemoveTrailingErrorNotices()
+        {
+            bool removed = false;
+            while (_items.Count > 0 && IsErrorNoticeItem(_items[_items.Count - 1]))
+            {
+                _items.RemoveAt(_items.Count - 1);
+                removed = true;
+            }
+            if (removed)
+            {
+                Invalidate();
+                ReflowSoon();
+            }
+        }
+
+        // True when every block in the message is an error notice — the shape ShowTranscriptError
+        // produces (a Tool-role message whose markdown is a single error sentinel line).
+        private static bool IsErrorNoticeItem(MessageItem it)
+        {
+            if (it == null || it.Blocks == null || it.Blocks.Count == 0) return false;
+            for (int i = 0; i < it.Blocks.Count; i++)
+                if (it.Blocks[i] == null || it.Blocks[i].Type != BlockType.Error) return false;
+            return true;
+        }
+
+        // The Retry button appears only on the transcript's last message and only when that message
+        // is an error notice: retrying re-runs the turn that just failed, so once the conversation
+        // moves on (or when no handler is wired) older notices never offer it.
+        private bool IsRetryTarget(MessageItem it)
+        {
+            if (RetryRequested == null) return false;
+            if (it == null || _items.Count == 0 || _items[_items.Count - 1] != it) return false;
+            return IsErrorNoticeItem(it);
+        }
+
+        private Size GetRetryButtonSize()
+        {
+            Size txt = TextRenderer.MeasureText("Retry", _baseFont);
+            return new Size(txt.Width + 2 * RetryBtnPadX, _baseFont.Height + 2 * RetryBtnPadY);
+        }
+
         // Replace the content of the last message if it exists
         public void UpdateLastMessage(string markdown)
         {
@@ -1014,6 +1069,14 @@ namespace GxPT
                 // Lists don't add extra spacing after themselves
 
                 wUsed = Math.Max(wUsed, sz.Width);
+            }
+
+            // Trailing error notice: reserve room for the Retry button drawn under the red text
+            if (IsRetryTarget(it))
+            {
+                Size btn = GetRetryButtonSize();
+                h += RetryBtnGapTop + btn.Height;
+                wUsed = Math.Max(wUsed, btn.Width);
             }
 
             h += BubblePadding; // bottom padding
@@ -1493,6 +1556,8 @@ namespace GxPT
             if (it.EditDiffScrollHits == null) it.EditDiffScrollHits = new List<EditDiffScrollHit>(); else it.EditDiffScrollHits.Clear();
             // Reset drawn text segments list (for selection)
             if (it.DrawnSegments == null) it.DrawnSegments = new List<DrawnSeg>(); else it.DrawnSegments.Clear();
+            // Reset the retry button hit rect; the error-block draw re-captures it when shown
+            it.RetryRect = Rectangle.Empty;
             // Reset link run sequence
             it.LinkRunSeq = 0;
             DrawBlocks(g, content, it.Blocks, it);
@@ -1799,6 +1864,30 @@ namespace GxPT
                                              new InlineCopyContext { ForeOverride = _clrError });
                     y += 2;
                     if (owner != null) { if (owner.DrawnSegments == null) owner.DrawnSegments = new List<DrawnSeg>(); owner.DrawnSegments.Add(new DrawnSeg { IsNewLine = true, IsHardBreak = true, Rect = new Rectangle(x0, y, 0, 0), Text = null, Font = _baseFont }); }
+                    // Trailing error notice: a small bordered Retry button under the red text re-runs
+                    // the failed turn (the form wires RetryRequested to restart the send).
+                    if (owner != null && blk == blocks[blocks.Count - 1] && IsRetryTarget(owner))
+                    {
+                        y += RetryBtnGapTop;
+                        Size btnSz = GetRetryButtonSize();
+                        Rectangle btn = new Rectangle(x0, y, btnSz.Width, btnSz.Height);
+                        bool retryPressed = (owner == _retryPressedItem);
+                        bool retryHover = (owner == _hoverRetryItem);
+                        using (var sb = new SolidBrush(retryPressed ? _clrCopyPressed : (retryHover ? _clrCopyHover : _clrCodeBack)))
+                        using (var pen = new Pen(_clrCodeBorder))
+                        {
+                            g.FillRectangle(sb, btn);
+                            g.DrawRectangle(pen, btn);
+                        }
+                        using (var brush = new SolidBrush(_clrLink))
+                        using (var fmt = StringFormat.GenericTypographic)
+                        {
+                            fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+                            g.DrawString("Retry", _baseFont, brush, new PointF(btn.X + RetryBtnPadX, btn.Y + RetryBtnPadY), fmt);
+                        }
+                        owner.RetryRect = btn;
+                        y += btnSz.Height;
+                    }
                     numberedCounters.Clear();
                 }
                 else if (blk.Type == BlockType.CodeBlock)
@@ -2657,6 +2746,17 @@ namespace GxPT
                     Invalidate();
                     return;
                 }
+                // Retry button click → re-run the failed turn
+                var retryUp = HitTestRetry(e.Location);
+                if (retryUp != null && _retryPressedItem == retryUp)
+                {
+                    _retryPressedItem = null;
+                    Invalidate();
+                    var retryHandler = RetryRequested;
+                    if (retryHandler != null) retryHandler();
+                    return;
+                }
+                if (_retryPressedItem != null) { _retryPressedItem = null; Invalidate(); }
                 // Copy button click
                 var ui = HitTestCodeUI(e.Location);
                 if (ui.Hit && ui.Which == CodeUiHit.CopyButton && ui.Item != null)
@@ -2736,6 +2836,14 @@ namespace GxPT
                     _dragEditDiffStartMouseX = e.X;
                     _dragEditDiffStartScroll = GetEditDiffScroll(edh.Key);
                     Capture = true;
+                    Invalidate();
+                    return;
+                }
+                // Retry button press on a trailing error notice
+                var retryDown = HitTestRetry(e.Location);
+                if (retryDown != null)
+                {
+                    _retryPressedItem = retryDown;
                     Invalidate();
                     return;
                 }
@@ -2906,6 +3014,17 @@ namespace GxPT
                 _hoverScrollItem = null; _hoverScrollCodeIndex = -1; _hoverScrollIsTable = false; _hoverScrollTableIndex = -1;
             }
 
+            // Hover over the Retry button on a trailing error notice
+            var retryHover = HitTestRetry(e.Location);
+            if (retryHover != null)
+            {
+                _hoverRetryItem = retryHover; Cursor = Cursors.Hand; Invalidate(); return;
+            }
+            else
+            {
+                _hoverRetryItem = null;
+            }
+
             // Hover over attachment pill
             var pillHit = HitTestAttachmentPill(e.Location);
             if (pillHit.Item != null)
@@ -2940,6 +3059,7 @@ namespace GxPT
             _hoverCopyItem = null; _hoverCopyCodeIndex = -1;
             _hoverScrollItem = null; _hoverScrollCodeIndex = -1;
             _copyPressedItem = null; _copyPressedCodeIndex = -1;
+            _hoverRetryItem = null; _retryPressedItem = null;
             _hoverAttachItem = null; _hoverAttachIndex = -1; _pressAttachItem = null; _pressAttachIndex = -1;
             Invalidate();
         }
@@ -3029,6 +3149,17 @@ namespace GxPT
         }
 
         // Returns true and the diff key if the point is over an edit-diff header row.
+        // Hit test the Retry button on a trailing error notice. Only the last message can carry the
+        // button (rect captured at draw time, virtual coords), so only it is checked.
+        private MessageItem HitTestRetry(Point clientPt)
+        {
+            if (_items.Count == 0) return null;
+            var it = _items[_items.Count - 1];
+            if (it.RetryRect.Width <= 0 || !IsRetryTarget(it)) return null;
+            Point virt = new Point(clientPt.X, clientPt.Y + _scrollOffset);
+            return it.RetryRect.Contains(virt) ? it : null;
+        }
+
         private bool HitTestEditDiff(Point clientPt, out string key)
         {
             key = null;
