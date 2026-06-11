@@ -274,21 +274,23 @@ namespace GxPT.Tests.Mcp
         [Fact]
         public void Extracts_generation_stats_for_cost_reconciliation()
         {
-            var root = JObject.Parse("{\"data\":{\"id\":\"gen-x\",\"total_cost\":0.0585,\"cache_discount\":0.0559}}");
-            decimal? cost, discount;
-            Assert.True(OpenRouterClient.TryExtractGenerationStats(root, out cost, out discount));
-            Assert.Equal(0.0585m, cost);
-            Assert.Equal(0.0559m, discount);
+            var stats = OpenRouterClient.ExtractGenerationStats(JObject.Parse(
+                "{\"data\":{\"id\":\"gen-x\",\"total_cost\":0.0585,\"cache_discount\":0.0559,\"provider_name\":\"Amazon Bedrock\"}}"));
+            Assert.NotNull(stats);
+            Assert.Equal(0.0585m, stats.TotalCost);
+            Assert.Equal(0.0559m, stats.CacheDiscount);
+            Assert.Equal("Amazon Bedrock", stats.ProviderName);
 
             // negative discount = net write premium; still extracted
-            var writeHeavy = JObject.Parse("{\"data\":{\"total_cost\":0.138,\"cache_discount\":-0.0225}}");
-            Assert.True(OpenRouterClient.TryExtractGenerationStats(writeHeavy, out cost, out discount));
-            Assert.Equal(-0.0225m, discount);
+            var writeHeavy = OpenRouterClient.ExtractGenerationStats(JObject.Parse(
+                "{\"data\":{\"total_cost\":0.138,\"cache_discount\":-0.0225}}"));
+            Assert.NotNull(writeHeavy);
+            Assert.Equal(-0.0225m, writeHeavy.CacheDiscount);
+            Assert.Null(writeHeavy.ProviderName);
 
-            // malformed / missing data -> false, nothing extracted
-            Assert.False(OpenRouterClient.TryExtractGenerationStats(JObject.Parse("{\"error\":{}}"), out cost, out discount));
-            Assert.Null(cost);
-            Assert.False(OpenRouterClient.TryExtractGenerationStats(null, out cost, out discount));
+            // malformed / missing data -> null, nothing extracted
+            Assert.Null(OpenRouterClient.ExtractGenerationStats(JObject.Parse("{\"error\":{}}")));
+            Assert.Null(OpenRouterClient.ExtractGenerationStats(null));
         }
 
         // ---- streaming chunk parsing under Newtonsoft ----

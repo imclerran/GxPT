@@ -294,47 +294,54 @@ namespace GxPT
         // Fetches the authoritative accounting for a completed generation (GET /api/v1/generation).
         // The streamed usage.cost is the pre-cache-discount estimate and cache_discount never rides
         // the stream, so on cache-hit requests the stream-time numbers overstate cost and report no
-        // savings; this record carries the billed total_cost and the net cache_discount. The record
-        // materializes shortly after the stream ends - the retry loop covers that gap. Runs a
-        // blocking curl GET; call from a background thread.
-        public bool TryFetchGenerationStats(string generationId, out decimal? totalCost, out decimal? cacheDiscount)
+        // savings; the generation record carries the billed total_cost and the net cache_discount.
+        // The record materializes shortly after the stream ends - and total_cost can materialize
+        // before cache_discount - so the retry loop keeps polling briefly until the discount shows
+        // up, settling for whatever it got when it doesn't. Runs blocking curl GETs; call from a
+        // background thread. Null when nothing could be fetched.
+        public GenerationStats FetchGenerationStats(string generationId)
         {
-            totalCost = null;
-            cacheDiscount = null;
-            if (string.IsNullOrEmpty(generationId) || !IsConfigured) return false;
-            for (int attempt = 0; attempt < 3; attempt++)
+            if (string.IsNullOrEmpty(generationId) || !IsConfigured) return null;
+            GenerationStats best = null;
+            for (int attempt = 0; attempt < 4; attempt++)
             {
-                if (attempt > 0) System.Threading.Thread.Sleep(750);
+                if (attempt > 0) System.Threading.Thread.Sleep(1000);
                 string body = HttpGet("https://openrouter.ai/api/v1/generation?id="
                     + Uri.EscapeDataString(generationId));
                 if (string.IsNullOrEmpty(body)) continue;
-                if (TryExtractGenerationStats(SafeParse(body), out totalCost, out cacheDiscount))
-                {
-                    try
-                    {
-                        Logger.Log("Usage", "generation " + generationId + ": total_cost="
-                            + (totalCost.HasValue ? totalCost.Value.ToString() : "?")
-                            + " cache_discount=" + (cacheDiscount.HasValue ? cacheDiscount.Value.ToString() : "?"));
-                    }
-                    catch { }
-                    return true;
-                }
+                GenerationStats s = ExtractGenerationStats(SafeParse(body));
+                if (s == null) continue;
+                best = s;
+                if (s.CacheDiscount.HasValue) break;
             }
-            return false;
+            if (best != null)
+            {
+                try
+                {
+                    Logger.Log("Usage", "generation " + generationId + ": total_cost="
+                        + (best.TotalCost.HasValue ? best.TotalCost.Value.ToString() : "?")
+                        + " cache_discount=" + (best.CacheDiscount.HasValue ? best.CacheDiscount.Value.ToString() : "?")
+                        + (string.IsNullOrEmpty(best.ProviderName) ? string.Empty : " provider=" + best.ProviderName));
+                }
+                catch { }
+            }
+            return best;
         }
 
-        // { "data": { "total_cost": 0.0585, "cache_discount": 0.0559, ... } } -> the billed cost and
-        // net cache savings. True when at least one of the two is present.
-        internal static bool TryExtractGenerationStats(JObject root, out decimal? totalCost, out decimal? cacheDiscount)
+        // { "data": { "total_cost": 0.0585, "cache_discount": 0.0559, "provider_name": "Amazon
+        // Bedrock", ... } } -> billed cost, net cache savings (negative = write premium), and the
+        // serving provider. Null when the payload carries none of them.
+        internal static GenerationStats ExtractGenerationStats(JObject root)
         {
-            totalCost = null;
-            cacheDiscount = null;
-            if (root == null) return false;
+            if (root == null) return null;
             JToken data = root["data"];
-            if (data == null || data.Type != JTokenType.Object) return false;
-            totalCost = AsDecimal(data["total_cost"]);
-            cacheDiscount = AsDecimal(data["cache_discount"]);
-            return totalCost.HasValue || cacheDiscount.HasValue;
+            if (data == null || data.Type != JTokenType.Object) return null;
+            GenerationStats s = new GenerationStats();
+            s.TotalCost = AsDecimal(data["total_cost"]);
+            s.CacheDiscount = AsDecimal(data["cache_discount"]);
+            JToken pn = data["provider_name"];
+            if (pn != null && pn.Type == JTokenType.String) s.ProviderName = (string)pn;
+            return (s.TotalCost.HasValue || s.CacheDiscount.HasValue || s.ProviderName != null) ? s : null;
         }
 
         private static decimal? AsDecimal(JToken t)
@@ -829,6 +836,15 @@ namespace GxPT
         public string ToolChoice { get; set; }
     }
 
+    // The slice of OpenRouter's generation record (GET /api/v1/generation) used for usage
+    // reconciliation - the post-hoc, billed truth that the stream-time estimate converges to.
+    public sealed class GenerationStats
+    {
+        public decimal? TotalCost;     // billed credits (post cache discount / write premium)
+        public decimal? CacheDiscount; // net credits saved (+) / extra paid (-) by caching
+        public string ProviderName;    // serving endpoint; fallback when the stream omitted it
+    }
+
     // One streamed response's usage accounting, assembled from OpenRouter's final usage-bearing
     // SSE chunk (see ClientProperties.ResponseUsageCallback). Drives sticky cache routing
     // (Provider + the cache counters) and per-conversation cost tracking (Cost/CacheDiscount).
@@ -842,7 +858,7 @@ namespace GxPT
         // Cost is the STREAM-TIME estimate, which is pre-cache-discount (and CacheDiscount is, in
         // practice, never present on SSE chunks) - on a cache-hit request it overstates the billed
         // amount by the discount. Treat it as provisional and reconcile against the authoritative
-        // generation record (TryFetchGenerationStats) keyed by Id.
+        // generation record (FetchGenerationStats) keyed by Id.
         public string Id;              // OpenRouter generation id (chunk.id); keys the generation record
         public string Provider;        // serving endpoint (e.g. "Anthropic"); null when not reported
         public int PromptTokens;       // total prompt tokens (cached + written + uncached)

@@ -2112,7 +2112,7 @@ namespace GxPT
                                 if (cachingModel && !string.IsNullOrEmpty(u.Provider)
                                     && (u.CachedTokens > 0 || u.CacheWriteTokens > 0))
                                     usageConvo.CacheWarmProvider = u.Provider;
-                                RecordUsageAndReconcile(usageConvo, u);
+                                RecordUsageAndReconcile(usageConvo, u, cachingModel);
                             };
                         }
                         _client.CreateCompletionStream(
@@ -2453,8 +2453,9 @@ namespace GxPT
                         { revealConvo.CacheWarmProvider = served; };
                         // Per-response usage/cost accounting for the status bar (every iteration),
                         // with post-stream reconciliation against the billed generation record.
+                        bool cachingForUsage = OpenRouterClient.ModelSupportsPromptCaching(model);
                         orch.UsageReported = delegate(ResponseUsage u)
-                        { RecordUsageAndReconcile(revealConvo, u); };
+                        { RecordUsageAndReconcile(revealConvo, u, cachingForUsage); };
                     }
                     // Stop button cancellation: kills the in-flight model stream and lets the loop bail
                     // out cleanly between steps. Set once before the turn runs (read-only thereafter).
@@ -4711,26 +4712,37 @@ namespace GxPT
         // OpenRouter's authoritative generation record on a background thread. The streamed
         // usage.cost is the pre-cache-discount estimate and cache_discount never arrives on the
         // stream, so without reconciliation every cache hit inflates Cost and pins Saved at $0.00.
-        // Fetched only when the request showed cache activity or reported no cost at all - for
-        // plain uncached requests the streamed figure already matches billing.
-        private void RecordUsageAndReconcile(Conversation convo, ResponseUsage u)
+        //
+        // Reconciliation is gated by the MODEL's caching capability, never by the streamed cache
+        // counters: some provider streams (seen with Amazon Bedrock) omit prompt_tokens_details
+        // entirely, so a counter-based gate silently skips exactly the requests that need
+        // reconciling - the failure mode where Saved stays frozen at $0.00 while the OpenRouter
+        // dashboard shows cache activity on every request.
+        private void RecordUsageAndReconcile(Conversation convo, ResponseUsage u, bool cachingModel)
         {
             if (convo == null || u == null) return;
             convo.RecordUsage(u);
             NotifyUsageUpdated(convo);
 
             if (string.IsNullOrEmpty(u.Id) || _client == null) return;
-            if (u.CachedTokens <= 0 && u.CacheWriteTokens <= 0 && u.Cost.HasValue) return;
+            if (!cachingModel && u.Cost.HasValue) return; // streamed figure already matches billing
             System.Threading.ThreadPool.QueueUserWorkItem(delegate
             {
                 try
                 {
-                    decimal? totalCost, cacheDiscount;
-                    if (_client.TryFetchGenerationStats(u.Id, out totalCost, out cacheDiscount))
+                    GenerationStats stats = _client.FetchGenerationStats(u.Id);
+                    if (stats == null) return;
+                    convo.ReconcileUsage(u, stats.TotalCost, stats.CacheDiscount);
+                    // Streams that omit cache counters also starve the stream-side stickiness
+                    // gate; a nonzero billed discount is the same proof of cache activity,
+                    // observed late. Latch the conversation-level preference here - the next
+                    // turn emits it (mid-turn iterations still rely on stream counters).
+                    if (cachingModel && stats.CacheDiscount.HasValue && stats.CacheDiscount.Value != 0)
                     {
-                        convo.ReconcileUsage(u, totalCost, cacheDiscount);
-                        NotifyUsageUpdated(convo);
+                        string prov = !string.IsNullOrEmpty(u.Provider) ? u.Provider : stats.ProviderName;
+                        if (!string.IsNullOrEmpty(prov)) convo.CacheWarmProvider = prov;
                     }
+                    NotifyUsageUpdated(convo);
                 }
                 catch { }
             });

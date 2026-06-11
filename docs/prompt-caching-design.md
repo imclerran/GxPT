@@ -96,10 +96,15 @@ So requests on cache-supported models carry `provider.order = [<cache-warm provi
   caching-model-gated.
 - **The streamed `usage.cost` is the pre-cache-discount estimate, and `cache_discount` does not
   ride the SSE stream.** On a cache-hit request the stream-time cost overstates billing by the
-  discount. Requests with cache activity are therefore reconciled post-stream against the
+  discount. Caching-capable models therefore reconcile every request post-stream against the
   authoritative generation record (`GET /api/v1/generation?id=` -> `total_cost`,
-  `cache_discount`; `OpenRouterClient.TryFetchGenerationStats` +
-  `Conversation.ReconcileUsage`), which is also where the Saved figure comes from.
+  `cache_discount`, `provider_name`; `OpenRouterClient.FetchGenerationStats` +
+  `Conversation.ReconcileUsage`), which is also where the Saved figure comes from. The
+  reconcile gate must NOT depend on the streamed cache counters: some provider streams (seen
+  with Amazon Bedrock) omit `prompt_tokens_details` entirely, which would skip exactly the
+  requests that need reconciling - and starve the stream-side stickiness gate, which is why a
+  nonzero billed `cache_discount` also latches `CacheWarmProvider` as a late cache-activity
+  signal.
 - Semantics note: OpenRouter normalizes usage to OpenAI conventions - `prompt_tokens` is the
   TOTAL prompt size and the cache counters are subsets of it (unlike Anthropic's native API,
   where `input_tokens` is the uncached remainder). Never add the counters to `prompt_tokens`.
