@@ -4741,7 +4741,7 @@ namespace GxPT
                 {
                     GenerationStats stats = _client.FetchGenerationStats(u.Id);
                     if (stats == null) return;
-                    convo.ReconcileUsage(u, stats.TotalCost, stats.CacheDiscount);
+                    bool changed = convo.ReconcileUsage(u, stats.TotalCost, stats.CacheDiscount);
                     // Streams that omit cache counters also starve the stream-side stickiness
                     // gate; a nonzero billed discount is the same proof of cache activity,
                     // observed late. Latch the conversation-level preference here - the next
@@ -4752,6 +4752,22 @@ namespace GxPT
                         if (!string.IsNullOrEmpty(prov)) convo.CacheWarmProvider = prov;
                     }
                     NotifyUsageUpdated(convo);
+                    // Persist the corrected totals: a reconcile can land minutes after the turn's
+                    // normal save, and would otherwise be lost on app close / conversation close.
+                    // Update-only - never re-create a file the user deleted while the fetch was in
+                    // flight. The try/catch save matches the house pattern: a save that races a
+                    // running turn's history mutation throws and is skipped, and the next save
+                    // (which includes these totals) catches up.
+                    if (changed)
+                    {
+                        try
+                        {
+                            string path = ConversationStore.GetPathForId(convo.Id);
+                            if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
+                                ConversationStore.Save(convo);
+                        }
+                        catch { }
+                    }
                 }
                 catch { }
             });

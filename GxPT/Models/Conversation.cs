@@ -115,18 +115,28 @@ namespace GxPT
         // MainForm.RecordUsageAndReconcile): the streamed usage.cost is pre-cache-discount and
         // cache_discount never rides the stream, so without this every cache hit inflates TotalCost
         // and Saved never moves. Deltas against what RecordUsage already added for this request, so
-        // totals land on billed reality regardless of what the stream carried.
-        internal void ReconcileUsage(ResponseUsage original, decimal? totalCost, decimal? cacheDiscount)
+        // totals land on billed reality regardless of what the stream carried. Returns true when a
+        // total actually changed (the caller persists the conversation then - reconciles can land
+        // minutes after the turn's normal save, and would otherwise be lost on close).
+        internal bool ReconcileUsage(ResponseUsage original, decimal? totalCost, decimal? cacheDiscount)
         {
-            if (original == null) return;
+            if (original == null) return false;
+            bool changed = false;
             lock (_usageGate)
             {
                 if (totalCost.HasValue)
-                    TotalCost += totalCost.Value - (original.Cost.HasValue ? original.Cost.Value : 0);
+                {
+                    decimal delta = totalCost.Value - (original.Cost.HasValue ? original.Cost.Value : 0);
+                    if (delta != 0) { TotalCost += delta; changed = true; }
+                }
                 if (cacheDiscount.HasValue)
-                    TotalCacheDiscount += cacheDiscount.Value
+                {
+                    decimal delta = cacheDiscount.Value
                         - (original.CacheDiscount.HasValue ? original.CacheDiscount.Value : 0);
+                    if (delta != 0) { TotalCacheDiscount += delta; changed = true; }
+                }
             }
+            return changed;
         }
 
         // A consistent copy for the UI thread (decimal/long reads aren't atomic on x86).
