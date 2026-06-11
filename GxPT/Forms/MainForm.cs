@@ -4809,14 +4809,19 @@ namespace GxPT
             // and the strip looks broken until the first response arrives.
             UsageStats s = (convo != null) ? convo.GetUsageStats() : new UsageStats();
 
+            // Every pane is a caption label + value label pair: the Saved pane needs the split so
+            // only the amount carries the health color, and the other two match it so all three
+            // panes share identical caption/value spacing. Captions (with the dividers) stay
+            // system text; the Saved value goes green once caching has net-saved money, red while
+            // net negative (write premiums not yet amortized by reads), neutral at zero.
             if (this.tslContext != null)
-                this.tslContext.Text = "Context: " + FormatTokenCount(s.LastPromptTokens) + " tok";
+                this.tslContext.Text = "Context:";
+            if (this.tslContextValue != null)
+                this.tslContextValue.Text = FormatTokenCount(s.LastPromptTokens) + " tok";
             if (this.tslCost != null)
-                this.tslCost.Text = "Cost: " + FormatMoney(s.TotalCost);
-            // The Saved pane is two labels so only the amount carries the health color: the
-            // "Saved:" caption (with the divider) stays system text, while the value goes green
-            // once caching has net-saved money, red while net negative (write premiums not yet
-            // amortized by reads), neutral at zero.
+                this.tslCost.Text = "Cost:";
+            if (this.tslCostValue != null)
+                this.tslCostValue.Text = FormatMoney(s.TotalCost);
             if (this.tslSaved != null)
                 this.tslSaved.Text = "Saved:";
             if (this.tslSavedValue != null)
@@ -4827,10 +4832,13 @@ namespace GxPT
             }
 
             string breakdown = BuildUsageTooltip(s);
-            if (this.tslContext != null) this.tslContext.ToolTipText = breakdown;
-            if (this.tslCost != null) this.tslCost.ToolTipText = breakdown;
-            if (this.tslSaved != null) this.tslSaved.ToolTipText = breakdown;
-            if (this.tslSavedValue != null) this.tslSavedValue.ToolTipText = breakdown;
+            ToolStripStatusLabel[] panes = new ToolStripStatusLabel[]
+            {
+                this.tslContext, this.tslContextValue, this.tslCost, this.tslCostValue,
+                this.tslSaved, this.tslSavedValue
+            };
+            foreach (ToolStripStatusLabel pane in panes)
+                if (pane != null) pane.ToolTipText = breakdown;
         }
 
         // The hover breakdown: cache percentages with their time windows labeled explicitly (the
