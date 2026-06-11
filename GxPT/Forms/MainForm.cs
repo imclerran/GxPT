@@ -4709,9 +4709,11 @@ namespace GxPT
         }
 
         // Records a response's streamed usage (instant feedback), then reconciles it against
-        // OpenRouter's authoritative generation record on a background thread. The streamed
-        // usage.cost is the pre-cache-discount estimate and cache_discount never arrives on the
-        // stream, so without reconciliation every cache hit inflates Cost and pins Saved at $0.00.
+        // OpenRouter's authoritative generation record on a background thread. cache_discount
+        // never arrives on the stream, so the generation record is the Saved figure's only data
+        // source; it also corrects Cost wherever a provider's stream estimate differs from billing
+        // (observed accurate on Bedrock; not guaranteed elsewhere - the delta reconcile is a no-op
+        // when they match).
         //
         // Reconciliation is gated by the MODEL's caching capability, never by the streamed cache
         // counters: some provider streams (seen with Amazon Bedrock) omit prompt_tokens_details

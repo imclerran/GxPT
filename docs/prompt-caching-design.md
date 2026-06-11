@@ -94,17 +94,17 @@ So requests on cache-supported models carry `provider.order = [<cache-warm provi
   callback feeds the status bar's per-conversation cost/savings accounting
   (`Conversation.RecordUsage`), which runs on every model - only the stickiness gate inside it is
   caching-model-gated.
-- **The streamed `usage.cost` is the pre-cache-discount estimate, and `cache_discount` does not
-  ride the SSE stream.** On a cache-hit request the stream-time cost overstates billing by the
-  discount. Caching-capable models therefore reconcile every request post-stream against the
-  authoritative generation record (`GET /api/v1/generation?id=` -> `total_cost`,
-  `cache_discount`, `provider_name`; `OpenRouterClient.FetchGenerationStats` +
-  `Conversation.ReconcileUsage`), which is also where the Saved figure comes from. The
-  reconcile gate must NOT depend on the streamed cache counters: some provider streams (seen
-  with Amazon Bedrock) omit `prompt_tokens_details` entirely, which would skip exactly the
-  requests that need reconciling - and starve the stream-side stickiness gate, which is why a
-  nonzero billed `cache_discount` also latches `CacheWarmProvider` as a late cache-activity
-  signal.
+- **`cache_discount` does not ride the SSE stream** - the post-hoc generation record
+  (`GET /api/v1/generation?id=` -> `total_cost`, `cache_discount`, `provider_name`;
+  `OpenRouterClient.FetchGenerationStats` + `Conversation.ReconcileUsage`) is the Saved
+  figure's only data source. The streamed `usage.cost` was observed billing-accurate (cache
+  pricing included) on Bedrock-served Anthropic models, but that isn't guaranteed across
+  providers, so caching-capable models reconcile every request; the delta-based reconcile is a
+  no-op when the stream was already accurate. Operational notes: the record can take several
+  seconds to become queryable (the fetch retries patiently and logs failures - a silent fetch
+  failure looks like "Saved frozen at $0.00"); the reconcile gate must not depend on streamed
+  cache counters being present; and a nonzero billed `cache_discount` also latches
+  `CacheWarmProvider` as a late cache-activity signal for streams that omit counters.
 - Semantics note: OpenRouter normalizes usage to OpenAI conventions - `prompt_tokens` is the
   TOTAL prompt size and the cache counters are subsets of it (unlike Anthropic's native API,
   where `input_tokens` is the uncached remainder). Never add the counters to `prompt_tokens`.

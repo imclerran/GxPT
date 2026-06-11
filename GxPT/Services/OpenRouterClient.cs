@@ -292,40 +292,59 @@ namespace GxPT
         }
 
         // Fetches the authoritative accounting for a completed generation (GET /api/v1/generation).
-        // The streamed usage.cost is the pre-cache-discount estimate and cache_discount never rides
-        // the stream, so on cache-hit requests the stream-time numbers overstate cost and report no
-        // savings; the generation record carries the billed total_cost and the net cache_discount.
-        // The record materializes shortly after the stream ends - and total_cost can materialize
-        // before cache_discount - so the retry loop keeps polling briefly until the discount shows
-        // up, settling for whatever it got when it doesn't. Runs blocking curl GETs; call from a
+        // The streamed usage.cost has been observed billing-accurate (cache pricing included) on
+        // some providers, but cache_discount never rides the stream - this record is the Saved
+        // figure's only data source, and the billing correction for any provider whose stream
+        // estimate differs (the delta-based reconcile is a no-op when they already match). The
+        // record can take several seconds to become queryable after the stream ends, so the retry
+        // loop is patient; it also keeps polling briefly when total_cost materializes before
+        // cache_discount. Failures are logged - a silent failure here looks like "Saved frozen at
+        // $0.00" in the UI and is otherwise undiagnosable. Runs blocking curl GETs; call from a
         // background thread. Null when nothing could be fetched.
         public GenerationStats FetchGenerationStats(string generationId)
         {
             if (string.IsNullOrEmpty(generationId) || !IsConfigured) return null;
+            string url = "https://openrouter.ai/api/v1/generation?id=" + Uri.EscapeDataString(generationId);
+            int[] delaysMs = new int[] { 0, 1000, 2000, 3000, 4000 };
             GenerationStats best = null;
-            for (int attempt = 0; attempt < 4; attempt++)
+            HttpGetResult last = null;
+            for (int attempt = 0; attempt < delaysMs.Length; attempt++)
             {
-                if (attempt > 0) System.Threading.Thread.Sleep(1000);
-                string body = HttpGet("https://openrouter.ai/api/v1/generation?id="
-                    + Uri.EscapeDataString(generationId));
-                if (string.IsNullOrEmpty(body)) continue;
-                GenerationStats s = ExtractGenerationStats(SafeParse(body));
+                if (delaysMs[attempt] > 0) System.Threading.Thread.Sleep(delaysMs[attempt]);
+                last = HttpGetEx(url);
+                if (last == null || last.ExitCode != 0 || string.IsNullOrEmpty(last.Body)) continue;
+                GenerationStats s = ExtractGenerationStats(SafeParse(last.Body));
                 if (s == null) continue;
                 best = s;
                 if (s.CacheDiscount.HasValue) break;
             }
-            if (best != null)
+            try
             {
-                try
+                if (best != null)
                 {
                     Logger.Log("Usage", "generation " + generationId + ": total_cost="
                         + (best.TotalCost.HasValue ? best.TotalCost.Value.ToString() : "?")
                         + " cache_discount=" + (best.CacheDiscount.HasValue ? best.CacheDiscount.Value.ToString() : "?")
                         + (string.IsNullOrEmpty(best.ProviderName) ? string.Empty : " provider=" + best.ProviderName));
                 }
-                catch { }
+                else
+                {
+                    string detail = last == null
+                        ? "no response"
+                        : "exit=" + last.ExitCode + " body=" + Snippet(last.Body, 200);
+                    Logger.Log("Usage", "generation " + generationId + ": fetch FAILED after "
+                        + delaysMs.Length + " attempts (" + detail + ")");
+                }
             }
+            catch { }
             return best;
+        }
+
+        private static string Snippet(string s, int max)
+        {
+            if (string.IsNullOrEmpty(s)) return "(empty)";
+            s = s.Replace("\r", " ").Replace("\n", " ");
+            return s.Length > max ? s.Substring(0, max) + "..." : s;
         }
 
         // { "data": { "total_cost": 0.0585, "cache_discount": 0.0559, "provider_name": "Amazon
@@ -353,9 +372,17 @@ namespace GxPT
         }
 
         // Authenticated GET via curl (the API key rides the temp config file, off the command
-        // line, mirroring the POST paths). Returns the body, or null on any failure.
-        private string HttpGet(string url)
+        // line, mirroring the POST paths). Returns the exit code and body so callers can log
+        // failures usefully (a 404 here usually means the generation record isn't queryable yet).
+        private sealed class HttpGetResult
         {
+            public int ExitCode = -1;
+            public string Body;
+        }
+
+        private HttpGetResult HttpGetEx(string url)
+        {
+            var result = new HttpGetResult();
             var tempFiles = new List<string>();
             try
             {
@@ -386,20 +413,18 @@ namespace GxPT
                 using (var p = Process.Start(psi))
                 {
                     var utf8 = new UTF8Encoding(false, false);
-                    string output;
                     using (var outReader = new StreamReader(p.StandardOutput.BaseStream, utf8, false))
-                        output = outReader.ReadToEnd();
+                        result.Body = outReader.ReadToEnd();
                     try { p.StandardError.ReadToEnd(); }
                     catch { }
                     p.WaitForExit();
-                    int exitCode = -1;
-                    try { exitCode = p.ExitCode; }
+                    try { result.ExitCode = p.ExitCode; }
                     catch { }
-                    return exitCode == 0 ? output : null;
                 }
             }
-            catch { return null; }
+            catch { }
             finally { CleanupTempFiles(tempFiles); }
+            return result;
         }
 
         // IChatStreamer: build the body (with tools) then stream parsed chunks. Used by the
@@ -610,7 +635,7 @@ namespace GxPT
                             + " cached=" + (cached.HasValue ? cached.Value.ToString() : "?")
                             + " cacheWrite=" + (written.HasValue ? written.Value.ToString() : "?")
                             + " completion=" + (usage.completion_tokens.HasValue ? usage.completion_tokens.Value.ToString() : "?")
-                            + " cost=" + (usage.cost.HasValue ? usage.cost.Value.ToString() : "?") + " (pre-discount estimate)");
+                            + " cost=" + (usage.cost.HasValue ? usage.cost.Value.ToString() : "?") + " (streamed)");
                     }
                 }
                 catch { }
@@ -855,10 +880,12 @@ namespace GxPT
         // native API, where input_tokens is the uncached remainder). PromptTokens is therefore the
         // conversation's "context size" gauge as-is; never add the cache counters to it.
         //
-        // Cost is the STREAM-TIME estimate, which is pre-cache-discount (and CacheDiscount is, in
-        // practice, never present on SSE chunks) - on a cache-hit request it overstates the billed
-        // amount by the discount. Treat it as provisional and reconcile against the authoritative
-        // generation record (FetchGenerationStats) keyed by Id.
+        // Cost is the STREAM-TIME figure. Observed billing-accurate (cache pricing included) on
+        // Bedrock-served Anthropic models, but CacheDiscount is, in practice, never present on SSE
+        // chunks, and other providers' stream estimates aren't guaranteed to match billing. Treat
+        // Cost as provisional and reconcile against the authoritative generation record
+        // (FetchGenerationStats) keyed by Id - the delta-based reconcile is a no-op when the
+        // stream was already accurate.
         public string Id;              // OpenRouter generation id (chunk.id); keys the generation record
         public string Provider;        // serving endpoint (e.g. "Anthropic"); null when not reported
         public int PromptTokens;       // total prompt tokens (cached + written + uncached)
