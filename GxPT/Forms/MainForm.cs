@@ -4813,12 +4813,16 @@ namespace GxPT
                 this.tslContext.Text = "Context: " + FormatTokenCount(s.LastPromptTokens) + " tok";
             if (this.tslCost != null)
                 this.tslCost.Text = "Cost: " + FormatMoney(s.TotalCost);
+            // The Saved pane is two labels so only the amount carries the health color: the
+            // "Saved:" caption (with the divider) stays system text, while the value goes green
+            // once caching has net-saved money, red while net negative (write premiums not yet
+            // amortized by reads), neutral at zero.
             if (this.tslSaved != null)
+                this.tslSaved.Text = "Saved:";
+            if (this.tslSavedValue != null)
             {
-                this.tslSaved.Text = "Saved: " + FormatMoney(s.TotalCacheDiscount);
-                // At-a-glance cache health: green once caching has net-saved money, red while net
-                // negative (write premiums not yet amortized by reads), neutral at zero.
-                this.tslSaved.ForeColor = s.TotalCacheDiscount > 0 ? Color.Green
+                this.tslSavedValue.Text = FormatMoney(s.TotalCacheDiscount);
+                this.tslSavedValue.ForeColor = s.TotalCacheDiscount > 0 ? Color.Green
                     : (s.TotalCacheDiscount < 0 ? Color.Firebrick : SystemColors.ControlText);
             }
 
@@ -4826,6 +4830,7 @@ namespace GxPT
             if (this.tslContext != null) this.tslContext.ToolTipText = breakdown;
             if (this.tslCost != null) this.tslCost.ToolTipText = breakdown;
             if (this.tslSaved != null) this.tslSaved.ToolTipText = breakdown;
+            if (this.tslSavedValue != null) this.tslSavedValue.ToolTipText = breakdown;
         }
 
         // The hover breakdown: cache percentages with their time windows labeled explicitly (the

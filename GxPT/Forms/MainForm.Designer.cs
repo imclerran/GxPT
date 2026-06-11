@@ -80,6 +80,7 @@
             this.tslContext = new System.Windows.Forms.ToolStripStatusLabel();
             this.tslCost = new System.Windows.Forms.ToolStripStatusLabel();
             this.tslSaved = new System.Windows.Forms.ToolStripStatusLabel();
+            this.tslSavedValue = new System.Windows.Forms.ToolStripStatusLabel();
             this.msMain.SuspendLayout();
             this.ssMain.SuspendLayout();
             this.pnlInput.SuspendLayout();
@@ -543,7 +544,8 @@
             this.tslSpring,
             this.tslContext,
             this.tslCost,
-            this.tslSaved});
+            this.tslSaved,
+            this.tslSavedValue});
             this.ssMain.Location = new System.Drawing.Point(0, 744);
             this.ssMain.Name = "ssMain";
             this.ssMain.ShowItemToolTips = true;
@@ -573,6 +575,12 @@
             this.tslSaved.BorderSides = System.Windows.Forms.ToolStripStatusLabelBorderSides.Left;
             this.tslSaved.Name = "tslSaved";
             this.tslSaved.Size = new System.Drawing.Size(0, 17);
+            //
+            // tslSavedValue
+            //
+            this.tslSavedValue.Margin = new System.Windows.Forms.Padding(-2, 3, 0, 2);
+            this.tslSavedValue.Name = "tslSavedValue";
+            this.tslSavedValue.Size = new System.Drawing.Size(0, 17);
             //
             // MainForm
             //
@@ -661,6 +669,7 @@
         private System.Windows.Forms.ToolStripStatusLabel tslContext;
         private System.Windows.Forms.ToolStripStatusLabel tslCost;
         private System.Windows.Forms.ToolStripStatusLabel tslSaved;
+        private System.Windows.Forms.ToolStripStatusLabel tslSavedValue;
         private System.Windows.Forms.ToolStripMenuItem miDeleteConversations;
         private System.Windows.Forms.ToolStripMenuItem miNextTab;
         private System.Windows.Forms.ToolStripMenuItem miPreviousTab;
