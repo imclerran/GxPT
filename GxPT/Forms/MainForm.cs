@@ -4811,6 +4811,11 @@ namespace GxPT
         // entirely, so a counter-based gate silently skips exactly the requests that need
         // reconciling - the failure mode where Saved stays frozen at $0.00 while the OpenRouter
         // dashboard shows cache activity on every request.
+        //
+        // Cancelled streams always reach the fetch: their stub (id + Cancelled flag, no cost, no
+        // counters - see ResponseUsage.Cancelled) leaves Cost null, so neither early-out below
+        // fires. The generation record is a cancelled request's only accounting - providers
+        // without disconnect-cancellation bill the COMPLETE response the status bar never saw.
         private void RecordUsageAndReconcile(Conversation convo, ResponseUsage u, bool cachingModel)
         {
             if (convo == null || u == null) return;
@@ -4830,9 +4835,12 @@ namespace GxPT
             {
                 try
                 {
-                    GenerationStats stats = _client.FetchGenerationStats(u.Id);
+                    // Non-caching models reach here only for cancelled streams; their record is
+                    // complete once total_cost lands, so don't hold the retry loop out for a
+                    // cache_discount that never comes.
+                    GenerationStats stats = _client.FetchGenerationStats(u.Id, cachingModel);
                     if (stats == null) return;
-                    bool changed = convo.ReconcileUsage(u, stats.TotalCost, stats.CacheDiscount);
+                    bool changed = convo.ReconcileUsage(u, stats);
                     // Streams that omit cache counters also starve the stream-side stickiness
                     // gate; a nonzero billed discount is the same proof of cache activity,
                     // observed late. Latch the conversation-level preference here - the next

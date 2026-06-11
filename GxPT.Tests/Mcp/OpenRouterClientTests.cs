@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using GxPT;
 using Newtonsoft.Json;
@@ -289,6 +290,96 @@ namespace GxPT.Tests.Mcp
             // malformed / missing data -> null, nothing extracted
             Assert.Null(OpenRouterClient.ExtractGenerationStats(JObject.Parse("{\"error\":{}}")));
             Assert.Null(OpenRouterClient.ExtractGenerationStats(null));
+        }
+
+        [Fact]
+        public void Extracts_generation_stats_token_counts_and_cancelled_flag()
+        {
+            // native counts preferred (they're what billing uses); cancelled flag surfaced
+            var stats = OpenRouterClient.ExtractGenerationStats(JObject.Parse(
+                "{\"data\":{\"total_cost\":0.021,\"cancelled\":true,"
+                + "\"tokens_prompt\":900,\"tokens_completion\":140,"
+                + "\"native_tokens_prompt\":1000,\"native_tokens_completion\":150,"
+                + "\"native_tokens_reasoning\":40,\"native_tokens_cached\":800}}"));
+            Assert.NotNull(stats);
+            Assert.True(stats.Cancelled);
+            Assert.Equal(1000, stats.PromptTokens);
+            Assert.Equal(150, stats.CompletionTokens);
+            Assert.Equal(40, stats.ReasoningTokens);
+            Assert.Equal(800, stats.CachedTokens);
+
+            // normalized fallback when native counts are absent; token-only records still extract
+            var normalized = OpenRouterClient.ExtractGenerationStats(JObject.Parse(
+                "{\"data\":{\"tokens_prompt\":900,\"tokens_completion\":140}}"));
+            Assert.NotNull(normalized);
+            Assert.False(normalized.Cancelled);
+            Assert.Equal(900, normalized.PromptTokens);
+            Assert.Equal(140, normalized.CompletionTokens);
+            Assert.Null(normalized.ReasoningTokens);
+            Assert.Null(normalized.CachedTokens);
+        }
+
+        // ---- cancelled-stream usage stub (WrapWithProviderReport's flush) ----
+
+        private static ChatCompletionChunk Chunk(string json)
+        {
+            return JsonConvert.DeserializeObject<ChatCompletionChunk>(json);
+        }
+
+        [Fact]
+        public void Cancel_flush_reports_stub_with_generation_id_once()
+        {
+            var reported = new List<ResponseUsage>();
+            var props = new ClientProperties();
+            props.ResponseUsageCallback = delegate(ResponseUsage u) { reported.Add(u); };
+            Action flush;
+            var sink = OpenRouterClient.WrapWithProviderReport(props, delegate { }, out flush);
+
+            // a content chunk carries the generation id but no usage -> nothing reported yet
+            sink(Chunk("{\"id\":\"gen-1\",\"provider\":\"Anthropic\",\"choices\":[{\"delta\":{\"content\":\"h\"}}]}"));
+            Assert.Empty(reported);
+
+            flush();
+            var stub = Assert.Single(reported);
+            Assert.True(stub.Cancelled);
+            Assert.Equal("gen-1", stub.Id);
+            Assert.Equal("Anthropic", stub.Provider);
+            Assert.Null(stub.Cost);
+            Assert.Equal(0, stub.PromptTokens);
+
+            flush(); // idempotent: a double cancel path must not double-report
+            Assert.Single(reported);
+        }
+
+        [Fact]
+        public void Cancel_flush_is_noop_after_usage_reported()
+        {
+            var reported = new List<ResponseUsage>();
+            var props = new ClientProperties();
+            props.ResponseUsageCallback = delegate(ResponseUsage u) { reported.Add(u); };
+            Action flush;
+            var sink = OpenRouterClient.WrapWithProviderReport(props, delegate { }, out flush);
+
+            // cancel raced the final chunk: usage already reported, flush must not re-report
+            sink(Chunk("{\"id\":\"gen-1\",\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"cost\":0.001}}"));
+            flush();
+
+            var only = Assert.Single(reported);
+            Assert.False(only.Cancelled);
+            Assert.Equal(0.001m, only.Cost);
+        }
+
+        [Fact]
+        public void Cancel_flush_is_noop_when_no_chunk_ever_arrived()
+        {
+            var reported = new List<ResponseUsage>();
+            var props = new ClientProperties();
+            props.ResponseUsageCallback = delegate(ResponseUsage u) { reported.Add(u); };
+            Action flush;
+            OpenRouterClient.WrapWithProviderReport(props, delegate { }, out flush);
+
+            flush(); // cancelled before the first chunk: no id exists, nothing to fetch
+            Assert.Empty(reported);
         }
 
         // ---- streaming chunk parsing under Newtonsoft ----

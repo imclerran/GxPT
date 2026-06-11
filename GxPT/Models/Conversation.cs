@@ -90,9 +90,20 @@ namespace GxPT
         public int LastCachedTokens { get; set; }
         public int LastCacheWriteTokens { get; set; }
 
+        // The newest request recorded, by reference. Gates Last* updates during reconciliation:
+        // a reconcile can land minutes after its request (the generation record is slow to
+        // materialize), and by then a newer request may own the context gauge - only the
+        // still-newest request's reconcile may touch Last*.
+        private ResponseUsage _lastUsage;
+
         // Accumulate one response's usage (called once per model request, including every tool-loop
         // iteration). Cost/discount are null when the endpoint didn't report them - skipped, not
         // counted as zero, so totals stay "sum of what was billed and reported".
+        //
+        // A cancelled stream reports a stub (see ResponseUsage.Cancelled) whose counters are zero
+        // because the usage chunk never arrived, not because nothing was billed: adding the zeros
+        // to the totals is harmless, but the Last* gauge keeps the previous request's values
+        // rather than collapsing to 0 - the real counts arrive later via ReconcileUsage.
         internal void RecordUsage(ResponseUsage u)
         {
             if (u == null) return;
@@ -104,9 +115,13 @@ namespace GxPT
                 TotalCachedTokens += u.CachedTokens;
                 TotalCompletionTokens += u.CompletionTokens;
                 TotalReasoningTokens += u.ReasoningTokens;
-                LastPromptTokens = u.PromptTokens;
-                LastCachedTokens = u.CachedTokens;
-                LastCacheWriteTokens = u.CacheWriteTokens;
+                if (!u.Cancelled)
+                {
+                    LastPromptTokens = u.PromptTokens;
+                    LastCachedTokens = u.CachedTokens;
+                    LastCacheWriteTokens = u.CacheWriteTokens;
+                }
+                _lastUsage = u;
             }
             LastUpdated = DateTime.Now;
         }
@@ -115,25 +130,66 @@ namespace GxPT
         // MainForm.RecordUsageAndReconcile): the streamed usage.cost is pre-cache-discount and
         // cache_discount never rides the stream, so without this every cache hit inflates TotalCost
         // and Saved never moves. Deltas against what RecordUsage already added for this request, so
-        // totals land on billed reality regardless of what the stream carried. Returns true when a
-        // total actually changed (the caller persists the conversation then - reconciles can land
-        // minutes after the turn's normal save, and would otherwise be lost on close).
-        internal bool ReconcileUsage(ResponseUsage original, decimal? totalCost, decimal? cacheDiscount)
+        // totals land on billed reality regardless of what the stream carried. For a cancelled
+        // request (original.Cancelled) the record's token counts are landed too - the stream never
+        // carried any, and on providers without disconnect-cancellation the generation ran (and
+        // billed) to completion server-side, so the record is the counts' only source. Returns true
+        // when a total actually changed (the caller persists the conversation then - reconciles can
+        // land minutes after the turn's normal save, and would otherwise be lost on close).
+        internal bool ReconcileUsage(ResponseUsage original, GenerationStats stats)
         {
-            if (original == null) return false;
+            if (original == null || stats == null) return false;
             bool changed = false;
             lock (_usageGate)
             {
-                if (totalCost.HasValue)
+                if (stats.TotalCost.HasValue)
                 {
-                    decimal delta = totalCost.Value - (original.Cost.HasValue ? original.Cost.Value : 0);
+                    decimal delta = stats.TotalCost.Value - (original.Cost.HasValue ? original.Cost.Value : 0);
                     if (delta != 0) { TotalCost += delta; changed = true; }
                 }
-                if (cacheDiscount.HasValue)
+                if (stats.CacheDiscount.HasValue)
                 {
-                    decimal delta = cacheDiscount.Value
+                    decimal delta = stats.CacheDiscount.Value
                         - (original.CacheDiscount.HasValue ? original.CacheDiscount.Value : 0);
                     if (delta != 0) { TotalCacheDiscount += delta; changed = true; }
+                }
+                // Token corrections only for cancelled requests: a completed stream's own usage
+                // chunk already landed in the totals, and re-landing the record's counts would
+                // just churn the totals over tokenizer normalization differences.
+                if (original.Cancelled)
+                {
+                    if (stats.PromptTokens.HasValue)
+                    {
+                        int delta = stats.PromptTokens.Value - original.PromptTokens;
+                        if (delta != 0) { TotalPromptTokens += delta; changed = true; }
+                    }
+                    if (stats.CompletionTokens.HasValue)
+                    {
+                        int delta = stats.CompletionTokens.Value - original.CompletionTokens;
+                        if (delta != 0) { TotalCompletionTokens += delta; changed = true; }
+                    }
+                    if (stats.ReasoningTokens.HasValue)
+                    {
+                        int delta = stats.ReasoningTokens.Value - original.ReasoningTokens;
+                        if (delta != 0) { TotalReasoningTokens += delta; changed = true; }
+                    }
+                    if (stats.CachedTokens.HasValue)
+                    {
+                        int delta = stats.CachedTokens.Value - original.CachedTokens;
+                        if (delta != 0) { TotalCachedTokens += delta; changed = true; }
+                    }
+                    // RecordUsage left the Last* gauge at the previous request's values (the stub's
+                    // zeros mean "unknown"); land the cancelled request's real context size now,
+                    // unless a newer request has taken the gauge since. The record carries no
+                    // cache-write count, so that line resets to 0 (unknown) rather than keeping the
+                    // previous request's writes next to this request's reads.
+                    if (ReferenceEquals(_lastUsage, original) && stats.PromptTokens.HasValue)
+                    {
+                        LastPromptTokens = stats.PromptTokens.Value;
+                        LastCachedTokens = stats.CachedTokens.HasValue ? stats.CachedTokens.Value : 0;
+                        LastCacheWriteTokens = 0;
+                        changed = true;
+                    }
                 }
             }
             return changed;

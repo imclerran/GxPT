@@ -125,6 +125,12 @@ So requests on cache-supported models carry `provider.order = [<cache-warm provi
 - Semantics note: OpenRouter normalizes usage to OpenAI conventions - `prompt_tokens` is the
   TOTAL prompt size and the cache counters are subsets of it (unlike Anthropic's native API,
   where `input_tokens` is the uncached remainder). Never add the counters to `prompt_tokens`.
+- **Cancelled streams** ride the same reconcile path: Stop kills curl before the usage-bearing
+  final chunk, so the client flushes a stub `ResponseUsage` (generation id + provider,
+  `Cancelled` flag, no counters, no cost) and the generation record supplies the billed truth -
+  including token counts, which `ReconcileUsage` lands only for cancelled requests. This is the
+  only correct accounting: providers without disconnect-cancellation (Bedrock, Google, ...) keep
+  generating server-side and bill the FULL response the stream never saw.
 - Stickiness is **confirmation-gated**: only a response demonstrating cache activity - a read
   (`cached_tokens > 0`) or a write (`cache_write_tokens > 0`) - sets or moves the preference.
   Merely serving proves nothing (a third-party host of an open-weights model may not cache at

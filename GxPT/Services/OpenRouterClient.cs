@@ -289,6 +289,14 @@ namespace GxPT
         // background thread. Null when nothing could be fetched.
         public GenerationStats FetchGenerationStats(string generationId)
         {
+            return FetchGenerationStats(generationId, true);
+        }
+
+        // waitForCacheDiscount: when false (non-caching models - reached for cancelled streams,
+        // whose cost/token truth lives only in this record), the retry loop stops as soon as
+        // total_cost materializes instead of holding out for a cache_discount that never comes.
+        public GenerationStats FetchGenerationStats(string generationId, bool waitForCacheDiscount)
+        {
             if (string.IsNullOrEmpty(generationId) || !IsConfigured) return null;
             string url = "https://openrouter.ai/api/v1/generation?id=" + Uri.EscapeDataString(generationId);
             // Field-measured: records materialize with variable latency clustered around 10-15s
@@ -306,7 +314,7 @@ namespace GxPT
                 GenerationStats s = ExtractGenerationStats(SafeParse(last.Body));
                 if (s == null) continue;
                 best = s;
-                if (s.CacheDiscount.HasValue) break;
+                if (waitForCacheDiscount ? s.CacheDiscount.HasValue : s.TotalCost.HasValue) break;
             }
             try
             {
@@ -315,7 +323,11 @@ namespace GxPT
                     Logger.Log("Usage", "generation " + generationId + ": total_cost="
                         + (best.TotalCost.HasValue ? best.TotalCost.Value.ToString() : "?")
                         + " cache_discount=" + (best.CacheDiscount.HasValue ? best.CacheDiscount.Value.ToString() : "?")
-                        + (string.IsNullOrEmpty(best.ProviderName) ? string.Empty : " provider=" + best.ProviderName));
+                        + (string.IsNullOrEmpty(best.ProviderName) ? string.Empty : " provider=" + best.ProviderName)
+                        + (best.Cancelled ? " cancelled=true prompt="
+                            + (best.PromptTokens.HasValue ? best.PromptTokens.Value.ToString() : "?")
+                            + " completion=" + (best.CompletionTokens.HasValue ? best.CompletionTokens.Value.ToString() : "?")
+                            : string.Empty));
                 }
                 else
                 {
@@ -338,8 +350,12 @@ namespace GxPT
         }
 
         // { "data": { "total_cost": 0.0585, "cache_discount": 0.0559, "provider_name": "Amazon
-        // Bedrock", ... } } -> billed cost, net cache savings (negative = write premium), and the
-        // serving provider. Null when the payload carries none of them.
+        // Bedrock", ... } } -> billed cost, net cache savings (negative = write premium), the
+        // serving provider, plus the record's token counts and cancelled flag (a cancelled stream
+        // never delivered its usage chunk, so this record is the only source of its counts).
+        // Token counts prefer the native_tokens_* fields - the tokenizer billing uses, matching
+        // what usage accounting streams - falling back to the normalized tokens_* fields. Null
+        // when the payload carries none of them.
         internal static GenerationStats ExtractGenerationStats(JObject root)
         {
             if (root == null) return null;
@@ -350,7 +366,14 @@ namespace GxPT
             s.CacheDiscount = AsDecimal(data["cache_discount"]);
             JToken pn = data["provider_name"];
             if (pn != null && pn.Type == JTokenType.String) s.ProviderName = (string)pn;
-            return (s.TotalCost.HasValue || s.CacheDiscount.HasValue || s.ProviderName != null) ? s : null;
+            s.PromptTokens = AsInt(data["native_tokens_prompt"]) ?? AsInt(data["tokens_prompt"]);
+            s.CompletionTokens = AsInt(data["native_tokens_completion"]) ?? AsInt(data["tokens_completion"]);
+            s.ReasoningTokens = AsInt(data["native_tokens_reasoning"]);
+            s.CachedTokens = AsInt(data["native_tokens_cached"]);
+            JToken cn = data["cancelled"];
+            if (cn != null && cn.Type == JTokenType.Boolean) s.Cancelled = (bool)cn;
+            return (s.TotalCost.HasValue || s.CacheDiscount.HasValue || s.ProviderName != null
+                || s.PromptTokens.HasValue || s.CompletionTokens.HasValue) ? s : null;
         }
 
         private static decimal? AsDecimal(JToken t)
@@ -358,6 +381,14 @@ namespace GxPT
             if (t == null) return null;
             if (t.Type != JTokenType.Float && t.Type != JTokenType.Integer) return null;
             try { return (decimal)t; }
+            catch { return null; }
+        }
+
+        private static int? AsInt(JToken t)
+        {
+            if (t == null) return null;
+            if (t.Type != JTokenType.Float && t.Type != JTokenType.Integer) return null;
+            try { return (int)t; }
             catch { return null; }
         }
 
@@ -426,16 +457,28 @@ namespace GxPT
             if (props == null) props = new ClientProperties();
             if (!props.Stream.HasValue) props.Stream = true;
             string body = BuildRequestBody(model, messages, tools, props);
-            StreamRawChunks(body, WrapWithProviderReport(props, onChunk), onError, cancel);
+            Action flushCancelled;
+            Action<ChatCompletionChunk> sink = WrapWithProviderReport(props, onChunk, out flushCancelled);
+            StreamRawChunks(body, sink, onError, cancel, flushCancelled);
         }
 
         // Decorates a chunk sink to report (once, on the final usage-bearing chunk) the response's
         // usage accounting via props.ResponseUsageCallback. The provider name arrives on the first
         // chunk but the usage counters only on the last, so the report waits for usage. Identity
         // when no callback is registered.
-        private static Action<ChatCompletionChunk> WrapWithProviderReport(
-            ClientProperties props, Action<ChatCompletionChunk> onChunk)
+        //
+        // flushCancelled covers the stop path: cancellation kills curl, so the usage-bearing final
+        // chunk never arrives and the report above never fires - but every chunk (from the first)
+        // carries the generation id, which is all the caller needs to fetch the billed truth from
+        // the generation record afterwards. Invoked on a cancelled stream, it reports a stub
+        // ResponseUsage (id + provider, Cancelled flag, no counters, no cost) exactly once; a no-op
+        // when the usage report already fired (cancel raced the final chunk) or no chunk ever
+        // arrived (no id exists client-side, so there is nothing to fetch). Null when no callback
+        // is registered. Internal for tests.
+        internal static Action<ChatCompletionChunk> WrapWithProviderReport(
+            ClientProperties props, Action<ChatCompletionChunk> onChunk, out Action flushCancelled)
         {
+            flushCancelled = null;
             if (props == null || props.ResponseUsageCallback == null) return onChunk;
             Action<ResponseUsage> report = props.ResponseUsageCallback;
             bool[] reported = new bool[1];      // closure-mutable state (C# 3.5: no local functions)
@@ -443,6 +486,18 @@ namespace GxPT
             string[] genId = new string[1];
             // cache_discount may ride a different chunk than usage; remember the latest seen.
             decimal?[] discount = new decimal?[1];
+            flushCancelled = delegate
+            {
+                if (reported[0] || string.IsNullOrEmpty(genId[0])) return;
+                reported[0] = true;
+                ResponseUsage stub = new ResponseUsage();
+                stub.Id = genId[0];
+                stub.Provider = provider[0];
+                stub.CacheDiscount = discount[0];
+                stub.Cancelled = true;
+                try { report(stub); }
+                catch { }
+            };
             return delegate(ChatCompletionChunk chunk)
             {
                 if (chunk != null)
@@ -497,20 +552,21 @@ namespace GxPT
             string body = BuildRequestBody(model, messages, null, props);
 
             bool failed = false;
-            StreamRawChunks(body,
-                WrapWithProviderReport(props, delegate(ChatCompletionChunk chunk)
+            Action flushCancelled;
+            Action<ChatCompletionChunk> sink = WrapWithProviderReport(props, delegate(ChatCompletionChunk chunk)
+            {
+                if (chunk != null && chunk.choices != null)
                 {
-                    if (chunk != null && chunk.choices != null)
+                    foreach (var ch in chunk.choices)
                     {
-                        foreach (var ch in chunk.choices)
-                        {
-                            string content = (ch != null && ch.delta != null) ? ch.delta.content : null;
-                            if (!string.IsNullOrEmpty(content) && onDelta != null) onDelta(content);
-                        }
+                        string content = (ch != null && ch.delta != null) ? ch.delta.content : null;
+                        if (!string.IsNullOrEmpty(content) && onDelta != null) onDelta(content);
                     }
-                }),
+                }
+            }, out flushCancelled);
+            StreamRawChunks(body, sink,
                 delegate(string err) { failed = true; if (onError != null) onError(err); },
-                cancel);
+                cancel, flushCancelled);
 
             // A user-initiated stop returns from StreamRawChunks without an error (the connection was
             // dropped on purpose). onDone still fires so the caller finalizes whatever text streamed;
@@ -524,6 +580,14 @@ namespace GxPT
         // process is registered so a Stop click can kill it; a kill is reported as a clean stop (no
         // onError) rather than a request failure.
         public void StreamRawChunks(string body, Action<ChatCompletionChunk> onChunk, Action<string> onError, RequestCancellation cancel)
+        {
+            StreamRawChunks(body, onChunk, onError, cancel, null);
+        }
+
+        // cancelledFlush (optional, see WrapWithProviderReport) runs on the user-stop paths -
+        // killing curl drops the connection before the usage-bearing final chunk, so this is the
+        // only chance to surface the generation id for post-hoc billed-cost reconciliation.
+        public void StreamRawChunks(string body, Action<ChatCompletionChunk> onChunk, Action<string> onError, RequestCancellation cancel, Action cancelledFlush)
         {
             List<string> tempFiles;
             string args = BuildCurlArgs(body, out tempFiles);
@@ -637,6 +701,9 @@ namespace GxPT
                 {
                     try { Logger.Log("Stream", "stream cancelled by user (chunks=" + chunkCount + ")"); }
                     catch { }
+                    if (cancelledFlush != null)
+                        try { cancelledFlush(); }
+                        catch { }
                     cancel.Detach();
                     CleanupTempFiles(tempFiles);
                     return;
@@ -682,7 +749,13 @@ namespace GxPT
                 CleanupTempFiles(tempFiles);
                 // A kill mid-read can surface as an IOException here; if the user asked to stop, that's
                 // expected - swallow it rather than reporting a request failure.
-                if (cancel != null && cancel.IsCancelled) return;
+                if (cancel != null && cancel.IsCancelled)
+                {
+                    if (cancelledFlush != null)
+                        try { cancelledFlush(); }
+                        catch { }
+                    return;
+                }
                 if (onError != null) onError(ex.Message);
             }
         }
@@ -853,11 +926,19 @@ namespace GxPT
 
     // The slice of OpenRouter's generation record (GET /api/v1/generation) used for usage
     // reconciliation - the post-hoc, billed truth that the stream-time estimate converges to.
+    // For a cancelled stream this record is the ONLY accounting that exists: providers without
+    // disconnect-cancellation (Bedrock, Google, ...) keep generating server-side and bill the
+    // FULL response, so nothing observed on the wire before the kill bounds the real cost.
     public sealed class GenerationStats
     {
         public decimal? TotalCost;     // billed credits (post cache discount / write premium)
         public decimal? CacheDiscount; // net credits saved (+) / extra paid (-) by caching
         public string ProviderName;    // serving endpoint; fallback when the stream omitted it
+        public int? PromptTokens;      // billed prompt tokens (native count; normalized fallback)
+        public int? CompletionTokens;  // billed output tokens (native count; normalized fallback)
+        public int? ReasoningTokens;   // of CompletionTokens, how many were reasoning
+        public int? CachedTokens;      // of PromptTokens, how many were read from cache
+        public bool Cancelled;         // the record's own cancelled flag (diagnostic)
     }
 
     // One streamed response's usage accounting, assembled from OpenRouter's final usage-bearing
@@ -885,5 +966,10 @@ namespace GxPT
         public int CacheWriteTokens;   // of PromptTokens, how many were written to a new cache entry
         public decimal? Cost;          // credits charged for this request; null when not reported
         public decimal? CacheDiscount; // net credits saved (+) / extra paid (-) by caching; null when not reported
+        // True for the stub reported when the user cancelled the stream before its usage-bearing
+        // final chunk: only Id/Provider are meaningful, every counter is zero (unknown, NOT "none")
+        // and Cost is null. Consumers must not treat the zeros as data - the billed truth arrives
+        // via FetchGenerationStats(Id) and lands through Conversation.ReconcileUsage.
+        public bool Cancelled;
     }
 }
