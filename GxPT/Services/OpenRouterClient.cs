@@ -204,7 +204,9 @@ namespace GxPT
                 || m.StartsWith("openai/", StringComparison.OrdinalIgnoreCase)    // automatic (>=1024 tokens)
                 || m.StartsWith("deepseek/", StringComparison.OrdinalIgnoreCase)  // automatic
                 || m.StartsWith("x-ai/", StringComparison.OrdinalIgnoreCase)      // automatic (Grok)
-                || m.StartsWith("qwen/", StringComparison.OrdinalIgnoreCase);     // automatic (context cache)
+                || m.StartsWith("qwen/", StringComparison.OrdinalIgnoreCase)      // automatic (context cache)
+                || m.StartsWith("minimax/", StringComparison.OrdinalIgnoreCase)   // automatic
+                || m.StartsWith("moonshotai/", StringComparison.OrdinalIgnoreCase); // automatic (Kimi)
         }
 
         // "~"-prefixed model aliases (e.g. "~anthropic/claude-sonnet-latest") resolve to the same

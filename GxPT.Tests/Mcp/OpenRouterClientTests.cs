@@ -214,6 +214,8 @@ namespace GxPT.Tests.Mcp
             Assert.True(OpenRouterClient.ModelSupportsPromptCaching("openai/gpt-4o"));
             Assert.True(OpenRouterClient.ModelSupportsPromptCaching("deepseek/deepseek-chat"));
             Assert.True(OpenRouterClient.ModelSupportsPromptCaching("qwen/qwen3-coder"));
+            Assert.True(OpenRouterClient.ModelSupportsPromptCaching("minimax/minimax-m2"));
+            Assert.True(OpenRouterClient.ModelSupportsPromptCaching("moonshotai/kimi-k2"));
             Assert.True(OpenRouterClient.ModelSupportsPromptCaching("~anthropic/claude-sonnet-latest"));
             Assert.False(OpenRouterClient.ModelSupportsPromptCaching("mistralai/mistral-large"));
         }
