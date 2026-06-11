@@ -160,6 +160,60 @@ namespace GxPT
                     _previewLabel.Text = "Diff:";
                     handled = true;
                 }
+                else if (string.Equals(req.FunctionName, "skills__create_skill", StringComparison.Ordinal)
+                      || string.Equals(req.FunctionName, "skills__update_skill", StringComparison.Ordinal))
+                {
+                    // Show the skill's authored fields (name/description/instructions) as readable
+                    // markdown rather than raw JSON. update_skill carries only the fields being changed.
+                    string slug = req.Arguments.Value<string>("slug") ?? string.Empty;
+                    string text = BuildSkillFields(req.Arguments);
+                    _diffPanel.SetContent(slug, text, "markdown", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                    _previewLabel.Text = string.Equals(req.FunctionName, "skills__create_skill", StringComparison.Ordinal)
+                        ? "Create skill:" : "Update skill:";
+                    handled = true;
+                }
+                else if (string.Equals(req.FunctionName, "skills__write_skill_file", StringComparison.Ordinal))
+                {
+                    // Mirror files__write: the file content, highlighted by its extension.
+                    string slug = req.Arguments.Value<string>("slug") ?? string.Empty;
+                    string rel = req.Arguments.Value<string>("relpath") ?? string.Empty;
+                    string content = req.Arguments.Value<string>("content") ?? string.Empty;
+                    string lang = (rel.Length > 0 ? SyntaxHighlighter.GetLanguageForFileName(rel) : null) ?? "text";
+                    _diffPanel.SetContent(SkillFileTarget(slug, rel), content, lang, dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                    _previewLabel.Text = "Write skill file:";
+                    handled = true;
+                }
+                else if (string.Equals(req.FunctionName, "skills__run_skill_script", StringComparison.Ordinal))
+                {
+                    // Mirror command__run: the script and its literal arguments.
+                    string rel = req.Arguments.Value<string>("relpath") ?? string.Empty;
+                    string scriptArgs = PathsOf(req.Arguments, "args");
+                    string text = (rel + (scriptArgs.Length > 0 ? " " + scriptArgs : "")).Trim();
+                    if (text.Length > 0)
+                    {
+                        _diffPanel.SetContent(string.Empty, text, "batch", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                        _previewLabel.Text = "Run skill script:";
+                        handled = true;
+                    }
+                }
+                else if (string.Equals(req.FunctionName, "skills__delete_skill_file", StringComparison.Ordinal))
+                {
+                    string slug = req.Arguments.Value<string>("slug") ?? string.Empty;
+                    string rel = req.Arguments.Value<string>("relpath") ?? string.Empty;
+                    _diffPanel.SetContent(string.Empty, SkillFileTarget(slug, rel), "text", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                    _previewLabel.Text = "Delete skill file:";
+                    handled = true;
+                }
+                else if (string.Equals(req.FunctionName, "skills__delete_skill", StringComparison.Ordinal))
+                {
+                    string slug = req.Arguments.Value<string>("slug") ?? string.Empty;
+                    if (slug.Length > 0)
+                    {
+                        _diffPanel.SetContent(string.Empty, slug, "text", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                        _previewLabel.Text = "Delete skill:";
+                        handled = true;
+                    }
+                }
                 else if (string.Equals(req.FunctionName, "command__run", StringComparison.Ordinal))
                 {
                     string cmd = req.Arguments.Value<string>("command") ?? string.Empty;
@@ -185,7 +239,9 @@ namespace GxPT
                     if (msg.Trim().Length > 0)
                     {
                         _diffPanel.SetContent(string.Empty, msg, "text", dark, _monoFont, tc.CodeBack, tc.UiForeground);
-                        _previewLabel.Text = "Commit message:";
+                        // Note when commit will stage everything first (git add -A), so it isn't a surprise.
+                        _previewLabel.Text = Bv(req.Arguments, "all")
+                            ? "Commit message (staging all changes):" : "Commit message:";
                         handled = true;
                     }
                 }
@@ -242,6 +298,61 @@ namespace GxPT
                         _previewLabel.Text = "Git command:";
                         handled = true;
                     }
+                }
+                else if (req.FunctionName != null && req.FunctionName.StartsWith("msbuild__build_solution_", StringComparison.Ordinal))
+                {
+                    // devenv (whole-solution) build: show the equivalent command line. The IDE year is the
+                    // tool-name suffix (build_solution_2022 -> 2022). Checked before the MSBuild prefix
+                    // below since "build_solution_*" also starts with "build_".
+                    string year = req.FunctionName.Substring("msbuild__build_solution_".Length);
+                    _diffPanel.SetContent("Visual Studio " + year, DevenvCommandPreview(req.Arguments), "batch", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                    _previewLabel.Text = "Build (Visual Studio):";
+                    handled = true;
+                }
+                else if (req.FunctionName != null && req.FunctionName.StartsWith("msbuild__build_", StringComparison.Ordinal))
+                {
+                    // MSBuild build: the equivalent command line. The engine version is the tool-name
+                    // suffix (build_17_0 -> 17.0); MSBuild can run arbitrary build logic, so this is gated.
+                    string ver = req.FunctionName.Substring("msbuild__build_".Length).Replace('_', '.');
+                    string bitness = req.Arguments.Value<string>("bitness") ?? string.Empty;
+                    string head = "MSBuild " + ver + (bitness.Length > 0 ? " (" + bitness + ")" : string.Empty);
+                    _diffPanel.SetContent(head, MsBuildCommandPreview(req.Arguments), "batch", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                    _previewLabel.Text = "Build (MSBuild):";
+                    handled = true;
+                }
+                else if (string.Equals(req.FunctionName, "memory__remember", StringComparison.Ordinal)
+                      || string.Equals(req.FunctionName, "memory__update_memory", StringComparison.Ordinal))
+                {
+                    // Show the memory's summary (+ optional detail) as readable markdown rather than JSON.
+                    // update_memory carries only the fields being changed.
+                    string name = req.Arguments.Value<string>("name") ?? string.Empty;
+                    _diffPanel.SetContent(name, MemoryBody(req.Arguments), "markdown", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                    _previewLabel.Text = string.Equals(req.FunctionName, "memory__remember", StringComparison.Ordinal)
+                        ? "Create memory:" : "Update memory:";
+                    handled = true;
+                }
+                else if (string.Equals(req.FunctionName, "memory__forget", StringComparison.Ordinal))
+                {
+                    string name = req.Arguments.Value<string>("name") ?? string.Empty;
+                    if (name.Length > 0)
+                    {
+                        _diffPanel.SetContent(string.Empty, name, "text", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                        _previewLabel.Text = "Forget memory:";
+                        handled = true;
+                    }
+                }
+                else if (string.Equals(req.FunctionName, "memory__consolidate", StringComparison.Ordinal))
+                {
+                    // Which memories are merged away (and into what), then the new entry's summary/detail.
+                    string newName = req.Arguments.Value<string>("new_name") ?? string.Empty;
+                    var sb2 = new System.Text.StringBuilder();
+                    string sources = JoinArr(req.Arguments, "names", ", ");
+                    if (sources.Length > 0) sb2.Append("Merging: ").Append(sources);
+                    string rest = MemoryBody(req.Arguments);
+                    if (rest.Length > 0) { if (sb2.Length > 0) sb2.Append("\r\n\r\n"); sb2.Append(rest); }
+                    _diffPanel.SetContent(newName, sb2.ToString(), "markdown", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                    _previewLabel.Text = "Consolidate memories:";
+                    handled = true;
                 }
             }
 
@@ -518,6 +629,120 @@ namespace GxPT
             catch { return string.Empty; }
         }
 
+        // "slug/relpath" for a skill-file approval header, tolerant of a missing part.
+        private static string SkillFileTarget(string slug, string rel)
+        {
+            if (slug.Length > 0 && rel.Length > 0) return slug + "/" + rel;
+            if (rel.Length > 0) return rel;
+            return slug.Length > 0 ? slug : "(skill file)";
+        }
+
+        // Readable "Name:/Description:" preamble + instructions body for create/update_skill approvals,
+        // shown as markdown instead of raw JSON. Only non-empty fields appear (update_skill sends just
+        // the fields being changed).
+        private static string BuildSkillFields(Newtonsoft.Json.Linq.JObject a)
+        {
+            string name = a.Value<string>("name") ?? string.Empty;
+            string desc = a.Value<string>("description") ?? string.Empty;
+            string body = a.Value<string>("body") ?? string.Empty;
+            var sb = new System.Text.StringBuilder();
+            if (name.Length > 0) sb.Append("Name: ").Append(name);
+            if (desc.Length > 0) { if (sb.Length > 0) sb.Append("\r\n"); sb.Append("Description: ").Append(desc); }
+            if (body.Length > 0) { if (sb.Length > 0) sb.Append("\r\n\r\n"); sb.Append(body); }
+            return sb.ToString();
+        }
+
+        // The memory's one-line summary, then its optional detail note, for remember/update/consolidate
+        // approvals — shown as markdown instead of raw JSON. Only non-empty fields appear (update sends
+        // just the fields being changed).
+        private static string MemoryBody(Newtonsoft.Json.Linq.JObject a)
+        {
+            string summary = Sv(a, "summary");
+            string detail = Sv(a, "detail");
+            var sb = new System.Text.StringBuilder();
+            if (summary.Length > 0) sb.Append(summary);
+            if (detail.Length > 0) { if (sb.Length > 0) sb.Append("\r\n\r\n"); sb.Append(detail); }
+            return sb.ToString();
+        }
+
+        // "msbuild <project> /t:... /p:Configuration=... ..." for an msbuild__build_<ver> approval,
+        // mirroring the switches the server actually passes (MsBuildTools.BuildArgs). Routine defaults
+        // (/v:minimal, /nologo) are omitted so the risk-bearing parts (project, targets, properties)
+        // stand out.
+        private static string MsBuildCommandPreview(Newtonsoft.Json.Linq.JObject a)
+        {
+            var sb = new System.Text.StringBuilder("msbuild");
+            string project = Sv(a, "project");
+            sb.Append(' ').Append(project.Length > 0 ? project : "<lone solution/project in workdir>");
+
+            string targets = JoinArr(a, "targets", ";");
+            if (targets.Length > 0) sb.Append(" /t:").Append(targets);
+
+            string config = Sv(a, "configuration");
+            if (config.Length > 0) sb.Append(" /p:Configuration=").Append(config);
+            string platform = Sv(a, "platform");
+            if (platform.Length > 0) sb.Append(" /p:Platform=").Append(platform);
+
+            var props = a["properties"] as Newtonsoft.Json.Linq.JObject;
+            if (props != null)
+                foreach (var kv in props)
+                {
+                    if (string.IsNullOrEmpty(kv.Key)) continue;
+                    sb.Append(" /p:").Append(kv.Key).Append('=').Append(kv.Value != null ? kv.Value.ToString() : string.Empty);
+                }
+
+            string verbosity = Sv(a, "verbosity");
+            if (verbosity.Length > 0) sb.Append(" /v:").Append(verbosity);
+            return sb.ToString();
+        }
+
+        // "devenv <solution> /Build \"Config|Platform\" ..." for an msbuild__build_solution_<year>
+        // approval (mirrors MsBuildTools.BuildDevenvArgs).
+        private static string DevenvCommandPreview(Newtonsoft.Json.Linq.JObject a)
+        {
+            var sb = new System.Text.StringBuilder("devenv");
+            string solution = Sv(a, "solution");
+            sb.Append(' ').Append(solution.Length > 0 ? solution : "<lone .sln in workdir>");
+            sb.Append(' ').Append(DevenvActionSwitch(Sv(a, "action")));
+
+            string config = Sv(a, "configuration"); if (config.Length == 0) config = "Release";
+            string platform = Sv(a, "platform");
+            sb.Append(" \"").Append(platform.Length > 0 ? config + "|" + platform : config).Append('"');
+
+            string project = Sv(a, "project");
+            if (project.Length > 0) sb.Append(" /Project ").Append(project);
+            string projectConfig = Sv(a, "project_config");
+            if (projectConfig.Length > 0) sb.Append(" /ProjectConfig ").Append(projectConfig);
+            return sb.ToString();
+        }
+
+        private static string DevenvActionSwitch(string action)
+        {
+            if (string.IsNullOrEmpty(action)) return "/Build";
+            switch (action.ToLowerInvariant())
+            {
+                case "rebuild": return "/Rebuild";
+                case "clean": return "/Clean";
+                case "deploy": return "/Deploy";
+                default: return "/Build";
+            }
+        }
+
+        // Joins a string[] arg with the given separator (also accepts a lone string). Empty when absent.
+        private static string JoinArr(Newtonsoft.Json.Linq.JObject a, string name, string sep)
+        {
+            var arr = a[name] as Newtonsoft.Json.Linq.JArray;
+            if (arr == null) { string s = a.Value<string>(name); return s ?? string.Empty; }
+            var sb = new System.Text.StringBuilder();
+            foreach (var t in arr)
+            {
+                string s = (string)t; if (string.IsNullOrEmpty(s)) continue;
+                if (sb.Length > 0) sb.Append(sep);
+                sb.Append(s);
+            }
+            return sb.ToString();
+        }
+
         // A readable "git <subcommand> ..." line for the approval preview of the extended git tools.
         // Returns "" for tools handled elsewhere (commit/push) or unknown ones.
         private static string GitOpSummary(ApprovalRequest req)
@@ -539,8 +764,16 @@ namespace GxPT
                 case "git__branch":
                 {
                     string act = Sv(a, "action"); if (act.Length == 0) act = "list";
-                    sb.Append("branch ").Append(act); Append(sb, Sv(a, "name"));
-                    if (Sv(a, "new_name").Length > 0) sb.Append(" -> ").Append(Sv(a, "new_name")); break;
+                    string nm = Sv(a, "name");
+                    switch (act.ToLowerInvariant())
+                    {
+                        // Real git syntax so a force-delete (-D) of unmerged work is visible before approving.
+                        case "create": sb.Append("branch"); if (Bv(a, "force")) sb.Append(" -f"); Append(sb, nm); break;
+                        case "delete": sb.Append(Bv(a, "force") ? "branch -D" : "branch -d"); Append(sb, nm); break;
+                        case "rename": sb.Append("branch -m"); Append(sb, nm); Append(sb, Sv(a, "new_name")); break;
+                        default: sb.Append("branch"); if (Bv(a, "all")) sb.Append(" -a"); break;
+                    }
+                    break;
                 }
                 case "git__merge":
                     sb.Append("merge"); if (Bv(a, "no_ff")) sb.Append(" --no-ff"); Append(sb, Sv(a, "branch")); break;
@@ -568,7 +801,16 @@ namespace GxPT
                 {
                     string act = Sv(a, "action"); if (act.Length == 0) act = "push";
                     sb.Append("stash ").Append(act);
-                    if (Sv(a, "message").Length > 0) sb.Append(" -m ").Append(Sv(a, "message"));
+                    if (act == "push")
+                    {
+                        if (Sv(a, "message").Length > 0) sb.Append(" -m ").Append(Sv(a, "message"));
+                    }
+                    else if (act == "pop" || act == "apply" || act == "drop")
+                    {
+                        // Show the targeted entry (stash@{N}) so it's clear which stash is affected.
+                        string idx = Sv(a, "index");
+                        if (idx.Length > 0) sb.Append(" stash@{").Append(idx).Append('}');
+                    }
                     break;
                 }
                 default: return string.Empty;

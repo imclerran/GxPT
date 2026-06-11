@@ -4,16 +4,16 @@ namespace GxPT
 {
     // Shared formatting for tool activity shown in the transcript, so the live stream and the
     // reloaded view render identically. The qualified function name ("web__search") is displayed
-    // as "web / search" — this also avoids the double-underscore being mangled by markdown emphasis.
+    // as "web: search" — this also avoids the double-underscore being mangled by markdown emphasis.
     internal static class McpMarkers
     {
         public static string Display(string functionName)
         {
-            return string.IsNullOrEmpty(functionName) ? string.Empty : functionName.Replace("__", " / ");
+            return string.IsNullOrEmpty(functionName) ? string.Empty : functionName.Replace("__", ": ");
         }
 
         // A compact "using <tool>" marker, plain (not italic) for consistency with the collapsible
-        // tool records. Display() turns the qualified name into "web / search" with no underscores.
+        // tool records. Display() turns the qualified name into "web: search" with no underscores.
         public static string Call(string functionName)
         {
             return "using " + Display(functionName);
