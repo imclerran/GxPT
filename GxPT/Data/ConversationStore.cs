@@ -110,6 +110,23 @@ namespace GxPT
                 // Omit an empty map so untouched conversations stay clean (NullValueHandling.Ignore).
                 SkillOverrides = (convo.SkillOverrides != null && convo.SkillOverrides.Count > 0)
                     ? convo.SkillOverrides : null,
+                // Revealed-tool list (prompt caching): persisted so a reopened conversation resumes
+                // with the same tools array instead of silently starting cold. Omitted when empty.
+                RevealedTools = (convo.RevealedTools != null && convo.RevealedTools.Count > 0)
+                    ? convo.RevealedTools : null,
+                CacheWarmProvider = string.IsNullOrEmpty(convo.CacheWarmProvider)
+                    ? null : convo.CacheWarmProvider,
+                // Usage accumulators (status bar): nullable in the DTO so untouched/legacy
+                // conversations stay clean (NullValueHandling.Ignore drops the nulls).
+                TotalCost = convo.TotalCost != 0 ? (decimal?)convo.TotalCost : null,
+                TotalCacheDiscount = convo.TotalCacheDiscount != 0 ? (decimal?)convo.TotalCacheDiscount : null,
+                TotalPromptTokens = convo.TotalPromptTokens != 0 ? (long?)convo.TotalPromptTokens : null,
+                TotalCachedTokens = convo.TotalCachedTokens != 0 ? (long?)convo.TotalCachedTokens : null,
+                TotalCompletionTokens = convo.TotalCompletionTokens != 0 ? (long?)convo.TotalCompletionTokens : null,
+                TotalReasoningTokens = convo.TotalReasoningTokens != 0 ? (long?)convo.TotalReasoningTokens : null,
+                LastPromptTokens = convo.LastPromptTokens != 0 ? (int?)convo.LastPromptTokens : null,
+                LastCachedTokens = convo.LastCachedTokens != 0 ? (int?)convo.LastCachedTokens : null,
+                LastCacheWriteTokens = convo.LastCacheWriteTokens != 0 ? (int?)convo.LastCacheWriteTokens : null,
                 LastUpdated = convo.LastUpdated,
                 Messages = convo.History.Select(m => ToMessageDto(m)).ToList()
             };
@@ -179,6 +196,20 @@ namespace GxPT
                 SkillOverrides = dto.SkillOverrides != null
                     ? new Dictionary<string, bool>(dto.SkillOverrides, StringComparer.OrdinalIgnoreCase)
                     : new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase),
+                // Absent in older files -> empty list (nothing revealed yet).
+                RevealedTools = dto.RevealedTools != null
+                    ? new List<string>(dto.RevealedTools) : new List<string>(),
+                CacheWarmProvider = dto.CacheWarmProvider,
+                // Absent in older files -> zeroes (no usage recorded yet).
+                TotalCost = dto.TotalCost.HasValue ? dto.TotalCost.Value : 0,
+                TotalCacheDiscount = dto.TotalCacheDiscount.HasValue ? dto.TotalCacheDiscount.Value : 0,
+                TotalPromptTokens = dto.TotalPromptTokens.HasValue ? dto.TotalPromptTokens.Value : 0,
+                TotalCachedTokens = dto.TotalCachedTokens.HasValue ? dto.TotalCachedTokens.Value : 0,
+                TotalCompletionTokens = dto.TotalCompletionTokens.HasValue ? dto.TotalCompletionTokens.Value : 0,
+                TotalReasoningTokens = dto.TotalReasoningTokens.HasValue ? dto.TotalReasoningTokens.Value : 0,
+                LastPromptTokens = dto.LastPromptTokens.HasValue ? dto.LastPromptTokens.Value : 0,
+                LastCachedTokens = dto.LastCachedTokens.HasValue ? dto.LastCachedTokens.Value : 0,
+                LastCacheWriteTokens = dto.LastCacheWriteTokens.HasValue ? dto.LastCacheWriteTokens.Value : 0,
                 LastUpdated = dto.LastUpdated == default(DateTime) && !string.IsNullOrEmpty(path)
                     ? File.GetLastWriteTimeUtc(path)
                     : (dto.LastUpdated == default(DateTime) ? DateTime.Now : dto.LastUpdated)
@@ -346,6 +377,21 @@ namespace GxPT
             // from JSON when null/empty via NullValueHandling.Ignore.
             public bool? SkillsFeatureOff { get; set; }
             public Dictionary<string, bool> SkillOverrides { get; set; }
+            // Revealed MCP tool names (prompt caching; null/absent in older files -> none revealed).
+            public List<string> RevealedTools { get; set; }
+            // Sticky cache-routing provider: the endpoint that last demonstrated a cache hit
+            // (null/absent in older files -> none observed yet).
+            public string CacheWarmProvider { get; set; }
+            // Usage accumulators (status bar); null/absent in older files -> zero.
+            public decimal? TotalCost { get; set; }
+            public decimal? TotalCacheDiscount { get; set; }
+            public long? TotalPromptTokens { get; set; }
+            public long? TotalCachedTokens { get; set; }
+            public long? TotalCompletionTokens { get; set; }
+            public long? TotalReasoningTokens { get; set; }
+            public int? LastPromptTokens { get; set; }
+            public int? LastCachedTokens { get; set; }
+            public int? LastCacheWriteTokens { get; set; }
             public DateTime LastUpdated { get; set; }
             public List<MessageDto> Messages { get; set; }
         }

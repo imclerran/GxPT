@@ -49,6 +49,7 @@
             this.miPreviousTab = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripSeparator6 = new System.Windows.Forms.ToolStripSeparator();
             this.miDarkMode = new System.Windows.Forms.ToolStripMenuItem();
+            this.miStatusBar = new System.Windows.Forms.ToolStripMenuItem();
             this.miHelp = new System.Windows.Forms.ToolStripMenuItem();
             this.miApiKeysHelp = new System.Windows.Forms.ToolStripMenuItem();
             this.miPrivacyHelp = new System.Windows.Forms.ToolStripMenuItem();
@@ -74,7 +75,16 @@
             this.tabPage1 = new System.Windows.Forms.TabPage();
             this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.splitContainer1 = new System.Windows.Forms.SplitContainer();
+            this.ssMain = new System.Windows.Forms.StatusStrip();
+            this.tslSpring = new System.Windows.Forms.ToolStripStatusLabel();
+            this.tslContext = new System.Windows.Forms.ToolStripStatusLabel();
+            this.tslContextValue = new System.Windows.Forms.ToolStripStatusLabel();
+            this.tslCost = new System.Windows.Forms.ToolStripStatusLabel();
+            this.tslCostValue = new System.Windows.Forms.ToolStripStatusLabel();
+            this.tslSaved = new System.Windows.Forms.ToolStripStatusLabel();
+            this.tslSavedValue = new System.Windows.Forms.ToolStripStatusLabel();
             this.msMain.SuspendLayout();
+            this.ssMain.SuspendLayout();
             this.pnlInput.SuspendLayout();
             this.pnlInputRight.SuspendLayout();
             this.pnlButtonsFill.SuspendLayout();
@@ -200,7 +210,8 @@
             this.miNextTab,
             this.miPreviousTab,
             this.toolStripSeparator6,
-            this.miDarkMode});
+            this.miDarkMode,
+            this.miStatusBar});
             this.miView.Name = "miView";
             this.miView.Size = new System.Drawing.Size(44, 20);
             this.miView.Text = "&View";
@@ -248,7 +259,16 @@
             this.miDarkMode.Size = new System.Drawing.Size(228, 22);
             this.miDarkMode.Text = "&Dark Mode";
             this.miDarkMode.Click += new System.EventHandler(this.miDarkMode_Click);
-            // 
+            //
+            // miStatusBar
+            //
+            this.miStatusBar.Checked = true;
+            this.miStatusBar.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.miStatusBar.Name = "miStatusBar";
+            this.miStatusBar.Size = new System.Drawing.Size(228, 22);
+            this.miStatusBar.Text = "&Status Bar";
+            this.miStatusBar.Click += new System.EventHandler(this.miStatusBar_Click);
+            //
             // miHelp
             // 
             this.miHelp.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
@@ -519,14 +539,77 @@
             this.splitContainer1.SplitterDistance = 6;
             this.splitContainer1.SplitterWidth = 1;
             this.splitContainer1.TabIndex = 1;
-            // 
+            //
+            // ssMain
+            //
+            this.ssMain.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.tslSpring,
+            this.tslContext,
+            this.tslContextValue,
+            this.tslCost,
+            this.tslCostValue,
+            this.tslSaved,
+            this.tslSavedValue});
+            this.ssMain.Location = new System.Drawing.Point(0, 744);
+            this.ssMain.Name = "ssMain";
+            this.ssMain.ShowItemToolTips = true;
+            this.ssMain.Size = new System.Drawing.Size(892, 22);
+            this.ssMain.SizingGrip = false;
+            this.ssMain.TabIndex = 3;
+            //
+            // tslSpring
+            //
+            this.tslSpring.Name = "tslSpring";
+            this.tslSpring.Size = new System.Drawing.Size(700, 17);
+            this.tslSpring.Spring = true;
+            //
+            // tslContext
+            //
+            this.tslContext.Name = "tslContext";
+            this.tslContext.Size = new System.Drawing.Size(0, 17);
+            //
+            // tslContextValue
+            //
+            this.tslContextValue.Margin = new System.Windows.Forms.Padding(-2, 3, 0, 2);
+            this.tslContextValue.Name = "tslContextValue";
+            this.tslContextValue.Size = new System.Drawing.Size(0, 17);
+            //
+            // tslCost
+            //
+            this.tslCost.BorderSides = System.Windows.Forms.ToolStripStatusLabelBorderSides.Left;
+            this.tslCost.Margin = new System.Windows.Forms.Padding(5, 3, 0, 2);
+            this.tslCost.Name = "tslCost";
+            this.tslCost.Padding = new System.Windows.Forms.Padding(5, 0, 0, 0);
+            this.tslCost.Size = new System.Drawing.Size(0, 17);
+            //
+            // tslCostValue
+            //
+            this.tslCostValue.Margin = new System.Windows.Forms.Padding(-2, 3, 0, 2);
+            this.tslCostValue.Name = "tslCostValue";
+            this.tslCostValue.Size = new System.Drawing.Size(0, 17);
+            //
+            // tslSaved
+            //
+            this.tslSaved.BorderSides = System.Windows.Forms.ToolStripStatusLabelBorderSides.Left;
+            this.tslSaved.Margin = new System.Windows.Forms.Padding(5, 3, 0, 2);
+            this.tslSaved.Name = "tslSaved";
+            this.tslSaved.Padding = new System.Windows.Forms.Padding(5, 0, 0, 0);
+            this.tslSaved.Size = new System.Drawing.Size(0, 17);
+            //
+            // tslSavedValue
+            //
+            this.tslSavedValue.Margin = new System.Windows.Forms.Padding(-2, 3, 0, 2);
+            this.tslSavedValue.Name = "tslSavedValue";
+            this.tslSavedValue.Size = new System.Drawing.Size(0, 17);
+            //
             // MainForm
-            // 
+            //
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(892, 766);
             this.Controls.Add(this.splitContainer1);
             this.Controls.Add(this.msMain);
+            this.Controls.Add(this.ssMain);
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.MainMenuStrip = this.msMain;
             this.Name = "MainForm";
@@ -534,6 +617,8 @@
             this.Text = "GxPT - New Conversation";
             this.msMain.ResumeLayout(false);
             this.msMain.PerformLayout();
+            this.ssMain.ResumeLayout(false);
+            this.ssMain.PerformLayout();
             this.pnlInput.ResumeLayout(false);
             this.pnlInput.PerformLayout();
             this.pnlInputRight.ResumeLayout(false);
@@ -598,6 +683,15 @@
         private System.Windows.Forms.Panel pnlButtons;
         private System.Windows.Forms.FlowLayoutPanel pnlAttachmentsBanner;
         private System.Windows.Forms.ToolStripMenuItem miDarkMode;
+        private System.Windows.Forms.ToolStripMenuItem miStatusBar;
+        private System.Windows.Forms.StatusStrip ssMain;
+        private System.Windows.Forms.ToolStripStatusLabel tslSpring;
+        private System.Windows.Forms.ToolStripStatusLabel tslContext;
+        private System.Windows.Forms.ToolStripStatusLabel tslCost;
+        private System.Windows.Forms.ToolStripStatusLabel tslContextValue;
+        private System.Windows.Forms.ToolStripStatusLabel tslCostValue;
+        private System.Windows.Forms.ToolStripStatusLabel tslSaved;
+        private System.Windows.Forms.ToolStripStatusLabel tslSavedValue;
         private System.Windows.Forms.ToolStripMenuItem miDeleteConversations;
         private System.Windows.Forms.ToolStripMenuItem miNextTab;
         private System.Windows.Forms.ToolStripMenuItem miPreviousTab;

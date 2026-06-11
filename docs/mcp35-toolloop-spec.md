@@ -96,10 +96,11 @@ registry maintains a **bijection** `functionName ↔ (connection, originalToolNa
 ### `reveal_tools` — host meta-tool (not from any server)
 Always exposed: `{ name:"reveal_tools", description, parameters:{ names: string[] } }`.
 When the model calls it, the **host handles it locally** (no MCP round-trip):
-validate names against the manifest, add them to the **revealed set** (LRU cap,
-architecture §7), and return the revealed tools' **full definitions** as the
-tool result so the model can read their schemas. They become callable on the
-next iteration.
+validate names against the manifest, add them to the **revealed set** (owned by
+the Conversation; provider-gated eviction — see discovery spec §8 and
+`prompt-caching-design.md`), and return the revealed tools' **full
+definitions** as the tool result so the model can read their schemas. They
+become callable on the next iteration.
 
 ### Result → `tool` message content
 `CallToolResult.content[]` → a string for the `tool` message:
@@ -245,11 +246,13 @@ ExecuteCall(c):
   decision), e.g. a compact list. This is cheap and keeps discovery
   deterministic.
 - The exposed `tools` array each turn = **`reveal_tools`** + the **revealed
-  set** (full schemas, LRU-capped). The model reads the manifest → calls
-  `reveal_tools(names)` → those defs join the `tools` array next iteration → it
-  calls them.
-- `reveal_tools` execution is local (host): validate names, update the revealed
-  set (touch LRU recency), return the revealed schemas as the tool result.
+  set** (full schemas, name-sorted for prompt-cache stability; conversation-
+  owned with provider-gated eviction — see discovery spec §8). The model reads
+  the manifest → calls `reveal_tools(names)` → those defs join the `tools`
+  array next iteration → it calls them.
+- `reveal_tools` execution is local (host): validate names, update the
+  conversation's revealed list (bump recency), return the revealed schemas as
+  the tool result.
 
 ---
 

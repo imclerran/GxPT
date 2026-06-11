@@ -26,6 +26,13 @@ namespace GxPT
         public List<ToolCall> ToolCalls;
         // Tool-call loop (phase 4): set on "tool"-role messages; the id of the call being answered.
         public string ToolCallId;
+        // Prompt-cache breakpoint (request-time only; never persisted). OpenRouterClient emits this
+        // message's content as a content-part array carrying cache_control {type: ephemeral} for
+        // every model - providers without explicit caching ignore the annotation. Set only on
+        // request-scoped message objects (the orchestrator clones history messages via
+        // WithCacheControl) so flags can never accumulate in persisted history across turns -
+        // Anthropic rejects requests with more than 4 breakpoints.
+        public bool CacheControl;
 
         public ChatMessage() { }
         public ChatMessage(string role, string content)
@@ -36,6 +43,17 @@ namespace GxPT
         public ChatMessage(string role, string content, List<AttachedFile> attachments)
         {
             Role = role; Content = content ?? string.Empty; Attachments = attachments;
+        }
+
+        // A shallow copy with the cache breakpoint set: flags a persisted history message at request
+        // time without mutating it (the copy lives only in the outgoing request list).
+        internal ChatMessage WithCacheControl()
+        {
+            var c = new ChatMessage(Role, Content, Attachments);
+            c.ToolCalls = ToolCalls;
+            c.ToolCallId = ToolCallId;
+            c.CacheControl = true;
+            return c;
         }
     }
 
@@ -60,7 +78,17 @@ namespace GxPT
         public string @object { get; set; }
         public long created { get; set; }
         public string model { get; set; }
+        // The provider endpoint that served this request (e.g. "Anthropic", "Amazon Bedrock").
+        // Drives sticky provider routing: prompt caches live per provider, so the next request of
+        // the conversation prefers (provider.order) whoever holds the warm cache.
+        public string provider { get; set; }
         public List<Choice> choices { get; set; }
+        // Token accounting; arrives on the final SSE chunk when the request asked for it
+        // (usage: {include: true}). Null on every other chunk.
+        public UsageInfo usage { get; set; }
+        // Net credits saved (positive) or extra paid (negative, cache-write premium) due to prompt
+        // caching on this request. Top-level response field; may be absent on some providers.
+        public decimal? cache_discount { get; set; }
 
         internal sealed class Choice
         {
@@ -73,6 +101,35 @@ namespace GxPT
             public string role { get; set; }
             public string content { get; set; }
             public List<ToolCallDelta> tool_calls { get; set; }
+        }
+
+        internal sealed class UsageInfo
+        {
+            public int? prompt_tokens { get; set; }
+            public int? completion_tokens { get; set; }
+            public int? total_tokens { get; set; }
+            // Credits charged to the account for this request (OpenRouter credits ~= USD).
+            public decimal? cost { get; set; }
+            public PromptTokensDetails prompt_tokens_details { get; set; }
+            public CompletionTokensDetails completion_tokens_details { get; set; }
+        }
+
+        // cached_tokens is the prompt-cache read count: the prompt-prefix tokens the provider served
+        // from cache (billed at the provider's discounted cache-read rate). Zero across repeated
+        // identical-prefix requests means a silent cache invalidator is at work.
+        // cache_write_tokens is the cache write count: tokens written to a new cache entry (billed
+        // at the provider's write premium). Large repeated writes are the signature of an
+        // invalidator re-billing the prefix; a write also proves this endpoint caches and now holds
+        // the conversation's warm entry (drives sticky provider routing from the first request).
+        internal sealed class PromptTokensDetails
+        {
+            public int? cached_tokens { get; set; }
+            public int? cache_write_tokens { get; set; }
+        }
+
+        internal sealed class CompletionTokensDetails
+        {
+            public int? reasoning_tokens { get; set; }
         }
     }
 

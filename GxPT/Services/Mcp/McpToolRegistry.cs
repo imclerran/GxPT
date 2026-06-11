@@ -11,9 +11,19 @@ using Newtonsoft.Json.Linq;
 namespace GxPT
 {
     // The host's tool-discovery component (phase 5). Aggregates every connected server's tools into
-    // (a) a cheap names manifest, (b) a small LRU-capped set of "revealed" full definitions, and
+    // (a) a cheap names manifest, (b) full definitions for a conversation's "revealed" set, and
     // (c) reveal_tools, the meta-tool that moves a tool from "known by name" to "callable". Owns the
     // server-qualified function-name bijection so tool_calls resolve back to (connection, toolName).
+    //
+    // Reveal state lives on the CONVERSATION, not here (prompt-caching design): each conversation
+    // owns an append-only, never-evicted list of revealed names that it passes into Reveal /
+    // ExposedFunctionDefs. Per-conversation scoping keeps one tab's reveals out of another tab's
+    // tools array, and append-only keeps the serialized tools array stable - the array renders at
+    // position 0 of the prompt, so any membership or order change invalidates the provider's prompt
+    // cache for the conversation's entire transcript. (Eviction never pays: a revealed def costs a
+    // few hundred cache-discounted tokens per turn; evicting it re-bills the whole transcript once.)
+    // The registry validates every name against the live catalog at emission time, so a stale
+    // revealed name (server removed or disabled) is skipped harmlessly rather than pruned.
     //
     // Workdir-scoped servers (files/git/command) run as one process PER working directory, so several
     // connections can expose the SAME function name (e.g. files__read) for different folders. The
@@ -27,7 +37,6 @@ namespace GxPT
     internal sealed class McpToolRegistry : IToolAnnotationSource
     {
         public const string RevealToolsName = "reveal_tools";
-        public const int DefaultRevealCap = 24; // discovery spec §13
 
         private sealed class CatalogEntry
         {
@@ -51,17 +60,13 @@ namespace GxPT
         // which carries only the connection) can rebuild its entries with the right workdir tag.
         private readonly Dictionary<McpServerConnection, string> _connWorkdir =
             new Dictionary<McpServerConnection, string>();
-        private readonly Dictionary<string, long> _revealed = new Dictionary<string, long>(StringComparer.Ordinal);
 
-        private readonly int _revealCap;
         private readonly ILogSink _log;
-        private long _tick;
         private string _manifestCache;
         private bool _manifestDirty = true;
 
-        public McpToolRegistry(int revealCap, ILogSink log)
+        public McpToolRegistry(ILogSink log)
         {
-            _revealCap = revealCap > 0 ? revealCap : DefaultRevealCap;
             _log = log != null ? log : NullLogSink.Instance;
         }
 
@@ -199,10 +204,12 @@ namespace GxPT
                         for (int j = list.Count - 1; j >= 0; j--)
                             if (ReferenceEquals(list[j].Conn, conn)) list.RemoveAt(j);
                         // The name disappears from the surface only when no connection provides it.
+                        // Conversations' revealed lists keep the name; ExposedFunctionDefs skips
+                        // names absent from the catalog, so the def simply stops being emitted (and
+                        // reappears if the server comes back).
                         if (list.Count == 0)
                         {
                             _byFunctionName.Remove(fn);
-                            _revealed.Remove(fn);
                         }
                     }
                 }
@@ -338,42 +345,41 @@ namespace GxPT
             return sb.ToString();
         }
 
-        public IList<JObject> ExposedFunctionDefs()
+        // Workdir-agnostic exposed defs (kept for callers/tests that don't run a folder-scoped turn).
+        public IList<JObject> ExposedFunctionDefs(IEnumerable<string> revealed)
         {
-            List<JObject> result = new List<JObject>();
-            result.Add(RevealToolsDef());
-            lock (_lock)
-            {
-                // Order the revealed set by recency (oldest first) for a stable, deterministic array.
-                List<string> fns = new List<string>(_revealed.Keys);
-                fns.Sort(delegate(string a, string b) { return _revealed[a].CompareTo(_revealed[b]); });
-                for (int i = 0; i < fns.Count; i++)
-                {
-                    CatalogEntry e;
-                    if (TryFirstEntryLocked(fns[i], out e))
-                        result.Add(FunctionDef(e.FunctionName, e.Description, CloneSchema(e.Schema)));
-                }
-            }
-            return result;
+            return ExposedFunctionDefs(null, revealed);
         }
 
-        // The exposed defs (reveal_tools + revealed tools) usable on a turn with this working directory.
-        // A revealed tool that only exists for another folder is dropped, so it can't be sent then fail.
-        public IList<JObject> ExposedFunctionDefs(string workdir)
+        // The exposed defs for a turn: reveal_tools plus the conversation's revealed set, usable on a
+        // turn with this working directory. A revealed tool that only exists for another folder is
+        // dropped, so it can't be sent then fail; a name no longer in the catalog is skipped.
+        //
+        // Order is BY NAME, never by reveal order or recency: the tools array renders at position 0
+        // of the prompt, so the serialization must be byte-identical between requests or every
+        // request misses the provider's prompt cache. (The old recency order re-sorted the array
+        // whenever a tool was called, which would have invalidated the cache on every loop iteration.)
+        public IList<JObject> ExposedFunctionDefs(string workdir, IEnumerable<string> revealed)
         {
             List<JObject> result = new List<JObject>();
             result.Add(RevealToolsDef());
+            if (revealed == null) return result;
+
+            List<string> fns = new List<string>(revealed);
+            fns.Sort(StringComparer.Ordinal);
             lock (_lock)
             {
-                List<string> fns = new List<string>(_revealed.Keys);
-                fns.Sort(delegate(string a, string b) { return _revealed[a].CompareTo(_revealed[b]); });
+                string prev = null;
                 for (int i = 0; i < fns.Count; i++)
                 {
+                    string fn = fns[i];
+                    if (fn == null || fn == prev) continue; // defensive dedup (sorted, so adjacent)
+                    prev = fn;
                     List<CatalogEntry> list;
-                    if (!_byFunctionName.TryGetValue(fns[i], out list)) continue;
+                    if (!_byFunctionName.TryGetValue(fn, out list)) continue;
                     if (!ResolvableForWorkdirLocked(list, workdir)) continue;
                     CatalogEntry e;
-                    if (TryBestEntryLocked(fns[i], workdir, out e))
+                    if (TryBestEntryLocked(fn, workdir, out e))
                         result.Add(FunctionDef(e.FunctionName, e.Description, CloneSchema(e.Schema)));
                 }
             }
@@ -410,15 +416,18 @@ namespace GxPT
         }
 
         // Workdir-agnostic reveal (independent tools, or tests that don't run a folder turn).
-        public string Reveal(string[] names)
+        public string Reveal(string[] names, IList<string> revealed)
         {
-            return Reveal(names, null);
+            return Reveal(names, null, revealed);
         }
 
         // Reveal the named tools' full defs for a turn with `workdir`, choosing each tool's schema from
         // the candidate that turn will actually call (TryBestEntryLocked) so the revealed schema matches
-        // the executing connection — see TryBestEntryLocked.
-        public string Reveal(string[] names, string workdir)
+        // the executing connection — see TryBestEntryLocked. Successful names are recorded in
+        // `revealed`, the conversation's reveal list; the list is kept in recency order (a re-reveal
+        // moves the name to the end) so the orchestrator's provider-gated eviction can trim oldest
+        // first. Emission order is independent of list order (ExposedFunctionDefs sorts by name).
+        public string Reveal(string[] names, string workdir, IList<string> revealed)
         {
             JArray defs = new JArray();
             List<string> notes = new List<string>();
@@ -433,7 +442,11 @@ namespace GxPT
                         CatalogEntry e;
                         if (n != null && TryBestEntryLocked(n, workdir, out e))
                         {
-                            _revealed[n] = ++_tick; // add or bump recency
+                            if (revealed != null)
+                            {
+                                revealed.Remove(n); // no-op when absent; bump-to-end when present
+                                revealed.Add(n);
+                            }
                             JObject d = new JObject();
                             d["name"] = e.FunctionName;
                             d["description"] = e.Description != null ? e.Description : string.Empty;
@@ -446,7 +459,6 @@ namespace GxPT
                         }
                     }
                 }
-                EnforceCapLocked();
             }
 
             StringBuilder sb = new StringBuilder();
@@ -483,8 +495,6 @@ namespace GxPT
                             if (list[i].Workdir == null) { best = list[i]; break; }
                     if (best != null)
                     {
-                        if (_revealed.ContainsKey(functionName))
-                            _revealed[functionName] = ++_tick; // keep an actively-called tool alive
                         conn = best.Conn;
                         toolName = best.OriginalName;
                         return true;
@@ -518,21 +528,6 @@ namespace GxPT
             if (a == null) return b == null;
             if (b == null) return false;
             return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
-        }
-
-        private void EnforceCapLocked()
-        {
-            while (_revealed.Count > _revealCap)
-            {
-                string victim = null;
-                long min = long.MaxValue;
-                foreach (KeyValuePair<string, long> kv in _revealed)
-                {
-                    if (kv.Value < min) { min = kv.Value; victim = kv.Key; }
-                }
-                if (victim == null) break;
-                _revealed.Remove(victim);
-            }
         }
 
         private static JObject RevealToolsDef()

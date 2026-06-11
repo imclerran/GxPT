@@ -18,8 +18,8 @@ This is the last phase before the **repo split** (architecture §4).
 
 - **In scope:** catalog aggregation across `McpServerConnection`s,
   server-qualified **name munging + bijection**, the names manifest system
-  message, the **revealed set with an LRU cap**, and `reveal_tools` handling +
-  call resolution.
+  message, the **revealed set** (conversation-owned; see the prompt-caching
+  revision note in §8), and `reveal_tools` handling + call resolution.
 - **Out of scope:** the loop itself (phase 4), approval (phase 6), ranking /
   `search_tools` (deferred). All multi-server policy lives here (D11).
 - Constraints: **net35**, Newtonsoft (`JObject`) per D16, thread-safe (touched
@@ -34,7 +34,8 @@ McpHost  ──owns──►  McpServerConnection × N        (phase 3)
    │                      │ Ready / ToolsChanged / faulted
    ▼                      ▼
 McpToolRegistry  ◄── aggregates tools/list, owns names↔(conn,tool) bijection,
-   │                 names manifest, revealed set (LRU), reveal_tools
+   │                 names manifest, reveal_tools; reveal STATE lives on the
+   │                 Conversation (see §8 revision note)
    ▼
 McpChatOrchestrator (phase 4): NamesManifestSystemMessage() + ExposedFunctionDefs()
                                → BuildRequestBody;  Reveal() / TryResolve() on tool_calls
@@ -176,26 +177,37 @@ bool TryResolve(string functionName, out McpServerConnection conn, out string to
 ```
 
 Resolving (i.e. the model actually calling a tool) **bumps recency**, so an
-actively-used tool is never the LRU victim.
+actively-used tool is never the eviction victim. *(Revised: recency now lives
+on the conversation's reveal list and is bumped by the orchestrator, not in
+`TryResolve` — see §8.)*
 
 ---
 
-## 8. LRU cap & eviction
+## 8. Reveal-set ownership & eviction
 
-```csharp
-void EnforceCap():
-   while _revealed.Count > _revealCap:
-      victim = key of _revealed with min tick
-      _revealed.Remove(victim)
-```
+> **Revised by the prompt-caching work** (see `prompt-caching-design.md`,
+> which is authoritative for everything in this section). The original
+> registry-owned LRU described below was replaced because it broke provider
+> prompt caching two ways: the recency-sorted emission reordered the `tools`
+> array (position 0 of the prompt) whenever a tool was called, and the
+> registry-global set let concurrent tabs churn each other's arrays.
 
-- The cap bounds **only the revealed set** (the full schemas in `tools`); the
-  names manifest is always complete (cheap).
-- `reveal_tools` is *not* in `_revealed` (it's prepended separately), so it can
-  never be evicted.
-- A single `Reveal` batch larger than the cap leaves only the most-recent `cap`
-  callable; the model saw every requested schema in the result and can re-reveal.
-- `_revealCap` default is a tuning value (§13).
+Current model:
+
+- **Reveal state lives on the `Conversation`** (`RevealedTools`, persisted,
+  restored on reopen), threaded through `Reveal` / `ExposedFunctionDefs` by
+  the orchestrator. The registry is stateless with respect to reveals.
+- **Emission is name-sorted**, never reveal- or recency-ordered, so the
+  serialized `tools` array is byte-stable across requests.
+- The list itself is **recency-ordered** (reveal and call both bump a name to
+  the end), used only for eviction order.
+- **Eviction is provider-gated, at turn start only** (`McpChatOrchestrator`):
+  prompt-caching providers never evict (an evicted def re-bills the whole
+  cached transcript — always a net loss); non-caching providers trim to
+  `RevealEvictionCap` (24), least recently used first.
+- `reveal_tools` is prepended separately and can never be evicted; stale
+  revealed names (server removed/disabled) are skipped at emission time, not
+  pruned, so a returning server restores its defs.
 
 ---
 
@@ -278,10 +290,13 @@ small seam returning canned `Tool` lists):
    invalidated on mutation.
 3. **Reveal** — `ExposedFunctionDefs` always leads with `reveal_tools`; revealing
    adds defs; the result returns all requested schemas; unknown names noted.
-4. **LRU** — exceeding the cap evicts least-recently-used; `TryResolve` bumps
-   recency (prevents eviction of an active tool); evicted tool re-revealable.
-5. **Lifecycle** — refresh prunes removed tools from catalog + revealed; remove
-   drops a faulted server's tools so they can't be resolved.
+4. **Reveal-set stability** *(revised; see §8)* — the registry never evicts
+   from the caller's list; exposed defs are name-sorted regardless of reveal or
+   call order; duplicate names emit one def. Provider-gated eviction is the
+   orchestrator's job and covered by its tests.
+5. **Lifecycle** — refresh prunes removed tools from the catalog and exposure
+   (the conversation's list keeps the name; emission skips it); remove drops a
+   faulted server's tools so they can't be resolved.
 
 Passing this completes the discovery layer; the roadmap then **splits `Mcp35.*`
 into its own repo** before phases 6–8.
@@ -290,9 +305,10 @@ into its own repo** before phases 6–8.
 
 ## 13. Resolved questions
 
-- **`_revealCap` default** — *resolved*: **24** (mid of the 16–32 range), a named
+- **Reveal cap default** — *resolved*: **24** (mid of the 16–32 range), a named
   constant so it stays tunable without a design change (closes architecture §15
-  "reveal cap value").
+  "reveal cap value"). *(Revised: now `McpChatOrchestrator.RevealEvictionCap`,
+  enforced only on non-caching providers — see §8.)*
 - **Manifest format** — *resolved*: **flat list** of qualified names. The
   `server__tool` prefix already groups names visually (`github__…`, `files__…`),
   so explicit per-server headers add tokens for little gain; revisit only if

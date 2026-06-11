@@ -10,7 +10,7 @@ namespace GxPT.Tests.Mcp
         private static McpToolRegistry RegistryWith(out RegistryFakeTransport ft, string server, params ToolDef[] tools)
         {
             var conn = FakeConn.Ready(server, out ft, tools);
-            var reg = new McpToolRegistry(8, null);
+            var reg = new McpToolRegistry(null);
             reg.AddConnection(conn);
             return reg;
         }
@@ -56,7 +56,7 @@ namespace GxPT.Tests.Mcp
         }
 
         [Fact]
-        public void Passes_manifest_system_message_and_tools_to_streamer()
+        public void Passes_manifest_tail_and_tools_to_streamer()
         {
             RegistryFakeTransport ft;
             var reg = RegistryWith(out ft, "files", new ToolDef("read"));
@@ -65,16 +65,233 @@ namespace GxPT.Tests.Mcp
 
             New(streamer, reg).RunTurn(new List<ChatMessage>(), "hello", new RecordingUi());
 
-            // first request: agentic guidance leads, then the names manifest, then history
+            // Request layout (prompt-caching zones): stable system head, then history, then the
+            // ephemeral context tail (a trailing user message carrying the names manifest).
             var msgs = streamer.SeenMessages[0];
             Assert.Equal("system", msgs[0].Role);
             Assert.Contains("operating as an agent", msgs[0].Content); // agentic behavior guidance
-            Assert.Equal("system", msgs[1].Role);
-            Assert.Contains("reveal_tools", msgs[1].Content);   // manifest instructs reveal-before-call
-            Assert.Contains("files__read", msgs[1].Content);     // and lists tool names
-            Assert.Equal("user", msgs[2].Role);
+            Assert.Equal("user", msgs[1].Role);
+            Assert.Equal("hello", msgs[1].Content);
+            var tail = msgs[msgs.Count - 1];
+            Assert.Equal("user", tail.Role);
+            Assert.Contains("Ephemeral context", tail.Content);  // framed as host-appended context
+            Assert.Contains("reveal_tools", tail.Content);       // manifest instructs reveal-before-call
+            Assert.Contains("files__read", tail.Content);        // and lists tool names
             // exposed tools always lead with reveal_tools
             Assert.Equal("reveal_tools", (string)streamer.SeenTools[0][0]["function"]["name"]);
+        }
+
+        [Fact]
+        public void Cache_breakpoints_ride_the_stable_head_and_newest_history_message()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            var streamer = new ScriptedStreamer();
+            streamer.Turns.Add(Chunks.Text("hi"));
+
+            var history = new List<ChatMessage>();
+            New(streamer, reg).RunTurn(history, "hello", new RecordingUi());
+
+            var msgs = streamer.SeenMessages[0];
+            // breakpoint #1: last message of the stable system head
+            Assert.True(msgs[0].CacheControl);
+            // breakpoint #2: the newest history message (the user turn), not the ephemeral tail
+            Assert.True(msgs[1].CacheControl);
+            Assert.False(msgs[msgs.Count - 1].CacheControl);
+            // the flag lands on a request-local clone, never on persisted history
+            Assert.False(history[0].CacheControl);
+        }
+
+        [Fact]
+        public void Intermediate_breakpoints_bridge_long_tool_fanouts()
+        {
+            // A single iteration with K tool calls appends ~2K+1 content blocks; beyond Anthropic's
+            // ~20-block matcher lookback the next request's end breakpoint can't find the previous
+            // cache entry. The two spare breakpoint slots are spaced backward from the end so every
+            // inter-breakpoint span stays within the lookback.
+            var msgs = new List<ChatMessage> { new ChatMessage("system", "head") };
+            int headCount = 1;
+            msgs.Add(new ChatMessage("user", "go"));
+            var asst = new ChatMessage("assistant", "fanning out");
+            asst.ToolCalls = new List<ToolCall>();
+            for (int i = 0; i < 12; i++) asst.ToolCalls.Add(new ToolCall("c" + i, "files__read", "{}"));
+            msgs.Add(asst);
+            for (int i = 0; i < 12; i++)
+            {
+                var t = new ChatMessage("tool", "result " + i);
+                t.ToolCallId = "c" + i;
+                msgs.Add(t);
+            }
+
+            McpChatOrchestrator.ApplyCacheBreakpoints(msgs, headCount);
+
+            int flags = 0;
+            foreach (var m in msgs) if (m.CacheControl) flags++;
+            Assert.True(flags >= 3, "expected intermediate flags, got " + flags);
+            Assert.True(flags <= 4, "must stay within Anthropic's 4-breakpoint limit, got " + flags);
+            Assert.True(msgs[0].CacheControl);                 // stable head
+            Assert.True(msgs[msgs.Count - 1].CacheControl);    // newest message
+
+            // No span between consecutive breakpoints may exceed the ~20-block lookback.
+            int run = 0, maxRun = 0;
+            for (int i = headCount; i < msgs.Count; i++)
+            {
+                run += McpChatOrchestrator.EstimateContentBlocks(msgs[i]);
+                if (msgs[i].CacheControl) { if (run > maxRun) maxRun = run; run = 0; }
+            }
+            Assert.True(maxRun <= 20, "max inter-breakpoint span " + maxRun + " blocks");
+        }
+
+        [Fact]
+        public void Content_block_estimate_counts_tool_calls()
+        {
+            Assert.Equal(1, McpChatOrchestrator.EstimateContentBlocks(new ChatMessage("user", "hi")));
+            var toolMsg = new ChatMessage("tool", "result");
+            Assert.Equal(1, McpChatOrchestrator.EstimateContentBlocks(toolMsg));
+            var asst = new ChatMessage("assistant", "text");
+            asst.ToolCalls = new List<ToolCall> { new ToolCall("a", "t", "{}"), new ToolCall("b", "t", "{}") };
+            Assert.Equal(3, McpChatOrchestrator.EstimateContentBlocks(asst)); // 2 tool_use + 1 text
+            var silent = new ChatMessage("assistant", "");
+            silent.ToolCalls = new List<ToolCall> { new ToolCall("a", "t", "{}") };
+            Assert.Equal(1, McpChatOrchestrator.EstimateContentBlocks(silent)); // tool_use only
+        }
+
+        [Fact]
+        public void Sticky_provider_routing_latches_on_a_demonstrated_cache_hit()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            ft.OnCall = delegate(string name, JObject args) { return RegistryFakeTransport.TextResult("x"); };
+
+            var streamer = new ScriptedStreamer();
+            streamer.ServeAs = "Amazon Bedrock";
+            streamer.ServeCachedTokens = 1500; // response demonstrates a cache read
+            streamer.Turns.Add(Chunks.OneToolCall("c1", "files__read", "{}"));
+            streamer.Turns.Add(Chunks.Text("done"));
+
+            // anthropic/* is a prompt-caching model -> stickiness active
+            var orch = new McpChatOrchestrator(streamer, reg, null, "anthropic/claude-sonnet-4.5", null);
+            string persisted = null;
+            orch.ProviderServed = delegate(string p) { persisted = p; };
+            orch.RunTurn(new List<ChatMessage>(), "go", new RecordingUi());
+
+            Assert.Null(streamer.SeenProps[0].ProviderOrder);            // no cache activity observed yet
+            Assert.Equal("Amazon Bedrock", streamer.SeenProps[1].ProviderOrder[0]); // iteration 2 follows the cache
+            Assert.Equal("Amazon Bedrock", persisted);                   // host persistence hook fired
+        }
+
+        [Fact]
+        public void Sticky_provider_routing_latches_on_a_cache_write_too()
+        {
+            // A cache write proves this endpoint caches AND now holds the conversation's warm
+            // entry, so explicit-caching providers latch from the very first request - no need to
+            // wait for the first hit.
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            ft.OnCall = delegate(string name, JObject args) { return RegistryFakeTransport.TextResult("x"); };
+
+            var streamer = new ScriptedStreamer();
+            streamer.ServeAs = "Anthropic";
+            streamer.ServeCacheWriteTokens = 900; // first request: cold write, no read
+            streamer.Turns.Add(Chunks.OneToolCall("c1", "files__read", "{}"));
+            streamer.Turns.Add(Chunks.Text("done"));
+
+            var orch = new McpChatOrchestrator(streamer, reg, null, "anthropic/claude-sonnet-4.5", null);
+            orch.RunTurn(new List<ChatMessage>(), "go", new RecordingUi());
+
+            Assert.Null(streamer.SeenProps[0].ProviderOrder);
+            Assert.Equal("Anthropic", streamer.SeenProps[1].ProviderOrder[0]); // latched off the write
+        }
+
+        [Fact]
+        public void Uncached_responses_do_not_create_provider_stickiness()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            ft.OnCall = delegate(string name, JObject args) { return RegistryFakeTransport.TextResult("x"); };
+
+            var streamer = new ScriptedStreamer();
+            streamer.ServeAs = "SomeHost";
+            streamer.ServeCachedTokens = 0; // served, but no cache activity demonstrated (read or write)
+            streamer.Turns.Add(Chunks.OneToolCall("c1", "files__read", "{}"));
+            streamer.Turns.Add(Chunks.Text("done"));
+
+            var orch = new McpChatOrchestrator(streamer, reg, null, "anthropic/claude-sonnet-4.5", null);
+            string persisted = null;
+            orch.ProviderServed = delegate(string p) { persisted = p; };
+            orch.RunTurn(new List<ChatMessage>(), "go", new RecordingUi());
+
+            Assert.Null(streamer.SeenProps[0].ProviderOrder);
+            Assert.Null(streamer.SeenProps[1].ProviderOrder); // still load-balanced: no hit, no stick
+            Assert.Null(persisted);
+        }
+
+        [Fact]
+        public void Usage_is_reported_to_the_host_on_every_iteration_for_any_model()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            ft.OnCall = delegate(string name, JObject args) { return RegistryFakeTransport.TextResult("x"); };
+
+            var streamer = new ScriptedStreamer();
+            streamer.ServeAs = "SomeHost";   // non-caching model: no stickiness, but usage still flows
+            streamer.ServeCost = 0.01m;
+            streamer.Turns.Add(Chunks.OneToolCall("c1", "files__read", "{}"));
+            streamer.Turns.Add(Chunks.Text("done"));
+
+            var orch = New(streamer, reg); // model "test-model"
+            var reported = new List<ResponseUsage>();
+            orch.UsageReported = delegate(ResponseUsage u) { reported.Add(u); };
+            orch.RunTurn(new List<ChatMessage>(), "go", new RecordingUi());
+
+            Assert.Equal(2, reported.Count); // one per loop iteration
+            Assert.Equal(0.01m, reported[0].Cost);
+            Assert.Equal("SomeHost", reported[1].Provider);
+        }
+
+        [Fact]
+        public void Confirmed_provider_preference_survives_an_uncached_response()
+        {
+            // A cached=0 response from the confirmed provider is usually TTL expiry - keeping the
+            // preference makes the cache rebuild land on the same provider, so it must not clear.
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            ft.OnCall = delegate(string name, JObject args) { return RegistryFakeTransport.TextResult("x"); };
+
+            var streamer = new ScriptedStreamer();
+            streamer.ServeAs = "Anthropic";
+            streamer.ServeCachedTokens = 0;
+            streamer.Turns.Add(Chunks.OneToolCall("c1", "files__read", "{}"));
+            streamer.Turns.Add(Chunks.Text("done"));
+
+            var orch = new McpChatOrchestrator(streamer, reg, null, "anthropic/claude-sonnet-4.5", null);
+            orch.PreferredProvider = "Amazon Bedrock"; // confirmed on an earlier turn
+            orch.RunTurn(new List<ChatMessage>(), "go", new RecordingUi());
+
+            Assert.Equal("Amazon Bedrock", streamer.SeenProps[0].ProviderOrder[0]);
+            Assert.Equal("Amazon Bedrock", streamer.SeenProps[1].ProviderOrder[0]); // not cleared
+        }
+
+        [Fact]
+        public void Sticky_provider_routing_is_off_for_non_caching_models()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            ft.OnCall = delegate(string name, JObject args) { return RegistryFakeTransport.TextResult("x"); };
+
+            var streamer = new ScriptedStreamer();
+            streamer.ServeAs = "SomeProvider";
+            streamer.Turns.Add(Chunks.OneToolCall("c1", "files__read", "{}"));
+            streamer.Turns.Add(Chunks.Text("done"));
+
+            var orch = New(streamer, reg); // model "test-model" has no prompt caching
+            orch.PreferredProvider = "SomeProvider"; // even a seeded preference is not emitted
+            orch.RunTurn(new List<ChatMessage>(), "go", new RecordingUi());
+
+            Assert.Null(streamer.SeenProps[0].ProviderOrder);
+            Assert.Null(streamer.SeenProps[1].ProviderOrder);
+            // (the usage callback is still registered on non-caching models - cost accounting
+            // applies everywhere - but the stickiness gate inside it never fires)
         }
 
         [Fact]
@@ -148,8 +365,12 @@ namespace GxPT.Tests.Mcp
             orch.RunTurn(history, "loop forever", ui);
 
             Assert.True(ui.Completed);
-            Assert.Equal(4, streamer.Calls);                       // 3 tool iterations + 1 tool-less wrap-up
-            Assert.Null(streamer.SeenTools[3]);                    // wrap-up offers no tools
+            Assert.Equal(4, streamer.Calls);                       // 3 tool iterations + 1 wrap-up
+            // The wrap-up keeps the loop's tools array (dropping it would change position 0 of the
+            // prompt and forfeit the cached prefix) but forbids further calls via tool_choice "none".
+            Assert.NotNull(streamer.SeenTools[3]);
+            Assert.Equal("none", streamer.SeenProps[3].ToolChoice);
+            Assert.Null(streamer.SeenProps[2].ToolChoice);         // loop iterations leave it default
             // The wrap-up instruction must be a trailing user turn, not a system message: Anthropic
             // hoists in-array system messages out of position, leaving nothing for the model to answer.
             var wrapMsgs = streamer.SeenMessages[3];

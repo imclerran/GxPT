@@ -56,6 +56,108 @@ namespace GxPT
         // = force off); a slug absent inherits the global default. Set by the /skills and /skill commands.
         public bool? SkillsFeatureOff { get; set; }
         public Dictionary<string, bool> SkillOverrides { get; set; }
+        // Server-qualified MCP tool names this conversation has revealed, in recency order (reveal
+        // and call both move a name to the end). Owned by the conversation - not the registry - so
+        // concurrent tabs don't share reveal state (which would churn each other's tools array and
+        // break prompt caching) and the working set survives save/reopen. Append-only on prompt-
+        // caching providers; trimmed to a cap at turn start on non-caching ones (see
+        // McpChatOrchestrator.RevealedToolNames). Stale names (server removed/disabled) are skipped
+        // by the registry at request time, so the list never needs pruning here.
+        public List<string> RevealedTools { get; set; }
+        // The OpenRouter provider endpoint that last demonstrated a prompt-cache hit for this
+        // conversation (cached_tokens > 0 on its response; e.g. "Anthropic", "Amazon Bedrock").
+        // Prompt caches live per provider, so on cache-supported models the next request prefers
+        // this provider via provider.order - routing follows the warm cache instead of flapping
+        // between endpoints. Confirmation-gated: providers that merely served a request (or don't
+        // cache at all) never land here. Null until a hit is observed; harmless when stale (it's a
+        // preference with fallback, and after TTL expiry any consistent choice works).
+        public string CacheWarmProvider { get; set; }
+
+        // ---- usage / cost accounting (status bar) ----
+        // Running totals across the conversation's lifetime plus a last-request snapshot, fed by
+        // RecordUsage (worker thread) and read by the status bar via GetUsageStats (UI thread);
+        // _usageGate keeps cross-thread reads consistent. Persisted with the conversation so a
+        // reopened tab keeps its lifetime cost. Totals are billed-as-reported (OpenRouter usage
+        // accounting); the naming-model title call is deliberately not counted.
+        private readonly object _usageGate = new object();
+        public decimal TotalCost { get; set; }           // sum of usage.cost (credits ~= USD)
+        public decimal TotalCacheDiscount { get; set; }  // net sum of cache_discount (+saved/-premium)
+        public long TotalPromptTokens { get; set; }      // total prompt tokens (cached subset included)
+        public long TotalCachedTokens { get; set; }      // of TotalPromptTokens, served from cache
+        public long TotalCompletionTokens { get; set; }
+        public long TotalReasoningTokens { get; set; }
+        public int LastPromptTokens { get; set; }        // newest request's full context size
+        public int LastCachedTokens { get; set; }
+        public int LastCacheWriteTokens { get; set; }
+
+        // Accumulate one response's usage (called once per model request, including every tool-loop
+        // iteration). Cost/discount are null when the endpoint didn't report them - skipped, not
+        // counted as zero, so totals stay "sum of what was billed and reported".
+        internal void RecordUsage(ResponseUsage u)
+        {
+            if (u == null) return;
+            lock (_usageGate)
+            {
+                if (u.Cost.HasValue) TotalCost += u.Cost.Value;
+                if (u.CacheDiscount.HasValue) TotalCacheDiscount += u.CacheDiscount.Value;
+                TotalPromptTokens += u.PromptTokens;
+                TotalCachedTokens += u.CachedTokens;
+                TotalCompletionTokens += u.CompletionTokens;
+                TotalReasoningTokens += u.ReasoningTokens;
+                LastPromptTokens = u.PromptTokens;
+                LastCachedTokens = u.CachedTokens;
+                LastCacheWriteTokens = u.CacheWriteTokens;
+            }
+            LastUpdated = DateTime.Now;
+        }
+
+        // Replaces a request's streamed estimate with the authoritative generation record (see
+        // MainForm.RecordUsageAndReconcile): the streamed usage.cost is pre-cache-discount and
+        // cache_discount never rides the stream, so without this every cache hit inflates TotalCost
+        // and Saved never moves. Deltas against what RecordUsage already added for this request, so
+        // totals land on billed reality regardless of what the stream carried. Returns true when a
+        // total actually changed (the caller persists the conversation then - reconciles can land
+        // minutes after the turn's normal save, and would otherwise be lost on close).
+        internal bool ReconcileUsage(ResponseUsage original, decimal? totalCost, decimal? cacheDiscount)
+        {
+            if (original == null) return false;
+            bool changed = false;
+            lock (_usageGate)
+            {
+                if (totalCost.HasValue)
+                {
+                    decimal delta = totalCost.Value - (original.Cost.HasValue ? original.Cost.Value : 0);
+                    if (delta != 0) { TotalCost += delta; changed = true; }
+                }
+                if (cacheDiscount.HasValue)
+                {
+                    decimal delta = cacheDiscount.Value
+                        - (original.CacheDiscount.HasValue ? original.CacheDiscount.Value : 0);
+                    if (delta != 0) { TotalCacheDiscount += delta; changed = true; }
+                }
+            }
+            return changed;
+        }
+
+        // A consistent copy for the UI thread (decimal/long reads aren't atomic on x86).
+        internal UsageStats GetUsageStats()
+        {
+            lock (_usageGate)
+            {
+                UsageStats s = new UsageStats();
+                s.TotalCost = TotalCost;
+                s.TotalCacheDiscount = TotalCacheDiscount;
+                s.TotalPromptTokens = TotalPromptTokens;
+                s.TotalCachedTokens = TotalCachedTokens;
+                s.TotalCompletionTokens = TotalCompletionTokens;
+                s.TotalReasoningTokens = TotalReasoningTokens;
+                s.LastPromptTokens = LastPromptTokens;
+                s.LastCachedTokens = LastCachedTokens;
+                s.LastCacheWriteTokens = LastCacheWriteTokens;
+                return s;
+            }
+        }
+
         public DateTime LastUpdated { get; set; }
         public event Action<string> NameGenerated;
 
@@ -65,6 +167,7 @@ namespace GxPT
             Name = GenericName; // initialize to generic name
             SelectedModel = null;
             SkillOverrides = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            RevealedTools = new List<string>();
             ZdrFirstMessageIndex = -1; // not latched until a ZDR send occurs
             // A brand-new conversation inherits the current global ZDR default as its starting value
             // (seed only - not a live override, so the user can still uncheck it before the first send).
@@ -298,5 +401,19 @@ namespace GxPT
             if (s.Length > 80) s = s.Substring(0, 80).Trim();
             return s;
         }
+    }
+
+    // Snapshot of a conversation's usage accumulators for UI display (see Conversation.GetUsageStats).
+    internal sealed class UsageStats
+    {
+        public decimal TotalCost;
+        public decimal TotalCacheDiscount;
+        public long TotalPromptTokens;
+        public long TotalCachedTokens;
+        public long TotalCompletionTokens;
+        public long TotalReasoningTokens;
+        public int LastPromptTokens;
+        public int LastCachedTokens;
+        public int LastCacheWriteTokens;
     }
 }

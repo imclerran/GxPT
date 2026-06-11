@@ -142,6 +142,155 @@ namespace GxPT.Tests.Mcp
             Assert.Null(JObject.Parse(bodyNull)["provider"]);
         }
 
+        // ---- prompt caching ----
+
+        [Fact]
+        public void Usage_accounting_is_always_requested()
+        {
+            var body = OpenRouterClient.BuildRequestBody("m", new List<ChatMessage>(), null, new ClientProperties());
+            Assert.True((bool)JObject.Parse(body)["usage"]["include"]);
+        }
+
+        [Fact]
+        public void Cache_breakpoint_emits_content_part_with_cache_control_on_supported_model()
+        {
+            var msg = new ChatMessage("user", "hi");
+            msg.CacheControl = true;
+            var body = OpenRouterClient.BuildRequestBody(
+                "anthropic/claude-sonnet-4.5", new List<ChatMessage> { msg }, null, new ClientProperties());
+
+            var content = ((JArray)JObject.Parse(body)["messages"])[1]["content"];
+            Assert.Equal(JTokenType.Array, content.Type);
+            Assert.Equal("text", (string)content[0]["type"]);
+            Assert.Equal("hi", (string)content[0]["text"]);
+            Assert.Equal("ephemeral", (string)content[0]["cache_control"]["type"]);
+        }
+
+        [Fact]
+        public void Cache_breakpoint_on_tool_message_keeps_tool_call_id()
+        {
+            var tool = new ChatMessage("tool", "result text");
+            tool.ToolCallId = "call_1";
+            tool.CacheControl = true;
+            var body = OpenRouterClient.BuildRequestBody(
+                "anthropic/claude-sonnet-4.5", new List<ChatMessage> { tool }, null, new ClientProperties());
+
+            var msg = (JObject)((JArray)JObject.Parse(body)["messages"])[1];
+            Assert.Equal("call_1", (string)msg["tool_call_id"]);
+            Assert.Equal("ephemeral", (string)msg["content"][0]["cache_control"]["type"]);
+        }
+
+        [Fact]
+        public void Cache_breakpoints_are_emitted_for_every_model()
+        {
+            // Providers without explicit caching ignore the annotation (documented by OpenRouter),
+            // while some third-party hosts of auto-caching vendors' models may require it - so the
+            // markers are unconditional rather than vendor-gated.
+            var msg = new ChatMessage("user", "hi");
+            msg.CacheControl = true;
+            var body = OpenRouterClient.BuildRequestBody(
+                "openai/gpt-4o", new List<ChatMessage> { msg }, null, new ClientProperties());
+
+            var content = ((JArray)JObject.Parse(body)["messages"])[1]["content"];
+            Assert.Equal(JTokenType.Array, content.Type);
+            Assert.Equal("ephemeral", (string)content[0]["cache_control"]["type"]);
+        }
+
+        [Fact]
+        public void Unflagged_messages_keep_plain_string_content()
+        {
+            var body = OpenRouterClient.BuildRequestBody(
+                "anthropic/claude-sonnet-4.5", new List<ChatMessage> { new ChatMessage("user", "hi") },
+                null, new ClientProperties());
+            Assert.Equal("hi", (string)((JArray)JObject.Parse(body)["messages"])[1]["content"]);
+        }
+
+        [Fact]
+        public void Model_cache_support_is_vendor_prefixed_and_tilde_alias_aware()
+        {
+            // The caching gate (drives reveal-set eviction and sticky routing).
+            Assert.True(OpenRouterClient.ModelSupportsPromptCaching("openai/gpt-4o"));
+            Assert.True(OpenRouterClient.ModelSupportsPromptCaching("deepseek/deepseek-chat"));
+            Assert.True(OpenRouterClient.ModelSupportsPromptCaching("qwen/qwen3-coder"));
+            Assert.True(OpenRouterClient.ModelSupportsPromptCaching("minimax/minimax-m2"));
+            Assert.True(OpenRouterClient.ModelSupportsPromptCaching("moonshotai/kimi-k2"));
+            Assert.True(OpenRouterClient.ModelSupportsPromptCaching("~anthropic/claude-sonnet-latest"));
+            Assert.False(OpenRouterClient.ModelSupportsPromptCaching("mistralai/mistral-large"));
+        }
+
+        [Fact]
+        public void Tool_choice_is_emitted_only_alongside_tools()
+        {
+            var tools = new List<JObject>
+            {
+                JObject.Parse("{\"type\":\"function\",\"function\":{\"name\":\"f\",\"parameters\":{}}}")
+            };
+            var withTools = OpenRouterClient.BuildRequestBody(
+                "m", new List<ChatMessage>(), tools, new ClientProperties { ToolChoice = "none" });
+            Assert.Equal("none", (string)JObject.Parse(withTools)["tool_choice"]);
+
+            var withoutTools = OpenRouterClient.BuildRequestBody(
+                "m", new List<ChatMessage>(), null, new ClientProperties { ToolChoice = "none" });
+            Assert.Null(JObject.Parse(withoutTools)["tool_choice"]);
+        }
+
+        [Fact]
+        public void Provider_order_is_emitted_for_sticky_cache_routing()
+        {
+            var props = new ClientProperties { ProviderOrder = new List<string> { "Amazon Bedrock" } };
+            var body = OpenRouterClient.BuildRequestBody("m", new List<ChatMessage>(), null, props);
+            var p = (JObject)JObject.Parse(body)["provider"];
+            Assert.Equal("Amazon Bedrock", (string)((JArray)p["order"])[0]);
+        }
+
+        [Fact]
+        public void Parses_provider_on_chunk()
+        {
+            var json = "{\"id\":\"x\",\"provider\":\"Anthropic\",\"choices\":[{\"delta\":{\"content\":\"h\"},\"finish_reason\":null}]}";
+            var chunk = JsonConvert.DeserializeObject<ChatCompletionChunk>(json);
+            Assert.Equal("Anthropic", chunk.provider);
+        }
+
+        [Fact]
+        public void Parses_usage_chunk_with_cache_counters_and_cost()
+        {
+            var json = "{\"id\":\"x\",\"cache_discount\":0.0031,\"choices\":[],"
+                + "\"usage\":{\"prompt_tokens\":1200,\"completion_tokens\":80,\"total_tokens\":1280,\"cost\":0.0145,"
+                + "\"prompt_tokens_details\":{\"cached_tokens\":1100,\"cache_write_tokens\":90},"
+                + "\"completion_tokens_details\":{\"reasoning_tokens\":25}}}";
+            var chunk = JsonConvert.DeserializeObject<ChatCompletionChunk>(json);
+            Assert.Equal(1200, chunk.usage.prompt_tokens);
+            Assert.Equal(80, chunk.usage.completion_tokens);
+            Assert.Equal(1280, chunk.usage.total_tokens);
+            Assert.Equal(0.0145m, chunk.usage.cost);
+            Assert.Equal(1100, chunk.usage.prompt_tokens_details.cached_tokens);
+            Assert.Equal(90, chunk.usage.prompt_tokens_details.cache_write_tokens);
+            Assert.Equal(25, chunk.usage.completion_tokens_details.reasoning_tokens);
+            Assert.Equal(0.0031m, chunk.cache_discount);
+        }
+
+        [Fact]
+        public void Extracts_generation_stats_for_cost_reconciliation()
+        {
+            var stats = OpenRouterClient.ExtractGenerationStats(JObject.Parse(
+                "{\"data\":{\"id\":\"gen-x\",\"total_cost\":0.0585,\"cache_discount\":0.0559,\"provider_name\":\"Amazon Bedrock\"}}"));
+            Assert.NotNull(stats);
+            Assert.Equal(0.0585m, stats.TotalCost);
+            Assert.Equal(0.0559m, stats.CacheDiscount);
+            Assert.Equal("Amazon Bedrock", stats.ProviderName);
+
+            // negative discount = net write premium; still extracted
+            var writeHeavy = OpenRouterClient.ExtractGenerationStats(JObject.Parse(
+                "{\"data\":{\"total_cost\":0.138,\"cache_discount\":-0.0225}}"));
+            Assert.NotNull(writeHeavy);
+            Assert.Equal(-0.0225m, writeHeavy.CacheDiscount);
+            Assert.Null(writeHeavy.ProviderName);
+
+            // malformed / missing data -> null, nothing extracted
+            Assert.Null(OpenRouterClient.ExtractGenerationStats(JObject.Parse("{\"error\":{}}")));
+            Assert.Null(OpenRouterClient.ExtractGenerationStats(null));
+        }
+
         // ---- streaming chunk parsing under Newtonsoft ----
 
         [Fact]

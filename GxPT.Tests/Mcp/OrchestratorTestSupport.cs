@@ -59,10 +59,20 @@ namespace GxPT.Tests.Mcp
         public Func<int, ChatCompletionChunk[]> Fallback;
         public string ErrorMessage;   // when set, signal onError instead of streaming
         public int ErrorOnCall = -1;  // -1 = every call; otherwise only this call index
+        // When set, reports usage via props.ResponseUsageCallback (mimicking the real client,
+        // which reports off the response's final usage-bearing chunk). ServeAs is the provider
+        // name; ServeCachedTokens / ServeCacheWriteTokens are the cache counters - both 0
+        // simulates a response with no cache activity (non-caching endpoint, or an implicit
+        // cacher that doesn't report writes); ServeCost is the billed credits (null = unreported).
+        public string ServeAs;
+        public int ServeCachedTokens;
+        public int ServeCacheWriteTokens;
+        public decimal? ServeCost;
 
         public int Calls;
         public readonly List<IList<ChatMessage>> SeenMessages = new List<IList<ChatMessage>>();
         public readonly List<IList<JObject>> SeenTools = new List<IList<JObject>>();
+        public readonly List<ClientProperties> SeenProps = new List<ClientProperties>();
 
         public void StreamChat(string model, IList<ChatMessage> messages, IList<JObject> tools,
                                ClientProperties props, Action<ChatCompletionChunk> onChunk, Action<string> onError,
@@ -71,6 +81,17 @@ namespace GxPT.Tests.Mcp
             int idx = Calls++;
             SeenMessages.Add(messages);
             SeenTools.Add(tools);
+            SeenProps.Add(props);
+
+            if (ServeAs != null && props != null && props.ResponseUsageCallback != null)
+            {
+                var usage = new ResponseUsage();
+                usage.Provider = ServeAs;
+                usage.CachedTokens = ServeCachedTokens;
+                usage.CacheWriteTokens = ServeCacheWriteTokens;
+                usage.Cost = ServeCost;
+                props.ResponseUsageCallback(usage);
+            }
 
             if (ErrorMessage != null && (ErrorOnCall < 0 || ErrorOnCall == idx))
             {

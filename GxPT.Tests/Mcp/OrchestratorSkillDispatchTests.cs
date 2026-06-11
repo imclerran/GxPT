@@ -34,11 +34,14 @@ namespace GxPT.Tests.Mcp
             return new McpChatOrchestrator(s, reg, null, "test-model", null);
         }
 
-        private static string JoinSystem(IList<ChatMessage> msgs)
+        // The manifest now rides in the ephemeral context tail (a trailing user message; see the
+        // prompt-caching zones in McpChatOrchestrator), so manifest assertions scan every message
+        // of the request rather than just the system head.
+        private static string JoinAll(IList<ChatMessage> msgs)
         {
             StringBuilder sb = new StringBuilder();
             for (int i = 0; i < msgs.Count; i++)
-                if (msgs[i] != null && msgs[i].Role == "system") sb.Append(msgs[i].Content).Append('\n');
+                if (msgs[i] != null && msgs[i].Content != null) sb.Append(msgs[i].Content).Append('\n');
             return sb.ToString();
         }
 
@@ -47,7 +50,7 @@ namespace GxPT.Tests.Mcp
         {
             RegistryFakeTransport ft;
             var conn = FakeConn.Ready("skills", out ft, new ToolDef("create_skill"), new ToolDef("validate_skill"));
-            var reg = new McpToolRegistry(8, null);
+            var reg = new McpToolRegistry(null);
             reg.AddConnection(conn);
             ft.OnCall = delegate(string n, JObject a) { return RegistryFakeTransport.TextResult("should not run"); };
 
@@ -61,7 +64,7 @@ namespace GxPT.Tests.Mcp
             orch.RunTurn(new List<ChatMessage>(), "go", ui);
 
             // The manifest lists the visible tool but not the hidden one.
-            string firstReq = JoinSystem(streamer.SeenMessages[0]);
+            string firstReq = JoinAll(streamer.SeenMessages[0]);
             Assert.Contains("skills__validate_skill", firstReq);
             Assert.DoesNotContain("skills__create_skill", firstReq);
 
@@ -76,7 +79,7 @@ namespace GxPT.Tests.Mcp
         {
             RegistryFakeTransport ft;
             var conn = FakeConn.Ready("skills", out ft, new ToolDef("create_skill"));
-            var reg = new McpToolRegistry(8, null);
+            var reg = new McpToolRegistry(null);
             reg.AddConnection(conn);
 
             var streamer = new ScriptedStreamer();
@@ -87,7 +90,7 @@ namespace GxPT.Tests.Mcp
             orch.RunTurn(new List<ChatMessage>(), "hello", new RecordingUi());
 
             // No leftover framing over an empty list.
-            Assert.DoesNotContain("Available tools:", JoinSystem(streamer.SeenMessages[0]));
+            Assert.DoesNotContain("Available tools:", JoinAll(streamer.SeenMessages[0]));
         }
 
         [Fact]
@@ -100,7 +103,7 @@ namespace GxPT.Tests.Mcp
             SkillCatalog cat = SkillCatalog.Build(_bundled, null);
 
             // Empty registry: the only exposed tools are the host meta-tools (open_skill/read_skill_file).
-            var reg = new McpToolRegistry(8, null);
+            var reg = new McpToolRegistry(null);
             var streamer = new ScriptedStreamer();
             streamer.Turns.Add(Chunks.OneToolCall("c1", "open_skill", "{\"names\":[\"greeting\"]}"));
             streamer.Turns.Add(Chunks.Text("done"));

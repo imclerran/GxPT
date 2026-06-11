@@ -73,6 +73,7 @@ namespace GxPT
             // Setup initial tab context for the designer-created tab
             SetupInitialConversationTab();
             _inputManager.SetHintText();
+            InitUsageStatusBar();
 
             // Wire banner link and ensure it lays out nicely
             if (this.lnkOpenSettings != null)
@@ -88,6 +89,11 @@ namespace GxPT
                 UpdateApiKeyBanner();
                 MaybeShowModelUpdateBanner();
                 try { RestoreOpenTabsOnStartup(); }
+                catch { }
+                // The status bar synced in the constructor, before tabs were restored - and no
+                // OnTabSelected fires for the tab that is already selected, so without this the
+                // first visible tab shows empty usage stats until the user switches away and back.
+                try { SyncUsageStatusFromActiveTab(); }
                 catch { }
                 // After restoring tabs, if no API key is configured, open the API Keys Help tab and focus it
                 try
@@ -608,6 +614,8 @@ namespace GxPT
             RebuildAttachmentsBanner();
             // Point the MCP host's workdir-scoped servers (files/git/command) at the active tab's folder.
             SyncMcpWorkingDirFromActiveTab();
+            // Reflect the active conversation's usage/cost totals in the status bar.
+            SyncUsageStatusFromActiveTab();
             if (_inputManager != null) _inputManager.FocusInputSoon();
         }
 
@@ -1147,7 +1155,7 @@ namespace GxPT
                 clientInfo.Name = "GxPT";
                 clientInfo.Version = "1.0";
 
-                _mcpRegistry = new McpToolRegistry(McpToolRegistry.DefaultRevealCap, LoggerSink.Instance);
+                _mcpRegistry = new McpToolRegistry(LoggerSink.Instance);
                 var connector = new DefaultServerConnector(clientInfo, curlPath, caBundle, LoggerSink.Instance);
                 _mcpHost = new McpHost(connector, _mcpRegistry, LoggerSink.Instance);
 
@@ -2069,6 +2077,11 @@ namespace GxPT
                         // Snapshot the history and log it
                         // Build a model snapshot where attachments are appended to content on-the-fly
                         var snapshot = BuildMessagesForModel(ctx.Conversation.History);
+                        // Prompt caching: the newest message carries the cache breakpoint, so each
+                        // turn re-reads the prior turn's prefix and extends it. Snapshot messages are
+                        // request-local clones - the flag never lands in persisted history.
+                        if (snapshot.Count > 0)
+                            snapshot[snapshot.Count - 1].CacheControl = true;
                         try
                         {
                             var sbSnap = new StringBuilder();
@@ -2085,10 +2098,32 @@ namespace GxPT
                         }
                         catch { }
 
+                        var sendProps = new ClientProperties { Stream = true, Zdr = zdrForSend ? true : (bool?)null };
+                        // Sticky provider routing on cache-supported models: prefer (provider.order,
+                        // preference with fallback) the endpoint holding this conversation's warm
+                        // prompt cache. Stickiness is confirmation-gated - only a response reporting
+                        // cache activity (a read or a write) sets or moves the preference; merely
+                        // serving a request proves nothing. Usage/cost accounting (status bar)
+                        // records on every model.
+                        Conversation usageConvo = ctx.Conversation;
+                        bool cachingModel = OpenRouterClient.ModelSupportsPromptCaching(modelToUse);
+                        if (usageConvo != null)
+                        {
+                            if (cachingModel && !string.IsNullOrEmpty(usageConvo.CacheWarmProvider))
+                                sendProps.ProviderOrder = new List<string> { usageConvo.CacheWarmProvider };
+                            sendProps.ResponseUsageCallback = delegate(ResponseUsage u)
+                            {
+                                if (u == null) return;
+                                if (cachingModel && !string.IsNullOrEmpty(u.Provider)
+                                    && (u.CachedTokens > 0 || u.CacheWriteTokens > 0))
+                                    usageConvo.CacheWarmProvider = u.Provider;
+                                RecordUsageAndReconcile(usageConvo, u, cachingModel);
+                            };
+                        }
                         _client.CreateCompletionStream(
                             modelToUse,
                             snapshot,
-                            new ClientProperties { Stream = true, Zdr = zdrForSend ? true : (bool?)null },
+                            sendProps,
                             delegate(string d)
                             {
                                 if (string.IsNullOrEmpty(d)) return;
@@ -2405,6 +2440,28 @@ namespace GxPT
                                                        model, LoggerSink.Instance);
                     orch.WorkingDir = ctx.WorkingDir;
                     orch.Zdr = zdr ? true : (bool?)null;
+                    // Reveal state is per-conversation (recency-ordered; persisted with the
+                    // conversation) so concurrent tabs don't churn each other's tools array - the
+                    // array must stay byte-stable across requests for prompt caching to hit.
+                    Conversation revealConvo = ctx.Conversation;
+                    if (revealConvo != null)
+                    {
+                        if (revealConvo.RevealedTools == null)
+                            revealConvo.RevealedTools = new List<string>();
+                        orch.RevealedToolNames = revealConvo.RevealedTools;
+                        // Sticky provider routing: seed the orchestrator with the provider that
+                        // last demonstrated a cache hit for this conversation, and persist any
+                        // newly confirmed one, so requests keep landing on the endpoint holding
+                        // the warm prompt cache (the orchestrator gates updates on cached > 0).
+                        orch.PreferredProvider = revealConvo.CacheWarmProvider;
+                        orch.ProviderServed = delegate(string served)
+                        { revealConvo.CacheWarmProvider = served; };
+                        // Per-response usage/cost accounting for the status bar (every iteration),
+                        // with post-stream reconciliation against the billed generation record.
+                        bool cachingForUsage = OpenRouterClient.ModelSupportsPromptCaching(model);
+                        orch.UsageReported = delegate(ResponseUsage u)
+                        { RecordUsageAndReconcile(revealConvo, u, cachingForUsage); };
+                    }
                     // Stop button cancellation: kills the in-flight model stream and lets the loop bail
                     // out cleanly between steps. Set once before the turn runs (read-only thereafter).
                     orch.Cancellation = ctx.Cancellation;
@@ -4591,8 +4648,243 @@ namespace GxPT
                 // Also refresh tab headers (font/color may rely on system colors)
                 try { if (this.tabControl1 != null) this.tabControl1.Invalidate(); }
                 catch { }
+
+                // Status bar follows the UI theme
+                ApplyThemeToStatusBar();
             }
             catch { }
+        }
+
+        // ---- usage status bar (prompt caching / cost telemetry) ----
+
+        private void InitUsageStatusBar()
+        {
+            try
+            {
+                bool visible = AppSettings.GetBool("statusbar_visible", true);
+                if (this.ssMain != null) this.ssMain.Visible = visible;
+                if (this.miStatusBar != null) this.miStatusBar.Checked = visible;
+                ApplyThemeToStatusBar();
+                SyncUsageStatusFromActiveTab();
+            }
+            catch { }
+        }
+
+        private void miStatusBar_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                bool visible = !(this.ssMain != null && this.ssMain.Visible);
+                if (this.ssMain != null) this.ssMain.Visible = visible;
+                if (this.miStatusBar != null) this.miStatusBar.Checked = visible;
+                AppSettings.SetBool("statusbar_visible", visible);
+            }
+            catch { }
+        }
+
+        // The status strip matches the menu bar's system chrome rather than the transcript theme:
+        // the MenuStrip stays system-rendered in both light and dark modes, and a transcript-white
+        // strip looked out of place against it. Saved's health color is reapplied by the sync.
+        private void ApplyThemeToStatusBar()
+        {
+            try
+            {
+                if (this.ssMain == null) return;
+                this.ssMain.BackColor = SystemColors.Control;
+                this.ssMain.ForeColor = SystemColors.ControlText;
+                foreach (ToolStripItem it in this.ssMain.Items)
+                    it.ForeColor = SystemColors.ControlText;
+                SyncUsageStatusFromActiveTab();
+            }
+            catch { }
+        }
+
+        private void SyncUsageStatusFromActiveTab()
+        {
+            try
+            {
+                var act = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                UpdateUsageStatusStrip(act != null ? act.Conversation : null);
+            }
+            catch { }
+        }
+
+        // Records a response's streamed usage (instant feedback), then reconciles it against
+        // OpenRouter's authoritative generation record on a background thread. cache_discount
+        // never arrives on the stream, so the generation record is the Saved figure's only data
+        // source; it also corrects Cost wherever a provider's stream estimate differs from billing
+        // (observed accurate on Bedrock; not guaranteed elsewhere - the delta reconcile is a no-op
+        // when they match).
+        //
+        // Reconciliation is gated by the MODEL's caching capability, never by the streamed cache
+        // counters: some provider streams (seen with Amazon Bedrock) omit prompt_tokens_details
+        // entirely, so a counter-based gate silently skips exactly the requests that need
+        // reconciling - the failure mode where Saved stays frozen at $0.00 while the OpenRouter
+        // dashboard shows cache activity on every request.
+        private void RecordUsageAndReconcile(Conversation convo, ResponseUsage u, bool cachingModel)
+        {
+            if (convo == null || u == null) return;
+            convo.RecordUsage(u);
+            NotifyUsageUpdated(convo);
+
+            if (string.IsNullOrEmpty(u.Id) || _client == null) return;
+            // Stream-first, fetch-as-fallback: the fetch exists for cache_discount (and as a cost
+            // correction). When a stream ever carries both, there is nothing left to fetch - this
+            // self-cancels the extra GETs if OpenRouter adds cache_discount to SSE chunks.
+            if (u.CacheDiscount.HasValue && u.Cost.HasValue) return;
+            if (!cachingModel && u.Cost.HasValue) return;
+            // A dedicated background thread, not the ThreadPool: the fetch can sleep for up to
+            // ~2 minutes waiting for a slow generation record, and the app's sends/naming also run
+            // on the pool - a tool loop's worth of sleeping fetches must not starve them.
+            var worker = new System.Threading.Thread(delegate()
+            {
+                try
+                {
+                    GenerationStats stats = _client.FetchGenerationStats(u.Id);
+                    if (stats == null) return;
+                    bool changed = convo.ReconcileUsage(u, stats.TotalCost, stats.CacheDiscount);
+                    // Streams that omit cache counters also starve the stream-side stickiness
+                    // gate; a nonzero billed discount is the same proof of cache activity,
+                    // observed late. Latch the conversation-level preference here - the next
+                    // turn emits it (mid-turn iterations still rely on stream counters).
+                    if (cachingModel && stats.CacheDiscount.HasValue && stats.CacheDiscount.Value != 0)
+                    {
+                        string prov = !string.IsNullOrEmpty(u.Provider) ? u.Provider : stats.ProviderName;
+                        if (!string.IsNullOrEmpty(prov)) convo.CacheWarmProvider = prov;
+                    }
+                    NotifyUsageUpdated(convo);
+                    // Persist the corrected totals: a reconcile can land minutes after the turn's
+                    // normal save, and would otherwise be lost on app close / conversation close.
+                    // Update-only - never re-create a file the user deleted while the fetch was in
+                    // flight. The try/catch save matches the house pattern: a save that races a
+                    // running turn's history mutation throws and is skipped, and the next save
+                    // (which includes these totals) catches up.
+                    if (changed)
+                    {
+                        try
+                        {
+                            string path = ConversationStore.GetPathForId(convo.Id);
+                            if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
+                                ConversationStore.Save(convo);
+                        }
+                        catch { }
+                    }
+                }
+                catch { }
+            });
+            worker.IsBackground = true; // never holds the app open; unreconciled discounts at exit are accepted
+            worker.Start();
+        }
+
+        // Marshals a usage update from a send worker thread to the UI thread, refreshing the strip
+        // only when the reported conversation is still the active tab's (a background tab's turn
+        // must not paint over the foreground tab's stats; the totals are still recorded and appear
+        // on tab switch via SyncUsageStatusFromActiveTab).
+        private void NotifyUsageUpdated(Conversation convo)
+        {
+            try
+            {
+                if (IsDisposed || !IsHandleCreated) return;
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    try
+                    {
+                        var act = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                        if (act != null && ReferenceEquals(act.Conversation, convo))
+                            UpdateUsageStatusStrip(convo);
+                    }
+                    catch { }
+                });
+            }
+            catch { }
+        }
+
+        // Renders a conversation's usage accumulators into the status strip. Panes are running
+        // totals (Cost/Saved) plus the Context gauge (newest request's full prompt size); the cache
+        // percentages live in the tooltip where their time window can be labeled explicitly.
+        private void UpdateUsageStatusStrip(Conversation convo)
+        {
+            if (this.ssMain == null) return;
+            // Zeros, not blanks, for fresh conversations: empty labels collapse the pane dividers
+            // and the strip looks broken until the first response arrives.
+            UsageStats s = (convo != null) ? convo.GetUsageStats() : new UsageStats();
+
+            // Every pane is a caption label + value label pair: the Saved pane needs the split so
+            // only the amount carries the health color, and the other two match it so all three
+            // panes share identical caption/value spacing. Captions (with the dividers) stay
+            // system text; the Saved value goes green once caching has net-saved money, red while
+            // net negative (write premiums not yet amortized by reads), neutral at zero.
+            if (this.tslContext != null)
+                this.tslContext.Text = "Context:";
+            if (this.tslContextValue != null)
+                this.tslContextValue.Text = FormatTokenCount(s.LastPromptTokens) + " tok";
+            if (this.tslCost != null)
+                this.tslCost.Text = "Cost:";
+            if (this.tslCostValue != null)
+                this.tslCostValue.Text = FormatMoney(s.TotalCost);
+            if (this.tslSaved != null)
+                this.tslSaved.Text = "Saved:";
+            if (this.tslSavedValue != null)
+            {
+                this.tslSavedValue.Text = FormatMoney(s.TotalCacheDiscount);
+                this.tslSavedValue.ForeColor = s.TotalCacheDiscount > 0 ? Color.Green
+                    : (s.TotalCacheDiscount < 0 ? Color.Firebrick : SystemColors.ControlText);
+            }
+
+            string breakdown = BuildUsageTooltip(s);
+            ToolStripStatusLabel[] panes = new ToolStripStatusLabel[]
+            {
+                this.tslContext, this.tslContextValue, this.tslCost, this.tslCostValue,
+                this.tslSaved, this.tslSavedValue
+            };
+            foreach (ToolStripStatusLabel pane in panes)
+                if (pane != null) pane.ToolTipText = breakdown;
+        }
+
+        // The hover breakdown: cache percentages with their time windows labeled explicitly (the
+        // glanceable panes deliberately omit them - "last request" vs "lifetime" is ambiguous at a
+        // glance next to running totals). Short bulleted lines on purpose: the native tooltip
+        // word-wraps long lines at an arbitrary width, which mangled the prose layout.
+        internal static string BuildUsageTooltip(UsageStats s)
+        {
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            var sb = new System.Text.StringBuilder();
+            sb.Append("Last request:");
+            sb.Append("\r\n- ").Append(s.LastPromptTokens.ToString("N0", inv)).Append(" prompt tokens");
+            sb.Append("\r\n- ").Append(s.LastCachedTokens.ToString("N0", inv)).Append(" read from cache");
+            if (s.LastPromptTokens > 0)
+                sb.Append(" (").Append((100.0 * s.LastCachedTokens / s.LastPromptTokens).ToString("0", inv)).Append("%)");
+            if (s.LastCacheWriteTokens > 0)
+                sb.Append("\r\n- ").Append(s.LastCacheWriteTokens.ToString("N0", inv)).Append(" written to cache");
+            sb.Append("\r\n\r\nLifetime:");
+            sb.Append("\r\n- ").Append(s.TotalPromptTokens.ToString("N0", inv)).Append(" prompt tokens");
+            sb.Append("\r\n- ").Append(s.TotalCachedTokens.ToString("N0", inv)).Append(" read from cache");
+            if (s.TotalPromptTokens > 0)
+                sb.Append(" (").Append((100.0 * s.TotalCachedTokens / s.TotalPromptTokens).ToString("0", inv)).Append("%)");
+            sb.Append("\r\n- ").Append(s.TotalCompletionTokens.ToString("N0", inv)).Append(" output tokens");
+            if (s.TotalReasoningTokens > 0)
+                sb.Append(" (").Append(s.TotalReasoningTokens.ToString("N0", inv)).Append(" reasoning)");
+            return sb.ToString();
+        }
+
+        // "812", "41.2K", "1.3M" - compact enough for a status pane.
+        internal static string FormatTokenCount(long n)
+        {
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            if (n >= 1000000) return (n / 1000000.0).ToString("0.0", inv) + "M";
+            if (n >= 1000) return (n / 1000.0).ToString("0.0", inv) + "K";
+            return n.ToString(inv);
+        }
+
+        // OpenRouter credits are dollar-denominated. Two decimals minimum, four maximum so
+        // sub-cent conversations don't render as "$0.00" forever; negatives (a Saved total that is
+        // net write-premium so far) keep the sign visible.
+        internal static string FormatMoney(decimal v)
+        {
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            string sign = v < 0 ? "-" : string.Empty;
+            decimal a = Math.Abs(v);
+            return sign + "$" + a.ToString("0.00##", inv);
         }
 
         private void miDeleteConversations_Click(object sender, EventArgs e)

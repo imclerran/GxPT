@@ -34,6 +34,13 @@ namespace GxPT
             bool streamFlag = (props != null && props.Stream.HasValue) ? props.Stream.Value : false;
             payload["stream"] = streamFlag;
 
+            // Ask OpenRouter to return token-usage accounting (including prompt-cache read counts) -
+            // on streaming requests it arrives on the final SSE chunk. This is how cache hits are
+            // verified: see the "Usage" log line in StreamRawChunks.
+            var usageOpt = new Dictionary<string, object>();
+            usageOpt["include"] = true;
+            payload["usage"] = usageOpt;
+
             var msgs = new List<object>();
             // Prepend a system instruction to avoid emoji in all responses.
             var sys = new Dictionary<string, object>();
@@ -51,7 +58,7 @@ namespace GxPT
                     if (m.Role == "tool")
                     {
                         // Tool result, keyed back to the assistant's call id.
-                        mm["content"] = m.Content != null ? m.Content : string.Empty;
+                        mm["content"] = ContentValue(m);
                         mm["tool_call_id"] = m.ToolCallId;
                     }
                     else if (m.ToolCalls != null && m.ToolCalls.Count > 0)
@@ -74,19 +81,23 @@ namespace GxPT
                     }
                     else
                     {
-                        mm["content"] = m.Content != null ? m.Content : string.Empty;
+                        mm["content"] = ContentValue(m);
                     }
                     msgs.Add(mm);
                 }
             }
             payload["messages"] = msgs;
 
-            // Expose tools (tool_choice left at the provider default of "auto").
+            // Expose tools (tool_choice defaults to the provider's "auto"; the orchestrator's cap
+            // wrap-up sets "none" so the prompt prefix - which starts with the tools array - stays
+            // byte-identical to the loop's requests and re-reads the turn's prompt cache).
             if (tools != null && tools.Count > 0)
             {
                 var toolList = new List<object>();
                 foreach (var t in tools) toolList.Add(t);
                 payload["tools"] = toolList;
+                if (props != null && !string.IsNullOrEmpty(props.ToolChoice))
+                    payload["tool_choice"] = props.ToolChoice;
             }
 
             // Optionally add provider object if any of the provider properties are set.
@@ -115,6 +126,15 @@ namespace GxPT
                         if (onlyList.Count > 0) provider["only"] = onlyList;
                     }
 
+                    // order: sticky cache-routing preference (see ClientProperties.ProviderOrder).
+                    if (props.ProviderOrder != null && props.ProviderOrder.Count > 0)
+                    {
+                        var orderList = new List<string>();
+                        foreach (var s in props.ProviderOrder)
+                            if (!string.IsNullOrEmpty(s)) orderList.Add(s);
+                        if (orderList.Count > 0) provider["order"] = orderList;
+                    }
+
                     // max_price: include any provided fields
                     var maxPrice = new Dictionary<string, object>();
                     if (props.ProviderMaxPricePrompt.HasValue)
@@ -129,6 +149,57 @@ namespace GxPT
             catch { }
 
             return JsonConvert.SerializeObject(payload);
+        }
+
+        // A message's content value: a plain string normally; a one-part content array carrying
+        // cache_control {type: ephemeral} when the message is flagged as a cache breakpoint (the
+        // array form is the OpenAI-compatible shape OpenRouter requires for cache_control). Emitted
+        // for EVERY model: providers without explicit caching ignore the annotation (documented by
+        // OpenRouter; field-verified harmless), while some third-party hosts may implement
+        // explicit-marker caching even for models whose author caches automatically (suspected of
+        // SiliconFlow-hosted DeepSeek, which never auto-cached prefix-stable requests). Empty
+        // content always stays a plain string - there is nothing to cache and Anthropic rejects
+        // empty text parts.
+        private static object ContentValue(ChatMessage m)
+        {
+            string text = m.Content != null ? m.Content : string.Empty;
+            if (!m.CacheControl || text.Length == 0) return text;
+
+            var part = new Dictionary<string, object>();
+            part["type"] = "text";
+            part["text"] = text;
+            var cc = new Dictionary<string, object>();
+            cc["type"] = "ephemeral";
+            part["cache_control"] = cc;
+            return new List<object> { part };
+        }
+
+        // Providers whose prompt caching (explicit cache_control OR implicit/automatic prefix
+        // caching) makes a byte-stable prompt prefix valuable. Gates reveal-set eviction in the
+        // orchestrator: on these providers an evicted tool def changes the tools array (position 0
+        // of the prompt) and re-bills the conversation's whole transcript at full price, which costs
+        // far more than the stale def it saves - so the revealed set stays append-only. Providers
+        // not listed here get no caching benefit from a stable prefix, so trimming stale defs is a
+        // pure token saving there.
+        internal static bool ModelSupportsPromptCaching(string model)
+        {
+            if (string.IsNullOrEmpty(model)) return false;
+            string m = StripModelAliasPrefix(model);
+            return m.StartsWith("anthropic/", StringComparison.OrdinalIgnoreCase)  // explicit (cache_control)
+                || m.StartsWith("google/", StringComparison.OrdinalIgnoreCase)    // implicit + cache_control
+                || m.StartsWith("openai/", StringComparison.OrdinalIgnoreCase)    // automatic (>=1024 tokens)
+                || m.StartsWith("deepseek/", StringComparison.OrdinalIgnoreCase)  // automatic
+                || m.StartsWith("x-ai/", StringComparison.OrdinalIgnoreCase)      // automatic (Grok)
+                || m.StartsWith("qwen/", StringComparison.OrdinalIgnoreCase)      // automatic (context cache)
+                || m.StartsWith("minimax/", StringComparison.OrdinalIgnoreCase)   // automatic
+                || m.StartsWith("moonshotai/", StringComparison.OrdinalIgnoreCase); // automatic (Kimi)
+        }
+
+        // "~"-prefixed model aliases (e.g. "~anthropic/claude-sonnet-latest") resolve to the same
+        // vendor as their bare form; strip the marker before prefix-matching.
+        private static string StripModelAliasPrefix(string model)
+        {
+            return model.StartsWith("~", StringComparison.Ordinal) ? model.Substring(1) : model;
         }
 
         public string CreateCompletion(string model, IList<ChatMessage> messages)
@@ -206,6 +277,146 @@ namespace GxPT
             }
         }
 
+        // Fetches the authoritative accounting for a completed generation (GET /api/v1/generation).
+        // The streamed usage.cost has been observed billing-accurate (cache pricing included) on
+        // some providers, but cache_discount never rides the stream - this record is the Saved
+        // figure's only data source, and the billing correction for any provider whose stream
+        // estimate differs (the delta-based reconcile is a no-op when they already match). The
+        // record can take several seconds to become queryable after the stream ends, so the retry
+        // loop is patient; it also keeps polling briefly when total_cost materializes before
+        // cache_discount. Failures are logged - a silent failure here looks like "Saved frozen at
+        // $0.00" in the UI and is otherwise undiagnosable. Runs blocking curl GETs; call from a
+        // background thread. Null when nothing could be fetched.
+        public GenerationStats FetchGenerationStats(string generationId)
+        {
+            if (string.IsNullOrEmpty(generationId) || !IsConfigured) return null;
+            string url = "https://openrouter.ai/api/v1/generation?id=" + Uri.EscapeDataString(generationId);
+            // Field-measured: records materialize with variable latency clustered around 10-15s
+            // after completion, with stragglers beyond - a short schedule permanently loses the
+            // stragglers' discounts (there is no later retry). Front-loaded for the fast cases,
+            // patient tail for the slow ones (~2 minutes total).
+            int[] delaysMs = new int[] { 0, 1000, 2000, 3000, 4000, 10000, 15000, 30000, 60000 };
+            GenerationStats best = null;
+            HttpGetResult last = null;
+            for (int attempt = 0; attempt < delaysMs.Length; attempt++)
+            {
+                if (delaysMs[attempt] > 0) System.Threading.Thread.Sleep(delaysMs[attempt]);
+                last = HttpGetEx(url);
+                if (last == null || last.ExitCode != 0 || string.IsNullOrEmpty(last.Body)) continue;
+                GenerationStats s = ExtractGenerationStats(SafeParse(last.Body));
+                if (s == null) continue;
+                best = s;
+                if (s.CacheDiscount.HasValue) break;
+            }
+            try
+            {
+                if (best != null)
+                {
+                    Logger.Log("Usage", "generation " + generationId + ": total_cost="
+                        + (best.TotalCost.HasValue ? best.TotalCost.Value.ToString() : "?")
+                        + " cache_discount=" + (best.CacheDiscount.HasValue ? best.CacheDiscount.Value.ToString() : "?")
+                        + (string.IsNullOrEmpty(best.ProviderName) ? string.Empty : " provider=" + best.ProviderName));
+                }
+                else
+                {
+                    string detail = last == null
+                        ? "no response"
+                        : "exit=" + last.ExitCode + " body=" + Snippet(last.Body, 200);
+                    Logger.Log("Usage", "generation " + generationId + ": fetch FAILED after "
+                        + delaysMs.Length + " attempts (" + detail + ")");
+                }
+            }
+            catch { }
+            return best;
+        }
+
+        private static string Snippet(string s, int max)
+        {
+            if (string.IsNullOrEmpty(s)) return "(empty)";
+            s = s.Replace("\r", " ").Replace("\n", " ");
+            return s.Length > max ? s.Substring(0, max) + "..." : s;
+        }
+
+        // { "data": { "total_cost": 0.0585, "cache_discount": 0.0559, "provider_name": "Amazon
+        // Bedrock", ... } } -> billed cost, net cache savings (negative = write premium), and the
+        // serving provider. Null when the payload carries none of them.
+        internal static GenerationStats ExtractGenerationStats(JObject root)
+        {
+            if (root == null) return null;
+            JToken data = root["data"];
+            if (data == null || data.Type != JTokenType.Object) return null;
+            GenerationStats s = new GenerationStats();
+            s.TotalCost = AsDecimal(data["total_cost"]);
+            s.CacheDiscount = AsDecimal(data["cache_discount"]);
+            JToken pn = data["provider_name"];
+            if (pn != null && pn.Type == JTokenType.String) s.ProviderName = (string)pn;
+            return (s.TotalCost.HasValue || s.CacheDiscount.HasValue || s.ProviderName != null) ? s : null;
+        }
+
+        private static decimal? AsDecimal(JToken t)
+        {
+            if (t == null) return null;
+            if (t.Type != JTokenType.Float && t.Type != JTokenType.Integer) return null;
+            try { return (decimal)t; }
+            catch { return null; }
+        }
+
+        // Authenticated GET via curl (the API key rides the temp config file, off the command
+        // line, mirroring the POST paths). Returns the exit code and body so callers can log
+        // failures usefully (a 404 here usually means the generation record isn't queryable yet).
+        private sealed class HttpGetResult
+        {
+            public int ExitCode = -1;
+            public string Body;
+        }
+
+        private HttpGetResult HttpGetEx(string url)
+        {
+            var result = new HttpGetResult();
+            var tempFiles = new List<string>();
+            try
+            {
+                var utf8NoBom = new UTF8Encoding(false);
+                string configPath = Path.Combine(Path.GetTempPath(), "gxpt_cfg_" + Guid.NewGuid().ToString("N") + ".txt");
+                string args;
+                try
+                {
+                    File.WriteAllText(configPath,
+                        "header = \"Authorization: Bearer " + EscapeForCurlConfig(_apiKey) + "\"\n", utf8NoBom);
+                    tempFiles.Add(configPath);
+                    args = "-sS --fail-with-body \"" + url + "\" -K \"" + configPath + "\"";
+                }
+                catch
+                {
+                    args = "-sS --fail-with-body \"" + url + "\" -H \"Authorization: Bearer " + _apiKey + "\"";
+                }
+
+                var psi = new ProcessStartInfo
+                {
+                    FileName = _curlPath,
+                    Arguments = args,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                using (var p = Process.Start(psi))
+                {
+                    var utf8 = new UTF8Encoding(false, false);
+                    using (var outReader = new StreamReader(p.StandardOutput.BaseStream, utf8, false))
+                        result.Body = outReader.ReadToEnd();
+                    try { p.StandardError.ReadToEnd(); }
+                    catch { }
+                    p.WaitForExit();
+                    try { result.ExitCode = p.ExitCode; }
+                    catch { }
+                }
+            }
+            catch { }
+            finally { CleanupTempFiles(tempFiles); }
+            return result;
+        }
+
         // IChatStreamer: build the body (with tools) then stream parsed chunks. Used by the
         // McpChatOrchestrator; the assembler reassembles tool_calls and forwards text deltas.
         public void StreamChat(string model, IList<ChatMessage> messages, IList<JObject> tools,
@@ -215,7 +426,60 @@ namespace GxPT
             if (props == null) props = new ClientProperties();
             if (!props.Stream.HasValue) props.Stream = true;
             string body = BuildRequestBody(model, messages, tools, props);
-            StreamRawChunks(body, onChunk, onError, cancel);
+            StreamRawChunks(body, WrapWithProviderReport(props, onChunk), onError, cancel);
+        }
+
+        // Decorates a chunk sink to report (once, on the final usage-bearing chunk) the response's
+        // usage accounting via props.ResponseUsageCallback. The provider name arrives on the first
+        // chunk but the usage counters only on the last, so the report waits for usage. Identity
+        // when no callback is registered.
+        private static Action<ChatCompletionChunk> WrapWithProviderReport(
+            ClientProperties props, Action<ChatCompletionChunk> onChunk)
+        {
+            if (props == null || props.ResponseUsageCallback == null) return onChunk;
+            Action<ResponseUsage> report = props.ResponseUsageCallback;
+            bool[] reported = new bool[1];      // closure-mutable state (C# 3.5: no local functions)
+            string[] provider = new string[1];
+            string[] genId = new string[1];
+            // cache_discount may ride a different chunk than usage; remember the latest seen.
+            decimal?[] discount = new decimal?[1];
+            return delegate(ChatCompletionChunk chunk)
+            {
+                if (chunk != null)
+                {
+                    if (!string.IsNullOrEmpty(chunk.provider)) provider[0] = chunk.provider;
+                    if (!string.IsNullOrEmpty(chunk.id)) genId[0] = chunk.id;
+                    if (chunk.cache_discount.HasValue) discount[0] = chunk.cache_discount;
+                    if (!reported[0] && chunk.usage != null)
+                    {
+                        reported[0] = true;
+                        try { report(BuildResponseUsage(genId[0], provider[0], chunk.usage, discount[0])); }
+                        catch { }
+                    }
+                }
+                if (onChunk != null) onChunk(chunk);
+            };
+        }
+
+        private static ResponseUsage BuildResponseUsage(
+            string generationId, string provider, ChatCompletionChunk.UsageInfo u, decimal? cacheDiscount)
+        {
+            ResponseUsage r = new ResponseUsage();
+            r.Id = generationId;
+            r.Provider = provider;
+            r.PromptTokens = u.prompt_tokens.HasValue ? u.prompt_tokens.Value : 0;
+            r.CompletionTokens = u.completion_tokens.HasValue ? u.completion_tokens.Value : 0;
+            r.Cost = u.cost;
+            r.CacheDiscount = cacheDiscount;
+            ChatCompletionChunk.PromptTokensDetails pd = u.prompt_tokens_details;
+            if (pd != null)
+            {
+                if (pd.cached_tokens.HasValue) r.CachedTokens = pd.cached_tokens.Value;
+                if (pd.cache_write_tokens.HasValue) r.CacheWriteTokens = pd.cache_write_tokens.Value;
+            }
+            ChatCompletionChunk.CompletionTokensDetails cd = u.completion_tokens_details;
+            if (cd != null && cd.reasoning_tokens.HasValue) r.ReasoningTokens = cd.reasoning_tokens.Value;
+            return r;
         }
 
         public void CreateCompletionStream(string model, IList<ChatMessage> messages, Action<string> onDelta, Action onDone, Action<string> onError)
@@ -234,7 +498,7 @@ namespace GxPT
 
             bool failed = false;
             StreamRawChunks(body,
-                delegate(ChatCompletionChunk chunk)
+                WrapWithProviderReport(props, delegate(ChatCompletionChunk chunk)
                 {
                     if (chunk != null && chunk.choices != null)
                     {
@@ -244,7 +508,7 @@ namespace GxPT
                             if (!string.IsNullOrEmpty(content) && onDelta != null) onDelta(content);
                         }
                     }
-                },
+                }),
                 delegate(string err) { failed = true; if (onError != null) onError(err); },
                 cancel);
 
@@ -291,6 +555,7 @@ namespace GxPT
                 string line;
                 bool sawAnyChunk = false;
                 int chunkCount = 0;
+                ChatCompletionChunk.UsageInfo usage = null;
                 var stdoutBuf = new StringBuilder();
                 while ((line = sr.ReadLine()) != null)
                 {
@@ -318,6 +583,7 @@ namespace GxPT
                     {
                         sawAnyChunk = true;
                         chunkCount++;
+                        if (chunk.usage != null) usage = chunk.usage; // final SSE chunk carries usage
                         if (onChunk != null) onChunk(chunk);
                     }
                 }
@@ -341,6 +607,27 @@ namespace GxPT
                 }
 
                 try { Logger.Log("Stream", "curl exit=" + exitCode + " chunks=" + chunkCount + (sawAnyChunk ? string.Empty : " (no chunks)")); }
+                catch { }
+
+                // Prompt-cache telemetry: cached = prompt-prefix tokens served from the provider's
+                // cache (discounted); cacheWrite = tokens written to a new entry (write premium).
+                // cached=0 on a long conversation means the prefix missed, and repeated large
+                // cacheWrite values are the signature of an invalidator re-billing the prefix
+                // (tools array changed, non-deterministic serialization).
+                try
+                {
+                    if (usage != null)
+                    {
+                        ChatCompletionChunk.PromptTokensDetails d = usage.prompt_tokens_details;
+                        int? cached = (d != null) ? d.cached_tokens : null;
+                        int? written = (d != null) ? d.cache_write_tokens : null;
+                        Logger.Log("Usage", "prompt=" + (usage.prompt_tokens.HasValue ? usage.prompt_tokens.Value.ToString() : "?")
+                            + " cached=" + (cached.HasValue ? cached.Value.ToString() : "?")
+                            + " cacheWrite=" + (written.HasValue ? written.Value.ToString() : "?")
+                            + " completion=" + (usage.completion_tokens.HasValue ? usage.completion_tokens.Value.ToString() : "?")
+                            + " cost=" + (usage.cost.HasValue ? usage.cost.Value.ToString() : "?") + " (streamed)");
+                    }
+                }
                 catch { }
 
                 // User-initiated stop: killing curl makes it exit non-zero / end without [DONE], which
@@ -544,7 +831,59 @@ namespace GxPT
         // endpoints with a zero-retention policy. Null/false omits it (no effect on routing).
         public bool? Zdr { get; set; }
         public IList<string> ProviderOnly { get; set; }
+        // order: provider preference (sticky cache routing). OpenRouter tries these endpoints first
+        // and still falls back to others on failure (allow_fallbacks defaults true) - a preference,
+        // not a pin like `only`. Callers put the provider that served the conversation's previous
+        // request at the head so routing follows the warm prompt cache (caches are per provider).
+        public IList<string> ProviderOrder { get; set; }
+        // Invoked (at most once per request, from the stream-reading thread) with the response's
+        // usage accounting: serving provider, token counts, cache read/write counts, billed cost,
+        // and cache discount. Fires on the final SSE chunk - the one carrying usage - so callers
+        // can both gate provider stickiness on demonstrated cache activity and accumulate
+        // per-conversation cost; never fires when the endpoint omits usage entirely.
+        public Action<ResponseUsage> ResponseUsageCallback { get; set; }
         public decimal? ProviderMaxPricePrompt { get; set; }
         public decimal? ProviderMaxPriceCompletion { get; set; }
+        // tool_choice for the request ("none", "auto", ...). Null leaves it at the provider default.
+        // Only emitted when a tools array is present. The orchestrator's cap wrap-up uses "none" to
+        // forbid further tool calls while keeping the tools array (and so the cached prompt prefix)
+        // identical to the loop's requests.
+        public string ToolChoice { get; set; }
+    }
+
+    // The slice of OpenRouter's generation record (GET /api/v1/generation) used for usage
+    // reconciliation - the post-hoc, billed truth that the stream-time estimate converges to.
+    public sealed class GenerationStats
+    {
+        public decimal? TotalCost;     // billed credits (post cache discount / write premium)
+        public decimal? CacheDiscount; // net credits saved (+) / extra paid (-) by caching
+        public string ProviderName;    // serving endpoint; fallback when the stream omitted it
+    }
+
+    // One streamed response's usage accounting, assembled from OpenRouter's final usage-bearing
+    // SSE chunk (see ClientProperties.ResponseUsageCallback). Drives sticky cache routing
+    // (Provider + the cache counters) and per-conversation cost tracking (Cost/CacheDiscount).
+    public sealed class ResponseUsage
+    {
+        // NOTE - OpenRouter normalizes usage to OpenAI conventions: PromptTokens is the TOTAL
+        // prompt size, and CachedTokens / CacheWriteTokens are subsets of it (unlike Anthropic's
+        // native API, where input_tokens is the uncached remainder). PromptTokens is therefore the
+        // conversation's "context size" gauge as-is; never add the cache counters to it.
+        //
+        // Cost is the STREAM-TIME figure. Observed billing-accurate (cache pricing included) on
+        // Bedrock-served Anthropic models, but CacheDiscount is, in practice, never present on SSE
+        // chunks, and other providers' stream estimates aren't guaranteed to match billing. Treat
+        // Cost as provisional and reconcile against the authoritative generation record
+        // (FetchGenerationStats) keyed by Id - the delta-based reconcile is a no-op when the
+        // stream was already accurate.
+        public string Id;              // OpenRouter generation id (chunk.id); keys the generation record
+        public string Provider;        // serving endpoint (e.g. "Anthropic"); null when not reported
+        public int PromptTokens;       // total prompt tokens (cached + written + uncached)
+        public int CompletionTokens;   // output tokens, reasoning included
+        public int ReasoningTokens;    // of CompletionTokens, how many were reasoning
+        public int CachedTokens;       // of PromptTokens, how many were read from the provider's cache
+        public int CacheWriteTokens;   // of PromptTokens, how many were written to a new cache entry
+        public decimal? Cost;          // credits charged for this request; null when not reported
+        public decimal? CacheDiscount; // net credits saved (+) / extra paid (-) by caching; null when not reported
     }
 }
