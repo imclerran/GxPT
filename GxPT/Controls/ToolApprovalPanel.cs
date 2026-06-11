@@ -320,6 +320,40 @@ namespace GxPT
                     _previewLabel.Text = "Build (MSBuild):";
                     handled = true;
                 }
+                else if (string.Equals(req.FunctionName, "memory__remember", StringComparison.Ordinal)
+                      || string.Equals(req.FunctionName, "memory__update_memory", StringComparison.Ordinal))
+                {
+                    // Show the memory's summary (+ optional detail) as readable markdown rather than JSON.
+                    // update_memory carries only the fields being changed.
+                    string name = req.Arguments.Value<string>("name") ?? string.Empty;
+                    _diffPanel.SetContent(name, MemoryBody(req.Arguments), "markdown", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                    _previewLabel.Text = string.Equals(req.FunctionName, "memory__remember", StringComparison.Ordinal)
+                        ? "New memory:" : "Update memory:";
+                    handled = true;
+                }
+                else if (string.Equals(req.FunctionName, "memory__forget", StringComparison.Ordinal))
+                {
+                    string name = req.Arguments.Value<string>("name") ?? string.Empty;
+                    if (name.Length > 0)
+                    {
+                        _diffPanel.SetContent(string.Empty, name, "text", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                        _previewLabel.Text = "Forget memory:";
+                        handled = true;
+                    }
+                }
+                else if (string.Equals(req.FunctionName, "memory__consolidate", StringComparison.Ordinal))
+                {
+                    // Which memories are merged away (and into what), then the new entry's summary/detail.
+                    string newName = req.Arguments.Value<string>("new_name") ?? string.Empty;
+                    var sb2 = new System.Text.StringBuilder();
+                    string sources = JoinArr(req.Arguments, "names", ", ");
+                    if (sources.Length > 0) sb2.Append("Merging: ").Append(sources);
+                    string rest = MemoryBody(req.Arguments);
+                    if (rest.Length > 0) { if (sb2.Length > 0) sb2.Append("\r\n\r\n"); sb2.Append(rest); }
+                    _diffPanel.SetContent(newName, sb2.ToString(), "markdown", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                    _previewLabel.Text = "Consolidate memories:";
+                    handled = true;
+                }
             }
 
             if (handled)
@@ -615,6 +649,19 @@ namespace GxPT
             if (name.Length > 0) sb.Append("Name: ").Append(name);
             if (desc.Length > 0) { if (sb.Length > 0) sb.Append("\r\n"); sb.Append("Description: ").Append(desc); }
             if (body.Length > 0) { if (sb.Length > 0) sb.Append("\r\n\r\n"); sb.Append(body); }
+            return sb.ToString();
+        }
+
+        // The memory's one-line summary, then its optional detail note, for remember/update/consolidate
+        // approvals — shown as markdown instead of raw JSON. Only non-empty fields appear (update sends
+        // just the fields being changed).
+        private static string MemoryBody(Newtonsoft.Json.Linq.JObject a)
+        {
+            string summary = Sv(a, "summary");
+            string detail = Sv(a, "detail");
+            var sb = new System.Text.StringBuilder();
+            if (summary.Length > 0) sb.Append(summary);
+            if (detail.Length > 0) { if (sb.Length > 0) sb.Append("\r\n\r\n"); sb.Append(detail); }
             return sb.ToString();
         }
 

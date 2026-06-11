@@ -3733,6 +3733,44 @@ namespace GxPT
                     string slug = Str(args, "slug"); if (slug.Length == 0) return false;
                     header = "Validated skill " + slug; return true;
                 }
+                case "memory__remember":
+                {
+                    string nm = Str(args, "name"); if (nm.Length == 0) return false;
+                    header = "Remembered " + nm;
+                    // Expandable view of the memory: its one-line summary, then the optional detail note.
+                    body = FormatMemory(Str(args, "summary"), Str(args, "detail"));
+                    language = "markdown"; return true;
+                }
+                case "memory__update_memory":
+                {
+                    string nm = Str(args, "name"); if (nm.Length == 0) return false;
+                    header = "Updated memory " + nm;
+                    // Only the fields being changed are shown (update replaces; omitted fields are kept).
+                    body = FormatMemory(Str(args, "summary"), Str(args, "detail"));
+                    language = "markdown"; return true;
+                }
+                case "memory__read_memory":
+                {
+                    string nm = Str(args, "name"); if (nm.Length == 0) return false;
+                    header = "Read memory " + nm; return true;
+                }
+                case "memory__forget":
+                {
+                    string nm = Str(args, "name"); if (nm.Length == 0) return false;
+                    header = "Forgot " + nm; return true;
+                }
+                case "memory__consolidate":
+                {
+                    string newName = Str(args, "new_name");
+                    string sources = JoinPaths(args, "names");
+                    header = "Consolidated memories into " + (newName.Length > 0 ? newName : "(memory)");
+                    // Body: which memories were merged, then the new entry's summary and detail.
+                    var mem = new System.Text.StringBuilder();
+                    if (sources.Length > 0) mem.Append("Merged: ").Append(sources);
+                    string rest = FormatMemory(Str(args, "summary"), Str(args, "detail"));
+                    if (rest.Length > 0) { if (mem.Length > 0) mem.Append("\n\n"); mem.Append(rest); }
+                    body = mem.ToString(); language = "markdown"; return true;
+                }
                 default: return false;
             }
         }
@@ -3830,6 +3868,20 @@ namespace GxPT
             {
                 if (sb.Length > 0) sb.Append("\n\n");
                 sb.Append(body);
+            }
+            return sb.ToString();
+        }
+
+        // Expandable view of a memory for remember/update records: the one-line summary, then the
+        // optional detail note below it. Only non-empty fields appear (update sends just what changed).
+        private static string FormatMemory(string summary, string detail)
+        {
+            var sb = new System.Text.StringBuilder();
+            if (summary != null && summary.Length > 0) sb.Append(summary);
+            if (detail != null && detail.Length > 0)
+            {
+                if (sb.Length > 0) sb.Append("\n\n");
+                sb.Append(detail);
             }
             return sb.ToString();
         }
