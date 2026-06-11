@@ -121,9 +121,32 @@ namespace GxPT.Tests.Mcp
             orch.ProviderServed = delegate(string p) { persisted = p; };
             orch.RunTurn(new List<ChatMessage>(), "go", new RecordingUi());
 
-            Assert.Null(streamer.SeenProps[0].ProviderOrder);            // no hit observed yet
+            Assert.Null(streamer.SeenProps[0].ProviderOrder);            // no cache activity observed yet
             Assert.Equal("Amazon Bedrock", streamer.SeenProps[1].ProviderOrder[0]); // iteration 2 follows the cache
             Assert.Equal("Amazon Bedrock", persisted);                   // host persistence hook fired
+        }
+
+        [Fact]
+        public void Sticky_provider_routing_latches_on_a_cache_write_too()
+        {
+            // A cache write proves this endpoint caches AND now holds the conversation's warm
+            // entry, so explicit-caching providers latch from the very first request - no need to
+            // wait for the first hit.
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            ft.OnCall = delegate(string name, JObject args) { return RegistryFakeTransport.TextResult("x"); };
+
+            var streamer = new ScriptedStreamer();
+            streamer.ServeAs = "Anthropic";
+            streamer.ServeCacheWriteTokens = 900; // first request: cold write, no read
+            streamer.Turns.Add(Chunks.OneToolCall("c1", "files__read", "{}"));
+            streamer.Turns.Add(Chunks.Text("done"));
+
+            var orch = new McpChatOrchestrator(streamer, reg, null, "anthropic/claude-sonnet-4.5", null);
+            orch.RunTurn(new List<ChatMessage>(), "go", new RecordingUi());
+
+            Assert.Null(streamer.SeenProps[0].ProviderOrder);
+            Assert.Equal("Anthropic", streamer.SeenProps[1].ProviderOrder[0]); // latched off the write
         }
 
         [Fact]
@@ -135,7 +158,7 @@ namespace GxPT.Tests.Mcp
 
             var streamer = new ScriptedStreamer();
             streamer.ServeAs = "SomeHost";
-            streamer.ServeCachedTokens = 0; // served, but no cache read demonstrated
+            streamer.ServeCachedTokens = 0; // served, but no cache activity demonstrated (read or write)
             streamer.Turns.Add(Chunks.OneToolCall("c1", "files__read", "{}"));
             streamer.Turns.Add(Chunks.Text("done"));
 

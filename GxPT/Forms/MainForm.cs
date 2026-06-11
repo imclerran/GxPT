@@ -2092,10 +2092,11 @@ namespace GxPT
 
                         var sendProps = new ClientProperties { Stream = true, Zdr = zdrForSend ? true : (bool?)null };
                         // Sticky provider routing on cache-supported models: prefer (provider.order,
-                        // preference with fallback) the endpoint that last demonstrated a cache hit
-                        // for this conversation, since prompt caches live per provider. Stickiness is
-                        // confirmation-gated - only a response reporting cached_tokens > 0 sets or
-                        // moves the preference; merely serving a request proves nothing.
+                        // preference with fallback) the endpoint holding this conversation's warm
+                        // prompt cache. Stickiness is confirmation-gated - only a response reporting
+                        // cache activity (a read, cached_tokens > 0, or a write,
+                        // cache_write_tokens > 0) sets or moves the preference; merely serving a
+                        // request proves nothing.
                         if (OpenRouterClient.ModelSupportsPromptCaching(modelToUse))
                         {
                             Conversation stickyConvo = ctx.Conversation;
@@ -2103,9 +2104,9 @@ namespace GxPT
                             {
                                 if (!string.IsNullOrEmpty(stickyConvo.CacheWarmProvider))
                                     sendProps.ProviderOrder = new List<string> { stickyConvo.CacheWarmProvider };
-                                sendProps.ProviderServedCallback = delegate(string served, int cachedTokens)
+                                sendProps.ProviderServedCallback = delegate(string served, int cachedTokens, int cacheWriteTokens)
                                 {
-                                    if (cachedTokens > 0 && !string.IsNullOrEmpty(served))
+                                    if ((cachedTokens > 0 || cacheWriteTokens > 0) && !string.IsNullOrEmpty(served))
                                         stickyConvo.CacheWarmProvider = served;
                                 };
                             }

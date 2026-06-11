@@ -312,7 +312,7 @@ namespace GxPT
             ClientProperties props, Action<ChatCompletionChunk> onChunk)
         {
             if (props == null || props.ProviderServedCallback == null) return onChunk;
-            Action<string, int> report = props.ProviderServedCallback;
+            Action<string, int, int> report = props.ProviderServedCallback;
             bool[] reported = new bool[1];    // closure-mutable state (C# 3.5: no local functions)
             string[] provider = new string[1];
             return delegate(ChatCompletionChunk chunk)
@@ -323,11 +323,11 @@ namespace GxPT
                     if (!reported[0] && chunk.usage != null && provider[0] != null)
                     {
                         reported[0] = true;
-                        int cached = 0;
-                        if (chunk.usage.prompt_tokens_details != null
-                            && chunk.usage.prompt_tokens_details.cached_tokens.HasValue)
-                            cached = chunk.usage.prompt_tokens_details.cached_tokens.Value;
-                        try { report(provider[0], cached); }
+                        int cached = 0, written = 0;
+                        ChatCompletionChunk.PromptTokensDetails d = chunk.usage.prompt_tokens_details;
+                        if (d != null && d.cached_tokens.HasValue) cached = d.cached_tokens.Value;
+                        if (d != null && d.cache_write_tokens.HasValue) written = d.cache_write_tokens.Value;
+                        try { report(provider[0], cached, written); }
                         catch { }
                     }
                 }
@@ -463,16 +463,20 @@ namespace GxPT
                 catch { }
 
                 // Prompt-cache telemetry: cached = prompt-prefix tokens served from the provider's
-                // cache (discounted). cached=0 on a long conversation means the prefix missed - look
-                // for a cache invalidator (tools array changed, non-deterministic serialization).
+                // cache (discounted); cacheWrite = tokens written to a new entry (write premium).
+                // cached=0 on a long conversation means the prefix missed, and repeated large
+                // cacheWrite values are the signature of an invalidator re-billing the prefix
+                // (tools array changed, non-deterministic serialization).
                 try
                 {
                     if (usage != null)
                     {
-                        int? cached = (usage.prompt_tokens_details != null)
-                            ? usage.prompt_tokens_details.cached_tokens : null;
+                        ChatCompletionChunk.PromptTokensDetails d = usage.prompt_tokens_details;
+                        int? cached = (d != null) ? d.cached_tokens : null;
+                        int? written = (d != null) ? d.cache_write_tokens : null;
                         Logger.Log("Usage", "prompt=" + (usage.prompt_tokens.HasValue ? usage.prompt_tokens.Value.ToString() : "?")
                             + " cached=" + (cached.HasValue ? cached.Value.ToString() : "?")
+                            + " cacheWrite=" + (written.HasValue ? written.Value.ToString() : "?")
                             + " completion=" + (usage.completion_tokens.HasValue ? usage.completion_tokens.Value.ToString() : "?"));
                     }
                 }
@@ -685,11 +689,12 @@ namespace GxPT
         // request at the head so routing follows the warm prompt cache (caches are per provider).
         public IList<string> ProviderOrder { get; set; }
         // Invoked (at most once per request, from the stream-reading thread) with the provider that
-        // served the request and the cached_tokens count from its usage accounting (0 when the
-        // response reported no cache read). Fires on the final SSE chunk - the one carrying usage -
-        // so callers can make stickiness conditional on a demonstrated cache hit; never fires when
-        // the endpoint omits usage (no cache evidence -> no stickiness signal).
-        public Action<string, int> ProviderServedCallback { get; set; }
+        // served the request and the cached_tokens / cache_write_tokens counts from its usage
+        // accounting (0 when the response reported neither). Fires on the final SSE chunk - the one
+        // carrying usage - so callers can make stickiness conditional on demonstrated cache
+        // activity (a read proves the warm cache lives here; a write proves it just got created
+        // here); never fires when the endpoint omits usage (no cache evidence -> no signal).
+        public Action<string, int, int> ProviderServedCallback { get; set; }
         public decimal? ProviderMaxPricePrompt { get; set; }
         public decimal? ProviderMaxPriceCompletion { get; set; }
         // tool_choice for the request ("none", "auto", ...). Null leaves it at the provider default.

@@ -89,17 +89,18 @@ So requests on cache-supported models carry `provider.order = [<cache-warm provi
 "cache-warm" means **confirmed by a demonstrated hit**, not merely "served last":
 
 - OpenRouter reports the serving provider on response chunks (`chunk.provider`) and the cache
-  read count on the final usage chunk; the client surfaces both once per request via
-  `ClientProperties.ProviderServedCallback(provider, cachedTokens)`.
-- Stickiness is **confirmation-gated**: only a response with `cached_tokens > 0` sets or moves
-  the preference. Merely serving proves nothing - a third-party host of an open-weights model
-  may not cache at all, and pinning there would constrain load balancing for no benefit. A hit
-  proves this endpoint holds the conversation's warm cache.
-- A later `cached=0` from the confirmed provider does NOT clear the preference: that is usually
-  TTL expiry between turns, where keeping the rebuild on one provider is exactly the point. The
-  preference moves only when a different provider demonstrates a hit.
-- Cold start: the first request is a cache write (`cached=0`), so stickiness latches on the
-  first observed hit - typically iteration 2 of a tool loop.
+  counters (`cached_tokens`, `cache_write_tokens`) on the final usage chunk; the client surfaces
+  them once per request via `ClientProperties.ProviderServedCallback(provider, cached, written)`.
+- Stickiness is **confirmation-gated**: only a response demonstrating cache activity - a read
+  (`cached_tokens > 0`) or a write (`cache_write_tokens > 0`) - sets or moves the preference.
+  Merely serving proves nothing (a third-party host of an open-weights model may not cache at
+  all, and pinning there would constrain load balancing for no benefit); a read proves the warm
+  cache lives here, a write proves it was just created here. Explicit-caching providers
+  therefore latch from the conversation's first request; implicit cachers whose writes aren't
+  reported latch on their first observed hit.
+- A later no-activity response from the confirmed provider does NOT clear the preference: that
+  is usually TTL expiry between turns, where keeping the rebuild on one provider is exactly the
+  point. The preference moves only when a different provider demonstrates cache activity.
 - The orchestrator keeps the value in `PreferredProvider` (mid-turn loop iterations follow the
   warm cache immediately); the host persists it as `Conversation.CacheWarmProvider`.
 - `order` is a preference with fallback (allow_fallbacks defaults true), not a pin: an outage

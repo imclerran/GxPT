@@ -254,14 +254,15 @@ namespace GxPT.Tests.Mcp
         }
 
         [Fact]
-        public void Parses_usage_chunk_with_cached_tokens()
+        public void Parses_usage_chunk_with_cache_counters()
         {
             var json = "{\"id\":\"x\",\"choices\":[],\"usage\":{\"prompt_tokens\":1200,\"completion_tokens\":80,"
-                + "\"prompt_tokens_details\":{\"cached_tokens\":1100}}}";
+                + "\"prompt_tokens_details\":{\"cached_tokens\":1100,\"cache_write_tokens\":90}}}";
             var chunk = JsonConvert.DeserializeObject<ChatCompletionChunk>(json);
             Assert.Equal(1200, chunk.usage.prompt_tokens);
             Assert.Equal(80, chunk.usage.completion_tokens);
             Assert.Equal(1100, chunk.usage.prompt_tokens_details.cached_tokens);
+            Assert.Equal(90, chunk.usage.prompt_tokens_details.cache_write_tokens);
         }
 
         // ---- streaming chunk parsing under Newtonsoft ----

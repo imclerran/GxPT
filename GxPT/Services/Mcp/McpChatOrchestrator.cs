@@ -127,12 +127,14 @@ namespace GxPT
         // preference with fallback, not a pin. Confirmation-gated on purpose: merely serving a
         // request proves nothing (the endpoint may not cache at all - e.g. a third-party host of an
         // open-weights model - and pinning there would constrain load balancing for no benefit),
-        // while a cache read proves this is where the conversation's warm cache lives. A later
-        // cached=0 from the confirmed provider does NOT clear the preference - that is usually TTL
-        // expiry between turns, where keeping the rebuild on one provider is exactly the point; the
-        // preference moves only when a different provider demonstrates a hit. Cold start: the first
-        // request of a conversation is a cache write (cached=0), so stickiness latches on the first
-        // observed hit - typically iteration 2 of a tool loop. Ignored entirely on models without
+        // while cache activity proves it: a read (cached_tokens > 0) shows the warm cache lives
+        // here, and a write (cache_write_tokens > 0) shows it was just created here - either
+        // latches the preference, so explicit-caching providers stick from the conversation's very
+        // first request. A later no-activity response from the confirmed provider does NOT clear
+        // the preference - that is usually TTL expiry between turns, where keeping the rebuild on
+        // one provider is exactly the point; the preference moves only when a different provider
+        // demonstrates cache activity. Providers that report neither (implicit cachers whose writes
+        // are silent) latch on their first observed hit instead. Ignored entirely on models without
         // prompt caching.
         public string PreferredProvider { get; set; }
 
@@ -419,15 +421,15 @@ namespace GxPT
             props.ToolChoice = toolChoice;
 
             // Sticky provider routing on cache-supported models (see PreferredProvider). Stickiness
-            // is confirmation-gated: only a response that demonstrates a cache read (cached > 0)
-            // establishes or moves the preference.
+            // is confirmation-gated: only a response demonstrating cache activity - a read
+            // (cached > 0) or a write (cacheWrite > 0) - establishes or moves the preference.
             if (OpenRouterClient.ModelSupportsPromptCaching(_model))
             {
                 if (!string.IsNullOrEmpty(PreferredProvider))
                     props.ProviderOrder = new List<string> { PreferredProvider };
-                props.ProviderServedCallback = delegate(string served, int cachedTokens)
+                props.ProviderServedCallback = delegate(string served, int cachedTokens, int cacheWriteTokens)
                 {
-                    if (cachedTokens <= 0 || string.IsNullOrEmpty(served)) return;
+                    if ((cachedTokens <= 0 && cacheWriteTokens <= 0) || string.IsNullOrEmpty(served)) return;
                     PreferredProvider = served;
                     Action<string> cb = ProviderServed;
                     if (cb != null) cb(served);

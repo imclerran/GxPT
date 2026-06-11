@@ -109,9 +109,14 @@ namespace GxPT
         // cached_tokens is the prompt-cache read count: the prompt-prefix tokens the provider served
         // from cache (billed at the provider's discounted cache-read rate). Zero across repeated
         // identical-prefix requests means a silent cache invalidator is at work.
+        // cache_write_tokens is the cache write count: tokens written to a new cache entry (billed
+        // at the provider's write premium). Large repeated writes are the signature of an
+        // invalidator re-billing the prefix; a write also proves this endpoint caches and now holds
+        // the conversation's warm entry (drives sticky provider routing from the first request).
         internal sealed class PromptTokensDetails
         {
             public int? cached_tokens { get; set; }
+            public int? cache_write_tokens { get; set; }
         }
     }
 
