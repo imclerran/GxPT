@@ -654,14 +654,32 @@ namespace GxPT
 
         // The memory's one-line summary, then its optional detail note, for remember/update/consolidate
         // approvals — shown as markdown instead of raw JSON. Only non-empty fields appear (update sends
-        // just the fields being changed).
+        // just the fields being changed). If the call carried no summary/detail under those keys, fall
+        // back to whatever other fields it did carry, so the prompt is never a blank block.
         private static string MemoryBody(Newtonsoft.Json.Linq.JObject a)
         {
+            var sb = new System.Text.StringBuilder();
             string summary = Sv(a, "summary");
             string detail = Sv(a, "detail");
-            var sb = new System.Text.StringBuilder();
             if (summary.Length > 0) sb.Append(summary);
             if (detail.Length > 0) { if (sb.Length > 0) sb.Append("\r\n\r\n"); sb.Append(detail); }
+            if (sb.Length > 0) return sb.ToString();
+
+            // Fallback: surface every other provided field (name is shown as the header) so an
+            // unexpectedly-shaped call still renders something the user can act on.
+            if (a != null)
+            {
+                foreach (var p in a)
+                {
+                    if (string.Equals(p.Key, "name", StringComparison.Ordinal)) continue;
+                    if (p.Value == null || p.Value.Type == Newtonsoft.Json.Linq.JTokenType.Null) continue;
+                    string val = p.Value.Type == Newtonsoft.Json.Linq.JTokenType.String
+                        ? (string)p.Value : p.Value.ToString(Newtonsoft.Json.Formatting.None);
+                    if (string.IsNullOrEmpty(val)) continue;
+                    if (sb.Length > 0) sb.Append("\r\n");
+                    sb.Append(p.Key).Append(": ").Append(val);
+                }
+            }
             return sb.ToString();
         }
 
