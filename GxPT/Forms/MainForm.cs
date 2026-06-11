@@ -4682,23 +4682,19 @@ namespace GxPT
             catch { }
         }
 
+        // The status strip matches the menu bar's system chrome rather than the transcript theme:
+        // the MenuStrip stays system-rendered in both light and dark modes, and a transcript-white
+        // strip looked out of place against it. Saved's health color is reapplied by the sync.
         private void ApplyThemeToStatusBar()
         {
             try
             {
                 if (this.ssMain == null) return;
-                bool dark = false;
-                try
-                {
-                    string theme = AppSettings.GetString("theme");
-                    dark = !string.IsNullOrEmpty(theme) && theme.Trim().Equals("dark", StringComparison.OrdinalIgnoreCase);
-                }
-                catch { }
-                var colors = ThemeService.GetColors(dark);
-                this.ssMain.BackColor = colors.UiBackground;
-                this.ssMain.ForeColor = colors.UiForeground;
+                this.ssMain.BackColor = SystemColors.Control;
+                this.ssMain.ForeColor = SystemColors.ControlText;
                 foreach (ToolStripItem it in this.ssMain.Items)
-                    it.ForeColor = colors.UiForeground;
+                    it.ForeColor = SystemColors.ControlText;
+                SyncUsageStatusFromActiveTab();
             }
             catch { }
         }
@@ -4809,22 +4805,22 @@ namespace GxPT
         private void UpdateUsageStatusStrip(Conversation convo)
         {
             if (this.ssMain == null) return;
-            UsageStats s = (convo != null) ? convo.GetUsageStats() : null;
-            if (s == null || (s.TotalPromptTokens == 0 && s.TotalCost == 0))
-            {
-                // Nothing recorded yet (fresh or legacy conversation): an empty strip beats zeros.
-                if (this.tslContext != null) { this.tslContext.Text = string.Empty; this.tslContext.ToolTipText = null; }
-                if (this.tslCost != null) { this.tslCost.Text = string.Empty; this.tslCost.ToolTipText = null; }
-                if (this.tslSaved != null) { this.tslSaved.Text = string.Empty; this.tslSaved.ToolTipText = null; }
-                return;
-            }
+            // Zeros, not blanks, for fresh conversations: empty labels collapse the pane dividers
+            // and the strip looks broken until the first response arrives.
+            UsageStats s = (convo != null) ? convo.GetUsageStats() : new UsageStats();
 
             if (this.tslContext != null)
                 this.tslContext.Text = "Context: " + FormatTokenCount(s.LastPromptTokens) + " tok";
             if (this.tslCost != null)
                 this.tslCost.Text = "Cost: " + FormatMoney(s.TotalCost);
             if (this.tslSaved != null)
+            {
                 this.tslSaved.Text = "Saved: " + FormatMoney(s.TotalCacheDiscount);
+                // At-a-glance cache health: green once caching has net-saved money, red while net
+                // negative (write premiums not yet amortized by reads), neutral at zero.
+                this.tslSaved.ForeColor = s.TotalCacheDiscount > 0 ? Color.Green
+                    : (s.TotalCacheDiscount < 0 ? Color.Firebrick : SystemColors.ControlText);
+            }
 
             string breakdown = BuildUsageTooltip(s);
             if (this.tslContext != null) this.tslContext.ToolTipText = breakdown;
