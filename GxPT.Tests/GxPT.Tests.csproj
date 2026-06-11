@@ -54,6 +54,7 @@
     <Compile Include="..\GxPT\Services\Mcp\DefaultServerConnector.cs" Link="Linked\Mcp\DefaultServerConnector.cs" />
     <Compile Include="..\GxPT\Services\Logger.cs" Link="Linked\Logger.cs" />
     <Compile Include="..\GxPT\Services\AppSettings.cs" Link="Linked\AppSettings.cs" />
+    <Compile Include="..\GxPT\Services\ModelCatalogService.cs" Link="Linked\ModelCatalogService.cs" />
     <Compile Include="..\GxPT\Services\RecentWorkDirs.cs" Link="Linked\RecentWorkDirs.cs" />
     <Compile Include="..\GxPT\Services\Skills\SkillSlug.cs" Link="Linked\Skills\SkillSlug.cs" />
     <Compile Include="..\GxPT\Services\Skills\SkillFrontmatter.cs" Link="Linked\Skills\SkillFrontmatter.cs" />

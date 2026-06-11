@@ -129,6 +129,7 @@
     <Compile Include="Models\ChatModels.cs" />
     <Compile Include="Models\Conversation.cs" />
     <Compile Include="Models\ModelDefaults.cs" />
+    <Compile Include="Services\ModelCatalogService.cs" />
     <Compile Include="Data\ConversationStore.cs" />
     <Compile Include="Forms\FileViewerForm.cs">
       <SubType>Form</SubType>
@@ -160,6 +161,9 @@
       <SubType>Component</SubType>
     </Compile>
     <Compile Include="Controls\GenerationStatusBar.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Controls\ContextMeterItem.cs">
       <SubType>Component</SubType>
     </Compile>
     <Compile Include="Controls\WorkspaceContextStrip.cs">
