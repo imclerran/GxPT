@@ -77,6 +77,10 @@ namespace GxPT
         public string @object { get; set; }
         public long created { get; set; }
         public string model { get; set; }
+        // The provider endpoint that served this request (e.g. "Anthropic", "Amazon Bedrock").
+        // Drives sticky provider routing: prompt caches live per provider, so the next request of
+        // the conversation prefers (provider.order) whoever holds the warm cache.
+        public string provider { get; set; }
         public List<Choice> choices { get; set; }
         // Token accounting; arrives on the final SSE chunk when the request asked for it
         // (usage: {include: true}). Null on every other chunk.

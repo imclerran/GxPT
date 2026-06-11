@@ -120,6 +120,19 @@ namespace GxPT
         // Set per send (the orchestrator is built fresh each turn), so it's not shared/racy.
         public ICollection<string> HiddenToolNames { get; set; }
 
+        // Sticky provider routing (prompt caching): the provider endpoint that served this
+        // conversation's previous request, seeded by the host from Conversation.LastServedProvider.
+        // Prompt caches live per provider, so on cache-supported models each request emits
+        // provider.order = [PreferredProvider] - a preference with fallback, not a pin - and the
+        // value updates from the response so mid-turn loop iterations follow the warm cache too.
+        // Ignored (no emission, no tracking) on models without prompt caching, where stickiness
+        // would only constrain load balancing for no benefit.
+        public string PreferredProvider { get; set; }
+
+        // Notifies the host whenever the serving provider is observed on a response, so it can
+        // persist the value to the conversation for the next turn. Invoked from the worker thread.
+        public Action<string> ProviderServed { get; set; }
+
         // Provider data-collection preference applied to every request in the turn. Null leaves
         // it unset (provider default).
         public bool? ProviderDataCollectionAllowed { get; set; }
@@ -397,6 +410,19 @@ namespace GxPT
             props.ProviderDataCollectionAllowed = ProviderDataCollectionAllowed;
             props.Zdr = Zdr;
             props.ToolChoice = toolChoice;
+
+            // Sticky provider routing on cache-supported models (see PreferredProvider).
+            if (OpenRouterClient.ModelSupportsPromptCaching(_model))
+            {
+                if (!string.IsNullOrEmpty(PreferredProvider))
+                    props.ProviderOrder = new List<string> { PreferredProvider };
+                props.ProviderServedCallback = delegate(string served)
+                {
+                    PreferredProvider = served;
+                    Action<string> cb = ProviderServed;
+                    if (cb != null) cb(served);
+                };
+            }
 
             Action<string> textSink = (ui != null) ? new Action<string>(ui.AppendTextDelta) : null;
             ToolCallAssembler asm = new ToolCallAssembler(textSink);

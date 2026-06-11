@@ -2090,10 +2090,25 @@ namespace GxPT
                         }
                         catch { }
 
+                        var sendProps = new ClientProperties { Stream = true, Zdr = zdrForSend ? true : (bool?)null };
+                        // Sticky provider routing on cache-supported models: prefer (provider.order,
+                        // preference with fallback) the endpoint that served this conversation last,
+                        // since prompt caches live per provider; remember whoever serves this one.
+                        if (OpenRouterClient.ModelSupportsPromptCaching(modelToUse))
+                        {
+                            Conversation stickyConvo = ctx.Conversation;
+                            if (stickyConvo != null)
+                            {
+                                if (!string.IsNullOrEmpty(stickyConvo.LastServedProvider))
+                                    sendProps.ProviderOrder = new List<string> { stickyConvo.LastServedProvider };
+                                sendProps.ProviderServedCallback = delegate(string served)
+                                { stickyConvo.LastServedProvider = served; };
+                            }
+                        }
                         _client.CreateCompletionStream(
                             modelToUse,
                             snapshot,
-                            new ClientProperties { Stream = true, Zdr = zdrForSend ? true : (bool?)null },
+                            sendProps,
                             delegate(string d)
                             {
                                 if (string.IsNullOrEmpty(d)) return;
@@ -2419,6 +2434,12 @@ namespace GxPT
                         if (revealConvo.RevealedTools == null)
                             revealConvo.RevealedTools = new List<string>();
                         orch.RevealedToolNames = revealConvo.RevealedTools;
+                        // Sticky provider routing: seed the orchestrator with the provider that
+                        // served this conversation last, and persist whatever serves this turn, so
+                        // requests keep landing on the endpoint holding the warm prompt cache.
+                        orch.PreferredProvider = revealConvo.LastServedProvider;
+                        orch.ProviderServed = delegate(string served)
+                        { revealConvo.LastServedProvider = served; };
                     }
                     // Stop button cancellation: kills the in-flight model stream and lets the loop bail
                     // out cleanly between steps. Set once before the turn runs (read-only thereafter).

@@ -77,7 +77,27 @@ ephemeral context tail rebuilt every request, never cached               Zone C
 - Stale revealed names (server removed/disabled) are skipped at emission time, never pruned from
   the conversation's list, so a returning server restores its defs.
 
-## 5. Invalidation events (what still misses, by design)
+## 5. Sticky provider routing
+
+A model on OpenRouter can be served by several provider endpoints (Anthropic, Amazon Bedrock,
+Google Vertex, ...), and **prompt caches live per provider**: an entry written by Anthropic is
+invisible to Bedrock. Routing that flaps between endpoints fragments the cache — partial hits at
+best (bounded by the TTL running while a provider sits unused, and by the ~20-block matcher
+lookback), double write-premiums at worst.
+
+So requests on cache-supported models carry `provider.order = [<last serving provider>]`:
+
+- OpenRouter reports the serving provider on response chunks (`chunk.provider`); the client
+  surfaces it once per request via `ClientProperties.ProviderServedCallback`.
+- The orchestrator keeps it in `PreferredProvider` (so mid-turn loop iterations follow the warm
+  cache immediately) and the host persists it as `Conversation.LastServedProvider` for the next
+  turn / reopen.
+- `order` is a preference with fallback (allow_fallbacks defaults true), not a pin: an outage
+  reroutes and costs one cold cache write, then stickiness follows the new provider. This
+  self-corrects in a way a static "first-party provider" map would not.
+- Gated by `ModelSupportsPromptCaching`: non-caching models keep full load balancing.
+
+## 6. Invalidation events (what still misses, by design)
 
 | Event | Cost | Frequency |
 |---|---|---|
@@ -87,7 +107,7 @@ ephemeral context tail rebuilt every request, never cached               Zone C
 | loop iteration, normal user turn | incremental read + small write | the common case |
 | > provider TTL (~5 min) between turns | one re-write | normal chat pacing |
 
-## 6. Rules for future changes
+## 7. Rules for future changes
 
 1. Never interpolate timestamps, IDs, counters, or any per-request value into Zone A or the
    manifests' position before history. Volatile content goes in Zone C.

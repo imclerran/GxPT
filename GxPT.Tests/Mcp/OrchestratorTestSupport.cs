@@ -59,6 +59,9 @@ namespace GxPT.Tests.Mcp
         public Func<int, ChatCompletionChunk[]> Fallback;
         public string ErrorMessage;   // when set, signal onError instead of streaming
         public int ErrorOnCall = -1;  // -1 = every call; otherwise only this call index
+        // When set, reports this provider name via props.ProviderServedCallback (mimicking the real
+        // client, which reports the serving provider off the first response chunk that carries it).
+        public string ServeAs;
 
         public int Calls;
         public readonly List<IList<ChatMessage>> SeenMessages = new List<IList<ChatMessage>>();
@@ -73,6 +76,9 @@ namespace GxPT.Tests.Mcp
             SeenMessages.Add(messages);
             SeenTools.Add(tools);
             SeenProps.Add(props);
+
+            if (ServeAs != null && props != null && props.ProviderServedCallback != null)
+                props.ProviderServedCallback(ServeAs);
 
             if (ErrorMessage != null && (ErrorOnCall < 0 || ErrorOnCall == idx))
             {

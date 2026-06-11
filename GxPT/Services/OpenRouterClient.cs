@@ -130,6 +130,15 @@ namespace GxPT
                         if (onlyList.Count > 0) provider["only"] = onlyList;
                     }
 
+                    // order: sticky cache-routing preference (see ClientProperties.ProviderOrder).
+                    if (props.ProviderOrder != null && props.ProviderOrder.Count > 0)
+                    {
+                        var orderList = new List<string>();
+                        foreach (var s in props.ProviderOrder)
+                            if (!string.IsNullOrEmpty(s)) orderList.Add(s);
+                        if (orderList.Count > 0) provider["order"] = orderList;
+                    }
+
                     // max_price: include any provided fields
                     var maxPrice = new Dictionary<string, object>();
                     if (props.ProviderMaxPricePrompt.HasValue)
@@ -288,7 +297,27 @@ namespace GxPT
             if (props == null) props = new ClientProperties();
             if (!props.Stream.HasValue) props.Stream = true;
             string body = BuildRequestBody(model, messages, tools, props);
-            StreamRawChunks(body, onChunk, onError, cancel);
+            StreamRawChunks(body, WrapWithProviderReport(props, onChunk), onError, cancel);
+        }
+
+        // Decorates a chunk sink to report the serving provider (once, from the first chunk that
+        // carries it) via props.ProviderServedCallback. Identity when no callback is registered.
+        private static Action<ChatCompletionChunk> WrapWithProviderReport(
+            ClientProperties props, Action<ChatCompletionChunk> onChunk)
+        {
+            if (props == null || props.ProviderServedCallback == null) return onChunk;
+            Action<string> report = props.ProviderServedCallback;
+            bool[] reported = new bool[1]; // closure-mutable flag (C# 3.5: no local functions)
+            return delegate(ChatCompletionChunk chunk)
+            {
+                if (!reported[0] && chunk != null && !string.IsNullOrEmpty(chunk.provider))
+                {
+                    reported[0] = true;
+                    try { report(chunk.provider); }
+                    catch { }
+                }
+                if (onChunk != null) onChunk(chunk);
+            };
         }
 
         public void CreateCompletionStream(string model, IList<ChatMessage> messages, Action<string> onDelta, Action onDone, Action<string> onError)
@@ -307,7 +336,7 @@ namespace GxPT
 
             bool failed = false;
             StreamRawChunks(body,
-                delegate(ChatCompletionChunk chunk)
+                WrapWithProviderReport(props, delegate(ChatCompletionChunk chunk)
                 {
                     if (chunk != null && chunk.choices != null)
                     {
@@ -317,7 +346,7 @@ namespace GxPT
                             if (!string.IsNullOrEmpty(content) && onDelta != null) onDelta(content);
                         }
                     }
-                },
+                }),
                 delegate(string err) { failed = true; if (onError != null) onError(err); },
                 cancel);
 
@@ -635,6 +664,16 @@ namespace GxPT
         // endpoints with a zero-retention policy. Null/false omits it (no effect on routing).
         public bool? Zdr { get; set; }
         public IList<string> ProviderOnly { get; set; }
+        // order: provider preference (sticky cache routing). OpenRouter tries these endpoints first
+        // and still falls back to others on failure (allow_fallbacks defaults true) - a preference,
+        // not a pin like `only`. Callers put the provider that served the conversation's previous
+        // request at the head so routing follows the warm prompt cache (caches are per provider).
+        public IList<string> ProviderOrder { get; set; }
+        // Invoked (at most once per request, from the stream-reading thread) with the name of the
+        // provider that served the request, as reported by OpenRouter on the response chunks. Hosts
+        // use it to remember the conversation's cache-warm provider for the next request's
+        // ProviderOrder. Never invoked when OpenRouter omits the field.
+        public Action<string> ProviderServedCallback { get; set; }
         public decimal? ProviderMaxPricePrompt { get; set; }
         public decimal? ProviderMaxPriceCompletion { get; set; }
         // tool_choice for the request ("none", "auto", ...). Null leaves it at the provider default.

@@ -234,6 +234,23 @@ namespace GxPT.Tests.Mcp
         }
 
         [Fact]
+        public void Provider_order_is_emitted_for_sticky_cache_routing()
+        {
+            var props = new ClientProperties { ProviderOrder = new List<string> { "Amazon Bedrock" } };
+            var body = OpenRouterClient.BuildRequestBody("m", new List<ChatMessage>(), null, props);
+            var p = (JObject)JObject.Parse(body)["provider"];
+            Assert.Equal("Amazon Bedrock", (string)((JArray)p["order"])[0]);
+        }
+
+        [Fact]
+        public void Parses_provider_on_chunk()
+        {
+            var json = "{\"id\":\"x\",\"provider\":\"Anthropic\",\"choices\":[{\"delta\":{\"content\":\"h\"},\"finish_reason\":null}]}";
+            var chunk = JsonConvert.DeserializeObject<ChatCompletionChunk>(json);
+            Assert.Equal("Anthropic", chunk.provider);
+        }
+
+        [Fact]
         public void Parses_usage_chunk_with_cached_tokens()
         {
             var json = "{\"id\":\"x\",\"choices\":[],\"usage\":{\"prompt_tokens\":1200,\"completion_tokens\":80,"

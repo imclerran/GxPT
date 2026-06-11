@@ -103,6 +103,50 @@ namespace GxPT.Tests.Mcp
         }
 
         [Fact]
+        public void Sticky_provider_routing_follows_the_serving_provider_on_caching_models()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            ft.OnCall = delegate(string name, JObject args) { return RegistryFakeTransport.TextResult("x"); };
+
+            var streamer = new ScriptedStreamer();
+            streamer.ServeAs = "Amazon Bedrock";
+            streamer.Turns.Add(Chunks.OneToolCall("c1", "files__read", "{}"));
+            streamer.Turns.Add(Chunks.Text("done"));
+
+            // anthropic/* is a prompt-caching model -> stickiness active
+            var orch = new McpChatOrchestrator(streamer, reg, null, "anthropic/claude-sonnet-4.5", null);
+            string persisted = null;
+            orch.ProviderServed = delegate(string p) { persisted = p; };
+            orch.RunTurn(new List<ChatMessage>(), "go", new RecordingUi());
+
+            Assert.Null(streamer.SeenProps[0].ProviderOrder);            // nothing observed yet
+            Assert.Equal("Amazon Bedrock", streamer.SeenProps[1].ProviderOrder[0]); // iteration 2 follows the cache
+            Assert.Equal("Amazon Bedrock", persisted);                   // host persistence hook fired
+        }
+
+        [Fact]
+        public void Sticky_provider_routing_is_off_for_non_caching_models()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            ft.OnCall = delegate(string name, JObject args) { return RegistryFakeTransport.TextResult("x"); };
+
+            var streamer = new ScriptedStreamer();
+            streamer.ServeAs = "SomeProvider";
+            streamer.Turns.Add(Chunks.OneToolCall("c1", "files__read", "{}"));
+            streamer.Turns.Add(Chunks.Text("done"));
+
+            var orch = New(streamer, reg); // model "test-model" has no prompt caching
+            orch.PreferredProvider = "SomeProvider"; // even a seeded preference is not emitted
+            orch.RunTurn(new List<ChatMessage>(), "go", new RecordingUi());
+
+            Assert.Null(streamer.SeenProps[0].ProviderOrder);
+            Assert.Null(streamer.SeenProps[1].ProviderOrder);
+            Assert.Null(streamer.SeenProps[0].ProviderServedCallback); // not even tracking
+        }
+
+        [Fact]
         public void Multiple_tool_calls_in_one_turn_run_serially()
         {
             RegistryFakeTransport ft;
