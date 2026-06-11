@@ -4829,16 +4829,19 @@ namespace GxPT
             if (u.CacheDiscount.HasValue && u.Cost.HasValue) return;
             if (!cachingModel && u.Cost.HasValue) return;
             // A dedicated background thread, not the ThreadPool: the fetch can sleep for up to
-            // ~2 minutes waiting for a slow generation record, and the app's sends/naming also run
-            // on the pool - a tool loop's worth of sleeping fetches must not starve them.
+            // ~2 minutes waiting for a slow generation record (~12 for a cancelled stream's, which
+            // can't finalize until the provider-side generation ends), and the app's sends/naming
+            // also run on the pool - a tool loop's worth of sleeping fetches must not starve them.
             var worker = new System.Threading.Thread(delegate()
             {
                 try
                 {
                     // Non-caching models reach here only for cancelled streams; their record is
                     // complete once total_cost lands, so don't hold the retry loop out for a
-                    // cache_discount that never comes.
-                    GenerationStats stats = _client.FetchGenerationStats(u.Id, cachingModel);
+                    // cache_discount that never comes. Cancelled streams get the patient retry
+                    // schedule - their records 404 for minutes while the provider-side
+                    // generation runs out.
+                    GenerationStats stats = _client.FetchGenerationStats(u.Id, cachingModel, u.Cancelled);
                     if (stats == null) return;
                     bool changed = convo.ReconcileUsage(u, stats);
                     // Streams that omit cache counters also starve the stream-side stickiness

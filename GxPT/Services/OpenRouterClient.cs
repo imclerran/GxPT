@@ -289,21 +289,33 @@ namespace GxPT
         // background thread. Null when nothing could be fetched.
         public GenerationStats FetchGenerationStats(string generationId)
         {
-            return FetchGenerationStats(generationId, true);
+            return FetchGenerationStats(generationId, true, false);
         }
 
         // waitForCacheDiscount: when false (non-caching models - reached for cancelled streams,
         // whose cost/token truth lives only in this record), the retry loop stops as soon as
         // total_cost materializes instead of holding out for a cache_discount that never comes.
-        public GenerationStats FetchGenerationStats(string generationId, bool waitForCacheDiscount)
+        //
+        // cancelledGeneration: cancelled streams' records take far longer to materialize than
+        // completed ones - field-observed still 404 ("Generation not found") 3.5+ minutes after
+        // the kill, where completed records cluster at 10-15s. Plausibly the record can't
+        // finalize until the provider-side generation ends, and on providers without
+        // disconnect-cancellation that's the WHOLE remaining generation plus accounting lag. So
+        // cancelled fetches get a much more patient schedule (~11.5 minutes of coverage) and
+        // break on total_cost - by the time a cancelled record exists at all it's final, so
+        // whatever discount it carries rides the same response.
+        public GenerationStats FetchGenerationStats(string generationId, bool waitForCacheDiscount, bool cancelledGeneration)
         {
             if (string.IsNullOrEmpty(generationId) || !IsConfigured) return null;
             string url = "https://openrouter.ai/api/v1/generation?id=" + Uri.EscapeDataString(generationId);
             // Field-measured: records materialize with variable latency clustered around 10-15s
             // after completion, with stragglers beyond - a short schedule permanently loses the
             // stragglers' discounts (there is no later retry). Front-loaded for the fast cases,
-            // patient tail for the slow ones (~2 minutes total).
-            int[] delaysMs = new int[] { 0, 1000, 2000, 3000, 4000, 10000, 15000, 30000, 60000 };
+            // patient tail for the slow ones (~2 minutes total). Cancelled generations skip the
+            // front-loading (the record provably isn't there yet) and stretch the tail instead.
+            int[] delaysMs = cancelledGeneration
+                ? new int[] { 5000, 10000, 15000, 30000, 60000, 90000, 120000, 120000, 120000, 120000 }
+                : new int[] { 0, 1000, 2000, 3000, 4000, 10000, 15000, 30000, 60000 };
             GenerationStats best = null;
             HttpGetResult last = null;
             for (int attempt = 0; attempt < delaysMs.Length; attempt++)
@@ -314,7 +326,11 @@ namespace GxPT
                 GenerationStats s = ExtractGenerationStats(SafeParse(last.Body));
                 if (s == null) continue;
                 best = s;
-                if (waitForCacheDiscount ? s.CacheDiscount.HasValue : s.TotalCost.HasValue) break;
+                if (cancelledGeneration || !waitForCacheDiscount)
+                {
+                    if (s.TotalCost.HasValue) break;
+                }
+                else if (s.CacheDiscount.HasValue) break;
             }
             try
             {
@@ -335,7 +351,8 @@ namespace GxPT
                         ? "no response"
                         : "exit=" + last.ExitCode + " body=" + Snippet(last.Body, 200);
                     Logger.Log("Usage", "generation " + generationId + ": fetch FAILED after "
-                        + delaysMs.Length + " attempts (" + detail + ")");
+                        + delaysMs.Length + " attempts (" + detail + ")"
+                        + (cancelledGeneration ? " [cancelled stream]" : string.Empty));
                 }
             }
             catch { }

@@ -130,7 +130,11 @@ So requests on cache-supported models carry `provider.order = [<cache-warm provi
   `Cancelled` flag, no counters, no cost) and the generation record supplies the billed truth -
   including token counts, which `ReconcileUsage` lands only for cancelled requests. This is the
   only correct accounting: providers without disconnect-cancellation (Bedrock, Google, ...) keep
-  generating server-side and bill the FULL response the stream never saw.
+  generating server-side and bill the FULL response the stream never saw. Operational note: a
+  cancelled generation's record 404s ("Generation not found") far longer than a completed one's
+  - field-observed still absent 3.5+ minutes after the kill, plausibly because it can't finalize
+  until the provider-side generation ends - so cancelled fetches use a separate patient retry
+  schedule (~11.5 minutes) and break on `total_cost` rather than waiting for `cache_discount`.
 - Stickiness is **confirmation-gated**: only a response demonstrating cache activity - a read
   (`cached_tokens > 0`) or a write (`cache_write_tokens > 0`) - sets or moves the preference.
   Merely serving proves nothing (a third-party host of an open-weights model may not cache at
