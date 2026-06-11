@@ -687,9 +687,11 @@ namespace GxPT
             }
         }
 
-        // Log-friendly copy of the request body: only the last entry of the messages array is
-        // kept (a long transcript would otherwise dominate the log), with a placeholder string
-        // recording how many earlier messages were dropped. Everything else is left intact.
+        // Log-friendly copy of the request body: only the last two entries of the messages array
+        // are kept (a long transcript would otherwise dominate the log), with a placeholder string
+        // recording how many earlier messages were dropped. Two because the orchestrator appends an
+        // ephemeral context tail after the real user message - keeping just one would log only that
+        // tail. Everything else is left intact.
         internal static string TruncateMessagesForLog(string jsonBody)
         {
             if (string.IsNullOrEmpty(jsonBody)) return jsonBody;
@@ -697,10 +699,11 @@ namespace GxPT
             {
                 var obj = JObject.Parse(jsonBody);
                 var msgs = obj["messages"] as JArray;
-                if (msgs != null && msgs.Count > 1)
+                if (msgs != null && msgs.Count > 2)
                 {
                     var truncated = new JArray();
-                    truncated.Add("... " + (msgs.Count - 1) + " earlier message(s) omitted ...");
+                    truncated.Add("... " + (msgs.Count - 2) + " earlier message(s) omitted ...");
+                    truncated.Add(msgs[msgs.Count - 2]);
                     truncated.Add(msgs[msgs.Count - 1]);
                     obj["messages"] = truncated;
                 }

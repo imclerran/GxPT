@@ -291,10 +291,12 @@ namespace GxPT.Tests.Mcp
             Assert.Null(OpenRouterClient.ExtractGenerationStats(null));
         }
 
-        // ---- log truncation: only the last message survives, with an omission marker ----
+        // ---- log truncation: only the last two messages survive, with an omission marker ----
+        // (two, not one: the orchestrator appends an ephemeral context tail after the real user
+        // message, so keeping a single entry would log only that tail)
 
         [Fact]
-        public void TruncateMessagesForLog_keeps_last_message_and_marks_omissions()
+        public void TruncateMessagesForLog_keeps_last_two_messages_and_marks_omissions()
         {
             var body = OpenRouterClient.BuildRequestBody("m", new List<ChatMessage>
             {
@@ -306,22 +308,33 @@ namespace GxPT.Tests.Mcp
             var logged = JObject.Parse(OpenRouterClient.TruncateMessagesForLog(body));
             var msgs = (JArray)logged["messages"];
 
-            // 4 originals (emoji system message + 3) collapse to marker + last
-            Assert.Equal(2, msgs.Count);
-            Assert.Equal("... 3 earlier message(s) omitted ...", (string)msgs[0]);
-            Assert.Equal("user", (string)msgs[1]["role"]);
-            Assert.Equal("last", (string)msgs[1]["content"]);
+            // 4 originals (emoji system message + 3) collapse to marker + last two
+            Assert.Equal(3, msgs.Count);
+            Assert.Equal("... 2 earlier message(s) omitted ...", (string)msgs[0]);
+            Assert.Equal("assistant", (string)msgs[1]["role"]);
+            Assert.Equal("second", (string)msgs[1]["content"]);
+            Assert.Equal("user", (string)msgs[2]["role"]);
+            Assert.Equal("last", (string)msgs[2]["content"]);
 
             // everything outside messages is untouched
             Assert.Equal("m", (string)logged["model"]);
         }
 
         [Fact]
-        public void TruncateMessagesForLog_leaves_single_message_and_bad_json_alone()
+        public void TruncateMessagesForLog_leaves_short_arrays_and_bad_json_alone()
         {
-            var body = OpenRouterClient.BuildRequestBody("m", new List<ChatMessage>(), null, new ClientProperties());
-            var logged = JObject.Parse(OpenRouterClient.TruncateMessagesForLog(body));
-            Assert.Equal(1, ((JArray)logged["messages"]).Count);
+            // emoji system message only
+            var one = OpenRouterClient.BuildRequestBody("m", new List<ChatMessage>(), null, new ClientProperties());
+            Assert.Equal(1, ((JArray)JObject.Parse(OpenRouterClient.TruncateMessagesForLog(one))["messages"]).Count);
+
+            // emoji system message + one user message: still no truncation
+            var two = OpenRouterClient.BuildRequestBody("m", new List<ChatMessage>
+            {
+                new ChatMessage("user", "hi"),
+            }, null, new ClientProperties());
+            var msgs = (JArray)JObject.Parse(OpenRouterClient.TruncateMessagesForLog(two))["messages"];
+            Assert.Equal(2, msgs.Count);
+            Assert.Equal("hi", (string)msgs[1]["content"]);
 
             Assert.Equal("not json", OpenRouterClient.TruncateMessagesForLog("not json"));
             Assert.Null(OpenRouterClient.TruncateMessagesForLog(null));
