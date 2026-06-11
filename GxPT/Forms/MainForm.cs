@@ -3519,6 +3519,28 @@ namespace GxPT
                     header = n > 1 ? ("Read " + n + " web pages") : "Read a web page";
                     body = urls; return true;
                 }
+                case "web__get":
+                {
+                    string url = Str(args, "url"); if (url.Length == 0) return false;
+                    header = "Fetched " + url;
+                    // When custom request headers were sent, show them as a readable name: value list;
+                    // otherwise this is a plain one-line record.
+                    body = FormatHeaderMap(args, "headers"); language = "text"; return true;
+                }
+                case "web__http":
+                {
+                    string url = Str(args, "url"); if (url.Length == 0) return false;
+                    string method = Str(args, "method"); if (method.Length == 0) method = "POST";
+                    header = "Sent " + method.ToUpperInvariant() + " to " + url;
+                    // Expandable body reads like a raw request: header lines, then a blank line, then the
+                    // request body. With no headers, a JSON body is highlighted as JSON.
+                    string hdrs = FormatHeaderMap(args, "headers");
+                    string reqBody = Str(args, "body");
+                    if (hdrs.Length == 0) { body = reqBody; language = LooksLikeJson(reqBody) ? "json" : "text"; }
+                    else if (reqBody.Length == 0) { body = hdrs; language = "text"; }
+                    else { body = hdrs + "\n\n" + reqBody; language = "text"; }
+                    return true;
+                }
                 case "git__commit":
                 {
                     string msg = Str(args, "message"); if (msg.Trim().Length == 0) return false;
@@ -3648,9 +3670,7 @@ namespace GxPT
                     string slug = Str(args, "slug");
                     string rel = Str(args, "relpath");
                     LineDiffResult diff = DiffUtil.BuildLineDiff(Str(args, "old_string"), Str(args, "new_string"));
-                    string target = (slug.Length > 0 && rel.Length > 0) ? (slug + "/" + rel)
-                                  : (rel.Length > 0 ? rel : (slug.Length > 0 ? slug : "(skill file)"));
-                    header = "edited " + target;
+                    header = "edited " + SkillTarget(slug, rel);
                     body = diff.Body; language = "diff"; added = diff.Added; removed = diff.Removed; return true;
                 }
                 case "skills__run_skill_script":
@@ -3658,6 +3678,51 @@ namespace GxPT
                     string rel = Str(args, "relpath");
                     header = rel.Length > 0 ? "Ran skill script: " + rel : "Ran a skill script";
                     return true;
+                }
+                case "skills__create_skill":
+                {
+                    string slug = Str(args, "slug"); string name = Str(args, "name");
+                    header = "Created skill " + (slug.Length > 0 ? slug : (name.Length > 0 ? name : "(skill)"));
+                    // Expandable view of the skill's fields (name/description/instructions), not raw JSON.
+                    body = FormatSkillFields(name, Str(args, "description"), Str(args, "body"));
+                    language = "markdown"; return true;
+                }
+                case "skills__update_skill":
+                {
+                    string slug = Str(args, "slug");
+                    header = "Updated skill " + (slug.Length > 0 ? slug : "(skill)");
+                    // Only the fields the model actually changed are shown.
+                    body = FormatSkillFields(Str(args, "name"), Str(args, "description"), Str(args, "body"));
+                    language = "markdown"; return true;
+                }
+                case "skills__write_skill_file":
+                {
+                    // Mirror files__write: show the file's content highlighted by its extension.
+                    string rel = Str(args, "relpath");
+                    header = "Wrote skill file " + SkillTarget(Str(args, "slug"), rel);
+                    body = Str(args, "content");
+                    language = (rel.Length > 0 ? SyntaxHighlighter.GetLanguageForFileName(rel) : null) ?? "text";
+                    return true;
+                }
+                case "skills__delete_skill_file":
+                {
+                    string rel = Str(args, "relpath"); if (rel.Length == 0) return false;
+                    header = "Deleted skill file " + SkillTarget(Str(args, "slug"), rel); return true;
+                }
+                case "skills__delete_skill":
+                {
+                    string slug = Str(args, "slug"); if (slug.Length == 0) return false;
+                    header = "Deleted skill " + slug; return true;
+                }
+                case "skills__list_skill_files":
+                {
+                    string slug = Str(args, "slug"); if (slug.Length == 0) return false;
+                    header = "Listed skill files for " + slug; return true;
+                }
+                case "skills__validate_skill":
+                {
+                    string slug = Str(args, "slug"); if (slug.Length == 0) return false;
+                    header = "Validated skill " + slug; return true;
                 }
                 default: return false;
             }
@@ -3701,6 +3766,63 @@ namespace GxPT
                 return sb.ToString();
             }
             catch { return string.Empty; }
+        }
+
+        // Flattens a free-form header map arg ({ "Accept": "application/json", ... }) into readable
+        // "Name: value" lines for a tool-record body. Empty when the arg is absent or not an object.
+        private static string FormatHeaderMap(Newtonsoft.Json.Linq.JObject args, string name)
+        {
+            try
+            {
+                var obj = args[name] as Newtonsoft.Json.Linq.JObject;
+                if (obj == null) return string.Empty;
+                var sb = new System.Text.StringBuilder();
+                foreach (var p in obj)
+                {
+                    if (p.Value == null) continue;
+                    if (sb.Length > 0) sb.Append('\n');
+                    sb.Append(p.Key).Append(": ").Append((string)p.Value);
+                }
+                return sb.ToString();
+            }
+            catch { return string.Empty; }
+        }
+
+        // Heuristic: does this text look like a JSON object/array body (so it can be syntax-highlighted
+        // as JSON)? A cheap leading-bracket check; the highlighter degrades gracefully if it's wrong.
+        private static bool LooksLikeJson(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return false;
+            string t = s.Trim();
+            return t.Length > 1 && (t[0] == '{' || t[0] == '[');
+        }
+
+        // "slug/relpath" for a skill-file record header, tolerant of a missing slug or relpath.
+        private static string SkillTarget(string slug, string relpath)
+        {
+            if (slug.Length > 0 && relpath.Length > 0) return slug + "/" + relpath;
+            if (relpath.Length > 0) return relpath;
+            return slug.Length > 0 ? slug : "(skill file)";
+        }
+
+        // Expandable view of a skill's authored fields for create/update records: a readable
+        // "Name:"/"Description:" preamble followed by the instructions body. Only non-empty fields
+        // appear (update_skill passes only the fields being changed), so an unchanged field is omitted.
+        private static string FormatSkillFields(string name, string description, string body)
+        {
+            var sb = new System.Text.StringBuilder();
+            if (name != null && name.Length > 0) sb.Append("Name: ").Append(name);
+            if (description != null && description.Length > 0)
+            {
+                if (sb.Length > 0) sb.Append('\n');
+                sb.Append("Description: ").Append(description);
+            }
+            if (body != null && body.Length > 0)
+            {
+                if (sb.Length > 0) sb.Append("\n\n");
+                sb.Append(body);
+            }
+            return sb.ToString();
         }
 
         // Comma-separated summary of a string[] pathspec arg (also accepts a lone string), for a
