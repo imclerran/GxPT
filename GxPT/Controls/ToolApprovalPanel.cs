@@ -239,7 +239,9 @@ namespace GxPT
                     if (msg.Trim().Length > 0)
                     {
                         _diffPanel.SetContent(string.Empty, msg, "text", dark, _monoFont, tc.CodeBack, tc.UiForeground);
-                        _previewLabel.Text = "Commit message:";
+                        // Note when commit will stage everything first (git add -A), so it isn't a surprise.
+                        _previewLabel.Text = Bv(req.Arguments, "all")
+                            ? "Commit message (staging all changes):" : "Commit message:";
                         handled = true;
                     }
                 }
@@ -616,8 +618,16 @@ namespace GxPT
                 case "git__branch":
                 {
                     string act = Sv(a, "action"); if (act.Length == 0) act = "list";
-                    sb.Append("branch ").Append(act); Append(sb, Sv(a, "name"));
-                    if (Sv(a, "new_name").Length > 0) sb.Append(" -> ").Append(Sv(a, "new_name")); break;
+                    string nm = Sv(a, "name");
+                    switch (act.ToLowerInvariant())
+                    {
+                        // Real git syntax so a force-delete (-D) of unmerged work is visible before approving.
+                        case "create": sb.Append("branch"); if (Bv(a, "force")) sb.Append(" -f"); Append(sb, nm); break;
+                        case "delete": sb.Append(Bv(a, "force") ? "branch -D" : "branch -d"); Append(sb, nm); break;
+                        case "rename": sb.Append("branch -m"); Append(sb, nm); Append(sb, Sv(a, "new_name")); break;
+                        default: sb.Append("branch"); if (Bv(a, "all")) sb.Append(" -a"); break;
+                    }
+                    break;
                 }
                 case "git__merge":
                     sb.Append("merge"); if (Bv(a, "no_ff")) sb.Append(" --no-ff"); Append(sb, Sv(a, "branch")); break;
@@ -645,7 +655,16 @@ namespace GxPT
                 {
                     string act = Sv(a, "action"); if (act.Length == 0) act = "push";
                     sb.Append("stash ").Append(act);
-                    if (Sv(a, "message").Length > 0) sb.Append(" -m ").Append(Sv(a, "message"));
+                    if (act == "push")
+                    {
+                        if (Sv(a, "message").Length > 0) sb.Append(" -m ").Append(Sv(a, "message"));
+                    }
+                    else if (act == "pop" || act == "apply" || act == "drop")
+                    {
+                        // Show the targeted entry (stash@{N}) so it's clear which stash is affected.
+                        string idx = Sv(a, "index");
+                        if (idx.Length > 0) sb.Append(" stash@{").Append(idx).Append('}');
+                    }
                     break;
                 }
                 default: return string.Empty;

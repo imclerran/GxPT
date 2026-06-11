@@ -3588,8 +3588,17 @@ namespace GxPT
                     switch (action.ToLowerInvariant())
                     {
                         case "create": header = nm.Length > 0 ? ("Created branch " + nm) : "Created branch"; break;
-                        case "delete": header = nm.Length > 0 ? ("Deleted branch " + nm) : "Deleted branch"; break;
-                        case "rename": header = "Renamed branch" + (Str(args, "new_name").Length > 0 ? " to " + Str(args, "new_name") : ""); break;
+                        case "delete":
+                        {
+                            // A force-delete (-D) can drop unmerged work, so call it out distinctly.
+                            string verb = Bool(args, "force") ? "Force-deleted branch" : "Deleted branch";
+                            header = nm.Length > 0 ? (verb + " " + nm) : verb; break;
+                        }
+                        case "rename":
+                        {
+                            string from = Str(args, "name"); string to = Str(args, "new_name");
+                            header = "Renamed branch" + (from.Length > 0 ? " " + from : "") + (to.Length > 0 ? " to " + to : ""); break;
+                        }
                         default: header = "Listed branches"; break;
                     }
                     return true;
