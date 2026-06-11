@@ -299,6 +299,27 @@ namespace GxPT
                         handled = true;
                     }
                 }
+                else if (req.FunctionName != null && req.FunctionName.StartsWith("msbuild__build_solution_", StringComparison.Ordinal))
+                {
+                    // devenv (whole-solution) build: show the equivalent command line. The IDE year is the
+                    // tool-name suffix (build_solution_2022 -> 2022). Checked before the MSBuild prefix
+                    // below since "build_solution_*" also starts with "build_".
+                    string year = req.FunctionName.Substring("msbuild__build_solution_".Length);
+                    _diffPanel.SetContent("Visual Studio " + year, DevenvCommandPreview(req.Arguments), "batch", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                    _previewLabel.Text = "Build (Visual Studio):";
+                    handled = true;
+                }
+                else if (req.FunctionName != null && req.FunctionName.StartsWith("msbuild__build_", StringComparison.Ordinal))
+                {
+                    // MSBuild build: the equivalent command line. The engine version is the tool-name
+                    // suffix (build_17_0 -> 17.0); MSBuild can run arbitrary build logic, so this is gated.
+                    string ver = req.FunctionName.Substring("msbuild__build_".Length).Replace('_', '.');
+                    string bitness = req.Arguments.Value<string>("bitness") ?? string.Empty;
+                    string head = "MSBuild " + ver + (bitness.Length > 0 ? " (" + bitness + ")" : string.Empty);
+                    _diffPanel.SetContent(head, MsBuildCommandPreview(req.Arguments), "batch", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                    _previewLabel.Text = "Build (MSBuild):";
+                    handled = true;
+                }
             }
 
             if (handled)
@@ -594,6 +615,84 @@ namespace GxPT
             if (name.Length > 0) sb.Append("Name: ").Append(name);
             if (desc.Length > 0) { if (sb.Length > 0) sb.Append("\r\n"); sb.Append("Description: ").Append(desc); }
             if (body.Length > 0) { if (sb.Length > 0) sb.Append("\r\n\r\n"); sb.Append(body); }
+            return sb.ToString();
+        }
+
+        // "msbuild <project> /t:... /p:Configuration=... ..." for an msbuild__build_<ver> approval,
+        // mirroring the switches the server actually passes (MsBuildTools.BuildArgs). Routine defaults
+        // (/v:minimal, /nologo) are omitted so the risk-bearing parts (project, targets, properties)
+        // stand out.
+        private static string MsBuildCommandPreview(Newtonsoft.Json.Linq.JObject a)
+        {
+            var sb = new System.Text.StringBuilder("msbuild");
+            string project = Sv(a, "project");
+            sb.Append(' ').Append(project.Length > 0 ? project : "<lone solution/project in workdir>");
+
+            string targets = JoinArr(a, "targets", ";");
+            if (targets.Length > 0) sb.Append(" /t:").Append(targets);
+
+            string config = Sv(a, "configuration");
+            if (config.Length > 0) sb.Append(" /p:Configuration=").Append(config);
+            string platform = Sv(a, "platform");
+            if (platform.Length > 0) sb.Append(" /p:Platform=").Append(platform);
+
+            var props = a["properties"] as Newtonsoft.Json.Linq.JObject;
+            if (props != null)
+                foreach (var kv in props)
+                {
+                    if (string.IsNullOrEmpty(kv.Key)) continue;
+                    sb.Append(" /p:").Append(kv.Key).Append('=').Append(kv.Value != null ? kv.Value.ToString() : string.Empty);
+                }
+
+            string verbosity = Sv(a, "verbosity");
+            if (verbosity.Length > 0) sb.Append(" /v:").Append(verbosity);
+            return sb.ToString();
+        }
+
+        // "devenv <solution> /Build \"Config|Platform\" ..." for an msbuild__build_solution_<year>
+        // approval (mirrors MsBuildTools.BuildDevenvArgs).
+        private static string DevenvCommandPreview(Newtonsoft.Json.Linq.JObject a)
+        {
+            var sb = new System.Text.StringBuilder("devenv");
+            string solution = Sv(a, "solution");
+            sb.Append(' ').Append(solution.Length > 0 ? solution : "<lone .sln in workdir>");
+            sb.Append(' ').Append(DevenvActionSwitch(Sv(a, "action")));
+
+            string config = Sv(a, "configuration"); if (config.Length == 0) config = "Release";
+            string platform = Sv(a, "platform");
+            sb.Append(" \"").Append(platform.Length > 0 ? config + "|" + platform : config).Append('"');
+
+            string project = Sv(a, "project");
+            if (project.Length > 0) sb.Append(" /Project ").Append(project);
+            string projectConfig = Sv(a, "project_config");
+            if (projectConfig.Length > 0) sb.Append(" /ProjectConfig ").Append(projectConfig);
+            return sb.ToString();
+        }
+
+        private static string DevenvActionSwitch(string action)
+        {
+            if (string.IsNullOrEmpty(action)) return "/Build";
+            switch (action.ToLowerInvariant())
+            {
+                case "rebuild": return "/Rebuild";
+                case "clean": return "/Clean";
+                case "deploy": return "/Deploy";
+                default: return "/Build";
+            }
+        }
+
+        // Joins a string[] arg with the given separator (also accepts a lone string). Empty when absent.
+        private static string JoinArr(Newtonsoft.Json.Linq.JObject a, string name, string sep)
+        {
+            var arr = a[name] as Newtonsoft.Json.Linq.JArray;
+            if (arr == null) { string s = a.Value<string>(name); return s ?? string.Empty; }
+            var sb = new System.Text.StringBuilder();
+            foreach (var t in arr)
+            {
+                string s = (string)t; if (string.IsNullOrEmpty(s)) continue;
+                if (sb.Length > 0) sb.Append(sep);
+                sb.Append(s);
+            }
             return sb.ToString();
         }
 
