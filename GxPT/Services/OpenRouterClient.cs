@@ -305,7 +305,11 @@ namespace GxPT
         {
             if (string.IsNullOrEmpty(generationId) || !IsConfigured) return null;
             string url = "https://openrouter.ai/api/v1/generation?id=" + Uri.EscapeDataString(generationId);
-            int[] delaysMs = new int[] { 0, 1000, 2000, 3000, 4000 };
+            // Field-measured: records materialize with variable latency clustered around 10-15s
+            // after completion, with stragglers beyond - a short schedule permanently loses the
+            // stragglers' discounts (there is no later retry). Front-loaded for the fast cases,
+            // patient tail for the slow ones (~2 minutes total).
+            int[] delaysMs = new int[] { 0, 1000, 2000, 3000, 4000, 10000, 15000, 30000, 60000 };
             GenerationStats best = null;
             HttpGetResult last = null;
             for (int attempt = 0; attempt < delaysMs.Length; attempt++)

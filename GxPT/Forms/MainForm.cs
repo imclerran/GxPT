@@ -4732,7 +4732,10 @@ namespace GxPT
             // self-cancels the extra GETs if OpenRouter adds cache_discount to SSE chunks.
             if (u.CacheDiscount.HasValue && u.Cost.HasValue) return;
             if (!cachingModel && u.Cost.HasValue) return;
-            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            // A dedicated background thread, not the ThreadPool: the fetch can sleep for up to
+            // ~2 minutes waiting for a slow generation record, and the app's sends/naming also run
+            // on the pool - a tool loop's worth of sleeping fetches must not starve them.
+            var worker = new System.Threading.Thread(delegate()
             {
                 try
                 {
@@ -4752,6 +4755,8 @@ namespace GxPT
                 }
                 catch { }
             });
+            worker.IsBackground = true; // never holds the app open; unreconciled discounts at exit are accepted
+            worker.Start();
         }
 
         // Marshals a usage update from a send worker thread to the UI thread, refreshing the strip
