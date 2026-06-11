@@ -203,7 +203,8 @@ namespace GxPT
                 || m.StartsWith("google/", StringComparison.OrdinalIgnoreCase)    // implicit + cache_control
                 || m.StartsWith("openai/", StringComparison.OrdinalIgnoreCase)    // automatic (>=1024 tokens)
                 || m.StartsWith("deepseek/", StringComparison.OrdinalIgnoreCase)  // automatic
-                || m.StartsWith("x-ai/", StringComparison.OrdinalIgnoreCase);     // automatic (Grok)
+                || m.StartsWith("x-ai/", StringComparison.OrdinalIgnoreCase)      // automatic (Grok)
+                || m.StartsWith("qwen/", StringComparison.OrdinalIgnoreCase);     // automatic (context cache)
         }
 
         // "~"-prefixed model aliases (e.g. "~anthropic/claude-sonnet-latest") resolve to the same

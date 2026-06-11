@@ -213,6 +213,7 @@ namespace GxPT.Tests.Mcp
             // The broader caching gate (drives reveal-set eviction) also covers automatic cachers.
             Assert.True(OpenRouterClient.ModelSupportsPromptCaching("openai/gpt-4o"));
             Assert.True(OpenRouterClient.ModelSupportsPromptCaching("deepseek/deepseek-chat"));
+            Assert.True(OpenRouterClient.ModelSupportsPromptCaching("qwen/qwen3-coder"));
             Assert.True(OpenRouterClient.ModelSupportsPromptCaching("~anthropic/claude-sonnet-latest"));
             Assert.False(OpenRouterClient.ModelSupportsPromptCaching("mistralai/mistral-large"));
         }
