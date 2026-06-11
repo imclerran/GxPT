@@ -2026,211 +2026,267 @@ namespace GxPT
                 }
                 ClearAttachmentsBanner();
 
-                var modelToUse = GetSelectedModel();
-
-                // Effective ZDR for this send (global default OR the per-conversation toggle); engages
-                // the one-way latch on the first ZDR send and tags the message bubbles just added.
-                bool zdrForSend = ResolveZdrForSend(ctx);
-                if (zdrForSend) MarkActiveTurnZdrBubbles(ctx);
-
-                // Tool-enabled turn: tool activity renders as a separate chrome-less message above the
-                // answer bubble. BeginToolSend owns the whole turn; the plain path below is unchanged.
-                // Skills also route through the tool loop (they inject a manifest and expose open_skill),
-                // so a conversation with skills but no MCP tools still takes this path.
-                bool hasMcpTools = _mcpRegistry != null && _mcpRegistry.HasToolsForWorkdir(ctx.WorkingDir);
-                if (hasMcpTools || ConversationHasSkills(ctx))
-                {
-                    BeginToolSend(ctx, modelToUse, zdrForSend);
-                    return;
-                }
-
-                // Add placeholder assistant message to stream into and capture its index
-                int assistantIndex = ctx.Transcript.AddMessageGetIndex(MessageRole.Assistant, string.Empty);
-                if (zdrForSend) ctx.Transcript.SetMessageZdrTag(assistantIndex, true);
-                Logger.Log("Send", "Assistant placeholder index=" + assistantIndex);
-                var assistantBuilder = new StringBuilder();
-                // Capture this turn's cancellation handle for the streaming callbacks (the field is
-                // cleared to null when the turn finalizes).
-                RequestCancellation cancel = ctx.Cancellation;
-
-                // Throttle UI updates with a WinForms timer (coalesces rapid deltas)
-                var sbLock = new object();
-                int lastRenderedLen = 0;
-                var renderTimer = new System.Windows.Forms.Timer();
-                renderTimer.Interval = 75; // ~13 fps; adjust between 50-150ms if needed
-                renderTimer.Tick += (s2, e2) =>
-                {
-                    string snapshot;
-                    int len;
-                    lock (sbLock)
-                    {
-                        len = assistantBuilder.Length;
-                        if (len == lastRenderedLen) return; // nothing new
-                        snapshot = assistantBuilder.ToString();
-                        lastRenderedLen = len;
-                    }
-                    // Update on UI thread (timer runs on UI thread)
-                    ctx.Transcript.UpdateMessageAt(assistantIndex, snapshot);
-                };
-                // Keep view pinned to bottom while streaming
-                try { ctx.Transcript.StickToBottomDuringStreaming = true; }
-                catch { }
-                renderTimer.Start();
-
-                // Kick off streaming in background
-                System.Threading.ThreadPool.QueueUserWorkItem(delegate
-                {
-                    try
-                    {
-                        // Snapshot the history and log it
-                        // Build a model snapshot where attachments are appended to content on-the-fly
-                        var snapshot = BuildMessagesForModel(ctx.Conversation.History);
-                        // Prompt caching: the newest message carries the cache breakpoint, so each
-                        // turn re-reads the prior turn's prefix and extends it. Snapshot messages are
-                        // request-local clones - the flag never lands in persisted history.
-                        if (snapshot.Count > 0)
-                            snapshot[snapshot.Count - 1].CacheControl = true;
-                        try
-                        {
-                            var sbSnap = new StringBuilder();
-                            sbSnap.Append("Sending ").Append(snapshot.Count).Append(" messages:\n");
-                            for (int i = 0; i < snapshot.Count; i++)
-                            {
-                                var m = snapshot[i];
-                                string content = m.Content ?? string.Empty;
-                                content = content.Replace("\r", " ").Replace("\n", " ");
-                                if (content.Length > 200) content = content.Substring(0, 200) + "...";
-                                sbSnap.Append("  ").Append(i).Append(": ").Append(m.Role).Append(" | ").Append(content).Append('\n');
-                            }
-                            Logger.Log("Send", sbSnap.ToString());
-                        }
-                        catch { }
-
-                        var sendProps = new ClientProperties { Stream = true, Zdr = zdrForSend ? true : (bool?)null };
-                        // Sticky provider routing on cache-supported models: prefer (provider.order,
-                        // preference with fallback) the endpoint holding this conversation's warm
-                        // prompt cache. Stickiness is confirmation-gated - only a response reporting
-                        // cache activity (a read or a write) sets or moves the preference; merely
-                        // serving a request proves nothing. Usage/cost accounting (status bar)
-                        // records on every model.
-                        Conversation usageConvo = ctx.Conversation;
-                        bool cachingModel = OpenRouterClient.ModelSupportsPromptCaching(modelToUse);
-                        if (usageConvo != null)
-                        {
-                            if (cachingModel && !string.IsNullOrEmpty(usageConvo.CacheWarmProvider))
-                                sendProps.ProviderOrder = new List<string> { usageConvo.CacheWarmProvider };
-                            sendProps.ResponseUsageCallback = delegate(ResponseUsage u)
-                            {
-                                if (u == null) return;
-                                if (cachingModel && !string.IsNullOrEmpty(u.Provider)
-                                    && (u.CachedTokens > 0 || u.CacheWriteTokens > 0))
-                                    usageConvo.CacheWarmProvider = u.Provider;
-                                RecordUsageAndReconcile(usageConvo, u, cachingModel);
-                            };
-                        }
-                        _client.CreateCompletionStream(
-                            modelToUse,
-                            snapshot,
-                            sendProps,
-                            delegate(string d)
-                            {
-                                if (string.IsNullOrEmpty(d)) return;
-                                lock (sbLock) { assistantBuilder.Append(d); }
-                                // no per-delta BeginInvoke; timer will render
-                            },
-                            delegate
-                            {
-                                // finalize on UI thread (update history and unlock send)
-                                string finalText;
-                                lock (sbLock) { finalText = assistantBuilder.ToString(); }
-                                BeginInvoke((MethodInvoker)delegate
-                                {
-                                    try { renderTimer.Stop(); renderTimer.Dispose(); }
-                                    catch { }
-                                    try { ctx.Transcript.StickToBottomDuringStreaming = false; }
-                                    catch { }
-                                    // A user stop ends the stream via onDone (no error). If nothing
-                                    // streamed yet, drop the empty placeholder rather than committing an
-                                    // empty assistant message; otherwise keep the partial text as normal.
-                                    bool cancelled = (cancel != null && cancel.IsCancelled);
-                                    if (cancelled && finalText.Trim().Length == 0)
-                                    {
-                                        if (assistantIndex == ctx.Transcript.MessageCount - 1)
-                                            ctx.Transcript.RemoveLastMessage();
-                                        Logger.Log("Send", "Stream stopped by user before any output at index=" + assistantIndex);
-                                    }
-                                    else
-                                    {
-                                        ctx.Transcript.UpdateMessageAt(assistantIndex, finalText);
-                                        ctx.Conversation.AddAssistantMessage(finalText);
-                                        ctx.Conversation.SelectedModel = ctx.SelectedModel;
-                                        // Save assistant completion if allowed
-                                        if (!ctx.NoSaveUntilUserSend)
-                                            ConversationStore.Save(ctx.Conversation); // save only after streaming completes
-                                        try { Logger.Log("Transcript", "Final assistant message at index=" + assistantIndex + ":\n" + (finalText ?? string.Empty)); }
-                                        catch { }
-                                        Logger.Log("Send", "Assistant finalized at index=" + assistantIndex + ", chars=" + (finalText != null ? finalText.Length : 0) + (cancelled ? " (stopped by user)" : string.Empty));
-                                    }
-                                    ctx.IsSending = false;
-                                    ctx.Cancellation = null;
-                                    HideGenerationBar(ctx);
-                                    if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
-                                });
-                            },
-                            delegate(string err)
-                            {
-                                if (string.IsNullOrEmpty(err)) err = "Unknown error.";
-                                string partial;
-                                lock (sbLock) { partial = assistantBuilder.ToString(); }
-                                BeginInvoke((MethodInvoker)delegate
-                                {
-                                    try { renderTimer.Stop(); renderTimer.Dispose(); }
-                                    catch { }
-                                    try { ctx.Transcript.StickToBottomDuringStreaming = false; }
-                                    catch { }
-                                    // Keep any partial text in the assistant bubble; otherwise drop the
-                                    // empty placeholder so only the red error notice shows.
-                                    if (partial.Trim().Length > 0)
-                                        ctx.Transcript.UpdateMessageAt(assistantIndex, partial);
-                                    else if (assistantIndex == ctx.Transcript.MessageCount - 1)
-                                        ctx.Transcript.RemoveLastMessage();
-                                    ShowTranscriptError(ctx.Transcript, err);
-                                    Logger.Log("Send", "Stream error at index=" + assistantIndex + ": " + err);
-                                    ctx.IsSending = false;
-                                    ctx.Cancellation = null;
-                                    HideGenerationBar(ctx);
-                                    // don't save on failure; no new assistant content
-                                });
-                            },
-                            cancel
-                        );
-                    }
-                    catch (Exception ex)
-                    {
-                        string partial;
-                        lock (sbLock) { partial = assistantBuilder.ToString(); }
-                        BeginInvoke((MethodInvoker)delegate
-                        {
-                            try { renderTimer.Stop(); renderTimer.Dispose(); }
-                            catch { }
-                            try { ctx.Transcript.StickToBottomDuringStreaming = false; }
-                            catch { }
-                            if (partial.Trim().Length > 0)
-                                ctx.Transcript.UpdateMessageAt(assistantIndex, partial);
-                            else if (assistantIndex == ctx.Transcript.MessageCount - 1)
-                                ctx.Transcript.RemoveLastMessage();
-                            ShowTranscriptError(ctx.Transcript, ex.Message);
-                            Logger.Log("Send", "Exception in streaming worker: " + ex.Message);
-                            ctx.IsSending = false;
-                            ctx.Cancellation = null;
-                            HideGenerationBar(ctx);
-                        });
-                    }
-                });
+                StartModelTurn(ctx);
             }
             catch
             {
                 Logger.Log("Send", "Send failed unexpectedly; unlocking.");
+                ctx.IsSending = false;
+                ctx.Cancellation = null;
+                HideGenerationBar(ctx);
+                throw;
+            }
+        }
+
+        // Kick off the model turn for the conversation's current history: routes to the tool loop
+        // when MCP tools or skills apply, otherwise streams a plain completion into a new assistant
+        // bubble. Callers own the send lock — ctx.IsSending is already true, ctx.Cancellation is
+        // fresh and the generation bar is showing. Used by the normal send path and by
+        // RetryLastTurn, which re-runs the turn over unchanged history after a failure.
+        private void StartModelTurn(TabManager.ChatTabContext ctx)
+        {
+            var modelToUse = GetSelectedModel();
+
+            // Effective ZDR for this send (global default OR the per-conversation toggle); engages
+            // the one-way latch on the first ZDR send and tags the message bubbles just added.
+            bool zdrForSend = ResolveZdrForSend(ctx);
+            if (zdrForSend) MarkActiveTurnZdrBubbles(ctx);
+
+            // Tool-enabled turn: tool activity renders as a separate chrome-less message above the
+            // answer bubble. BeginToolSend owns the whole turn; the plain path below is unchanged.
+            // Skills also route through the tool loop (they inject a manifest and expose open_skill),
+            // so a conversation with skills but no MCP tools still takes this path.
+            bool hasMcpTools = _mcpRegistry != null && _mcpRegistry.HasToolsForWorkdir(ctx.WorkingDir);
+            if (hasMcpTools || ConversationHasSkills(ctx))
+            {
+                BeginToolSend(ctx, modelToUse, zdrForSend);
+                return;
+            }
+
+            // Add placeholder assistant message to stream into and capture its index
+            int assistantIndex = ctx.Transcript.AddMessageGetIndex(MessageRole.Assistant, string.Empty);
+            if (zdrForSend) ctx.Transcript.SetMessageZdrTag(assistantIndex, true);
+            Logger.Log("Send", "Assistant placeholder index=" + assistantIndex);
+            var assistantBuilder = new StringBuilder();
+            // Capture this turn's cancellation handle for the streaming callbacks (the field is
+            // cleared to null when the turn finalizes).
+            RequestCancellation cancel = ctx.Cancellation;
+
+            // Throttle UI updates with a WinForms timer (coalesces rapid deltas)
+            var sbLock = new object();
+            int lastRenderedLen = 0;
+            var renderTimer = new System.Windows.Forms.Timer();
+            renderTimer.Interval = 75; // ~13 fps; adjust between 50-150ms if needed
+            renderTimer.Tick += (s2, e2) =>
+            {
+                string snapshot;
+                int len;
+                lock (sbLock)
+                {
+                    len = assistantBuilder.Length;
+                    if (len == lastRenderedLen) return; // nothing new
+                    snapshot = assistantBuilder.ToString();
+                    lastRenderedLen = len;
+                }
+                // Update on UI thread (timer runs on UI thread)
+                ctx.Transcript.UpdateMessageAt(assistantIndex, snapshot);
+            };
+            // Keep view pinned to bottom while streaming
+            try { ctx.Transcript.StickToBottomDuringStreaming = true; }
+            catch { }
+            renderTimer.Start();
+
+            // Kick off streaming in background
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    // Snapshot the history and log it
+                    // Build a model snapshot where attachments are appended to content on-the-fly
+                    var snapshot = BuildMessagesForModel(ctx.Conversation.History);
+                    // Prompt caching: the newest message carries the cache breakpoint, so each
+                    // turn re-reads the prior turn's prefix and extends it. Snapshot messages are
+                    // request-local clones - the flag never lands in persisted history.
+                    if (snapshot.Count > 0)
+                        snapshot[snapshot.Count - 1].CacheControl = true;
+                    try
+                    {
+                        var sbSnap = new StringBuilder();
+                        sbSnap.Append("Sending ").Append(snapshot.Count).Append(" messages:\n");
+                        for (int i = 0; i < snapshot.Count; i++)
+                        {
+                            var m = snapshot[i];
+                            string content = m.Content ?? string.Empty;
+                            content = content.Replace("\r", " ").Replace("\n", " ");
+                            if (content.Length > 200) content = content.Substring(0, 200) + "...";
+                            sbSnap.Append("  ").Append(i).Append(": ").Append(m.Role).Append(" | ").Append(content).Append('\n');
+                        }
+                        Logger.Log("Send", sbSnap.ToString());
+                    }
+                    catch { }
+
+                    var sendProps = new ClientProperties { Stream = true, Zdr = zdrForSend ? true : (bool?)null };
+                    // Sticky provider routing on cache-supported models: prefer (provider.order,
+                    // preference with fallback) the endpoint holding this conversation's warm
+                    // prompt cache. Stickiness is confirmation-gated - only a response reporting
+                    // cache activity (a read or a write) sets or moves the preference; merely
+                    // serving a request proves nothing. Usage/cost accounting (status bar)
+                    // records on every model.
+                    Conversation usageConvo = ctx.Conversation;
+                    bool cachingModel = OpenRouterClient.ModelSupportsPromptCaching(modelToUse);
+                    if (usageConvo != null)
+                    {
+                        if (cachingModel && !string.IsNullOrEmpty(usageConvo.CacheWarmProvider))
+                            sendProps.ProviderOrder = new List<string> { usageConvo.CacheWarmProvider };
+                        sendProps.ResponseUsageCallback = delegate(ResponseUsage u)
+                        {
+                            if (u == null) return;
+                            if (cachingModel && !string.IsNullOrEmpty(u.Provider)
+                                && (u.CachedTokens > 0 || u.CacheWriteTokens > 0))
+                                usageConvo.CacheWarmProvider = u.Provider;
+                            RecordUsageAndReconcile(usageConvo, u, cachingModel);
+                        };
+                    }
+                    _client.CreateCompletionStream(
+                        modelToUse,
+                        snapshot,
+                        sendProps,
+                        delegate(string d)
+                        {
+                            if (string.IsNullOrEmpty(d)) return;
+                            lock (sbLock) { assistantBuilder.Append(d); }
+                            // no per-delta BeginInvoke; timer will render
+                        },
+                        delegate
+                        {
+                            // finalize on UI thread (update history and unlock send)
+                            string finalText;
+                            lock (sbLock) { finalText = assistantBuilder.ToString(); }
+                            BeginInvoke((MethodInvoker)delegate
+                            {
+                                try { renderTimer.Stop(); renderTimer.Dispose(); }
+                                catch { }
+                                try { ctx.Transcript.StickToBottomDuringStreaming = false; }
+                                catch { }
+                                // A user stop ends the stream via onDone (no error). If nothing
+                                // streamed yet, drop the empty placeholder rather than committing an
+                                // empty assistant message; otherwise keep the partial text as normal.
+                                bool cancelled = (cancel != null && cancel.IsCancelled);
+                                if (cancelled && finalText.Trim().Length == 0)
+                                {
+                                    if (assistantIndex == ctx.Transcript.MessageCount - 1)
+                                        ctx.Transcript.RemoveLastMessage();
+                                    Logger.Log("Send", "Stream stopped by user before any output at index=" + assistantIndex);
+                                }
+                                else
+                                {
+                                    ctx.Transcript.UpdateMessageAt(assistantIndex, finalText);
+                                    ctx.Conversation.AddAssistantMessage(finalText);
+                                    ctx.Conversation.SelectedModel = ctx.SelectedModel;
+                                    // Save assistant completion if allowed
+                                    if (!ctx.NoSaveUntilUserSend)
+                                        ConversationStore.Save(ctx.Conversation); // save only after streaming completes
+                                    try { Logger.Log("Transcript", "Final assistant message at index=" + assistantIndex + ":\n" + (finalText ?? string.Empty)); }
+                                    catch { }
+                                    Logger.Log("Send", "Assistant finalized at index=" + assistantIndex + ", chars=" + (finalText != null ? finalText.Length : 0) + (cancelled ? " (stopped by user)" : string.Empty));
+                                }
+                                ctx.IsSending = false;
+                                ctx.Cancellation = null;
+                                HideGenerationBar(ctx);
+                                if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
+                            });
+                        },
+                        delegate(string err)
+                        {
+                            if (string.IsNullOrEmpty(err)) err = "Unknown error.";
+                            string partial;
+                            lock (sbLock) { partial = assistantBuilder.ToString(); }
+                            BeginInvoke((MethodInvoker)delegate
+                            {
+                                try { renderTimer.Stop(); renderTimer.Dispose(); }
+                                catch { }
+                                try { ctx.Transcript.StickToBottomDuringStreaming = false; }
+                                catch { }
+                                // Keep any partial text in the assistant bubble; otherwise drop the
+                                // empty placeholder so only the red error notice shows.
+                                if (partial.Trim().Length > 0)
+                                    ctx.Transcript.UpdateMessageAt(assistantIndex, partial);
+                                else if (assistantIndex == ctx.Transcript.MessageCount - 1)
+                                    ctx.Transcript.RemoveLastMessage();
+                                ShowTranscriptError(ctx.Transcript, err);
+                                Logger.Log("Send", "Stream error at index=" + assistantIndex + ": " + err);
+                                ctx.IsSending = false;
+                                ctx.Cancellation = null;
+                                HideGenerationBar(ctx);
+                                // don't save on failure; no new assistant content
+                            });
+                        },
+                        cancel
+                    );
+                }
+                catch (Exception ex)
+                {
+                    string partial;
+                    lock (sbLock) { partial = assistantBuilder.ToString(); }
+                    BeginInvoke((MethodInvoker)delegate
+                    {
+                        try { renderTimer.Stop(); renderTimer.Dispose(); }
+                        catch { }
+                        try { ctx.Transcript.StickToBottomDuringStreaming = false; }
+                        catch { }
+                        if (partial.Trim().Length > 0)
+                            ctx.Transcript.UpdateMessageAt(assistantIndex, partial);
+                        else if (assistantIndex == ctx.Transcript.MessageCount - 1)
+                            ctx.Transcript.RemoveLastMessage();
+                        ShowTranscriptError(ctx.Transcript, ex.Message);
+                        Logger.Log("Send", "Exception in streaming worker: " + ex.Message);
+                        ctx.IsSending = false;
+                        ctx.Cancellation = null;
+                        HideGenerationBar(ctx);
+                    });
+                }
+            });
+        }
+
+        // Re-run the turn that just failed (the Retry button on a trailing error notice). The failed
+        // turn's input is already in history, so nothing is appended: the error notice is removed and
+        // the turn restarts over the unchanged history — this holds for both the plain stream (the
+        // user message is committed before the request) and the tool loop (the orchestrator's partial
+        // progress stays in history, same as when the user keeps typing after a failure).
+        internal void RetryLastTurn(TabManager.ChatTabContext ctx)
+        {
+            if (ctx == null || ctx.Conversation == null || ctx.Transcript == null) return;
+            if (ctx.IsSending) return;
+            if (ctx.Conversation.History == null || LastUserHistoryIndex(ctx.Conversation) < 0)
+                return; // no turn to re-run
+
+            if (_client == null || !_client.IsConfigured)
+            {
+                string reason = _client == null
+                    ? "Client not initialized."
+                    : (!System.IO.File.Exists(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Lib\\curl.exe"))
+                        ? "curl.exe could not be found."
+                        : "Missing API key in settings.");
+                ctx.Transcript.AddMessage(MessageRole.Assistant, "Error: " + reason);
+                Logger.Log("Send", "Retry blocked: " + reason);
+                return;
+            }
+
+            // Drop the trailing error notice so the retried turn streams in its place; a repeat
+            // failure surfaces a fresh notice (with a fresh Retry button).
+            ctx.Transcript.RemoveTrailingErrorNotices();
+
+            ctx.IsSending = true;
+            ctx.Cancellation = new RequestCancellation();
+            ShowGenerationBar(ctx);
+            try
+            {
+                Logger.Log("Send", "Retry turn. Model=" + GetSelectedModel());
+                StartModelTurn(ctx);
+            }
+            catch
+            {
+                Logger.Log("Send", "Retry failed unexpectedly; unlocking.");
                 ctx.IsSending = false;
                 ctx.Cancellation = null;
                 HideGenerationBar(ctx);

@@ -174,8 +174,9 @@ namespace GxPT
                 };
                 ctx.Conversation.SelectedModel = ctx.SelectedModel;
                 _mainForm.EnsureConversationId(ctx.Conversation);
-                // Wire edit-request and name-generated handlers for this tab
+                // Wire edit-request, retry and name-generated handlers for this tab
                 HookEditRequest(ctx);
+                HookRetryRequest(ctx);
                 HookNameGenerated(ctx);
 
                 try { ctx.Page.Text = "New Conversation"; }
@@ -216,8 +217,9 @@ namespace GxPT
             ctx.Conversation.SelectedModel = ctx.SelectedModel;
             _mainForm.EnsureConversationId(ctx.Conversation);
 
-            // Wire edit-request and name-generated handlers for this tab
+            // Wire edit-request, retry and name-generated handlers for this tab
             HookEditRequest(ctx);
+            HookRetryRequest(ctx);
             HookNameGenerated(ctx);
 
             _tabContexts[page] = ctx;
@@ -584,6 +586,18 @@ namespace GxPT
                 }
             }
             catch { }
+        }
+
+        // Wire a tab's transcript Retry button (shown on a trailing error notice) to re-run the
+        // failed turn.
+        private void HookRetryRequest(ChatTabContext ctx)
+        {
+            if (ctx == null || ctx.Transcript == null) return;
+            ctx.Transcript.RetryRequested += delegate
+            {
+                try { _mainForm.RetryLastTurn(ctx); }
+                catch { }
+            };
         }
 
         // Wire a tab's transcript edit-request to populate the input box and enter edit mode.
