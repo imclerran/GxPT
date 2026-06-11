@@ -78,6 +78,7 @@
             this.ssMain = new System.Windows.Forms.StatusStrip();
             this.tslSpring = new System.Windows.Forms.ToolStripStatusLabel();
             this.tslContext = new System.Windows.Forms.ToolStripStatusLabel();
+            this.tspContextMeter = new System.Windows.Forms.ToolStripProgressBar();
             this.tslContextValue = new System.Windows.Forms.ToolStripStatusLabel();
             this.tslCost = new System.Windows.Forms.ToolStripStatusLabel();
             this.tslCostValue = new System.Windows.Forms.ToolStripStatusLabel();
@@ -545,6 +546,7 @@
             this.ssMain.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.tslSpring,
             this.tslContext,
+            this.tspContextMeter,
             this.tslContextValue,
             this.tslCost,
             this.tslCostValue,
@@ -567,6 +569,16 @@
             //
             this.tslContext.Name = "tslContext";
             this.tslContext.Size = new System.Drawing.Size(0, 17);
+            //
+            // tspContextMeter
+            //
+            this.tspContextMeter.AutoSize = false;
+            // Right margin offsets tslContextValue's -2 (which tucks the value against the
+            // caption when the meter is hidden) so a 3px gap survives when the meter shows.
+            this.tspContextMeter.Margin = new System.Windows.Forms.Padding(5, 4, 5, 3);
+            this.tspContextMeter.Name = "tspContextMeter";
+            this.tspContextMeter.Size = new System.Drawing.Size(80, 15);
+            this.tspContextMeter.Visible = false;
             //
             // tslContextValue
             //
@@ -687,6 +699,7 @@
         private System.Windows.Forms.StatusStrip ssMain;
         private System.Windows.Forms.ToolStripStatusLabel tslSpring;
         private System.Windows.Forms.ToolStripStatusLabel tslContext;
+        private System.Windows.Forms.ToolStripProgressBar tspContextMeter;
         private System.Windows.Forms.ToolStripStatusLabel tslCost;
         private System.Windows.Forms.ToolStripStatusLabel tslContextValue;
         private System.Windows.Forms.ToolStripStatusLabel tslCostValue;

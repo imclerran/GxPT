@@ -75,6 +75,14 @@ namespace GxPT
             _inputManager.SetHintText();
             InitUsageStatusBar();
 
+            // Daily, non-blocking refresh of the model context-size catalog (the status bar's
+            // context meter divides by it). The updated event lands on the fetch worker thread;
+            // repaint the strip so meters appear as soon as sizes are known - including the
+            // first-launch case where the strip starts meterless.
+            ModelCatalogService.CatalogUpdated += ModelCatalog_Updated;
+            try { ModelCatalogService.RefreshIfDue(); }
+            catch { }
+
             // Wire banner link and ensure it lays out nicely
             if (this.lnkOpenSettings != null)
                 this.lnkOpenSettings.LinkClicked += lnkOpenSettings_LinkClicked;
@@ -3430,6 +3438,8 @@ namespace GxPT
                         if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
                     }
                 }
+                // The context meter's denominator follows the selected model.
+                SyncUsageStatusFromActiveTab();
             }
             catch { }
         }
@@ -3451,6 +3461,8 @@ namespace GxPT
                         if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
                     }
                 }
+                // The context meter's denominator follows the typed model id.
+                SyncUsageStatusFromActiveTab();
             }
             catch { }
         }
@@ -4709,6 +4721,22 @@ namespace GxPT
             catch { }
         }
 
+        // The model catalog finished a background fetch (worker thread): marshal to the UI
+        // thread and repaint the active tab's Context pane so the meter (dis)appears promptly.
+        private void ModelCatalog_Updated()
+        {
+            try
+            {
+                if (IsDisposed || !IsHandleCreated) return;
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    try { SyncUsageStatusFromActiveTab(); }
+                    catch { }
+                });
+            }
+            catch { }
+        }
+
         // Records a response's streamed usage (instant feedback), then reconciles it against
         // OpenRouter's authoritative generation record on a background thread. cache_discount
         // never arrives on the stream, so the generation record is the Saved figure's only data
@@ -4809,6 +4837,16 @@ namespace GxPT
             // and the strip looks broken until the first response arrives.
             UsageStats s = (convo != null) ? convo.GetUsageStats() : new UsageStats();
 
+            // The context meter needs the model's context window. Prefer the conversation's own
+            // model (it tracks the combo and survives tab switches); fall back to whatever the
+            // combo shows for a tab that hasn't picked one yet. Unknown models (catalog not yet
+            // fetched, or a model OpenRouter no longer lists) get no meter, just the token count.
+            string meterModel = (convo != null && !string.IsNullOrEmpty(convo.SelectedModel))
+                ? convo.SelectedModel : GetSelectedModel();
+            int maxContext;
+            bool haveMax = ModelCatalogService.TryGetContextLength(meterModel, out maxContext)
+                && maxContext > 0;
+
             // Every pane is a caption label + value label pair: the Saved pane needs the split so
             // only the amount carries the health color, and the other two match it so all three
             // panes share identical caption/value spacing. Captions (with the dividers) stay
@@ -4816,8 +4854,21 @@ namespace GxPT
             // net negative (write premiums not yet amortized by reads), neutral at zero.
             if (this.tslContext != null)
                 this.tslContext.Text = "Context:";
+            if (this.tspContextMeter != null)
+            {
+                this.tspContextMeter.Visible = haveMax;
+                if (haveMax)
+                {
+                    int pct = (int)Math.Round(100.0 * s.LastPromptTokens / maxContext);
+                    if (pct < 0) pct = 0;
+                    if (pct > 100) pct = 100; // a request can overshoot the window (provider trims)
+                    this.tspContextMeter.Value = pct;
+                }
+            }
             if (this.tslContextValue != null)
-                this.tslContextValue.Text = FormatTokenCount(s.LastPromptTokens) + " tok";
+                this.tslContextValue.Text = haveMax
+                    ? FormatTokenCount(s.LastPromptTokens) + " / " + FormatTokenCount(maxContext)
+                    : FormatTokenCount(s.LastPromptTokens) + " tok";
             if (this.tslCost != null)
                 this.tslCost.Text = "Cost:";
             if (this.tslCostValue != null)
@@ -4831,13 +4882,13 @@ namespace GxPT
                     : (s.TotalCacheDiscount < 0 ? Color.Firebrick : SystemColors.ControlText);
             }
 
-            string breakdown = BuildUsageTooltip(s);
-            ToolStripStatusLabel[] panes = new ToolStripStatusLabel[]
+            string breakdown = BuildUsageTooltip(s, haveMax ? maxContext : 0);
+            ToolStripItem[] panes = new ToolStripItem[]
             {
-                this.tslContext, this.tslContextValue, this.tslCost, this.tslCostValue,
-                this.tslSaved, this.tslSavedValue
+                this.tslContext, this.tspContextMeter, this.tslContextValue,
+                this.tslCost, this.tslCostValue, this.tslSaved, this.tslSavedValue
             };
-            foreach (ToolStripStatusLabel pane in panes)
+            foreach (ToolStripItem pane in panes)
                 if (pane != null) pane.ToolTipText = breakdown;
         }
 
@@ -4845,10 +4896,18 @@ namespace GxPT
         // glanceable panes deliberately omit them - "last request" vs "lifetime" is ambiguous at a
         // glance next to running totals). Short bulleted lines on purpose: the native tooltip
         // word-wraps long lines at an arbitrary width, which mangled the prose layout.
-        internal static string BuildUsageTooltip(UsageStats s)
+        // maxContext is the model's context window in tokens; 0 = unknown (line omitted).
+        internal static string BuildUsageTooltip(UsageStats s, int maxContext)
         {
             var inv = System.Globalization.CultureInfo.InvariantCulture;
             var sb = new System.Text.StringBuilder();
+            if (maxContext > 0)
+            {
+                sb.Append("Model context window: ").Append(maxContext.ToString("N0", inv)).Append(" tokens");
+                if (s.LastPromptTokens > 0)
+                    sb.Append(" (").Append((100.0 * s.LastPromptTokens / maxContext).ToString("0", inv)).Append("% used)");
+                sb.Append("\r\n\r\n");
+            }
             sb.Append("Last request:");
             sb.Append("\r\n- ").Append(s.LastPromptTokens.ToString("N0", inv)).Append(" prompt tokens");
             sb.Append("\r\n- ").Append(s.LastCachedTokens.ToString("N0", inv)).Append(" read from cache");

@@ -116,6 +116,10 @@ namespace GxPT
                 this.btnAddRecommended.Click += BtnAddRecommended_Click;
             if (this.btnReplaceRecommended != null)
                 this.btnReplaceRecommended.Click += BtnReplaceRecommended_Click;
+            // Manual re-fetch of OpenRouter's model metadata (context window sizes) - the same
+            // fetch that runs automatically once a day at app open.
+            if (this.btnUpdateModelInfo != null)
+                this.btnUpdateModelInfo.Click += BtnUpdateModelInfo_Click;
             try
             {
                 _mcpTip.SetToolTip(this.btnAddRecommended,
@@ -123,6 +127,9 @@ namespace GxPT
                 _mcpTip.SetToolTip(this.btnReplaceRecommended,
                     "Replace your list with GxPT's latest recommended models, removing any that are no longer "
                     + "available. Nothing is saved until you click Save.");
+                _mcpTip.SetToolTip(this.btnUpdateModelInfo,
+                    "Re-download each model's context window size from OpenRouter now (also refreshed "
+                    + "automatically once a day). The status bar's context meter uses these.");
             }
             catch { }
 
@@ -1114,6 +1121,41 @@ namespace GxPT
 
             // Setting Lines fires TxtModels_TextChanged, which refreshes the combo and button states.
             this.txtModels.Lines = result.ToArray();
+        }
+
+        // Force-refresh the model context-size catalog (ModelCatalogService) in the background.
+        // The button doubles as the progress indicator; quiet on success (the status bar's
+        // context meter updates by itself via CatalogUpdated), a message box only on failure -
+        // the one case where the user, who explicitly asked, would otherwise see nothing happen.
+        private void BtnUpdateModelInfo_Click(object sender, EventArgs e)
+        {
+            var btn = this.btnUpdateModelInfo;
+            if (btn == null || !btn.Enabled) return;
+            string idleText = btn.Text;
+            btn.Enabled = false;
+            btn.Text = "Updating...";
+            ModelCatalogService.ForceRefresh(delegate(bool ok)
+            {
+                // Worker thread; the form may have been closed while the fetch ran.
+                try
+                {
+                    if (IsDisposed || !IsHandleCreated) return;
+                    BeginInvoke((MethodInvoker)delegate
+                    {
+                        try
+                        {
+                            btn.Text = idleText;
+                            btn.Enabled = true;
+                            if (!ok)
+                                MessageBox.Show(this,
+                                    "Could not update model info from OpenRouter. Check your network connection and try again.",
+                                    "Update Model Info", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        }
+                        catch { }
+                    });
+                }
+                catch { }
+            });
         }
 
         // Replace the entire list with the shipped catalog. Confirmed because it discards the user's

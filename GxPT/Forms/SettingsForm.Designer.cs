@@ -48,6 +48,7 @@
             this.grpRecommended = new System.Windows.Forms.GroupBox();
             this.btnAddRecommended = new System.Windows.Forms.Button();
             this.btnReplaceRecommended = new System.Windows.Forms.Button();
+            this.btnUpdateModelInfo = new System.Windows.Forms.Button();
             this.cmbDefaultModel = new System.Windows.Forms.ComboBox();
             this.cmbTheme = new System.Windows.Forms.ComboBox();
             this.nudTranscriptMaxWidth = new System.Windows.Forms.NumericUpDown();
@@ -302,6 +303,7 @@
             // pnlModelsRight
             // 
             this.pnlModelsRight.Controls.Add(this.grpRecommended);
+            this.pnlModelsRight.Controls.Add(this.btnUpdateModelInfo);
             this.pnlModelsRight.Dock = System.Windows.Forms.DockStyle.Right;
             this.pnlModelsRight.Location = new System.Drawing.Point(274, 0);
             this.pnlModelsRight.Name = "pnlModelsRight";
@@ -338,9 +340,19 @@
             this.btnReplaceRecommended.TabIndex = 1;
             this.btnReplaceRecommended.Text = "Replace list...";
             this.btnReplaceRecommended.UseVisualStyleBackColor = true;
-            // 
+            //
+            // btnUpdateModelInfo
+            //
+            this.btnUpdateModelInfo.Dock = System.Windows.Forms.DockStyle.Bottom;
+            this.btnUpdateModelInfo.Location = new System.Drawing.Point(4, 99);
+            this.btnUpdateModelInfo.Name = "btnUpdateModelInfo";
+            this.btnUpdateModelInfo.Size = new System.Drawing.Size(185, 23);
+            this.btnUpdateModelInfo.TabIndex = 22;
+            this.btnUpdateModelInfo.Text = "Update Model Info";
+            this.btnUpdateModelInfo.UseVisualStyleBackColor = true;
+            //
             // cmbDefaultModel
-            // 
+            //
             this.cmbDefaultModel.Dock = System.Windows.Forms.DockStyle.Fill;
             this.cmbDefaultModel.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cmbDefaultModel.DropDownWidth = 175;
@@ -789,6 +801,7 @@
         private System.Windows.Forms.GroupBox grpRecommended;
         private System.Windows.Forms.Button btnAddRecommended;
         private System.Windows.Forms.Button btnReplaceRecommended;
+        private System.Windows.Forms.Button btnUpdateModelInfo;
         private System.Windows.Forms.TextBox txtApiKey;
         private System.Windows.Forms.TabControl tabControl1;
         private System.Windows.Forms.TabPage tabVisual;
