@@ -2488,6 +2488,12 @@ namespace GxPT
                         if (asList == null) asList = new List<ChatMessage>(h);
                         return BuildMessagesForModel(asList);
                     };
+                    // AGENTS.md: inject the workspace root's project instructions into the stable
+                    // head (Zone A - cached, so a large file bills once per conversation). Read
+                    // once per send, here on the worker thread, so the block stays byte-identical
+                    // across the turn's loop iterations; an edit takes effect on the next turn.
+                    orch.ProjectInstructions = AgentsFileInjection.Build(ctx.WorkingDir);
+
                     // Inject the workspace's persistent memory index (rebuilt from .gxpt/memory.md each
                     // request) only when memory is enabled and this conversation has a workspace.
                     if (AppSettings.GetBool("mcp_memory_enabled", false) && !string.IsNullOrEmpty(ctx.WorkingDir))

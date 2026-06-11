@@ -103,6 +103,32 @@ namespace GxPT.Tests.Mcp
         }
 
         [Fact]
+        public void Project_instructions_join_the_stable_head_and_carry_breakpoint_1()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            var streamer = new ScriptedStreamer();
+            streamer.Turns.Add(Chunks.Text("hi"));
+
+            var orch = New(streamer, reg);
+            orch.ProjectInstructions = "AGENTS.md says: always run the tests.";
+            orch.RunTurn(new List<ChatMessage>(), "hello", new RecordingUi());
+
+            // Zone A: agent prompt, then the project-instructions block as the last head message
+            // (no workspace block here - WorkingDir is unset), so breakpoint #1 rides it and the
+            // tools + system head cache as one prefix.
+            var msgs = streamer.SeenMessages[0];
+            Assert.Equal("system", msgs[0].Role);
+            Assert.Contains("operating as an agent", msgs[0].Content);
+            Assert.Equal("system", msgs[1].Role);
+            Assert.Equal("AGENTS.md says: always run the tests.", msgs[1].Content);
+            Assert.False(msgs[0].CacheControl);
+            Assert.True(msgs[1].CacheControl);   // breakpoint #1: last message of the stable head
+            Assert.Equal("user", msgs[2].Role);  // history starts right after the head
+            Assert.Equal("hello", msgs[2].Content);
+        }
+
+        [Fact]
         public void Intermediate_breakpoints_bridge_long_tool_fanouts()
         {
             // A single iteration with K tool calls appends ~2K+1 content blocks; beyond Anthropic's
