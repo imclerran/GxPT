@@ -90,6 +90,11 @@ namespace GxPT
                 MaybeShowModelUpdateBanner();
                 try { RestoreOpenTabsOnStartup(); }
                 catch { }
+                // The status bar synced in the constructor, before tabs were restored - and no
+                // OnTabSelected fires for the tab that is already selected, so without this the
+                // first visible tab shows empty usage stats until the user switches away and back.
+                try { SyncUsageStatusFromActiveTab(); }
+                catch { }
                 // After restoring tabs, if no API key is configured, open the API Keys Help tab and focus it
                 try
                 {
