@@ -1973,6 +1973,67 @@ namespace GxPT
     }
 
     /// <summary>
+    /// Markdown syntax highlighter. Markdown isn't a token grammar, so this colors structural markers
+    /// (headings, code, links, emphasis, lists, quotes) rather than a full parse. Block constructs that
+    /// own their content (fenced code, headings) take priority so their inner text isn't re-tokenized;
+    /// inline marker-only patterns (list bullets, quote '>') leave the rest of the line to flow through
+    /// the remaining patterns, so emphasis and links inside a list item still light up.
+    /// </summary>
+    public class MarkdownHighlighter : RegexHighlighterBase
+    {
+        public static readonly string[] FileTypes = new string[] { "*.md", "*.markdown", "*.mdown", "*.mkd", "*.mdx" };
+        public override string Language
+        {
+            get { return "markdown"; }
+        }
+
+        public override string[] Aliases
+        {
+            get { return new string[] { "md", "mdown", "mkd", "mdx" }; }
+        }
+
+        protected override TokenPattern[] GetPatterns()
+        {
+            return new TokenPattern[]
+            {
+                // Fenced code blocks (``` or ~~~). Highest priority so their contents stay verbatim.
+                new TokenPattern(@"^[ \t]*(?:```|~~~)[^\n]*\n[\s\S]*?^[ \t]*(?:```|~~~)[ \t]*$", TokenType.String, 1),
+
+                // Inline code spans (`code`, or ``code with ` inside``).
+                new TokenPattern(@"`{1,2}[^`\n]+?`{1,2}", TokenType.String, 2),
+
+                // ATX headings: the whole line (e.g. "## Title") reads as a heading.
+                new TokenPattern(@"^[ \t]{0,3}#{1,6}[ \t][^\n]*$", TokenType.Keyword, 3),
+
+                // Horizontal rules (---, ***, ___) on their own line.
+                new TokenPattern(@"^[ \t]{0,3}(?:[-*_][ \t]*){3,}$", TokenType.Punctuation, 4),
+
+                // Links and images: [text](url) / ![alt](url). The whole construct is colored.
+                new TokenPattern(@"!?\[[^\]\n]*\]\([^)\n]*\)", TokenType.Method, 5),
+
+                // Autolinks: <https://example.com>.
+                new TokenPattern(@"<https?://[^>\s]+>", TokenType.Method, 6),
+
+                // Bold (**text** or __text__) before italic so the doubled markers win.
+                new TokenPattern(@"\*\*[^\n]+?\*\*|__[^\n]+?__", TokenType.Type, 7),
+
+                // Strikethrough (~~text~~).
+                new TokenPattern(@"~~[^\n]+?~~", TokenType.Comment, 8),
+
+                // Italic (*text* or _text_); require a non-space after the opening marker to avoid
+                // matching bare '*' bullets or stray underscores.
+                new TokenPattern(@"\*(?=\S)[^*\n]+?\*|_(?=\S)[^_\n]+?_", TokenType.Type, 9),
+
+                // Blockquote markers only (leading '>'), so inline formatting in the quote still shows.
+                new TokenPattern(@"^[ \t]{0,3}>+", TokenType.Comment, 10),
+
+                // List markers only (-, *, +, or "1."), leaving the item text to other patterns.
+                new TokenPattern(@"^[ \t]*(?:[-*+]|\d+[.)])(?=[ \t])", TokenType.Operator, 11)
+            };
+        }
+    }
+
+    /// <summary>
     /// MCFunction (Minecraft commands) syntax highlighter - supports Minecraft Java Edition commands
     /// </summary>
     public class McfunctionHighlighter : RegexHighlighterBase
