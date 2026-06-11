@@ -160,6 +160,60 @@ namespace GxPT
                     _previewLabel.Text = "Diff:";
                     handled = true;
                 }
+                else if (string.Equals(req.FunctionName, "skills__create_skill", StringComparison.Ordinal)
+                      || string.Equals(req.FunctionName, "skills__update_skill", StringComparison.Ordinal))
+                {
+                    // Show the skill's authored fields (name/description/instructions) as readable
+                    // markdown rather than raw JSON. update_skill carries only the fields being changed.
+                    string slug = req.Arguments.Value<string>("slug") ?? string.Empty;
+                    string text = BuildSkillFields(req.Arguments);
+                    _diffPanel.SetContent(slug, text, "markdown", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                    _previewLabel.Text = string.Equals(req.FunctionName, "skills__create_skill", StringComparison.Ordinal)
+                        ? "New skill:" : "Update skill:";
+                    handled = true;
+                }
+                else if (string.Equals(req.FunctionName, "skills__write_skill_file", StringComparison.Ordinal))
+                {
+                    // Mirror files__write: the file content, highlighted by its extension.
+                    string slug = req.Arguments.Value<string>("slug") ?? string.Empty;
+                    string rel = req.Arguments.Value<string>("relpath") ?? string.Empty;
+                    string content = req.Arguments.Value<string>("content") ?? string.Empty;
+                    string lang = (rel.Length > 0 ? SyntaxHighlighter.GetLanguageForFileName(rel) : null) ?? "text";
+                    _diffPanel.SetContent(SkillFileTarget(slug, rel), content, lang, dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                    _previewLabel.Text = "Write skill file:";
+                    handled = true;
+                }
+                else if (string.Equals(req.FunctionName, "skills__run_skill_script", StringComparison.Ordinal))
+                {
+                    // Mirror command__run: the script and its literal arguments.
+                    string rel = req.Arguments.Value<string>("relpath") ?? string.Empty;
+                    string scriptArgs = PathsOf(req.Arguments, "args");
+                    string text = (rel + (scriptArgs.Length > 0 ? " " + scriptArgs : "")).Trim();
+                    if (text.Length > 0)
+                    {
+                        _diffPanel.SetContent(string.Empty, text, "batch", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                        _previewLabel.Text = "Run skill script:";
+                        handled = true;
+                    }
+                }
+                else if (string.Equals(req.FunctionName, "skills__delete_skill_file", StringComparison.Ordinal))
+                {
+                    string slug = req.Arguments.Value<string>("slug") ?? string.Empty;
+                    string rel = req.Arguments.Value<string>("relpath") ?? string.Empty;
+                    _diffPanel.SetContent(string.Empty, SkillFileTarget(slug, rel), "text", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                    _previewLabel.Text = "Delete skill file:";
+                    handled = true;
+                }
+                else if (string.Equals(req.FunctionName, "skills__delete_skill", StringComparison.Ordinal))
+                {
+                    string slug = req.Arguments.Value<string>("slug") ?? string.Empty;
+                    if (slug.Length > 0)
+                    {
+                        _diffPanel.SetContent(string.Empty, slug, "text", dark, _monoFont, tc.CodeBack, tc.UiForeground);
+                        _previewLabel.Text = "Delete skill:";
+                        handled = true;
+                    }
+                }
                 else if (string.Equals(req.FunctionName, "command__run", StringComparison.Ordinal))
                 {
                     string cmd = req.Arguments.Value<string>("command") ?? string.Empty;
@@ -516,6 +570,29 @@ namespace GxPT
                 return sb.ToString();
             }
             catch { return string.Empty; }
+        }
+
+        // "slug/relpath" for a skill-file approval header, tolerant of a missing part.
+        private static string SkillFileTarget(string slug, string rel)
+        {
+            if (slug.Length > 0 && rel.Length > 0) return slug + "/" + rel;
+            if (rel.Length > 0) return rel;
+            return slug.Length > 0 ? slug : "(skill file)";
+        }
+
+        // Readable "Name:/Description:" preamble + instructions body for create/update_skill approvals,
+        // shown as markdown instead of raw JSON. Only non-empty fields appear (update_skill sends just
+        // the fields being changed).
+        private static string BuildSkillFields(Newtonsoft.Json.Linq.JObject a)
+        {
+            string name = a.Value<string>("name") ?? string.Empty;
+            string desc = a.Value<string>("description") ?? string.Empty;
+            string body = a.Value<string>("body") ?? string.Empty;
+            var sb = new System.Text.StringBuilder();
+            if (name.Length > 0) sb.Append("Name: ").Append(name);
+            if (desc.Length > 0) { if (sb.Length > 0) sb.Append("\r\n"); sb.Append("Description: ").Append(desc); }
+            if (body.Length > 0) { if (sb.Length > 0) sb.Append("\r\n\r\n"); sb.Append(body); }
+            return sb.ToString();
         }
 
         // A readable "git <subcommand> ..." line for the approval preview of the extended git tools.
