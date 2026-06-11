@@ -8,9 +8,12 @@ namespace GxPT.Tests.Mcp
 {
     public class McpToolRegistryTests
     {
-        private static McpToolRegistry NewRegistry(int cap)
+        // Reveal state lives on the conversation now (prompt-caching design): tests thread an
+        // explicit revealed-name list through Reveal / ExposedFunctionDefs the way the
+        // orchestrator threads the conversation's list.
+        private static McpToolRegistry NewRegistry()
         {
-            return new McpToolRegistry(cap, null);
+            return new McpToolRegistry(null);
         }
 
         private static List<string> ManifestNames(McpToolRegistry reg)
@@ -22,10 +25,10 @@ namespace GxPT.Tests.Mcp
             return names;
         }
 
-        private static List<string> ExposedNames(McpToolRegistry reg)
+        private static List<string> ExposedNames(McpToolRegistry reg, List<string> revealed)
         {
             var names = new List<string>();
-            foreach (JObject def in reg.ExposedFunctionDefs())
+            foreach (JObject def in reg.ExposedFunctionDefs(revealed))
                 names.Add((string)def["function"]["name"]);
             return names;
         }
@@ -38,10 +41,10 @@ namespace GxPT.Tests.Mcp
             return names;
         }
 
-        private static List<string> ExposedNamesFor(McpToolRegistry reg, string workdir)
+        private static List<string> ExposedNamesFor(McpToolRegistry reg, string workdir, List<string> revealed)
         {
             var names = new List<string>();
-            foreach (JObject def in reg.ExposedFunctionDefs(workdir))
+            foreach (JObject def in reg.ExposedFunctionDefs(workdir, revealed))
                 names.Add((string)def["function"]["name"]);
             return names;
         }
@@ -51,7 +54,7 @@ namespace GxPT.Tests.Mcp
         [Fact]
         public void WorkdirManifest_FolderlessTurn_OmitsScopedTools_KeepsIndependent()
         {
-            var reg = NewRegistry(24);
+            var reg = NewRegistry();
             reg.AddConnection(FakeConn.Ready("web", new ToolDef("search")), null);       // workdir-independent
             reg.AddConnection(FakeConn.Ready("files", new ToolDef("read")), "C:\\proj"); // scoped to a folder
 
@@ -74,15 +77,16 @@ namespace GxPT.Tests.Mcp
         [Fact]
         public void WorkdirExposedDefs_DropsRevealedScopedTool_OnFolderlessTurn()
         {
-            var reg = NewRegistry(24);
+            var reg = NewRegistry();
             reg.AddConnection(FakeConn.Ready("files", new ToolDef("read")), "C:\\proj");
-            reg.Reveal(new[] { "files__read" }); // revealed during a folder turn
+            var revealed = new List<string>();
+            reg.Reveal(new[] { "files__read" }, revealed); // revealed during a folder turn
 
-            var folderless = ExposedNamesFor(reg, null);
+            var folderless = ExposedNamesFor(reg, null, revealed);
             Assert.Contains("reveal_tools", folderless);
             Assert.DoesNotContain("files__read", folderless); // not usable folderless -> not sent
 
-            Assert.Contains("files__read", ExposedNamesFor(reg, "C:\\proj")); // exposed in its folder
+            Assert.Contains("files__read", ExposedNamesFor(reg, "C:\\proj", revealed)); // exposed in its folder
         }
 
         // ---- workdir-aware schema selection across a scoped/independent name collision (skills) ----
@@ -102,27 +106,29 @@ namespace GxPT.Tests.Mcp
         [Fact]
         public void WorkdirReveal_PicksSchemaOfTheInstanceTheCallWillReach()
         {
-            var reg = NewRegistry(24);
+            var reg = NewRegistry();
             // Eager workdir-less instance registers FIRST, so it is list[0] (reproduces the collision).
             reg.AddConnection(FakeConn.Ready("skills", new ToolDef("edit", "scope default user", null)), null);
             reg.AddConnection(FakeConn.Ready("skills", new ToolDef("edit", "scope default project", null)), "C:\\proj");
 
             // A folder turn reveals the workdir-scoped instance's schema (the one TryResolve will call).
-            Assert.Equal("scope default project", DescOf(reg.Reveal(new[] { "skills__edit" }, "C:\\proj")));
+            var revealed = new List<string>();
+            Assert.Equal("scope default project", DescOf(reg.Reveal(new[] { "skills__edit" }, "C:\\proj", revealed)));
             // A folderless turn reveals the workdir-less instance's schema.
-            Assert.Equal("scope default user", DescOf(reg.Reveal(new[] { "skills__edit" }, null)));
+            Assert.Equal("scope default user", DescOf(reg.Reveal(new[] { "skills__edit" }, null, revealed)));
         }
 
         [Fact]
         public void WorkdirExposedDefs_UsesSchemaOfTheInstanceTheCallWillReach()
         {
-            var reg = NewRegistry(24);
+            var reg = NewRegistry();
             reg.AddConnection(FakeConn.Ready("skills", new ToolDef("edit", "scope default user", null)), null);
             reg.AddConnection(FakeConn.Ready("skills", new ToolDef("edit", "scope default project", null)), "C:\\proj");
-            reg.Reveal(new[] { "skills__edit" }, "C:\\proj");
+            var revealed = new List<string>();
+            reg.Reveal(new[] { "skills__edit" }, "C:\\proj", revealed);
 
             string desc = null;
-            foreach (JObject def in reg.ExposedFunctionDefs("C:\\proj"))
+            foreach (JObject def in reg.ExposedFunctionDefs("C:\\proj", revealed))
                 if ((string)def["function"]["name"] == "skills__edit") desc = (string)def["function"]["description"];
             Assert.Equal("scope default project", desc);
         }
@@ -132,7 +138,7 @@ namespace GxPT.Tests.Mcp
         [Fact]
         public void Munges_qualified_name_and_resolves_back()
         {
-            var reg = NewRegistry(8);
+            var reg = NewRegistry();
             var conn = FakeConn.Ready("files", new ToolDef("read"));
             reg.AddConnection(conn);
 
@@ -150,7 +156,7 @@ namespace GxPT.Tests.Mcp
         {
             // Two instances of the same scoped server (one per working directory) expose the SAME
             // function name. The model sees it once; resolution picks the folder-specific connection.
-            var reg = NewRegistry(8);
+            var reg = NewRegistry();
             var connA = FakeConn.Ready("files", new ToolDef("read"));
             var connB = FakeConn.Ready("files", new ToolDef("read"));
             reg.AddConnection(connA, "C:\\a");
@@ -171,7 +177,7 @@ namespace GxPT.Tests.Mcp
         [Fact]
         public void Workdir_independent_tool_resolves_for_any_calling_workdir()
         {
-            var reg = NewRegistry(8);
+            var reg = NewRegistry();
             reg.AddConnection(FakeConn.Ready("web", new ToolDef("search")), null);
 
             McpServerConnection r; string tool;
@@ -182,7 +188,7 @@ namespace GxPT.Tests.Mcp
         [Fact]
         public void Removing_one_workdir_instance_keeps_the_tool_while_another_provides_it()
         {
-            var reg = NewRegistry(8);
+            var reg = NewRegistry();
             var connA = FakeConn.Ready("files", new ToolDef("read"));
             var connB = FakeConn.Ready("files", new ToolDef("read"));
             reg.AddConnection(connA, "C:\\a");
@@ -203,7 +209,7 @@ namespace GxPT.Tests.Mcp
         [Fact]
         public void Sanitizes_illegal_characters()
         {
-            var reg = NewRegistry(8);
+            var reg = NewRegistry();
             reg.AddConnection(FakeConn.Ready("git", new ToolDef("weird/name")));
             Assert.Contains("git__weird_name", ManifestNames(reg));
         }
@@ -212,7 +218,7 @@ namespace GxPT.Tests.Mcp
         public void Disambiguates_collisions_with_hash_suffix()
         {
             // "x/y" and "x_y" under server "s" both sanitize to base "s__x_y".
-            var reg = NewRegistry(8);
+            var reg = NewRegistry();
             reg.AddConnection(FakeConn.Ready("s", new ToolDef("x/y"), new ToolDef("x_y")));
 
             var names = ManifestNames(reg);
@@ -233,7 +239,7 @@ namespace GxPT.Tests.Mcp
         [Fact]
         public void Over_long_names_truncate_to_64_with_hash()
         {
-            var reg = NewRegistry(8);
+            var reg = NewRegistry();
             string longTool = new string('a', 90);
             reg.AddConnection(FakeConn.Ready("srv", new ToolDef(longTool)));
             var names = ManifestNames(reg);
@@ -245,7 +251,7 @@ namespace GxPT.Tests.Mcp
         [Fact]
         public void Munging_is_deterministic_across_remove_and_readd()
         {
-            var reg = NewRegistry(8);
+            var reg = NewRegistry();
             var conn = FakeConn.Ready("s", new ToolDef("x/y"), new ToolDef("x_y"));
             reg.AddConnection(conn);
             var first = ManifestNames(reg);
@@ -264,7 +270,7 @@ namespace GxPT.Tests.Mcp
         [Fact]
         public void Manifest_is_names_only_sorted_and_reflects_mutations()
         {
-            var reg = NewRegistry(8);
+            var reg = NewRegistry();
             var files = FakeConn.Ready("files", new ToolDef("write"), new ToolDef("read"));
             var git = FakeConn.Ready("git", new ToolDef("status"));
             reg.AddConnection(files);
@@ -284,10 +290,10 @@ namespace GxPT.Tests.Mcp
         [Fact]
         public void Exposed_defs_always_lead_with_reveal_tools()
         {
-            var reg = NewRegistry(8);
+            var reg = NewRegistry();
             reg.AddConnection(FakeConn.Ready("files", new ToolDef("read")));
 
-            var exposed = ExposedNames(reg);
+            var exposed = ExposedNames(reg, new List<string>());
             Assert.Equal(McpToolRegistry.RevealToolsName, exposed[0]);
             Assert.Single(exposed); // nothing revealed yet
         }
@@ -295,92 +301,106 @@ namespace GxPT.Tests.Mcp
         [Fact]
         public void Reveal_adds_defs_and_returns_requested_schemas()
         {
-            var reg = NewRegistry(8);
+            var reg = NewRegistry();
             JObject schema = JObject.Parse("{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}}}");
             reg.AddConnection(FakeConn.Ready("files", new ToolDef("read", "Read a file", schema)));
 
-            string result = reg.Reveal(new[] { "files__read" });
+            var revealed = new List<string>();
+            string result = reg.Reveal(new[] { "files__read" }, revealed);
             JArray defs = JArray.Parse(result.Split('\n')[0]);
             Assert.Single(defs);
             Assert.Equal("files__read", (string)defs[0]["name"]);
             Assert.Equal("Read a file", (string)defs[0]["description"]);
             Assert.NotNull(defs[0]["parameters"]["properties"]["path"]);
 
-            // now exposed in the tools array
-            Assert.Contains("files__read", ExposedNames(reg));
+            // recorded in the caller's list and now exposed in the tools array
+            Assert.Contains("files__read", revealed);
+            Assert.Contains("files__read", ExposedNames(reg, revealed));
         }
 
         [Fact]
         public void Reveal_notes_unknown_names()
         {
-            var reg = NewRegistry(8);
+            var reg = NewRegistry();
             reg.AddConnection(FakeConn.Ready("files", new ToolDef("read")));
-            string result = reg.Reveal(new[] { "files__read", "files__nope" });
+            var revealed = new List<string>();
+            string result = reg.Reveal(new[] { "files__read", "files__nope" }, revealed);
             Assert.Contains("unknown tool: files__nope", result);
+            Assert.DoesNotContain("files__nope", revealed); // unknown names are not recorded
         }
 
-        // ---- LRU ----
+        // ---- reveal-set stability (prompt caching) ----
 
         [Fact]
-        public void Exceeding_cap_evicts_least_recently_used()
+        public void Registry_never_evicts_from_the_callers_revealed_list()
         {
-            var reg = NewRegistry(2);
+            // Eviction is the orchestrator's job and provider-gated; the registry itself only
+            // appends. Reveal any number of tools and all of them stay exposed.
+            var reg = NewRegistry();
             reg.AddConnection(FakeConn.Ready("s", new ToolDef("a"), new ToolDef("b"), new ToolDef("c")));
 
-            reg.Reveal(new[] { "s__a" });
-            reg.Reveal(new[] { "s__b" });
-            reg.Reveal(new[] { "s__c" }); // cap 2 → s__a (oldest) evicted
+            var revealed = new List<string>();
+            reg.Reveal(new[] { "s__a" }, revealed);
+            reg.Reveal(new[] { "s__b" }, revealed);
+            reg.Reveal(new[] { "s__c" }, revealed);
 
-            var exposed = ExposedNames(reg);
-            Assert.DoesNotContain("s__a", exposed);
+            var exposed = ExposedNames(reg, revealed);
+            Assert.Contains("s__a", exposed);
             Assert.Contains("s__b", exposed);
             Assert.Contains("s__c", exposed);
-
-            // evicted tool is still in the manifest and re-revealable
-            Assert.Contains("s__a", ManifestNames(reg));
-            reg.Reveal(new[] { "s__a" });
-            Assert.Contains("s__a", ExposedNames(reg));
         }
 
         [Fact]
-        public void Resolving_bumps_recency_to_prevent_eviction()
+        public void Exposed_defs_are_name_sorted_regardless_of_reveal_order()
         {
-            var reg = NewRegistry(2);
-            reg.AddConnection(FakeConn.Ready("s", new ToolDef("a"), new ToolDef("b"), new ToolDef("c")));
+            // The tools array renders at position 0 of the prompt: any membership or order change
+            // invalidates the provider's prompt cache for the whole conversation, so emission must
+            // not depend on reveal order or recency.
+            var reg = NewRegistry();
+            reg.AddConnection(FakeConn.Ready("s", new ToolDef("a"), new ToolDef("b")));
 
-            reg.Reveal(new[] { "s__a" });
-            reg.Reveal(new[] { "s__b" });
+            var revealed = new List<string>();
+            reg.Reveal(new[] { "s__b" }, revealed);
+            reg.Reveal(new[] { "s__a" }, revealed);
+            Assert.Equal(new[] { "reveal_tools", "s__a", "s__b" }, ExposedNames(reg, revealed).ToArray());
 
-            // touch s__a via a resolve so it's now most-recent
-            McpServerConnection c; string t;
-            Assert.True(reg.TryResolve("s__a", out c, out t));
+            // A re-reveal bumps recency (the list reorders) without changing the emitted order.
+            reg.Reveal(new[] { "s__b" }, revealed);
+            Assert.Equal(new[] { "s__a", "s__b" }, revealed.ToArray()); // recency: a older than b
+            Assert.Equal(new[] { "reveal_tools", "s__a", "s__b" }, ExposedNames(reg, revealed).ToArray());
+        }
 
-            reg.Reveal(new[] { "s__c" }); // should evict s__b (now the LRU), not s__a
-
-            var exposed = ExposedNames(reg);
-            Assert.Contains("s__a", exposed);
-            Assert.DoesNotContain("s__b", exposed);
-            Assert.Contains("s__c", exposed);
+        [Fact]
+        public void Duplicate_names_in_the_revealed_list_emit_one_def()
+        {
+            var reg = NewRegistry();
+            reg.AddConnection(FakeConn.Ready("s", new ToolDef("a")));
+            var revealed = new List<string> { "s__a", "s__a" };
+            Assert.Equal(new[] { "reveal_tools", "s__a" }, ExposedNames(reg, revealed).ToArray());
         }
 
         // ---- lifecycle ----
 
         [Fact]
-        public void Refresh_prunes_removed_tools_from_catalog_and_revealed()
+        public void Refresh_prunes_removed_tools_from_catalog_and_exposure()
         {
-            var reg = NewRegistry(8);
+            var reg = NewRegistry();
             RegistryFakeTransport ft;
             var conn = FakeConn.Ready("s", out ft, new ToolDef("a"), new ToolDef("b"));
             reg.AddConnection(conn);
-            reg.Reveal(new[] { "s__a", "s__b" });
-            Assert.Contains("s__b", ExposedNames(reg));
+            var revealed = new List<string>();
+            reg.Reveal(new[] { "s__a", "s__b" }, revealed);
+            Assert.Contains("s__b", ExposedNames(reg, revealed));
 
             // server drops tool "b" on a subsequent tools/list
             ft.Tools = new List<ToolDef> { new ToolDef("a") };
             reg.RefreshConnection(conn);
 
             Assert.Equal(new[] { "s__a" }, ManifestNames(reg).ToArray());
-            Assert.DoesNotContain("s__b", ExposedNames(reg)); // pruned from revealed too
+            // The conversation's list keeps the name (so the def reappears if the server brings the
+            // tool back); emission skips it while it is absent from the catalog.
+            Assert.Contains("s__b", revealed);
+            Assert.DoesNotContain("s__b", ExposedNames(reg, revealed));
             McpServerConnection c; string t;
             Assert.False(reg.TryResolve("s__b", out c, out t));
         }
@@ -388,23 +408,24 @@ namespace GxPT.Tests.Mcp
         [Fact]
         public void Remove_drops_a_faulted_servers_tools()
         {
-            var reg = NewRegistry(8);
+            var reg = NewRegistry();
             var conn = FakeConn.Ready("s", new ToolDef("a"));
             reg.AddConnection(conn);
-            reg.Reveal(new[] { "s__a" });
+            var revealed = new List<string>();
+            reg.Reveal(new[] { "s__a" }, revealed);
 
             reg.RemoveConnection(conn);
 
             Assert.Empty(ManifestNames(reg));
             McpServerConnection c; string t;
             Assert.False(reg.TryResolve("s__a", out c, out t));
-            Assert.Equal(new[] { McpToolRegistry.RevealToolsName }, ExposedNames(reg).ToArray());
+            Assert.Equal(new[] { McpToolRegistry.RevealToolsName }, ExposedNames(reg, revealed).ToArray());
         }
 
         [Fact]
         public void HasTools_reflects_the_catalog()
         {
-            var reg = NewRegistry(8);
+            var reg = NewRegistry();
             Assert.False(reg.HasTools);
             var conn = FakeConn.Ready("files", new ToolDef("read"));
             reg.AddConnection(conn);
@@ -416,7 +437,7 @@ namespace GxPT.Tests.Mcp
         [Fact]
         public void Reveal_tools_name_is_never_produced_by_munging()
         {
-            var reg = NewRegistry(8);
+            var reg = NewRegistry();
             reg.AddConnection(FakeConn.Ready("reveal", new ToolDef("tools")));
             Assert.Contains("reveal__tools", ManifestNames(reg)); // double underscore, not "reveal_tools"
             Assert.DoesNotContain("reveal_tools", ManifestNames(reg));
@@ -429,7 +450,7 @@ namespace GxPT.Tests.Mcp
         [Fact]
         public void Manifest_steers_to_git_tools_when_command_also_present()
         {
-            var reg = NewRegistry(8);
+            var reg = NewRegistry();
             reg.AddConnection(FakeConn.Ready("git", new ToolDef("status")));
             reg.AddConnection(FakeConn.Ready("command", new ToolDef("run")));
             Assert.Contains(GitPreferNote, reg.NamesManifestSystemMessage());
@@ -438,7 +459,7 @@ namespace GxPT.Tests.Mcp
         [Fact]
         public void Manifest_omits_git_preference_note_without_command()
         {
-            var reg = NewRegistry(8);
+            var reg = NewRegistry();
             reg.AddConnection(FakeConn.Ready("git", new ToolDef("status")));
             Assert.DoesNotContain(GitPreferNote, reg.NamesManifestSystemMessage());
         }
@@ -446,7 +467,7 @@ namespace GxPT.Tests.Mcp
         [Fact]
         public void Manifest_omits_git_preference_note_without_git()
         {
-            var reg = NewRegistry(8);
+            var reg = NewRegistry();
             reg.AddConnection(FakeConn.Ready("command", new ToolDef("run")));
             Assert.DoesNotContain(GitPreferNote, reg.NamesManifestSystemMessage());
         }

@@ -34,6 +34,17 @@ namespace GxPT
             bool streamFlag = (props != null && props.Stream.HasValue) ? props.Stream.Value : false;
             payload["stream"] = streamFlag;
 
+            // Ask OpenRouter to return token-usage accounting (including prompt-cache read counts) -
+            // on streaming requests it arrives on the final SSE chunk. This is how cache hits are
+            // verified: see the "Usage" log line in StreamRawChunks.
+            var usageOpt = new Dictionary<string, object>();
+            usageOpt["include"] = true;
+            payload["usage"] = usageOpt;
+
+            // cache_control breakpoints are only emitted for providers that use explicit caching;
+            // everywhere else flagged messages serialize as plain strings (see ContentValue).
+            bool cacheable = ModelSupportsCacheControl((string)payload["model"]);
+
             var msgs = new List<object>();
             // Prepend a system instruction to avoid emoji in all responses.
             var sys = new Dictionary<string, object>();
@@ -51,7 +62,7 @@ namespace GxPT
                     if (m.Role == "tool")
                     {
                         // Tool result, keyed back to the assistant's call id.
-                        mm["content"] = m.Content != null ? m.Content : string.Empty;
+                        mm["content"] = ContentValue(m, cacheable);
                         mm["tool_call_id"] = m.ToolCallId;
                     }
                     else if (m.ToolCalls != null && m.ToolCalls.Count > 0)
@@ -74,19 +85,23 @@ namespace GxPT
                     }
                     else
                     {
-                        mm["content"] = m.Content != null ? m.Content : string.Empty;
+                        mm["content"] = ContentValue(m, cacheable);
                     }
                     msgs.Add(mm);
                 }
             }
             payload["messages"] = msgs;
 
-            // Expose tools (tool_choice left at the provider default of "auto").
+            // Expose tools (tool_choice defaults to the provider's "auto"; the orchestrator's cap
+            // wrap-up sets "none" so the prompt prefix - which starts with the tools array - stays
+            // byte-identical to the loop's requests and re-reads the turn's prompt cache).
             if (tools != null && tools.Count > 0)
             {
                 var toolList = new List<object>();
                 foreach (var t in tools) toolList.Add(t);
                 payload["tools"] = toolList;
+                if (props != null && !string.IsNullOrEmpty(props.ToolChoice))
+                    payload["tool_choice"] = props.ToolChoice;
             }
 
             // Optionally add provider object if any of the provider properties are set.
@@ -129,6 +144,64 @@ namespace GxPT
             catch { }
 
             return JsonConvert.SerializeObject(payload);
+        }
+
+        // A message's content value: a plain string normally; a one-part content array carrying
+        // cache_control {type: ephemeral} when the message is flagged as a cache breakpoint and the
+        // model's provider supports explicit caching (the array form is the OpenAI-compatible shape
+        // OpenRouter requires for cache_control). Empty content always stays a plain string - there
+        // is nothing to cache and Anthropic rejects empty text parts.
+        private static object ContentValue(ChatMessage m, bool modelSupportsCaching)
+        {
+            string text = m.Content != null ? m.Content : string.Empty;
+            if (!modelSupportsCaching || !m.CacheControl || text.Length == 0) return text;
+
+            var part = new Dictionary<string, object>();
+            part["type"] = "text";
+            part["text"] = text;
+            var cc = new Dictionary<string, object>();
+            cc["type"] = "ephemeral";
+            part["cache_control"] = cc;
+            return new List<object> { part };
+        }
+
+        // Providers that use explicit cache_control breakpoints via OpenRouter (Anthropic requires
+        // them; Gemini accepts them on top of its implicit caching). OpenAI/DeepSeek/Grok cache
+        // automatically on a stable prefix and need no annotation. OpenRouter documents unsupported
+        // cache_control as ignored, but gating by vendor prefix costs nothing and removes any risk
+        // of an unknown provider rejecting the content-part form. "~"-prefixed model aliases resolve
+        // to the same vendor, so the prefix is stripped before matching.
+        internal static bool ModelSupportsCacheControl(string model)
+        {
+            if (string.IsNullOrEmpty(model)) return false;
+            string m = StripModelAliasPrefix(model);
+            return m.StartsWith("anthropic/", StringComparison.OrdinalIgnoreCase)
+                || m.StartsWith("google/", StringComparison.OrdinalIgnoreCase);
+        }
+
+        // Providers whose prompt caching (explicit cache_control OR implicit/automatic prefix
+        // caching) makes a byte-stable prompt prefix valuable. Gates reveal-set eviction in the
+        // orchestrator: on these providers an evicted tool def changes the tools array (position 0
+        // of the prompt) and re-bills the conversation's whole transcript at full price, which costs
+        // far more than the stale def it saves - so the revealed set stays append-only. Providers
+        // not listed here get no caching benefit from a stable prefix, so trimming stale defs is a
+        // pure token saving there.
+        internal static bool ModelSupportsPromptCaching(string model)
+        {
+            if (string.IsNullOrEmpty(model)) return false;
+            string m = StripModelAliasPrefix(model);
+            return m.StartsWith("anthropic/", StringComparison.OrdinalIgnoreCase)  // explicit (cache_control)
+                || m.StartsWith("google/", StringComparison.OrdinalIgnoreCase)    // implicit + cache_control
+                || m.StartsWith("openai/", StringComparison.OrdinalIgnoreCase)    // automatic (>=1024 tokens)
+                || m.StartsWith("deepseek/", StringComparison.OrdinalIgnoreCase)  // automatic
+                || m.StartsWith("x-ai/", StringComparison.OrdinalIgnoreCase);     // automatic (Grok)
+        }
+
+        // "~"-prefixed model aliases (e.g. "~anthropic/claude-sonnet-latest") resolve to the same
+        // vendor as their bare form; strip the marker before prefix-matching.
+        private static string StripModelAliasPrefix(string model)
+        {
+            return model.StartsWith("~", StringComparison.Ordinal) ? model.Substring(1) : model;
         }
 
         public string CreateCompletion(string model, IList<ChatMessage> messages)
@@ -291,6 +364,7 @@ namespace GxPT
                 string line;
                 bool sawAnyChunk = false;
                 int chunkCount = 0;
+                ChatCompletionChunk.UsageInfo usage = null;
                 var stdoutBuf = new StringBuilder();
                 while ((line = sr.ReadLine()) != null)
                 {
@@ -318,6 +392,7 @@ namespace GxPT
                     {
                         sawAnyChunk = true;
                         chunkCount++;
+                        if (chunk.usage != null) usage = chunk.usage; // final SSE chunk carries usage
                         if (onChunk != null) onChunk(chunk);
                     }
                 }
@@ -341,6 +416,22 @@ namespace GxPT
                 }
 
                 try { Logger.Log("Stream", "curl exit=" + exitCode + " chunks=" + chunkCount + (sawAnyChunk ? string.Empty : " (no chunks)")); }
+                catch { }
+
+                // Prompt-cache telemetry: cached = prompt-prefix tokens served from the provider's
+                // cache (discounted). cached=0 on a long conversation means the prefix missed - look
+                // for a cache invalidator (tools array changed, non-deterministic serialization).
+                try
+                {
+                    if (usage != null)
+                    {
+                        int? cached = (usage.prompt_tokens_details != null)
+                            ? usage.prompt_tokens_details.cached_tokens : null;
+                        Logger.Log("Usage", "prompt=" + (usage.prompt_tokens.HasValue ? usage.prompt_tokens.Value.ToString() : "?")
+                            + " cached=" + (cached.HasValue ? cached.Value.ToString() : "?")
+                            + " completion=" + (usage.completion_tokens.HasValue ? usage.completion_tokens.Value.ToString() : "?"));
+                    }
+                }
                 catch { }
 
                 // User-initiated stop: killing curl makes it exit non-zero / end without [DONE], which
@@ -546,5 +637,10 @@ namespace GxPT
         public IList<string> ProviderOnly { get; set; }
         public decimal? ProviderMaxPricePrompt { get; set; }
         public decimal? ProviderMaxPriceCompletion { get; set; }
+        // tool_choice for the request ("none", "auto", ...). Null leaves it at the provider default.
+        // Only emitted when a tools array is present. The orchestrator's cap wrap-up uses "none" to
+        // forbid further tool calls while keeping the tools array (and so the cached prompt prefix)
+        // identical to the loop's requests.
+        public string ToolChoice { get; set; }
     }
 }

@@ -10,7 +10,7 @@ namespace GxPT.Tests.Mcp
         private static McpToolRegistry RegistryWith(out RegistryFakeTransport ft, string server, params ToolDef[] tools)
         {
             var conn = FakeConn.Ready(server, out ft, tools);
-            var reg = new McpToolRegistry(8, null);
+            var reg = new McpToolRegistry(null);
             reg.AddConnection(conn);
             return reg;
         }
@@ -56,7 +56,7 @@ namespace GxPT.Tests.Mcp
         }
 
         [Fact]
-        public void Passes_manifest_system_message_and_tools_to_streamer()
+        public void Passes_manifest_tail_and_tools_to_streamer()
         {
             RegistryFakeTransport ft;
             var reg = RegistryWith(out ft, "files", new ToolDef("read"));
@@ -65,16 +65,41 @@ namespace GxPT.Tests.Mcp
 
             New(streamer, reg).RunTurn(new List<ChatMessage>(), "hello", new RecordingUi());
 
-            // first request: agentic guidance leads, then the names manifest, then history
+            // Request layout (prompt-caching zones): stable system head, then history, then the
+            // ephemeral context tail (a trailing user message carrying the names manifest).
             var msgs = streamer.SeenMessages[0];
             Assert.Equal("system", msgs[0].Role);
             Assert.Contains("operating as an agent", msgs[0].Content); // agentic behavior guidance
-            Assert.Equal("system", msgs[1].Role);
-            Assert.Contains("reveal_tools", msgs[1].Content);   // manifest instructs reveal-before-call
-            Assert.Contains("files__read", msgs[1].Content);     // and lists tool names
-            Assert.Equal("user", msgs[2].Role);
+            Assert.Equal("user", msgs[1].Role);
+            Assert.Equal("hello", msgs[1].Content);
+            var tail = msgs[msgs.Count - 1];
+            Assert.Equal("user", tail.Role);
+            Assert.Contains("Ephemeral context", tail.Content);  // framed as host-appended context
+            Assert.Contains("reveal_tools", tail.Content);       // manifest instructs reveal-before-call
+            Assert.Contains("files__read", tail.Content);        // and lists tool names
             // exposed tools always lead with reveal_tools
             Assert.Equal("reveal_tools", (string)streamer.SeenTools[0][0]["function"]["name"]);
+        }
+
+        [Fact]
+        public void Cache_breakpoints_ride_the_stable_head_and_newest_history_message()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            var streamer = new ScriptedStreamer();
+            streamer.Turns.Add(Chunks.Text("hi"));
+
+            var history = new List<ChatMessage>();
+            New(streamer, reg).RunTurn(history, "hello", new RecordingUi());
+
+            var msgs = streamer.SeenMessages[0];
+            // breakpoint #1: last message of the stable system head
+            Assert.True(msgs[0].CacheControl);
+            // breakpoint #2: the newest history message (the user turn), not the ephemeral tail
+            Assert.True(msgs[1].CacheControl);
+            Assert.False(msgs[msgs.Count - 1].CacheControl);
+            // the flag lands on a request-local clone, never on persisted history
+            Assert.False(history[0].CacheControl);
         }
 
         [Fact]
@@ -148,8 +173,12 @@ namespace GxPT.Tests.Mcp
             orch.RunTurn(history, "loop forever", ui);
 
             Assert.True(ui.Completed);
-            Assert.Equal(4, streamer.Calls);                       // 3 tool iterations + 1 tool-less wrap-up
-            Assert.Null(streamer.SeenTools[3]);                    // wrap-up offers no tools
+            Assert.Equal(4, streamer.Calls);                       // 3 tool iterations + 1 wrap-up
+            // The wrap-up keeps the loop's tools array (dropping it would change position 0 of the
+            // prompt and forfeit the cached prefix) but forbids further calls via tool_choice "none".
+            Assert.NotNull(streamer.SeenTools[3]);
+            Assert.Equal("none", streamer.SeenProps[3].ToolChoice);
+            Assert.Null(streamer.SeenProps[2].ToolChoice);         // loop iterations leave it default
             // The wrap-up instruction must be a trailing user turn, not a system message: Anthropic
             // hoists in-array system messages out of position, leaving nothing for the model to answer.
             var wrapMsgs = streamer.SeenMessages[3];

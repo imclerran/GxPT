@@ -142,6 +142,108 @@ namespace GxPT.Tests.Mcp
             Assert.Null(JObject.Parse(bodyNull)["provider"]);
         }
 
+        // ---- prompt caching ----
+
+        [Fact]
+        public void Usage_accounting_is_always_requested()
+        {
+            var body = OpenRouterClient.BuildRequestBody("m", new List<ChatMessage>(), null, new ClientProperties());
+            Assert.True((bool)JObject.Parse(body)["usage"]["include"]);
+        }
+
+        [Fact]
+        public void Cache_breakpoint_emits_content_part_with_cache_control_on_supported_model()
+        {
+            var msg = new ChatMessage("user", "hi");
+            msg.CacheControl = true;
+            var body = OpenRouterClient.BuildRequestBody(
+                "anthropic/claude-sonnet-4.5", new List<ChatMessage> { msg }, null, new ClientProperties());
+
+            var content = ((JArray)JObject.Parse(body)["messages"])[1]["content"];
+            Assert.Equal(JTokenType.Array, content.Type);
+            Assert.Equal("text", (string)content[0]["type"]);
+            Assert.Equal("hi", (string)content[0]["text"]);
+            Assert.Equal("ephemeral", (string)content[0]["cache_control"]["type"]);
+        }
+
+        [Fact]
+        public void Cache_breakpoint_on_tool_message_keeps_tool_call_id()
+        {
+            var tool = new ChatMessage("tool", "result text");
+            tool.ToolCallId = "call_1";
+            tool.CacheControl = true;
+            var body = OpenRouterClient.BuildRequestBody(
+                "anthropic/claude-sonnet-4.5", new List<ChatMessage> { tool }, null, new ClientProperties());
+
+            var msg = (JObject)((JArray)JObject.Parse(body)["messages"])[1];
+            Assert.Equal("call_1", (string)msg["tool_call_id"]);
+            Assert.Equal("ephemeral", (string)msg["content"][0]["cache_control"]["type"]);
+        }
+
+        [Fact]
+        public void Cache_breakpoint_is_ignored_for_models_without_explicit_caching()
+        {
+            var msg = new ChatMessage("user", "hi");
+            msg.CacheControl = true;
+            var body = OpenRouterClient.BuildRequestBody(
+                "openai/gpt-4o", new List<ChatMessage> { msg }, null, new ClientProperties());
+
+            // plain string content - OpenAI caches automatically; no cache_control shape emitted
+            Assert.Equal("hi", (string)((JArray)JObject.Parse(body)["messages"])[1]["content"]);
+        }
+
+        [Fact]
+        public void Unflagged_messages_keep_plain_string_content_on_supported_models()
+        {
+            var body = OpenRouterClient.BuildRequestBody(
+                "anthropic/claude-sonnet-4.5", new List<ChatMessage> { new ChatMessage("user", "hi") },
+                null, new ClientProperties());
+            Assert.Equal("hi", (string)((JArray)JObject.Parse(body)["messages"])[1]["content"]);
+        }
+
+        [Fact]
+        public void Model_cache_support_is_vendor_prefixed_and_tilde_alias_aware()
+        {
+            Assert.True(OpenRouterClient.ModelSupportsCacheControl("anthropic/claude-opus-4"));
+            Assert.True(OpenRouterClient.ModelSupportsCacheControl("~anthropic/claude-sonnet-latest"));
+            Assert.True(OpenRouterClient.ModelSupportsCacheControl("google/gemini-2.5-pro"));
+            Assert.False(OpenRouterClient.ModelSupportsCacheControl("openai/gpt-4o"));
+            Assert.False(OpenRouterClient.ModelSupportsCacheControl(null));
+
+            // The broader caching gate (drives reveal-set eviction) also covers automatic cachers.
+            Assert.True(OpenRouterClient.ModelSupportsPromptCaching("openai/gpt-4o"));
+            Assert.True(OpenRouterClient.ModelSupportsPromptCaching("deepseek/deepseek-chat"));
+            Assert.True(OpenRouterClient.ModelSupportsPromptCaching("~anthropic/claude-sonnet-latest"));
+            Assert.False(OpenRouterClient.ModelSupportsPromptCaching("mistralai/mistral-large"));
+        }
+
+        [Fact]
+        public void Tool_choice_is_emitted_only_alongside_tools()
+        {
+            var tools = new List<JObject>
+            {
+                JObject.Parse("{\"type\":\"function\",\"function\":{\"name\":\"f\",\"parameters\":{}}}")
+            };
+            var withTools = OpenRouterClient.BuildRequestBody(
+                "m", new List<ChatMessage>(), tools, new ClientProperties { ToolChoice = "none" });
+            Assert.Equal("none", (string)JObject.Parse(withTools)["tool_choice"]);
+
+            var withoutTools = OpenRouterClient.BuildRequestBody(
+                "m", new List<ChatMessage>(), null, new ClientProperties { ToolChoice = "none" });
+            Assert.Null(JObject.Parse(withoutTools)["tool_choice"]);
+        }
+
+        [Fact]
+        public void Parses_usage_chunk_with_cached_tokens()
+        {
+            var json = "{\"id\":\"x\",\"choices\":[],\"usage\":{\"prompt_tokens\":1200,\"completion_tokens\":80,"
+                + "\"prompt_tokens_details\":{\"cached_tokens\":1100}}}";
+            var chunk = JsonConvert.DeserializeObject<ChatCompletionChunk>(json);
+            Assert.Equal(1200, chunk.usage.prompt_tokens);
+            Assert.Equal(80, chunk.usage.completion_tokens);
+            Assert.Equal(1100, chunk.usage.prompt_tokens_details.cached_tokens);
+        }
+
         // ---- streaming chunk parsing under Newtonsoft ----
 
         [Fact]

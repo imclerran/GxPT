@@ -20,6 +20,9 @@ namespace GxPT
     {
         public const int DefaultMaxIterations = 25;
         public const int DefaultCallTimeoutMs = 60000;
+        // Reveal-set cap, enforced only on models whose provider has no prompt caching (see the
+        // eviction note on RevealedToolNames). Matches the old registry-global LRU cap.
+        public const int RevealEvictionCap = 24;
 
         // Tool-result content returned when the user denies a call. Lives here (this file is linked
         // into the test project) so the transcript renderer can recognize a denied call; McpMarkers
@@ -44,7 +47,10 @@ namespace GxPT
             + "tool again later with adjusted arguments or once the situation changes.\n\n"
             + "Do not list or describe your tools or capabilities unless the user asks. Reply to "
             + "greetings and casual messages naturally and briefly, and bring up what you can do "
-            + "only when it is relevant to the user's request.";
+            + "only when it is relevant to the user's request.\n\n"
+            + "Some requests end with an extra user-role message marked [Ephemeral context ...]. "
+            + "It is appended by the host application (workspace memory, skills, tool availability), "
+            + "not written by the user; treat it as background information from the system.";
 
         // Per-turn workspace block, built from WorkingDir and injected as its own ephemeral system
         // message right after the agent prompt (only when a workspace is set). Kept separate from
@@ -67,10 +73,30 @@ namespace GxPT
         private readonly int _maxIterations;
         private readonly int _callTimeoutMs;
 
+        // The tools array offered on the most recent loop iteration. The cap wrap-up re-sends it
+        // (with tool_choice "none") so the wrap-up request's prompt prefix stays byte-identical to
+        // the loop's requests and re-reads the turn's prompt cache - omitting the array would change
+        // position 0 of the prompt and re-bill the whole transcript on the turn's largest request.
+        private IList<JObject> _lastOfferedTools;
+
         // Optional hook to transform history into the messages actually sent (e.g. inline file
         // attachments) without mutating the persisted history. Identity transform when null. Must
-        // preserve assistant ToolCalls and tool-role ToolCallId.
+        // preserve assistant ToolCalls and tool-role ToolCallId, and must be byte-deterministic per
+        // message: any nondeterminism (timestamps, fresh temp paths) silently zeroes the prompt-cache
+        // hit rate for everything after the first differing byte.
         public Func<IList<ChatMessage>, IList<ChatMessage>> RequestMessageTransform { get; set; }
+
+        // The conversation's revealed-tool list (server-qualified names), owned by the Conversation
+        // and persisted with it. Per-conversation scoping keeps one tab's reveals out of another
+        // tab's tools array; the registry validates each name against the live catalog at request
+        // time, so stale names are skipped harmlessly. The list is kept in recency order (reveal and
+        // call both bump a name to the end). Eviction is provider-gated at turn start: on prompt-
+        // caching providers the set is append-only - evicting a def changes the tools array at
+        // position 0 of the prompt and re-bills the whole transcript, which always costs more than
+        // the few hundred cache-discounted tokens the stale def occupies - while on non-caching
+        // providers the list is trimmed to RevealEvictionCap, oldest first, since stale defs are
+        // pure per-turn cost there. Defaults to a turn-local list when the host doesn't supply one.
+        public IList<string> RevealedToolNames { get; set; }
 
         // Optional provider of the persistent-memory system block (the current .gxpt/memory.md index
         // plus its framing), rebuilt from disk each request and injected as an ephemeral, non-persisted
@@ -163,6 +189,23 @@ namespace GxPT
             _log.Log("mcp", "[turn " + turnId + "] start: model=" + _model + ", history=" + history.Count
                 + " msg(s), maxIterations=" + _maxIterations);
 
+            if (RevealedToolNames == null) RevealedToolNames = new List<string>();
+            // Provider-gated eviction, at turn boundaries only (mid-loop eviction would churn the
+            // tools array between iterations for no benefit). See RevealedToolNames for the rationale.
+            if (RevealedToolNames.Count > RevealEvictionCap
+                && !OpenRouterClient.ModelSupportsPromptCaching(_model))
+            {
+                int evicted = 0;
+                while (RevealedToolNames.Count > RevealEvictionCap)
+                {
+                    RevealedToolNames.RemoveAt(0); // recency order: index 0 is least recently used
+                    evicted++;
+                }
+                _log.Log("mcp", "[turn " + turnId + "] evicted " + evicted
+                    + " least-recently-used revealed tool def(s) (non-caching provider, cap "
+                    + RevealEvictionCap + ")");
+            }
+
             // The cap is a budget rather than a fixed loop bound so the user can grant another batch
             // when it's reached (ContinuationDecider) instead of dead-ending the turn.
             int budget = _maxIterations;
@@ -189,7 +232,7 @@ namespace GxPT
                     {
                         _log.Log("mcp", "[turn " + turnId + "] iteration cap reached at " + iter
                             + "; wrapping up");
-                        RunCapWrapUp(history, ui, turnId);
+                        RunCapWrapUp(history, _lastOfferedTools, ui, turnId);
                         return;
                     }
                 }
@@ -199,7 +242,8 @@ namespace GxPT
                 // Filter by THIS turn's workdir so a folderless turn never advertises another folder's
                 // scoped tools (files/git/run_skill_script, ...) that it couldn't actually call.
                 bool hasMcpTools = _registry != null && _registry.HasToolsForWorkdir(WorkingDir);
-                IList<JObject> tools = hasMcpTools ? _registry.ExposedFunctionDefs(WorkingDir) : null;
+                IList<JObject> tools = hasMcpTools
+                    ? _registry.ExposedFunctionDefs(WorkingDir, RevealedToolNames) : null;
                 string manifest = hasMcpTools ? _registry.NamesManifestSystemMessage(WorkingDir) : null;
                 if (SkillTools != null && SkillTools.HasSkills)
                 {
@@ -219,43 +263,51 @@ namespace GxPT
                 // over an empty list (e.g. a folderless turn whose only resolvable tools are all hidden).
                 if (manifest != null && manifest.IndexOf("\n- ", StringComparison.Ordinal) < 0)
                     manifest = null;
+                _lastOfferedTools = tools;
                 _log.Log("mcp", "[turn " + turnId + "] iteration " + (iter + 1) + "/" + budget
                     + ": requesting model with " + (tools != null ? tools.Count : 0) + " exposed tool(s)");
 
-                // The names manifest rides as an extra system message in front of history; it is not
-                // persisted (rebuilt each request from the live catalog).
-                // Ephemeral system messages, ordered stable -> volatile for prompt-cache reuse:
-                // constant agent prompt, then the workspace block (constant for the turn), then
-                // memory (changes rarely within a turn), then the skills manifest, then the MCP names
-                // manifest (rebuilt every request). None are persisted into history.
-                List<ChatMessage> requestMessages = new List<ChatMessage>();
-                requestMessages.Add(new ChatMessage("system", AgentSystemPrompt));
-                string workspaceBlock = WorkspaceSystemMessage(WorkingDir);
-                if (!string.IsNullOrEmpty(workspaceBlock))
-                    requestMessages.Add(new ChatMessage("system", workspaceBlock));
-                if (MemorySystemMessageProvider != null)
-                {
-                    string memoryBlock = MemorySystemMessageProvider();
-                    if (!string.IsNullOrEmpty(memoryBlock))
-                        requestMessages.Add(new ChatMessage("system", memoryBlock));
-                }
-                if (SkillsManifestSystemMessageProvider != null)
-                {
-                    string skillsBlock = SkillsManifestSystemMessageProvider();
-                    if (!string.IsNullOrEmpty(skillsBlock))
-                        requestMessages.Add(new ChatMessage("system", skillsBlock));
-                }
-                if (!string.IsNullOrEmpty(manifest))
-                    requestMessages.Add(new ChatMessage("system", manifest));
+                // Request layout, designed for prompt-cache reuse (three zones by volatility):
+                //   Zone A - stable head: constant agent prompt + workspace block (system messages;
+                //            byte-identical for the conversation's lifetime). Cache breakpoint #1 on
+                //            its last message caches tools + system head together (tools render at
+                //            position 0 of the prompt).
+                //   Zone B - the persisted history (append-only). Cache breakpoint #2 rides the
+                //            newest message, so each loop iteration / turn reads the previous
+                //            request's prefix from cache and extends it incrementally.
+                //   Zone C - one ephemeral user-role tail message holding everything that may change
+                //            between requests (memory, skills manifest, MCP names manifest). Placed
+                //            AFTER the breakpoints so its churn never invalidates the cached
+                //            transcript. Never persisted; rebuilt every request.
+                List<ChatMessage> requestMessages = BuildStableHead();
+                requestMessages[requestMessages.Count - 1].CacheControl = true;
+                int headCount = requestMessages.Count;
+
                 // Build the sent messages from history, optionally transformed (e.g. attachments
                 // inlined). The transform must not drop tool_calls / tool_call_id.
                 IList<ChatMessage> contextMessages = RequestMessageTransform != null
                     ? RequestMessageTransform(history) : history;
                 requestMessages.AddRange(contextMessages);
+                // Breakpoint #2 on a request-local clone, never on the persisted message itself -
+                // otherwise stale flags accumulate across turns and overrun the provider's
+                // breakpoint limit (Anthropic allows at most 4 per request).
+                if (requestMessages.Count > headCount)
+                {
+                    int last = requestMessages.Count - 1;
+                    requestMessages[last] = requestMessages[last].WithCacheControl();
+                }
+
+                string memoryBlock = MemorySystemMessageProvider != null
+                    ? MemorySystemMessageProvider() : null;
+                string skillsBlock = SkillsManifestSystemMessageProvider != null
+                    ? SkillsManifestSystemMessageProvider() : null;
+                string ephemeralTail = BuildEphemeralContextText(memoryBlock, skillsBlock, manifest);
+                if (!string.IsNullOrEmpty(ephemeralTail))
+                    requestMessages.Add(new ChatMessage("user", ephemeralTail));
 
                 bool errored;
                 string errMessage;
-                ToolCallAssembler asm = StreamOnce(requestMessages, tools, ui, out errored, out errMessage);
+                ToolCallAssembler asm = StreamOnce(requestMessages, tools, null, ui, out errored, out errMessage);
                 if (errored)
                 {
                     _log.Log("mcp", "[turn " + turnId + "] aborted on iteration " + (iter + 1)
@@ -270,7 +322,7 @@ namespace GxPT
                 if (!asm.ProducedToolCalls && IsEmptyText(asm.Text))
                 {
                     _log.Log("mcp", "[turn " + turnId + "] empty response (no tool calls, no text); retrying once");
-                    asm = StreamOnce(requestMessages, tools, ui, out errored, out errMessage);
+                    asm = StreamOnce(requestMessages, tools, null, ui, out errored, out errMessage);
                     if (errored)
                     {
                         _log.Log("mcp", "[turn " + turnId + "] aborted on iteration " + (iter + 1)
@@ -335,14 +387,16 @@ namespace GxPT
         }
 
         // One streamed model request into a fresh assembler. Shared by the main loop, the
-        // empty-response retry, and (with tools = null) the cap wrap-up.
+        // empty-response retry, and (with toolChoice = "none") the cap wrap-up.
         private ToolCallAssembler StreamOnce(IList<ChatMessage> requestMessages, IList<JObject> tools,
-                                             IToolLoopUi ui, out bool errored, out string errMessage)
+                                             string toolChoice, IToolLoopUi ui, out bool errored,
+                                             out string errMessage)
         {
             ClientProperties props = new ClientProperties();
             props.Stream = true;
             props.ProviderDataCollectionAllowed = ProviderDataCollectionAllowed;
             props.Zdr = Zdr;
+            props.ToolChoice = toolChoice;
 
             Action<string> textSink = (ui != null) ? new Action<string>(ui.AppendTextDelta) : null;
             ToolCallAssembler asm = new ToolCallAssembler(textSink);
@@ -367,15 +421,28 @@ namespace GxPT
                 + (asm.Truncated ? " [TRUNCATED: model output cut off by length]" : ""));
         }
 
-        // Cap reached and not continued: one final tool-less model call asking it to summarize and
-        // ask how to proceed, so the turn ends with a readable assistant message rather than a
-        // cryptic dead-end. The user can simply reply to keep going (a fresh budget next turn).
-        private void RunCapWrapUp(IList<ChatMessage> history, IToolLoopUi ui, string turnId)
+        // Cap reached and not continued: one final model call (tool_choice "none") asking it to
+        // summarize and ask how to proceed, so the turn ends with a readable assistant message
+        // rather than a cryptic dead-end. The user can simply reply to keep going (a fresh budget
+        // next turn). The request reuses the loop's prompt shape - same stable head, same history,
+        // same tools array - rather than dropping tools: on Anthropic a tool_choice change
+        // invalidates only the message-tier cache, while removing the tools array would change
+        // position 0 of the prompt and invalidate the tools+system tiers as well. The next user
+        // turn (back on tool_choice auto) still extends the loop's cached prefix unharmed.
+        private void RunCapWrapUp(IList<ChatMessage> history, IList<JObject> tools, IToolLoopUi ui,
+                                  string turnId)
         {
-            List<ChatMessage> requestMessages = new List<ChatMessage>();
+            List<ChatMessage> requestMessages = BuildStableHead();
+            requestMessages[requestMessages.Count - 1].CacheControl = true;
+            int headCount = requestMessages.Count;
             IList<ChatMessage> contextMessages = RequestMessageTransform != null
                 ? RequestMessageTransform(history) : history;
             requestMessages.AddRange(contextMessages);
+            if (requestMessages.Count > headCount)
+            {
+                int last = requestMessages.Count - 1;
+                requestMessages[last] = requestMessages[last].WithCacheControl();
+            }
             // Sent as a user message, not system: Anthropic (via OpenRouter) hoists in-array system
             // messages to the top-level system parameter, which would leave the conversation ending
             // on a tool result and the model with nothing in-position to answer (it replies with a
@@ -386,10 +453,11 @@ namespace GxPT
                 + "request any more tools now. Briefly summarize what you have done so far and what "
                 + "still remains, then ask the user how they would like to proceed."));
 
-            // No tools offered, so the model must answer with text.
+            // tool_choice "none": the model must answer with text, while the unchanged tools array
+            // keeps the cached prefix intact.
             bool errored;
             string errMessage;
-            ToolCallAssembler asm = StreamOnce(requestMessages, null, ui, out errored, out errMessage);
+            ToolCallAssembler asm = StreamOnce(requestMessages, tools, "none", ui, out errored, out errMessage);
 
             string text;
             if (errored || IsEmptyText(asm.Text))
@@ -408,6 +476,45 @@ namespace GxPT
 
             history.Add(new ChatMessage("assistant", text));
             if (ui != null) ui.Complete();
+        }
+
+        // Zone A: the stable system head, byte-identical for every request of a conversation (the
+        // agent prompt is constant; the workspace block is constant while the workspace is). Fresh
+        // message objects each call, so callers may set CacheControl on them directly.
+        private List<ChatMessage> BuildStableHead()
+        {
+            List<ChatMessage> head = new List<ChatMessage>();
+            head.Add(new ChatMessage("system", AgentSystemPrompt));
+            string workspaceBlock = WorkspaceSystemMessage(WorkingDir);
+            if (!string.IsNullOrEmpty(workspaceBlock))
+                head.Add(new ChatMessage("system", workspaceBlock));
+            return head;
+        }
+
+        // Zone C: the ephemeral context tail - one user-role message holding everything that may
+        // change between requests (memory index, skills manifest, MCP names manifest). User role
+        // because Anthropic (via OpenRouter) hoists in-array system messages to the top-level system
+        // parameter, which would put this back in front of the cached history; as a trailing user
+        // message it merges into the same user turn as any preceding tool results ([tool_result...,
+        // text] is the order Anthropic requires). Returns null when every block is empty, so a turn
+        // without memory/skills/tools leaves no trace. Never persisted; the UI never renders it.
+        internal static string BuildEphemeralContextText(string memory, string skills, string toolManifest)
+        {
+            bool hasMemory = !string.IsNullOrEmpty(memory);
+            bool hasSkills = !string.IsNullOrEmpty(skills);
+            bool hasManifest = !string.IsNullOrEmpty(toolManifest);
+            if (!hasMemory && !hasSkills && !hasManifest) return null;
+
+            StringBuilder sb = new StringBuilder();
+            sb.Append("[Ephemeral context appended by the host application for this request. ");
+            sb.Append("It is not part of the user's message.]");
+            if (hasMemory)
+                sb.Append("\n\n<memory>\n").Append(memory).Append("\n</memory>");
+            if (hasSkills)
+                sb.Append("\n\n<skills>\n").Append(skills).Append("\n</skills>");
+            if (hasManifest)
+                sb.Append("\n\n<available_tools>\n").Append(toolManifest).Append("\n</available_tools>");
+            return sb.ToString();
         }
 
         private static bool IsEmptyText(string s)
@@ -446,7 +553,7 @@ namespace GxPT
             {
                 string[] names = ParseRevealNames(call.ArgumentsJson);
                 _log.Log("mcp", "[turn " + turnId + "] reveal_tools: " + names.Length + " name(s)");
-                return _registry.Reveal(names, WorkingDir);
+                return _registry.Reveal(names, WorkingDir, RevealedToolNames);
             }
 
             // open_skill is a host meta-tool (no MCP round-trip): load skill bodies by slug. Same
@@ -484,6 +591,15 @@ namespace GxPT
                 _log.Log("mcp", "[turn " + turnId + "] unresolved tool '" + call.Name + "' (workdir="
                     + (string.IsNullOrEmpty(WorkingDir) ? "(none)" : WorkingDir) + ")");
                 return "[Unknown tool: " + call.Name + "]";
+            }
+
+            // An actively-called tool moves to the end of the recency-ordered reveal list, so the
+            // provider-gated eviction (non-caching models only) trims idle defs first. Reordering the
+            // list is cache-safe: the emitted tools array is sorted by name, not list order.
+            if (RevealedToolNames != null && RevealedToolNames.Contains(call.Name))
+            {
+                RevealedToolNames.Remove(call.Name);
+                RevealedToolNames.Add(call.Name);
             }
 
             JObject args;

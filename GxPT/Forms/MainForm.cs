@@ -1147,7 +1147,7 @@ namespace GxPT
                 clientInfo.Name = "GxPT";
                 clientInfo.Version = "1.0";
 
-                _mcpRegistry = new McpToolRegistry(McpToolRegistry.DefaultRevealCap, LoggerSink.Instance);
+                _mcpRegistry = new McpToolRegistry(LoggerSink.Instance);
                 var connector = new DefaultServerConnector(clientInfo, curlPath, caBundle, LoggerSink.Instance);
                 _mcpHost = new McpHost(connector, _mcpRegistry, LoggerSink.Instance);
 
@@ -2069,6 +2069,11 @@ namespace GxPT
                         // Snapshot the history and log it
                         // Build a model snapshot where attachments are appended to content on-the-fly
                         var snapshot = BuildMessagesForModel(ctx.Conversation.History);
+                        // Prompt caching: the newest message carries the cache breakpoint, so each
+                        // turn re-reads the prior turn's prefix and extends it. Snapshot messages are
+                        // request-local clones - the flag never lands in persisted history.
+                        if (snapshot.Count > 0)
+                            snapshot[snapshot.Count - 1].CacheControl = true;
                         try
                         {
                             var sbSnap = new StringBuilder();
@@ -2405,6 +2410,16 @@ namespace GxPT
                                                        model, LoggerSink.Instance);
                     orch.WorkingDir = ctx.WorkingDir;
                     orch.Zdr = zdr ? true : (bool?)null;
+                    // Reveal state is per-conversation (recency-ordered; persisted with the
+                    // conversation) so concurrent tabs don't churn each other's tools array - the
+                    // array must stay byte-stable across requests for prompt caching to hit.
+                    Conversation revealConvo = ctx.Conversation;
+                    if (revealConvo != null)
+                    {
+                        if (revealConvo.RevealedTools == null)
+                            revealConvo.RevealedTools = new List<string>();
+                        orch.RevealedToolNames = revealConvo.RevealedTools;
+                    }
                     // Stop button cancellation: kills the in-flight model stream and lets the loop bail
                     // out cleanly between steps. Set once before the turn runs (read-only thereafter).
                     orch.Cancellation = ctx.Cancellation;

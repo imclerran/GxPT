@@ -56,6 +56,14 @@ namespace GxPT
         // = force off); a slug absent inherits the global default. Set by the /skills and /skill commands.
         public bool? SkillsFeatureOff { get; set; }
         public Dictionary<string, bool> SkillOverrides { get; set; }
+        // Server-qualified MCP tool names this conversation has revealed, in recency order (reveal
+        // and call both move a name to the end). Owned by the conversation - not the registry - so
+        // concurrent tabs don't share reveal state (which would churn each other's tools array and
+        // break prompt caching) and the working set survives save/reopen. Append-only on prompt-
+        // caching providers; trimmed to a cap at turn start on non-caching ones (see
+        // McpChatOrchestrator.RevealedToolNames). Stale names (server removed/disabled) are skipped
+        // by the registry at request time, so the list never needs pruning here.
+        public List<string> RevealedTools { get; set; }
         public DateTime LastUpdated { get; set; }
         public event Action<string> NameGenerated;
 
@@ -65,6 +73,7 @@ namespace GxPT
             Name = GenericName; // initialize to generic name
             SelectedModel = null;
             SkillOverrides = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            RevealedTools = new List<string>();
             ZdrFirstMessageIndex = -1; // not latched until a ZDR send occurs
             // A brand-new conversation inherits the current global ZDR default as its starting value
             // (seed only - not a live override, so the user can still uncheck it before the first send).

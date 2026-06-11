@@ -63,6 +63,7 @@ namespace GxPT.Tests.Mcp
         public int Calls;
         public readonly List<IList<ChatMessage>> SeenMessages = new List<IList<ChatMessage>>();
         public readonly List<IList<JObject>> SeenTools = new List<IList<JObject>>();
+        public readonly List<ClientProperties> SeenProps = new List<ClientProperties>();
 
         public void StreamChat(string model, IList<ChatMessage> messages, IList<JObject> tools,
                                ClientProperties props, Action<ChatCompletionChunk> onChunk, Action<string> onError,
@@ -71,6 +72,7 @@ namespace GxPT.Tests.Mcp
             int idx = Calls++;
             SeenMessages.Add(messages);
             SeenTools.Add(tools);
+            SeenProps.Add(props);
 
             if (ErrorMessage != null && (ErrorOnCall < 0 || ErrorOnCall == idx))
             {

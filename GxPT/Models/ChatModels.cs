@@ -26,6 +26,12 @@ namespace GxPT
         public List<ToolCall> ToolCalls;
         // Tool-call loop (phase 4): set on "tool"-role messages; the id of the call being answered.
         public string ToolCallId;
+        // Prompt-cache breakpoint (request-time only; never persisted). OpenRouterClient emits this
+        // message's content as a content-part array carrying cache_control {type: ephemeral} when the
+        // model's provider supports explicit caching. Set only on request-scoped message objects (the
+        // orchestrator clones history messages via WithCacheControl) so flags can never accumulate in
+        // persisted history across turns - Anthropic rejects requests with more than 4 breakpoints.
+        public bool CacheControl;
 
         public ChatMessage() { }
         public ChatMessage(string role, string content)
@@ -36,6 +42,17 @@ namespace GxPT
         public ChatMessage(string role, string content, List<AttachedFile> attachments)
         {
             Role = role; Content = content ?? string.Empty; Attachments = attachments;
+        }
+
+        // A shallow copy with the cache breakpoint set: flags a persisted history message at request
+        // time without mutating it (the copy lives only in the outgoing request list).
+        internal ChatMessage WithCacheControl()
+        {
+            var c = new ChatMessage(Role, Content, Attachments);
+            c.ToolCalls = ToolCalls;
+            c.ToolCallId = ToolCallId;
+            c.CacheControl = true;
+            return c;
         }
     }
 
@@ -61,6 +78,9 @@ namespace GxPT
         public long created { get; set; }
         public string model { get; set; }
         public List<Choice> choices { get; set; }
+        // Token accounting; arrives on the final SSE chunk when the request asked for it
+        // (usage: {include: true}). Null on every other chunk.
+        public UsageInfo usage { get; set; }
 
         internal sealed class Choice
         {
@@ -73,6 +93,21 @@ namespace GxPT
             public string role { get; set; }
             public string content { get; set; }
             public List<ToolCallDelta> tool_calls { get; set; }
+        }
+
+        internal sealed class UsageInfo
+        {
+            public int? prompt_tokens { get; set; }
+            public int? completion_tokens { get; set; }
+            public PromptTokensDetails prompt_tokens_details { get; set; }
+        }
+
+        // cached_tokens is the prompt-cache read count: the prompt-prefix tokens the provider served
+        // from cache (billed at the provider's discounted cache-read rate). Zero across repeated
+        // identical-prefix requests means a silent cache invalidator is at work.
+        internal sealed class PromptTokensDetails
+        {
+            public int? cached_tokens { get; set; }
         }
     }
 

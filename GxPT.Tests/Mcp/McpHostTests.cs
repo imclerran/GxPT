@@ -19,7 +19,7 @@ namespace GxPT.Tests.Mcp
         private static McpHost NewHost(out FakeServerConnector connector, out McpToolRegistry reg)
         {
             connector = new FakeServerConnector();
-            reg = new McpToolRegistry(24, null);
+            reg = new McpToolRegistry(null);
             return new McpHost(connector, reg, null, 2000);
         }
 
@@ -243,7 +243,7 @@ namespace GxPT.Tests.Mcp
             // Regression: closing the app while servers were still connecting used to hang for the
             // whole handshake because Start held the host lock across the blocking conn.Open().
             var connector = new GatedServerConnector();
-            var reg = new McpToolRegistry(24, null);
+            var reg = new McpToolRegistry(null);
             var host = new McpHost(connector, reg, null, 5000);
 
             // Connect on a background thread; its eager Open() parks in the gated handshake.

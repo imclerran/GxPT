@@ -110,6 +110,10 @@ namespace GxPT
                 // Omit an empty map so untouched conversations stay clean (NullValueHandling.Ignore).
                 SkillOverrides = (convo.SkillOverrides != null && convo.SkillOverrides.Count > 0)
                     ? convo.SkillOverrides : null,
+                // Revealed-tool list (prompt caching): persisted so a reopened conversation resumes
+                // with the same tools array instead of silently starting cold. Omitted when empty.
+                RevealedTools = (convo.RevealedTools != null && convo.RevealedTools.Count > 0)
+                    ? convo.RevealedTools : null,
                 LastUpdated = convo.LastUpdated,
                 Messages = convo.History.Select(m => ToMessageDto(m)).ToList()
             };
@@ -179,6 +183,9 @@ namespace GxPT
                 SkillOverrides = dto.SkillOverrides != null
                     ? new Dictionary<string, bool>(dto.SkillOverrides, StringComparer.OrdinalIgnoreCase)
                     : new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase),
+                // Absent in older files -> empty list (nothing revealed yet).
+                RevealedTools = dto.RevealedTools != null
+                    ? new List<string>(dto.RevealedTools) : new List<string>(),
                 LastUpdated = dto.LastUpdated == default(DateTime) && !string.IsNullOrEmpty(path)
                     ? File.GetLastWriteTimeUtc(path)
                     : (dto.LastUpdated == default(DateTime) ? DateTime.Now : dto.LastUpdated)
@@ -346,6 +353,8 @@ namespace GxPT
             // from JSON when null/empty via NullValueHandling.Ignore.
             public bool? SkillsFeatureOff { get; set; }
             public Dictionary<string, bool> SkillOverrides { get; set; }
+            // Revealed MCP tool names (prompt caching; null/absent in older files -> none revealed).
+            public List<string> RevealedTools { get; set; }
             public DateTime LastUpdated { get; set; }
             public List<MessageDto> Messages { get; set; }
         }
