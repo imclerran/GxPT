@@ -4727,7 +4727,11 @@ namespace GxPT
             NotifyUsageUpdated(convo);
 
             if (string.IsNullOrEmpty(u.Id) || _client == null) return;
-            if (!cachingModel && u.Cost.HasValue) return; // streamed figure already matches billing
+            // Stream-first, fetch-as-fallback: the fetch exists for cache_discount (and as a cost
+            // correction). When a stream ever carries both, there is nothing left to fetch - this
+            // self-cancels the extra GETs if OpenRouter adds cache_discount to SSE chunks.
+            if (u.CacheDiscount.HasValue && u.Cost.HasValue) return;
+            if (!cachingModel && u.Cost.HasValue) return;
             System.Threading.ThreadPool.QueueUserWorkItem(delegate
             {
                 try
