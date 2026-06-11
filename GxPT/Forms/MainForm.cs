@@ -3470,7 +3470,7 @@ namespace GxPT
                     LineDiffResult diff = DiffUtil.BuildLineDiff(Str(args, "old_string"), Str(args, "new_string"));
                     // The +N/-N counts ride alongside (color-coded at draw time), so the header label
                     // is just the path.
-                    header = "edited " + (path.Length > 0 ? path : "(file)");
+                    header = "Edited " + (path.Length > 0 ? path : "(file)");
                     body = diff.Body; language = "diff"; added = diff.Added; removed = diff.Removed; return true;
                 }
                 case "files__write":
@@ -3658,18 +3658,18 @@ namespace GxPT
                     }
                     return true;
                 }
-                case "reveal_tools": header = "Checking available tools"; return true;
+                case "reveal_tools": header = "Checked available tools"; return true;
                 case "open_skill":
                 {
                     // Post-flight (completed) record label, so past tense like the other records.
                     string slugs = JoinPaths(args, "names"); // generic string-array joiner
-                    header = slugs.Length > 0 ? "Read skill: " + slugs : "Read skill";
+                    header = slugs.Length > 0 ? "Read skill " + slugs : "Read skill";
                     return true;
                 }
                 case "read_skill_file":
                 {
                     string rel = Str(args, "relpath");
-                    header = rel.Length > 0 ? "Read skill file: " + rel : "Read skill file";
+                    header = rel.Length > 0 ? "Read skill file " + rel : "Read skill file";
                     return true;
                 }
                 case "skills__edit_skill_file":
@@ -3679,13 +3679,13 @@ namespace GxPT
                     string slug = Str(args, "slug");
                     string rel = Str(args, "relpath");
                     LineDiffResult diff = DiffUtil.BuildLineDiff(Str(args, "old_string"), Str(args, "new_string"));
-                    header = "edited " + SkillTarget(slug, rel);
+                    header = "Edited " + SkillTarget(slug, rel);
                     body = diff.Body; language = "diff"; added = diff.Added; removed = diff.Removed; return true;
                 }
                 case "skills__run_skill_script":
                 {
                     string rel = Str(args, "relpath");
-                    header = rel.Length > 0 ? "Ran skill script: " + rel : "Ran a skill script";
+                    header = rel.Length > 0 ? "Ran skill script " + rel : "Ran a skill script";
                     return true;
                 }
                 case "skills__create_skill":
