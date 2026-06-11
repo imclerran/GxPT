@@ -4676,45 +4676,47 @@ namespace GxPT
                 bool visible = AppSettings.GetBool("statusbar_visible", true);
                 if (this.ssMain != null) this.ssMain.Visible = visible;
                 if (this.miStatusBar != null) this.miStatusBar.Checked = visible;
-                SuppressContextMeterPulse();
+                // Un-theme the meter the moment its native control exists. The handle is created
+                // lazily (a hidden-at-startup item may not get one until the strip first lays it
+                // out), so a one-shot here can run before there is anything to un-theme - hence
+                // the hook plus the re-check on every strip update in UpdateUsageStatusStrip.
+                ProgressBar meterBar = (this.tspContextMeter != null) ? this.tspContextMeter.ProgressBar : null;
+                if (meterBar != null) meterBar.HandleCreated += delegate { ApplyContextMeterRendering(); };
+                ApplyContextMeterRendering();
                 ApplyThemeToStatusBar();
                 SyncUsageStatusFromActiveTab();
             }
             catch { }
         }
 
-        // ---- context meter pulse suppression ----
+        // ---- context meter rendering ----
         // Vista/7's themed progress bar periodically sweeps a highlight ("pulse") across the
         // fill even when the value never changes - distracting on a meter that's meant to sit
-        // still. PBM_SETSTATE -> PBST_PAUSED stops that animation. CAVEAT under evaluation:
-        // Win7 renders a paused bar amber/yellow instead of green; if that reads as a warning,
-        // the fallback plan is to un-theme the control (SetWindowTheme) instead. Harmlessly
-        // ignored on XP/classic rendering, where the pulse doesn't exist.
+        // still. (PBM_SETSTATE/PBST_PAUSED stopped it, but painted the bar amber - reads as a
+        // warning.) Un-theming just this control makes Windows render it classic-style: a flat,
+        // animation-free fill (solid, not segmented, thanks to the Continuous style set in the
+        // designer). XP loses the themed chrome on this one control too, which suits the status
+        // strip's plain system look.
 
-        private const int PBM_SETSTATE = 0x0410; // WM_USER + 16
-        private const int PBST_PAUSED = 0x0003;
+        [System.Runtime.InteropServices.DllImport("uxtheme.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        private static extern int SetWindowTheme(IntPtr hWnd, string pszSubAppName, string pszSubIdList);
 
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+        // The native handle the un-theme was last applied to. Guards both repeats (each
+        // SetWindowTheme call triggers a WM_THEMECHANGED repaint) and handle recreations,
+        // which discard the un-theme and would otherwise bring the pulse back.
+        private IntPtr _contextMeterUnthemed = IntPtr.Zero;
 
-        private void SuppressContextMeterPulse()
+        private void ApplyContextMeterRendering()
         {
             try
             {
-                if (this.tspContextMeter == null) return;
-                ProgressBar bar = this.tspContextMeter.ProgressBar;
-                if (bar == null) return;
-                // The state lives on the native control, so it must be (re)applied every time
-                // WinForms creates the handle - recreations (e.g. a RecreateHandle) reset it.
-                bar.HandleCreated += delegate { SetContextMeterPaused(bar); };
-                if (bar.IsHandleCreated) SetContextMeterPaused(bar);
+                ProgressBar bar = (this.tspContextMeter != null) ? this.tspContextMeter.ProgressBar : null;
+                if (bar == null || !bar.IsHandleCreated) return;
+                IntPtr h = bar.Handle;
+                if (h == _contextMeterUnthemed) return;
+                SetWindowTheme(h, string.Empty, string.Empty);
+                _contextMeterUnthemed = h;
             }
-            catch { }
-        }
-
-        private static void SetContextMeterPaused(ProgressBar bar)
-        {
-            try { SendMessage(bar.Handle, PBM_SETSTATE, new IntPtr(PBST_PAUSED), IntPtr.Zero); }
             catch { }
         }
 
@@ -4893,6 +4895,9 @@ namespace GxPT
             if (this.tspContextMeter != null)
             {
                 this.tspContextMeter.Visible = haveMax;
+                // Becoming visible can create the native control on the spot; make sure the
+                // un-theme has landed on this handle (no-op when already applied).
+                ApplyContextMeterRendering();
                 if (haveMax)
                 {
                     int pct = (int)Math.Round(100.0 * s.LastPromptTokens / maxContext);

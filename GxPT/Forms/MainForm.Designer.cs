@@ -578,6 +578,9 @@
             this.tspContextMeter.Margin = new System.Windows.Forms.Padding(5, 4, 5, 3);
             this.tspContextMeter.Name = "tspContextMeter";
             this.tspContextMeter.Size = new System.Drawing.Size(80, 15);
+            // Continuous (PBS_SMOOTH) matters because the control is un-themed at runtime (see
+            // ApplyContextMeterRendering): classic rendering would otherwise draw segmented blocks.
+            this.tspContextMeter.Style = System.Windows.Forms.ProgressBarStyle.Continuous;
             this.tspContextMeter.Visible = false;
             //
             // tslContextValue
