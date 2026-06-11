@@ -41,9 +41,17 @@ ephemeral context tail rebuilt every request, never cached               Zone C
   would put the volatile content back in front of the cached history. It is never persisted and
   never rendered by the UI; the agent prompt tells the model what it is. Memory, the skills
   manifest, and the MCP names manifest may all change per request at zero cache cost here.
-- **Breakpoints** are `ChatMessage.CacheControl` flags. Zone A's flag goes on a request-local
-  head message; Zone B's goes on a `WithCacheControl()` clone so the flag never lands in
-  persisted history (stale flags would accumulate past Anthropic's 4-breakpoint limit).
+- **Breakpoints** are `ChatMessage.CacheControl` flags, placed by
+  `McpChatOrchestrator.ApplyCacheBreakpoints`. Zone A's flag goes on a request-local head
+  message; Zone B's goes on a `WithCacheControl()` clone so the flag never lands in persisted
+  history (stale flags would accumulate past Anthropic's 4-breakpoint limit). The two spare
+  slots become **intermediate flags spaced ~12 estimated content blocks apart** walking back
+  from the newest message: Anthropic's matcher only looks back ~20 blocks from a breakpoint for
+  a prior cache entry, so a single iteration appending more than that (an assistant message
+  with K tool calls renders ~K+1 blocks plus K result blocks; K >= ~10) would otherwise leave
+  the next request unable to find the previous entry - a silent full miss. Bridged up to ~18
+  calls per iteration; a single assistant message wider than the lookback (~20+ calls) is
+  unbridgeable by placement and accepted.
 - During the tool-call loop, breakpoint #2 rides the newest tool result, so iteration N+1 reads
   everything through iteration N from cache. This is where most of the savings are.
 

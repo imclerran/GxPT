@@ -103,6 +103,60 @@ namespace GxPT.Tests.Mcp
         }
 
         [Fact]
+        public void Intermediate_breakpoints_bridge_long_tool_fanouts()
+        {
+            // A single iteration with K tool calls appends ~2K+1 content blocks; beyond Anthropic's
+            // ~20-block matcher lookback the next request's end breakpoint can't find the previous
+            // cache entry. The two spare breakpoint slots are spaced backward from the end so every
+            // inter-breakpoint span stays within the lookback.
+            var msgs = new List<ChatMessage> { new ChatMessage("system", "head") };
+            int headCount = 1;
+            msgs.Add(new ChatMessage("user", "go"));
+            var asst = new ChatMessage("assistant", "fanning out");
+            asst.ToolCalls = new List<ToolCall>();
+            for (int i = 0; i < 12; i++) asst.ToolCalls.Add(new ToolCall("c" + i, "files__read", "{}"));
+            msgs.Add(asst);
+            for (int i = 0; i < 12; i++)
+            {
+                var t = new ChatMessage("tool", "result " + i);
+                t.ToolCallId = "c" + i;
+                msgs.Add(t);
+            }
+
+            McpChatOrchestrator.ApplyCacheBreakpoints(msgs, headCount);
+
+            int flags = 0;
+            foreach (var m in msgs) if (m.CacheControl) flags++;
+            Assert.True(flags >= 3, "expected intermediate flags, got " + flags);
+            Assert.True(flags <= 4, "must stay within Anthropic's 4-breakpoint limit, got " + flags);
+            Assert.True(msgs[0].CacheControl);                 // stable head
+            Assert.True(msgs[msgs.Count - 1].CacheControl);    // newest message
+
+            // No span between consecutive breakpoints may exceed the ~20-block lookback.
+            int run = 0, maxRun = 0;
+            for (int i = headCount; i < msgs.Count; i++)
+            {
+                run += McpChatOrchestrator.EstimateContentBlocks(msgs[i]);
+                if (msgs[i].CacheControl) { if (run > maxRun) maxRun = run; run = 0; }
+            }
+            Assert.True(maxRun <= 20, "max inter-breakpoint span " + maxRun + " blocks");
+        }
+
+        [Fact]
+        public void Content_block_estimate_counts_tool_calls()
+        {
+            Assert.Equal(1, McpChatOrchestrator.EstimateContentBlocks(new ChatMessage("user", "hi")));
+            var toolMsg = new ChatMessage("tool", "result");
+            Assert.Equal(1, McpChatOrchestrator.EstimateContentBlocks(toolMsg));
+            var asst = new ChatMessage("assistant", "text");
+            asst.ToolCalls = new List<ToolCall> { new ToolCall("a", "t", "{}"), new ToolCall("b", "t", "{}") };
+            Assert.Equal(3, McpChatOrchestrator.EstimateContentBlocks(asst)); // 2 tool_use + 1 text
+            var silent = new ChatMessage("assistant", "");
+            silent.ToolCalls = new List<ToolCall> { new ToolCall("a", "t", "{}") };
+            Assert.Equal(1, McpChatOrchestrator.EstimateContentBlocks(silent)); // tool_use only
+        }
+
+        [Fact]
         public void Sticky_provider_routing_latches_on_a_demonstrated_cache_hit()
         {
             RegistryFakeTransport ft;

@@ -306,7 +306,6 @@ namespace GxPT
                 //            AFTER the breakpoints so its churn never invalidates the cached
                 //            transcript. Never persisted; rebuilt every request.
                 List<ChatMessage> requestMessages = BuildStableHead();
-                requestMessages[requestMessages.Count - 1].CacheControl = true;
                 int headCount = requestMessages.Count;
 
                 // Build the sent messages from history, optionally transformed (e.g. attachments
@@ -314,14 +313,7 @@ namespace GxPT
                 IList<ChatMessage> contextMessages = RequestMessageTransform != null
                     ? RequestMessageTransform(history) : history;
                 requestMessages.AddRange(contextMessages);
-                // Breakpoint #2 on a request-local clone, never on the persisted message itself -
-                // otherwise stale flags accumulate across turns and overrun the provider's
-                // breakpoint limit (Anthropic allows at most 4 per request).
-                if (requestMessages.Count > headCount)
-                {
-                    int last = requestMessages.Count - 1;
-                    requestMessages[last] = requestMessages[last].WithCacheControl();
-                }
+                ApplyCacheBreakpoints(requestMessages, headCount);
 
                 string memoryBlock = MemorySystemMessageProvider != null
                     ? MemorySystemMessageProvider() : null;
@@ -480,16 +472,11 @@ namespace GxPT
                                   string turnId)
         {
             List<ChatMessage> requestMessages = BuildStableHead();
-            requestMessages[requestMessages.Count - 1].CacheControl = true;
             int headCount = requestMessages.Count;
             IList<ChatMessage> contextMessages = RequestMessageTransform != null
                 ? RequestMessageTransform(history) : history;
             requestMessages.AddRange(contextMessages);
-            if (requestMessages.Count > headCount)
-            {
-                int last = requestMessages.Count - 1;
-                requestMessages[last] = requestMessages[last].WithCacheControl();
-            }
+            ApplyCacheBreakpoints(requestMessages, headCount);
             // Sent as a user message, not system: Anthropic (via OpenRouter) hoists in-array system
             // messages to the top-level system parameter, which would leave the conversation ending
             // on a tool result and the model with nothing in-position to answer (it replies with a
@@ -523,6 +510,53 @@ namespace GxPT
 
             history.Add(new ChatMessage("assistant", text));
             if (ui != null) ui.Complete();
+        }
+
+        // Flags the request's cache breakpoints (Anthropic allows at most 4 per request):
+        //   #1  last message of the stable head (request-local object; flagged directly),
+        //   #2  the newest history message (a WithCacheControl clone - the flag must never land
+        //       on, or accumulate in, persisted history),
+        //   plus up to TWO intermediate flags spaced ~12 estimated content blocks apart, walking
+        //   back from the end. The intermediates bridge Anthropic's ~20-block matcher lookback:
+        //   without them, a single iteration that appends more blocks than the lookback covers
+        //   (an assistant message with K tool calls renders as ~K+1 blocks and its results as K
+        //   more, so K >= ~10 outruns it) leaves the next request's breakpoint unable to find the
+        //   previous cache entry - a silent full miss. With both spares, fan-outs up to ~18 calls
+        //   per iteration stay bridged; a single message wider than the lookback (~20+ calls in
+        //   one assistant turn) is unbridgeable by placement and accepted. When the appended span
+        //   is short, the spares land in older, already-cached content, which is harmless.
+        internal static void ApplyCacheBreakpoints(List<ChatMessage> requestMessages, int headCount)
+        {
+            if (headCount > 0 && requestMessages.Count >= headCount)
+                requestMessages[headCount - 1].CacheControl = true;
+            if (requestMessages.Count <= headCount) return;
+
+            int last = requestMessages.Count - 1;
+            requestMessages[last] = requestMessages[last].WithCacheControl();
+
+            int blocksSinceFlag = 0;
+            int extraFlags = 0;
+            for (int i = last - 1; i >= headCount && extraFlags < 2; i--)
+            {
+                blocksSinceFlag += EstimateContentBlocks(requestMessages[i]);
+                if (blocksSinceFlag >= 12)
+                {
+                    requestMessages[i] = requestMessages[i].WithCacheControl();
+                    blocksSinceFlag = 0;
+                    extraFlags++;
+                }
+            }
+        }
+
+        // How many Anthropic content blocks one OpenAI-format message renders as: an assistant
+        // message contributes one tool_use block per call plus a text block when it carried text;
+        // everything else (user text, tool result, system) is a single block.
+        internal static int EstimateContentBlocks(ChatMessage m)
+        {
+            if (m == null) return 0;
+            int blocks = (m.ToolCalls != null) ? m.ToolCalls.Count : 0;
+            if (blocks == 0 || !string.IsNullOrEmpty(m.Content)) blocks++;
+            return blocks;
         }
 
         // Zone A: the stable system head, byte-identical for every request of a conversation (the
