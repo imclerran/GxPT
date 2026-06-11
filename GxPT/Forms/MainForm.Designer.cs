@@ -78,7 +78,7 @@
             this.ssMain = new System.Windows.Forms.StatusStrip();
             this.tslSpring = new System.Windows.Forms.ToolStripStatusLabel();
             this.tslContext = new System.Windows.Forms.ToolStripStatusLabel();
-            this.tspContextMeter = new System.Windows.Forms.ToolStripProgressBar();
+            this.tspContextMeter = new GxPT.ContextMeterItem();
             this.tslContextValue = new System.Windows.Forms.ToolStripStatusLabel();
             this.tslCost = new System.Windows.Forms.ToolStripStatusLabel();
             this.tslCostValue = new System.Windows.Forms.ToolStripStatusLabel();
@@ -572,15 +572,12 @@
             //
             // tspContextMeter
             //
-            this.tspContextMeter.AutoSize = false;
             // Right margin offsets tslContextValue's -2 (which tucks the value against the
             // caption when the meter is hidden) so a 3px gap survives when the meter shows.
             this.tspContextMeter.Margin = new System.Windows.Forms.Padding(5, 4, 5, 3);
             this.tspContextMeter.Name = "tspContextMeter";
-            this.tspContextMeter.Size = new System.Drawing.Size(80, 15);
-            // Continuous (PBS_SMOOTH) matters because the control is un-themed at runtime (see
-            // ApplyContextMeterRendering): classic rendering would otherwise draw segmented blocks.
-            this.tspContextMeter.Style = System.Windows.Forms.ProgressBarStyle.Continuous;
+            // Width is dictated by the item's block geometry (ContextMeterItem.MeterWidth).
+            this.tspContextMeter.Size = new System.Drawing.Size(81, 15);
             this.tspContextMeter.Visible = false;
             //
             // tslContextValue
@@ -702,7 +699,7 @@
         private System.Windows.Forms.StatusStrip ssMain;
         private System.Windows.Forms.ToolStripStatusLabel tslSpring;
         private System.Windows.Forms.ToolStripStatusLabel tslContext;
-        private System.Windows.Forms.ToolStripProgressBar tspContextMeter;
+        private ContextMeterItem tspContextMeter;
         private System.Windows.Forms.ToolStripStatusLabel tslCost;
         private System.Windows.Forms.ToolStripStatusLabel tslContextValue;
         private System.Windows.Forms.ToolStripStatusLabel tslCostValue;

@@ -163,6 +163,9 @@
     <Compile Include="Controls\GenerationStatusBar.cs">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Include="Controls\ContextMeterItem.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="Controls\WorkspaceContextStrip.cs">
       <SubType>Component</SubType>
     </Compile>
