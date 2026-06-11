@@ -169,7 +169,7 @@ namespace GxPT
                     string text = BuildSkillFields(req.Arguments);
                     _diffPanel.SetContent(slug, text, "markdown", dark, _monoFont, tc.CodeBack, tc.UiForeground);
                     _previewLabel.Text = string.Equals(req.FunctionName, "skills__create_skill", StringComparison.Ordinal)
-                        ? "New skill:" : "Update skill:";
+                        ? "Create skill:" : "Update skill:";
                     handled = true;
                 }
                 else if (string.Equals(req.FunctionName, "skills__write_skill_file", StringComparison.Ordinal))
@@ -328,7 +328,7 @@ namespace GxPT
                     string name = req.Arguments.Value<string>("name") ?? string.Empty;
                     _diffPanel.SetContent(name, MemoryBody(req.Arguments), "markdown", dark, _monoFont, tc.CodeBack, tc.UiForeground);
                     _previewLabel.Text = string.Equals(req.FunctionName, "memory__remember", StringComparison.Ordinal)
-                        ? "New memory:" : "Update memory:";
+                        ? "Create memory:" : "Update memory:";
                     handled = true;
                 }
                 else if (string.Equals(req.FunctionName, "memory__forget", StringComparison.Ordinal))
