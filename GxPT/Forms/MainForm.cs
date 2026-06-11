@@ -4676,9 +4676,45 @@ namespace GxPT
                 bool visible = AppSettings.GetBool("statusbar_visible", true);
                 if (this.ssMain != null) this.ssMain.Visible = visible;
                 if (this.miStatusBar != null) this.miStatusBar.Checked = visible;
+                SuppressContextMeterPulse();
                 ApplyThemeToStatusBar();
                 SyncUsageStatusFromActiveTab();
             }
+            catch { }
+        }
+
+        // ---- context meter pulse suppression ----
+        // Vista/7's themed progress bar periodically sweeps a highlight ("pulse") across the
+        // fill even when the value never changes - distracting on a meter that's meant to sit
+        // still. PBM_SETSTATE -> PBST_PAUSED stops that animation. CAVEAT under evaluation:
+        // Win7 renders a paused bar amber/yellow instead of green; if that reads as a warning,
+        // the fallback plan is to un-theme the control (SetWindowTheme) instead. Harmlessly
+        // ignored on XP/classic rendering, where the pulse doesn't exist.
+
+        private const int PBM_SETSTATE = 0x0410; // WM_USER + 16
+        private const int PBST_PAUSED = 0x0003;
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+        private void SuppressContextMeterPulse()
+        {
+            try
+            {
+                if (this.tspContextMeter == null) return;
+                ProgressBar bar = this.tspContextMeter.ProgressBar;
+                if (bar == null) return;
+                // The state lives on the native control, so it must be (re)applied every time
+                // WinForms creates the handle - recreations (e.g. a RecreateHandle) reset it.
+                bar.HandleCreated += delegate { SetContextMeterPaused(bar); };
+                if (bar.IsHandleCreated) SetContextMeterPaused(bar);
+            }
+            catch { }
+        }
+
+        private static void SetContextMeterPaused(ProgressBar bar)
+        {
+            try { SendMessage(bar.Handle, PBM_SETSTATE, new IntPtr(PBST_PAUSED), IntPtr.Zero); }
             catch { }
         }
 
