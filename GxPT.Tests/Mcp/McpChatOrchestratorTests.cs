@@ -173,6 +173,29 @@ namespace GxPT.Tests.Mcp
         }
 
         [Fact]
+        public void Usage_is_reported_to_the_host_on_every_iteration_for_any_model()
+        {
+            RegistryFakeTransport ft;
+            var reg = RegistryWith(out ft, "files", new ToolDef("read"));
+            ft.OnCall = delegate(string name, JObject args) { return RegistryFakeTransport.TextResult("x"); };
+
+            var streamer = new ScriptedStreamer();
+            streamer.ServeAs = "SomeHost";   // non-caching model: no stickiness, but usage still flows
+            streamer.ServeCost = 0.01m;
+            streamer.Turns.Add(Chunks.OneToolCall("c1", "files__read", "{}"));
+            streamer.Turns.Add(Chunks.Text("done"));
+
+            var orch = New(streamer, reg); // model "test-model"
+            var reported = new List<ResponseUsage>();
+            orch.UsageReported = delegate(ResponseUsage u) { reported.Add(u); };
+            orch.RunTurn(new List<ChatMessage>(), "go", new RecordingUi());
+
+            Assert.Equal(2, reported.Count); // one per loop iteration
+            Assert.Equal(0.01m, reported[0].Cost);
+            Assert.Equal("SomeHost", reported[1].Provider);
+        }
+
+        [Fact]
         public void Confirmed_provider_preference_survives_an_uncached_response()
         {
             // A cached=0 response from the confirmed provider is usually TTL expiry - keeping the
@@ -213,7 +236,8 @@ namespace GxPT.Tests.Mcp
 
             Assert.Null(streamer.SeenProps[0].ProviderOrder);
             Assert.Null(streamer.SeenProps[1].ProviderOrder);
-            Assert.Null(streamer.SeenProps[0].ProviderServedCallback); // not even tracking
+            // (the usage callback is still registered on non-caching models - cost accounting
+            // applies everywhere - but the stickiness gate inside it never fires)
         }
 
         [Fact]

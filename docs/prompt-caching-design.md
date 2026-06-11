@@ -88,9 +88,15 @@ lookback), double write-premiums at worst.
 So requests on cache-supported models carry `provider.order = [<cache-warm provider>]`, where
 "cache-warm" means **confirmed by a demonstrated hit**, not merely "served last":
 
-- OpenRouter reports the serving provider on response chunks (`chunk.provider`) and the cache
-  counters (`cached_tokens`, `cache_write_tokens`) on the final usage chunk; the client surfaces
-  them once per request via `ClientProperties.ProviderServedCallback(provider, cached, written)`.
+- OpenRouter reports the serving provider on response chunks (`chunk.provider`) and the usage
+  accounting (cache counters, billed cost, cache discount) on the final usage chunk; the client
+  surfaces it once per request as a `ResponseUsage` via `ClientProperties.ResponseUsageCallback`.
+  The same callback feeds the status bar's per-conversation cost/savings accounting
+  (`Conversation.RecordUsage`), which runs on every model - only the stickiness gate inside it is
+  caching-model-gated.
+- Semantics note: OpenRouter normalizes usage to OpenAI conventions - `prompt_tokens` is the
+  TOTAL prompt size and the cache counters are subsets of it (unlike Anthropic's native API,
+  where `input_tokens` is the uncached remainder). Never add the counters to `prompt_tokens`.
 - Stickiness is **confirmation-gated**: only a response demonstrating cache activity - a read
   (`cached_tokens > 0`) or a write (`cache_write_tokens > 0`) - sets or moves the preference.
   Merely serving proves nothing (a third-party host of an open-weights model may not cache at

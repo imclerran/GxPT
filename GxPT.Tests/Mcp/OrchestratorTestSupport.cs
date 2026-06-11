@@ -59,14 +59,15 @@ namespace GxPT.Tests.Mcp
         public Func<int, ChatCompletionChunk[]> Fallback;
         public string ErrorMessage;   // when set, signal onError instead of streaming
         public int ErrorOnCall = -1;  // -1 = every call; otherwise only this call index
-        // When set, reports this provider name via props.ProviderServedCallback (mimicking the real
-        // client, which reports the serving provider + cache counters off the response's final
-        // usage-bearing chunk). ServeCachedTokens / ServeCacheWriteTokens are the cached_tokens and
-        // cache_write_tokens values reported alongside it; both 0 simulates a response with no
-        // cache activity (non-caching endpoint, or an implicit cacher that doesn't report writes).
+        // When set, reports usage via props.ResponseUsageCallback (mimicking the real client,
+        // which reports off the response's final usage-bearing chunk). ServeAs is the provider
+        // name; ServeCachedTokens / ServeCacheWriteTokens are the cache counters - both 0
+        // simulates a response with no cache activity (non-caching endpoint, or an implicit
+        // cacher that doesn't report writes); ServeCost is the billed credits (null = unreported).
         public string ServeAs;
         public int ServeCachedTokens;
         public int ServeCacheWriteTokens;
+        public decimal? ServeCost;
 
         public int Calls;
         public readonly List<IList<ChatMessage>> SeenMessages = new List<IList<ChatMessage>>();
@@ -82,8 +83,15 @@ namespace GxPT.Tests.Mcp
             SeenTools.Add(tools);
             SeenProps.Add(props);
 
-            if (ServeAs != null && props != null && props.ProviderServedCallback != null)
-                props.ProviderServedCallback(ServeAs, ServeCachedTokens, ServeCacheWriteTokens);
+            if (ServeAs != null && props != null && props.ResponseUsageCallback != null)
+            {
+                var usage = new ResponseUsage();
+                usage.Provider = ServeAs;
+                usage.CachedTokens = ServeCachedTokens;
+                usage.CacheWriteTokens = ServeCacheWriteTokens;
+                usage.Cost = ServeCost;
+                props.ResponseUsageCallback(usage);
+            }
 
             if (ErrorMessage != null && (ErrorOnCall < 0 || ErrorOnCall == idx))
             {

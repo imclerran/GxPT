@@ -73,6 +73,7 @@ namespace GxPT
             // Setup initial tab context for the designer-created tab
             SetupInitialConversationTab();
             _inputManager.SetHintText();
+            InitUsageStatusBar();
 
             // Wire banner link and ensure it lays out nicely
             if (this.lnkOpenSettings != null)
@@ -608,6 +609,8 @@ namespace GxPT
             RebuildAttachmentsBanner();
             // Point the MCP host's workdir-scoped servers (files/git/command) at the active tab's folder.
             SyncMcpWorkingDirFromActiveTab();
+            // Reflect the active conversation's usage/cost totals in the status bar.
+            SyncUsageStatusFromActiveTab();
             if (_inputManager != null) _inputManager.FocusInputSoon();
         }
 
@@ -2094,22 +2097,24 @@ namespace GxPT
                         // Sticky provider routing on cache-supported models: prefer (provider.order,
                         // preference with fallback) the endpoint holding this conversation's warm
                         // prompt cache. Stickiness is confirmation-gated - only a response reporting
-                        // cache activity (a read, cached_tokens > 0, or a write,
-                        // cache_write_tokens > 0) sets or moves the preference; merely serving a
-                        // request proves nothing.
-                        if (OpenRouterClient.ModelSupportsPromptCaching(modelToUse))
+                        // cache activity (a read or a write) sets or moves the preference; merely
+                        // serving a request proves nothing. Usage/cost accounting (status bar)
+                        // records on every model.
+                        Conversation usageConvo = ctx.Conversation;
+                        bool cachingModel = OpenRouterClient.ModelSupportsPromptCaching(modelToUse);
+                        if (usageConvo != null)
                         {
-                            Conversation stickyConvo = ctx.Conversation;
-                            if (stickyConvo != null)
+                            if (cachingModel && !string.IsNullOrEmpty(usageConvo.CacheWarmProvider))
+                                sendProps.ProviderOrder = new List<string> { usageConvo.CacheWarmProvider };
+                            sendProps.ResponseUsageCallback = delegate(ResponseUsage u)
                             {
-                                if (!string.IsNullOrEmpty(stickyConvo.CacheWarmProvider))
-                                    sendProps.ProviderOrder = new List<string> { stickyConvo.CacheWarmProvider };
-                                sendProps.ProviderServedCallback = delegate(string served, int cachedTokens, int cacheWriteTokens)
-                                {
-                                    if ((cachedTokens > 0 || cacheWriteTokens > 0) && !string.IsNullOrEmpty(served))
-                                        stickyConvo.CacheWarmProvider = served;
-                                };
-                            }
+                                if (u == null) return;
+                                if (cachingModel && !string.IsNullOrEmpty(u.Provider)
+                                    && (u.CachedTokens > 0 || u.CacheWriteTokens > 0))
+                                    usageConvo.CacheWarmProvider = u.Provider;
+                                usageConvo.RecordUsage(u);
+                                NotifyUsageUpdated(usageConvo);
+                            };
                         }
                         _client.CreateCompletionStream(
                             modelToUse,
@@ -2447,6 +2452,12 @@ namespace GxPT
                         orch.PreferredProvider = revealConvo.CacheWarmProvider;
                         orch.ProviderServed = delegate(string served)
                         { revealConvo.CacheWarmProvider = served; };
+                        // Per-response usage/cost accounting for the status bar (every iteration).
+                        orch.UsageReported = delegate(ResponseUsage u)
+                        {
+                            revealConvo.RecordUsage(u);
+                            NotifyUsageUpdated(revealConvo);
+                        };
                     }
                     // Stop button cancellation: kills the in-flight model stream and lets the loop bail
                     // out cleanly between steps. Set once before the turn runs (read-only thereafter).
@@ -4634,8 +4645,167 @@ namespace GxPT
                 // Also refresh tab headers (font/color may rely on system colors)
                 try { if (this.tabControl1 != null) this.tabControl1.Invalidate(); }
                 catch { }
+
+                // Status bar follows the UI theme
+                ApplyThemeToStatusBar();
             }
             catch { }
+        }
+
+        // ---- usage status bar (prompt caching / cost telemetry) ----
+
+        private void InitUsageStatusBar()
+        {
+            try
+            {
+                bool visible = AppSettings.GetBool("statusbar_visible", true);
+                if (this.ssMain != null) this.ssMain.Visible = visible;
+                if (this.miStatusBar != null) this.miStatusBar.Checked = visible;
+                ApplyThemeToStatusBar();
+                SyncUsageStatusFromActiveTab();
+            }
+            catch { }
+        }
+
+        private void miStatusBar_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                bool visible = !(this.ssMain != null && this.ssMain.Visible);
+                if (this.ssMain != null) this.ssMain.Visible = visible;
+                if (this.miStatusBar != null) this.miStatusBar.Checked = visible;
+                AppSettings.SetBool("statusbar_visible", visible);
+            }
+            catch { }
+        }
+
+        private void ApplyThemeToStatusBar()
+        {
+            try
+            {
+                if (this.ssMain == null) return;
+                bool dark = false;
+                try
+                {
+                    string theme = AppSettings.GetString("theme");
+                    dark = !string.IsNullOrEmpty(theme) && theme.Trim().Equals("dark", StringComparison.OrdinalIgnoreCase);
+                }
+                catch { }
+                var colors = ThemeService.GetColors(dark);
+                this.ssMain.BackColor = colors.UiBackground;
+                this.ssMain.ForeColor = colors.UiForeground;
+                foreach (ToolStripItem it in this.ssMain.Items)
+                    it.ForeColor = colors.UiForeground;
+            }
+            catch { }
+        }
+
+        private void SyncUsageStatusFromActiveTab()
+        {
+            try
+            {
+                var act = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                UpdateUsageStatusStrip(act != null ? act.Conversation : null);
+            }
+            catch { }
+        }
+
+        // Marshals a usage update from a send worker thread to the UI thread, refreshing the strip
+        // only when the reported conversation is still the active tab's (a background tab's turn
+        // must not paint over the foreground tab's stats; the totals are still recorded and appear
+        // on tab switch via SyncUsageStatusFromActiveTab).
+        private void NotifyUsageUpdated(Conversation convo)
+        {
+            try
+            {
+                if (IsDisposed || !IsHandleCreated) return;
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    try
+                    {
+                        var act = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                        if (act != null && ReferenceEquals(act.Conversation, convo))
+                            UpdateUsageStatusStrip(convo);
+                    }
+                    catch { }
+                });
+            }
+            catch { }
+        }
+
+        // Renders a conversation's usage accumulators into the status strip. Panes are running
+        // totals (Cost/Saved) plus the Context gauge (newest request's full prompt size); the cache
+        // percentages live in the tooltip where their time window can be labeled explicitly.
+        private void UpdateUsageStatusStrip(Conversation convo)
+        {
+            if (this.ssMain == null) return;
+            UsageStats s = (convo != null) ? convo.GetUsageStats() : null;
+            if (s == null || (s.TotalPromptTokens == 0 && s.TotalCost == 0))
+            {
+                // Nothing recorded yet (fresh or legacy conversation): an empty strip beats zeros.
+                if (this.tslContext != null) { this.tslContext.Text = string.Empty; this.tslContext.ToolTipText = null; }
+                if (this.tslCost != null) { this.tslCost.Text = string.Empty; this.tslCost.ToolTipText = null; }
+                if (this.tslSaved != null) { this.tslSaved.Text = string.Empty; this.tslSaved.ToolTipText = null; }
+                return;
+            }
+
+            if (this.tslContext != null)
+                this.tslContext.Text = "Context: " + FormatTokenCount(s.LastPromptTokens) + " tok";
+            if (this.tslCost != null)
+                this.tslCost.Text = "Cost: " + FormatMoney(s.TotalCost);
+            if (this.tslSaved != null)
+                this.tslSaved.Text = "Saved: " + FormatMoney(s.TotalCacheDiscount);
+
+            string breakdown = BuildUsageTooltip(s);
+            if (this.tslContext != null) this.tslContext.ToolTipText = breakdown;
+            if (this.tslCost != null) this.tslCost.ToolTipText = breakdown;
+            if (this.tslSaved != null) this.tslSaved.ToolTipText = breakdown;
+        }
+
+        // The hover breakdown: cache percentages with their time windows labeled explicitly (the
+        // glanceable panes deliberately omit them - "last request" vs "lifetime" is ambiguous at a
+        // glance next to running totals).
+        internal static string BuildUsageTooltip(UsageStats s)
+        {
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            var sb = new System.Text.StringBuilder();
+            sb.Append("Last request: ").Append(s.LastCachedTokens.ToString("N0", inv))
+              .Append(" of ").Append(s.LastPromptTokens.ToString("N0", inv))
+              .Append(" prompt tokens read from cache");
+            if (s.LastPromptTokens > 0)
+                sb.Append(" (").Append((100.0 * s.LastCachedTokens / s.LastPromptTokens).ToString("0", inv)).Append("%)");
+            if (s.LastCacheWriteTokens > 0)
+                sb.Append("\r\n").Append("              ")
+                  .Append(s.LastCacheWriteTokens.ToString("N0", inv)).Append(" written to cache");
+            sb.Append("\r\nLifetime: ").Append(s.TotalCachedTokens.ToString("N0", inv))
+              .Append(" cached / ").Append(s.TotalPromptTokens.ToString("N0", inv))
+              .Append(" prompt tokens");
+            if (s.TotalPromptTokens > 0)
+                sb.Append(" (").Append((100.0 * s.TotalCachedTokens / s.TotalPromptTokens).ToString("0", inv)).Append("%)");
+            sb.Append("\r\nOutput: ").Append(s.TotalCompletionTokens.ToString("N0", inv)).Append(" tokens");
+            if (s.TotalReasoningTokens > 0)
+                sb.Append(" (reasoning: ").Append(s.TotalReasoningTokens.ToString("N0", inv)).Append(")");
+            return sb.ToString();
+        }
+
+        // "812", "41.2K", "1.3M" - compact enough for a status pane.
+        internal static string FormatTokenCount(long n)
+        {
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            if (n >= 1000000) return (n / 1000000.0).ToString("0.0", inv) + "M";
+            if (n >= 1000) return (n / 1000.0).ToString("0.0", inv) + "K";
+            return n.ToString(inv);
+        }
+
+        // OpenRouter credits are dollar-denominated. Two decimals minimum, four maximum so
+        // sub-cent conversations don't render as "$0.00" forever; negatives (a Saved total that is
+        // net write-premium so far) keep the sign visible.
+        internal static string FormatMoney(decimal v)
+        {
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            string sign = v < 0 ? "-" : string.Empty;
+            decimal a = Math.Abs(v);
+            return sign + "$" + a.ToString("0.00##", inv);
         }
 
         private void miDeleteConversations_Click(object sender, EventArgs e)

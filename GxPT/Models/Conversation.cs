@@ -72,6 +72,64 @@ namespace GxPT
         // cache at all) never land here. Null until a hit is observed; harmless when stale (it's a
         // preference with fallback, and after TTL expiry any consistent choice works).
         public string CacheWarmProvider { get; set; }
+
+        // ---- usage / cost accounting (status bar) ----
+        // Running totals across the conversation's lifetime plus a last-request snapshot, fed by
+        // RecordUsage (worker thread) and read by the status bar via GetUsageStats (UI thread);
+        // _usageGate keeps cross-thread reads consistent. Persisted with the conversation so a
+        // reopened tab keeps its lifetime cost. Totals are billed-as-reported (OpenRouter usage
+        // accounting); the naming-model title call is deliberately not counted.
+        private readonly object _usageGate = new object();
+        public decimal TotalCost { get; set; }           // sum of usage.cost (credits ~= USD)
+        public decimal TotalCacheDiscount { get; set; }  // net sum of cache_discount (+saved/-premium)
+        public long TotalPromptTokens { get; set; }      // total prompt tokens (cached subset included)
+        public long TotalCachedTokens { get; set; }      // of TotalPromptTokens, served from cache
+        public long TotalCompletionTokens { get; set; }
+        public long TotalReasoningTokens { get; set; }
+        public int LastPromptTokens { get; set; }        // newest request's full context size
+        public int LastCachedTokens { get; set; }
+        public int LastCacheWriteTokens { get; set; }
+
+        // Accumulate one response's usage (called once per model request, including every tool-loop
+        // iteration). Cost/discount are null when the endpoint didn't report them - skipped, not
+        // counted as zero, so totals stay "sum of what was billed and reported".
+        internal void RecordUsage(ResponseUsage u)
+        {
+            if (u == null) return;
+            lock (_usageGate)
+            {
+                if (u.Cost.HasValue) TotalCost += u.Cost.Value;
+                if (u.CacheDiscount.HasValue) TotalCacheDiscount += u.CacheDiscount.Value;
+                TotalPromptTokens += u.PromptTokens;
+                TotalCachedTokens += u.CachedTokens;
+                TotalCompletionTokens += u.CompletionTokens;
+                TotalReasoningTokens += u.ReasoningTokens;
+                LastPromptTokens = u.PromptTokens;
+                LastCachedTokens = u.CachedTokens;
+                LastCacheWriteTokens = u.CacheWriteTokens;
+            }
+            LastUpdated = DateTime.Now;
+        }
+
+        // A consistent copy for the UI thread (decimal/long reads aren't atomic on x86).
+        internal UsageStats GetUsageStats()
+        {
+            lock (_usageGate)
+            {
+                UsageStats s = new UsageStats();
+                s.TotalCost = TotalCost;
+                s.TotalCacheDiscount = TotalCacheDiscount;
+                s.TotalPromptTokens = TotalPromptTokens;
+                s.TotalCachedTokens = TotalCachedTokens;
+                s.TotalCompletionTokens = TotalCompletionTokens;
+                s.TotalReasoningTokens = TotalReasoningTokens;
+                s.LastPromptTokens = LastPromptTokens;
+                s.LastCachedTokens = LastCachedTokens;
+                s.LastCacheWriteTokens = LastCacheWriteTokens;
+                return s;
+            }
+        }
+
         public DateTime LastUpdated { get; set; }
         public event Action<string> NameGenerated;
 
@@ -315,5 +373,19 @@ namespace GxPT
             if (s.Length > 80) s = s.Substring(0, 80).Trim();
             return s;
         }
+    }
+
+    // Snapshot of a conversation's usage accumulators for UI display (see Conversation.GetUsageStats).
+    internal sealed class UsageStats
+    {
+        public decimal TotalCost;
+        public decimal TotalCacheDiscount;
+        public long TotalPromptTokens;
+        public long TotalCachedTokens;
+        public long TotalCompletionTokens;
+        public long TotalReasoningTokens;
+        public int LastPromptTokens;
+        public int LastCachedTokens;
+        public int LastCacheWriteTokens;
     }
 }

@@ -85,6 +85,9 @@ namespace GxPT
         // Token accounting; arrives on the final SSE chunk when the request asked for it
         // (usage: {include: true}). Null on every other chunk.
         public UsageInfo usage { get; set; }
+        // Net credits saved (positive) or extra paid (negative, cache-write premium) due to prompt
+        // caching on this request. Top-level response field; may be absent on some providers.
+        public decimal? cache_discount { get; set; }
 
         internal sealed class Choice
         {
@@ -103,7 +106,11 @@ namespace GxPT
         {
             public int? prompt_tokens { get; set; }
             public int? completion_tokens { get; set; }
+            public int? total_tokens { get; set; }
+            // Credits charged to the account for this request (OpenRouter credits ~= USD).
+            public decimal? cost { get; set; }
             public PromptTokensDetails prompt_tokens_details { get; set; }
+            public CompletionTokensDetails completion_tokens_details { get; set; }
         }
 
         // cached_tokens is the prompt-cache read count: the prompt-prefix tokens the provider served
@@ -117,6 +124,11 @@ namespace GxPT
         {
             public int? cached_tokens { get; set; }
             public int? cache_write_tokens { get; set; }
+        }
+
+        internal sealed class CompletionTokensDetails
+        {
+            public int? reasoning_tokens { get; set; }
         }
     }
 

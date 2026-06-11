@@ -303,36 +303,54 @@ namespace GxPT
             StreamRawChunks(body, WrapWithProviderReport(props, onChunk), onError, cancel);
         }
 
-        // Decorates a chunk sink to report (once, on the final usage-bearing chunk) the serving
-        // provider together with the response's cached-token count, via
-        // props.ProviderServedCallback. The provider name arrives on the first chunk but
-        // cached_tokens only on the last, so the report waits for usage. Identity when no callback
-        // is registered.
+        // Decorates a chunk sink to report (once, on the final usage-bearing chunk) the response's
+        // usage accounting via props.ResponseUsageCallback. The provider name arrives on the first
+        // chunk but the usage counters only on the last, so the report waits for usage. Identity
+        // when no callback is registered.
         private static Action<ChatCompletionChunk> WrapWithProviderReport(
             ClientProperties props, Action<ChatCompletionChunk> onChunk)
         {
-            if (props == null || props.ProviderServedCallback == null) return onChunk;
-            Action<string, int, int> report = props.ProviderServedCallback;
-            bool[] reported = new bool[1];    // closure-mutable state (C# 3.5: no local functions)
+            if (props == null || props.ResponseUsageCallback == null) return onChunk;
+            Action<ResponseUsage> report = props.ResponseUsageCallback;
+            bool[] reported = new bool[1];      // closure-mutable state (C# 3.5: no local functions)
             string[] provider = new string[1];
+            // cache_discount may ride a different chunk than usage; remember the latest seen.
+            decimal?[] discount = new decimal?[1];
             return delegate(ChatCompletionChunk chunk)
             {
                 if (chunk != null)
                 {
                     if (!string.IsNullOrEmpty(chunk.provider)) provider[0] = chunk.provider;
-                    if (!reported[0] && chunk.usage != null && provider[0] != null)
+                    if (chunk.cache_discount.HasValue) discount[0] = chunk.cache_discount;
+                    if (!reported[0] && chunk.usage != null)
                     {
                         reported[0] = true;
-                        int cached = 0, written = 0;
-                        ChatCompletionChunk.PromptTokensDetails d = chunk.usage.prompt_tokens_details;
-                        if (d != null && d.cached_tokens.HasValue) cached = d.cached_tokens.Value;
-                        if (d != null && d.cache_write_tokens.HasValue) written = d.cache_write_tokens.Value;
-                        try { report(provider[0], cached, written); }
+                        try { report(BuildResponseUsage(provider[0], chunk.usage, discount[0])); }
                         catch { }
                     }
                 }
                 if (onChunk != null) onChunk(chunk);
             };
+        }
+
+        private static ResponseUsage BuildResponseUsage(
+            string provider, ChatCompletionChunk.UsageInfo u, decimal? cacheDiscount)
+        {
+            ResponseUsage r = new ResponseUsage();
+            r.Provider = provider;
+            r.PromptTokens = u.prompt_tokens.HasValue ? u.prompt_tokens.Value : 0;
+            r.CompletionTokens = u.completion_tokens.HasValue ? u.completion_tokens.Value : 0;
+            r.Cost = u.cost;
+            r.CacheDiscount = cacheDiscount;
+            ChatCompletionChunk.PromptTokensDetails pd = u.prompt_tokens_details;
+            if (pd != null)
+            {
+                if (pd.cached_tokens.HasValue) r.CachedTokens = pd.cached_tokens.Value;
+                if (pd.cache_write_tokens.HasValue) r.CacheWriteTokens = pd.cache_write_tokens.Value;
+            }
+            ChatCompletionChunk.CompletionTokensDetails cd = u.completion_tokens_details;
+            if (cd != null && cd.reasoning_tokens.HasValue) r.ReasoningTokens = cd.reasoning_tokens.Value;
+            return r;
         }
 
         public void CreateCompletionStream(string model, IList<ChatMessage> messages, Action<string> onDelta, Action onDone, Action<string> onError)
@@ -688,13 +706,12 @@ namespace GxPT
         // not a pin like `only`. Callers put the provider that served the conversation's previous
         // request at the head so routing follows the warm prompt cache (caches are per provider).
         public IList<string> ProviderOrder { get; set; }
-        // Invoked (at most once per request, from the stream-reading thread) with the provider that
-        // served the request and the cached_tokens / cache_write_tokens counts from its usage
-        // accounting (0 when the response reported neither). Fires on the final SSE chunk - the one
-        // carrying usage - so callers can make stickiness conditional on demonstrated cache
-        // activity (a read proves the warm cache lives here; a write proves it just got created
-        // here); never fires when the endpoint omits usage (no cache evidence -> no signal).
-        public Action<string, int, int> ProviderServedCallback { get; set; }
+        // Invoked (at most once per request, from the stream-reading thread) with the response's
+        // usage accounting: serving provider, token counts, cache read/write counts, billed cost,
+        // and cache discount. Fires on the final SSE chunk - the one carrying usage - so callers
+        // can both gate provider stickiness on demonstrated cache activity and accumulate
+        // per-conversation cost; never fires when the endpoint omits usage entirely.
+        public Action<ResponseUsage> ResponseUsageCallback { get; set; }
         public decimal? ProviderMaxPricePrompt { get; set; }
         public decimal? ProviderMaxPriceCompletion { get; set; }
         // tool_choice for the request ("none", "auto", ...). Null leaves it at the provider default.
@@ -702,5 +719,24 @@ namespace GxPT
         // forbid further tool calls while keeping the tools array (and so the cached prompt prefix)
         // identical to the loop's requests.
         public string ToolChoice { get; set; }
+    }
+
+    // One streamed response's usage accounting, assembled from OpenRouter's final usage-bearing
+    // SSE chunk (see ClientProperties.ResponseUsageCallback). Drives sticky cache routing
+    // (Provider + the cache counters) and per-conversation cost tracking (Cost/CacheDiscount).
+    public sealed class ResponseUsage
+    {
+        // NOTE - OpenRouter normalizes usage to OpenAI conventions: PromptTokens is the TOTAL
+        // prompt size, and CachedTokens / CacheWriteTokens are subsets of it (unlike Anthropic's
+        // native API, where input_tokens is the uncached remainder). PromptTokens is therefore the
+        // conversation's "context size" gauge as-is; never add the cache counters to it.
+        public string Provider;        // serving endpoint (e.g. "Anthropic"); null when not reported
+        public int PromptTokens;       // total prompt tokens (cached + written + uncached)
+        public int CompletionTokens;   // output tokens, reasoning included
+        public int ReasoningTokens;    // of CompletionTokens, how many were reasoning
+        public int CachedTokens;       // of PromptTokens, how many were read from the provider's cache
+        public int CacheWriteTokens;   // of PromptTokens, how many were written to a new cache entry
+        public decimal? Cost;          // credits charged for this request; null when not reported
+        public decimal? CacheDiscount; // net credits saved (+) / extra paid (-) by caching; null when not reported
     }
 }

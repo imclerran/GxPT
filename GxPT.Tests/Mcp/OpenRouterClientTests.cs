@@ -254,15 +254,21 @@ namespace GxPT.Tests.Mcp
         }
 
         [Fact]
-        public void Parses_usage_chunk_with_cache_counters()
+        public void Parses_usage_chunk_with_cache_counters_and_cost()
         {
-            var json = "{\"id\":\"x\",\"choices\":[],\"usage\":{\"prompt_tokens\":1200,\"completion_tokens\":80,"
-                + "\"prompt_tokens_details\":{\"cached_tokens\":1100,\"cache_write_tokens\":90}}}";
+            var json = "{\"id\":\"x\",\"cache_discount\":0.0031,\"choices\":[],"
+                + "\"usage\":{\"prompt_tokens\":1200,\"completion_tokens\":80,\"total_tokens\":1280,\"cost\":0.0145,"
+                + "\"prompt_tokens_details\":{\"cached_tokens\":1100,\"cache_write_tokens\":90},"
+                + "\"completion_tokens_details\":{\"reasoning_tokens\":25}}}";
             var chunk = JsonConvert.DeserializeObject<ChatCompletionChunk>(json);
             Assert.Equal(1200, chunk.usage.prompt_tokens);
             Assert.Equal(80, chunk.usage.completion_tokens);
+            Assert.Equal(1280, chunk.usage.total_tokens);
+            Assert.Equal(0.0145m, chunk.usage.cost);
             Assert.Equal(1100, chunk.usage.prompt_tokens_details.cached_tokens);
             Assert.Equal(90, chunk.usage.prompt_tokens_details.cache_write_tokens);
+            Assert.Equal(25, chunk.usage.completion_tokens_details.reasoning_tokens);
+            Assert.Equal(0.0031m, chunk.cache_discount);
         }
 
         // ---- streaming chunk parsing under Newtonsoft ----

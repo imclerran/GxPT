@@ -142,6 +142,10 @@ namespace GxPT
         // to the conversation for the next turn. Invoked from the worker thread.
         public Action<string> ProviderServed { get; set; }
 
+        // Per-response usage/cost accounting (every model, every loop iteration), for the host to
+        // accumulate on the conversation and surface in the UI. Invoked from the worker thread.
+        public Action<ResponseUsage> UsageReported { get; set; }
+
         // Provider data-collection preference applied to every request in the turn. Null leaves
         // it unset (provider default).
         public bool? ProviderDataCollectionAllowed { get; set; }
@@ -420,21 +424,26 @@ namespace GxPT
             props.Zdr = Zdr;
             props.ToolChoice = toolChoice;
 
-            // Sticky provider routing on cache-supported models (see PreferredProvider). Stickiness
-            // is confirmation-gated: only a response demonstrating cache activity - a read
-            // (cached > 0) or a write (cacheWrite > 0) - establishes or moves the preference.
-            if (OpenRouterClient.ModelSupportsPromptCaching(_model))
+            // Sticky provider routing on cache-supported models (see PreferredProvider); usage
+            // accounting on every model. Stickiness is confirmation-gated: only a response
+            // demonstrating cache activity - a read or a write - establishes or moves the
+            // preference.
+            bool cachingModel = OpenRouterClient.ModelSupportsPromptCaching(_model);
+            if (cachingModel && !string.IsNullOrEmpty(PreferredProvider))
+                props.ProviderOrder = new List<string> { PreferredProvider };
+            props.ResponseUsageCallback = delegate(ResponseUsage u)
             {
-                if (!string.IsNullOrEmpty(PreferredProvider))
-                    props.ProviderOrder = new List<string> { PreferredProvider };
-                props.ProviderServedCallback = delegate(string served, int cachedTokens, int cacheWriteTokens)
+                if (u == null) return;
+                if (cachingModel && !string.IsNullOrEmpty(u.Provider)
+                    && (u.CachedTokens > 0 || u.CacheWriteTokens > 0))
                 {
-                    if ((cachedTokens <= 0 && cacheWriteTokens <= 0) || string.IsNullOrEmpty(served)) return;
-                    PreferredProvider = served;
+                    PreferredProvider = u.Provider;
                     Action<string> cb = ProviderServed;
-                    if (cb != null) cb(served);
-                };
-            }
+                    if (cb != null) cb(u.Provider);
+                }
+                Action<ResponseUsage> ucb = UsageReported;
+                if (ucb != null) ucb(u);
+            };
 
             Action<string> textSink = (ui != null) ? new Action<string>(ui.AppendTextDelta) : null;
             ToolCallAssembler asm = new ToolCallAssembler(textSink);
