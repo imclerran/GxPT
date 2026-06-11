@@ -687,11 +687,37 @@ namespace GxPT
             }
         }
 
+        // Log-friendly copy of the request body: only the last entry of the messages array is
+        // kept (a long transcript would otherwise dominate the log), with a placeholder string
+        // recording how many earlier messages were dropped. Everything else is left intact.
+        internal static string TruncateMessagesForLog(string jsonBody)
+        {
+            if (string.IsNullOrEmpty(jsonBody)) return jsonBody;
+            try
+            {
+                var obj = JObject.Parse(jsonBody);
+                var msgs = obj["messages"] as JArray;
+                if (msgs != null && msgs.Count > 1)
+                {
+                    var truncated = new JArray();
+                    truncated.Add("... " + (msgs.Count - 1) + " earlier message(s) omitted ...");
+                    truncated.Add(msgs[msgs.Count - 1]);
+                    obj["messages"] = truncated;
+                }
+                return obj.ToString(Formatting.None);
+            }
+            catch
+            {
+                // Unparseable body: better an oversized log line than none at all.
+                return jsonBody;
+            }
+        }
+
         private string BuildCurlArgs(string jsonBody, out List<string> tempFiles)
         {
             tempFiles = new List<string>();
 
-            try { Logger.Log("Stream", "Request JSON: " + jsonBody); }
+            try { if (Logger.Enabled) Logger.Log("Stream", "Request JSON (older messages omitted): " + TruncateMessagesForLog(jsonBody)); }
             catch { }
             try { Logger.Log("Stream", "Request JSON length=" + (jsonBody != null ? jsonBody.Length : 0)); }
             catch { }

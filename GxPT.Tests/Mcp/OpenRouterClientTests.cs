@@ -291,6 +291,42 @@ namespace GxPT.Tests.Mcp
             Assert.Null(OpenRouterClient.ExtractGenerationStats(null));
         }
 
+        // ---- log truncation: only the last message survives, with an omission marker ----
+
+        [Fact]
+        public void TruncateMessagesForLog_keeps_last_message_and_marks_omissions()
+        {
+            var body = OpenRouterClient.BuildRequestBody("m", new List<ChatMessage>
+            {
+                new ChatMessage("user", "first"),
+                new ChatMessage("assistant", "second"),
+                new ChatMessage("user", "last"),
+            }, null, new ClientProperties());
+
+            var logged = JObject.Parse(OpenRouterClient.TruncateMessagesForLog(body));
+            var msgs = (JArray)logged["messages"];
+
+            // 4 originals (emoji system message + 3) collapse to marker + last
+            Assert.Equal(2, msgs.Count);
+            Assert.Equal("... 3 earlier message(s) omitted ...", (string)msgs[0]);
+            Assert.Equal("user", (string)msgs[1]["role"]);
+            Assert.Equal("last", (string)msgs[1]["content"]);
+
+            // everything outside messages is untouched
+            Assert.Equal("m", (string)logged["model"]);
+        }
+
+        [Fact]
+        public void TruncateMessagesForLog_leaves_single_message_and_bad_json_alone()
+        {
+            var body = OpenRouterClient.BuildRequestBody("m", new List<ChatMessage>(), null, new ClientProperties());
+            var logged = JObject.Parse(OpenRouterClient.TruncateMessagesForLog(body));
+            Assert.Equal(1, ((JArray)logged["messages"]).Count);
+
+            Assert.Equal("not json", OpenRouterClient.TruncateMessagesForLog("not json"));
+            Assert.Null(OpenRouterClient.TruncateMessagesForLog(null));
+        }
+
         // ---- streaming chunk parsing under Newtonsoft ----
 
         [Fact]

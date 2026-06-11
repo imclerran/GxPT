@@ -42,6 +42,13 @@ namespace GxPT
             catch { return false; }
         }
 
+        // For callers that build expensive log messages: lets them skip the work entirely
+        // when logging is off.
+        public static bool Enabled
+        {
+            get { return IsEnabled(); }
+        }
+
         public static void Log(string category, string message)
         {
             if (!IsEnabled()) return;
