@@ -28,7 +28,8 @@ Assembled per request in `McpChatOrchestrator.RunTurn` (tool turns) and `MainFor
 tools array            append-only per conversation, name-sorted        ┐ Zone A
 emoji system message   constant (prepended by OpenRouterClient)         │ frozen for the
 agent system prompt    constant                                         │ conversation
-workspace system msg   constant while the workspace is unchanged        ┘
+workspace system msg   constant while the workspace is unchanged        │
+AGENTS.md system msg   constant while the file is unchanged             ┘
         ◄── cache breakpoint #1 (last system message)
 persisted history      append-only (user/assistant/tool messages)        Zone B
         ◄── cache breakpoint #2 (newest persisted message, cloned)
@@ -41,6 +42,11 @@ ephemeral context tail rebuilt every request, never cached               Zone C
   would put the volatile content back in front of the cached history. It is never persisted and
   never rendered by the UI; the agent prompt tells the model what it is. Memory, the skills
   manifest, and the MCP names manifest may all change per request at zero cache cost here.
+- **AGENTS.md** (workspace root, `AgentsFileInjection`) is read once per send
+  (`MainForm.BeginToolSend`) and handed to the orchestrator as a fixed string
+  (`ProjectInstructions`), so it cannot change between a turn's loop iterations — even if the
+  model edits the file through its own tools. An on-disk edit takes effect on the next turn at
+  the cost of one prefix re-write (see §6); absent or empty, it leaves no trace in context.
 - **Breakpoints** are `ChatMessage.CacheControl` flags, placed by
   `McpChatOrchestrator.ApplyCacheBreakpoints`. Zone A's flag goes on a request-local head
   message; Zone B's goes on a `WithCacheControl()` clone so the flag never lands in persisted
@@ -142,6 +148,7 @@ So requests on cache-supported models carry `provider.order = [<cache-warm provi
 |---|---|---|
 | reveal_tools / gate flip / cap eviction | one full prefix re-write | occasional, implies new work anyway |
 | workspace or model change mid-conversation | one full re-write / cold cache | rare |
+| AGENTS.md edit between turns | one full prefix re-write | rare (documentation cadence) |
 | memory write, skills change, manifest change | nothing (Zone C) | — |
 | loop iteration, normal user turn | incremental read + small write | the common case |
 | > provider TTL (~5 min) between turns | one re-write | normal chat pacing |

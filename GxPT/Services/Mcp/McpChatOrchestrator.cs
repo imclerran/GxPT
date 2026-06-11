@@ -98,6 +98,15 @@ namespace GxPT
         // pure per-turn cost there. Defaults to a turn-local list when the host doesn't supply one.
         public IList<string> RevealedToolNames { get; set; }
 
+        // Optional project-instructions block (the workspace root's AGENTS.md, framed by
+        // AgentsFileInjection), injected as the last stable-head system message (Zone A). A plain
+        // string set per send rather than a provider: Zone A must stay byte-identical across the
+        // turn's loop iterations, so the host reads the file once before the turn and an edit
+        // (including one the model makes itself through file tools) takes effect on the NEXT turn,
+        // re-billing the prefix once. Null/empty => no block, so a project without AGENTS.md
+        // leaves no trace in context.
+        public string ProjectInstructions { get; set; }
+
         // Optional provider of the persistent-memory system block (the current .gxpt/memory.md index
         // plus its framing), rebuilt from disk each request and injected as an ephemeral, non-persisted
         // system message - the same treatment as the names manifest. Returns null/empty when memory is
@@ -294,8 +303,9 @@ namespace GxPT
                     + ": requesting model with " + (tools != null ? tools.Count : 0) + " exposed tool(s)");
 
                 // Request layout, designed for prompt-cache reuse (three zones by volatility):
-                //   Zone A - stable head: constant agent prompt + workspace block (system messages;
-                //            byte-identical for the conversation's lifetime). Cache breakpoint #1 on
+                //   Zone A - stable head: constant agent prompt + workspace block + AGENTS.md
+                //            project instructions (system messages; byte-identical for the
+                //            conversation's lifetime). Cache breakpoint #1 on
                 //            its last message caches tools + system head together (tools render at
                 //            position 0 of the prompt).
                 //   Zone B - the persisted history (append-only). Cache breakpoint #2 rides the
@@ -560,7 +570,8 @@ namespace GxPT
         }
 
         // Zone A: the stable system head, byte-identical for every request of a conversation (the
-        // agent prompt is constant; the workspace block is constant while the workspace is). Fresh
+        // agent prompt is constant; the workspace block is constant while the workspace is; the
+        // project-instructions block is fixed per turn and constant while AGENTS.md is). Fresh
         // message objects each call, so callers may set CacheControl on them directly.
         private List<ChatMessage> BuildStableHead()
         {
@@ -569,6 +580,8 @@ namespace GxPT
             string workspaceBlock = WorkspaceSystemMessage(WorkingDir);
             if (!string.IsNullOrEmpty(workspaceBlock))
                 head.Add(new ChatMessage("system", workspaceBlock));
+            if (!string.IsNullOrEmpty(ProjectInstructions))
+                head.Add(new ChatMessage("system", ProjectInstructions));
             return head;
         }
 

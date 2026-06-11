@@ -175,6 +175,7 @@
     <Compile Include="Services\Mcp\McpServerSpec.cs" />
     <Compile Include="Services\Mcp\McpConfig.cs" />
     <Compile Include="Services\Mcp\MemoryInjection.cs" />
+    <Compile Include="Services\Mcp\AgentsFileInjection.cs" />
     <Compile Include="Services\Mcp\GitProbe.cs" />
     <Compile Include="Services\Mcp\MsBuildProbe.cs" />
     <Compile Include="Services\Mcp\IServerConnector.cs" />
