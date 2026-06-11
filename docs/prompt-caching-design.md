@@ -58,9 +58,12 @@ ephemeral context tail rebuilt every request, never cached               Zone C
 ## 3. Wire format (OpenRouterClient)
 
 - A flagged message's content is emitted as `[{type:"text", text, cache_control:{type:"ephemeral"}}]`
-  — but only when `ModelSupportsCacheControl(model)` (vendor prefixes `anthropic/`, `google/`,
-  with `~` aliases stripped). Other providers cache automatically (OpenAI, DeepSeek, Grok) or not
-  at all; they get plain string content.
+  — for **every** model, not just explicit-caching vendors. Providers without explicit caching
+  ignore the annotation (documented by OpenRouter; field-verified harmless), and the markers can
+  matter even for models whose author caches automatically: a third-party host may implement
+  explicit-marker caching only (suspected of SiliconFlow-hosted DeepSeek, which never auto-cached
+  prefix-stable requests). The original vendor gate (`ModelSupportsCacheControl`) was removed
+  once the ignored-not-errored behavior was field-verified.
 - Every request carries `usage: {include: true}`. The final SSE chunk's
   `usage.prompt_tokens_details.cached_tokens` is logged (`Usage` log tag) — this is the
   verification signal. `cached=0` on a long conversation means a silent invalidator.

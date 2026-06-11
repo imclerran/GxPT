@@ -27,10 +27,11 @@ namespace GxPT
         // Tool-call loop (phase 4): set on "tool"-role messages; the id of the call being answered.
         public string ToolCallId;
         // Prompt-cache breakpoint (request-time only; never persisted). OpenRouterClient emits this
-        // message's content as a content-part array carrying cache_control {type: ephemeral} when the
-        // model's provider supports explicit caching. Set only on request-scoped message objects (the
-        // orchestrator clones history messages via WithCacheControl) so flags can never accumulate in
-        // persisted history across turns - Anthropic rejects requests with more than 4 breakpoints.
+        // message's content as a content-part array carrying cache_control {type: ephemeral} for
+        // every model - providers without explicit caching ignore the annotation. Set only on
+        // request-scoped message objects (the orchestrator clones history messages via
+        // WithCacheControl) so flags can never accumulate in persisted history across turns -
+        // Anthropic rejects requests with more than 4 breakpoints.
         public bool CacheControl;
 
         public ChatMessage() { }

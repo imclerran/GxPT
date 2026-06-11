@@ -41,10 +41,6 @@ namespace GxPT
             usageOpt["include"] = true;
             payload["usage"] = usageOpt;
 
-            // cache_control breakpoints are only emitted for providers that use explicit caching;
-            // everywhere else flagged messages serialize as plain strings (see ContentValue).
-            bool cacheable = ModelSupportsCacheControl((string)payload["model"]);
-
             var msgs = new List<object>();
             // Prepend a system instruction to avoid emoji in all responses.
             var sys = new Dictionary<string, object>();
@@ -62,7 +58,7 @@ namespace GxPT
                     if (m.Role == "tool")
                     {
                         // Tool result, keyed back to the assistant's call id.
-                        mm["content"] = ContentValue(m, cacheable);
+                        mm["content"] = ContentValue(m);
                         mm["tool_call_id"] = m.ToolCallId;
                     }
                     else if (m.ToolCalls != null && m.ToolCalls.Count > 0)
@@ -85,7 +81,7 @@ namespace GxPT
                     }
                     else
                     {
-                        mm["content"] = ContentValue(m, cacheable);
+                        mm["content"] = ContentValue(m);
                     }
                     msgs.Add(mm);
                 }
@@ -156,14 +152,18 @@ namespace GxPT
         }
 
         // A message's content value: a plain string normally; a one-part content array carrying
-        // cache_control {type: ephemeral} when the message is flagged as a cache breakpoint and the
-        // model's provider supports explicit caching (the array form is the OpenAI-compatible shape
-        // OpenRouter requires for cache_control). Empty content always stays a plain string - there
-        // is nothing to cache and Anthropic rejects empty text parts.
-        private static object ContentValue(ChatMessage m, bool modelSupportsCaching)
+        // cache_control {type: ephemeral} when the message is flagged as a cache breakpoint (the
+        // array form is the OpenAI-compatible shape OpenRouter requires for cache_control). Emitted
+        // for EVERY model: providers without explicit caching ignore the annotation (documented by
+        // OpenRouter; field-verified harmless), while some third-party hosts may implement
+        // explicit-marker caching even for models whose author caches automatically (suspected of
+        // SiliconFlow-hosted DeepSeek, which never auto-cached prefix-stable requests). Empty
+        // content always stays a plain string - there is nothing to cache and Anthropic rejects
+        // empty text parts.
+        private static object ContentValue(ChatMessage m)
         {
             string text = m.Content != null ? m.Content : string.Empty;
-            if (!modelSupportsCaching || !m.CacheControl || text.Length == 0) return text;
+            if (!m.CacheControl || text.Length == 0) return text;
 
             var part = new Dictionary<string, object>();
             part["type"] = "text";
@@ -172,20 +172,6 @@ namespace GxPT
             cc["type"] = "ephemeral";
             part["cache_control"] = cc;
             return new List<object> { part };
-        }
-
-        // Providers that use explicit cache_control breakpoints via OpenRouter (Anthropic requires
-        // them; Gemini accepts them on top of its implicit caching). OpenAI/DeepSeek/Grok cache
-        // automatically on a stable prefix and need no annotation. OpenRouter documents unsupported
-        // cache_control as ignored, but gating by vendor prefix costs nothing and removes any risk
-        // of an unknown provider rejecting the content-part form. "~"-prefixed model aliases resolve
-        // to the same vendor, so the prefix is stripped before matching.
-        internal static bool ModelSupportsCacheControl(string model)
-        {
-            if (string.IsNullOrEmpty(model)) return false;
-            string m = StripModelAliasPrefix(model);
-            return m.StartsWith("anthropic/", StringComparison.OrdinalIgnoreCase)
-                || m.StartsWith("google/", StringComparison.OrdinalIgnoreCase);
         }
 
         // Providers whose prompt caching (explicit cache_control OR implicit/automatic prefix

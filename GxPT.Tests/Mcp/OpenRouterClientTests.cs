@@ -181,19 +181,23 @@ namespace GxPT.Tests.Mcp
         }
 
         [Fact]
-        public void Cache_breakpoint_is_ignored_for_models_without_explicit_caching()
+        public void Cache_breakpoints_are_emitted_for_every_model()
         {
+            // Providers without explicit caching ignore the annotation (documented by OpenRouter),
+            // while some third-party hosts of auto-caching vendors' models may require it - so the
+            // markers are unconditional rather than vendor-gated.
             var msg = new ChatMessage("user", "hi");
             msg.CacheControl = true;
             var body = OpenRouterClient.BuildRequestBody(
                 "openai/gpt-4o", new List<ChatMessage> { msg }, null, new ClientProperties());
 
-            // plain string content - OpenAI caches automatically; no cache_control shape emitted
-            Assert.Equal("hi", (string)((JArray)JObject.Parse(body)["messages"])[1]["content"]);
+            var content = ((JArray)JObject.Parse(body)["messages"])[1]["content"];
+            Assert.Equal(JTokenType.Array, content.Type);
+            Assert.Equal("ephemeral", (string)content[0]["cache_control"]["type"]);
         }
 
         [Fact]
-        public void Unflagged_messages_keep_plain_string_content_on_supported_models()
+        public void Unflagged_messages_keep_plain_string_content()
         {
             var body = OpenRouterClient.BuildRequestBody(
                 "anthropic/claude-sonnet-4.5", new List<ChatMessage> { new ChatMessage("user", "hi") },
@@ -204,13 +208,7 @@ namespace GxPT.Tests.Mcp
         [Fact]
         public void Model_cache_support_is_vendor_prefixed_and_tilde_alias_aware()
         {
-            Assert.True(OpenRouterClient.ModelSupportsCacheControl("anthropic/claude-opus-4"));
-            Assert.True(OpenRouterClient.ModelSupportsCacheControl("~anthropic/claude-sonnet-latest"));
-            Assert.True(OpenRouterClient.ModelSupportsCacheControl("google/gemini-2.5-pro"));
-            Assert.False(OpenRouterClient.ModelSupportsCacheControl("openai/gpt-4o"));
-            Assert.False(OpenRouterClient.ModelSupportsCacheControl(null));
-
-            // The broader caching gate (drives reveal-set eviction) also covers automatic cachers.
+            // The caching gate (drives reveal-set eviction and sticky routing).
             Assert.True(OpenRouterClient.ModelSupportsPromptCaching("openai/gpt-4o"));
             Assert.True(OpenRouterClient.ModelSupportsPromptCaching("deepseek/deepseek-chat"));
             Assert.True(OpenRouterClient.ModelSupportsPromptCaching("qwen/qwen3-coder"));
