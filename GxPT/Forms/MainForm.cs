@@ -3681,10 +3681,10 @@ namespace GxPT
                 }
                 case "skills__create_skill":
                 {
-                    string slug = Str(args, "slug"); string name = Str(args, "name");
-                    header = "Created skill " + (slug.Length > 0 ? slug : (name.Length > 0 ? name : "(skill)"));
+                    string slug = Str(args, "slug"); string skillName = Str(args, "name");
+                    header = "Created skill " + (slug.Length > 0 ? slug : (skillName.Length > 0 ? skillName : "(skill)"));
                     // Expandable view of the skill's fields (name/description/instructions), not raw JSON.
-                    body = FormatSkillFields(name, Str(args, "description"), Str(args, "body"));
+                    body = FormatSkillFields(skillName, Str(args, "description"), Str(args, "body"));
                     language = "markdown"; return true;
                 }
                 case "skills__update_skill":
