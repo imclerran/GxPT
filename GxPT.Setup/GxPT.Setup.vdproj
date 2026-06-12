@@ -883,6 +883,29 @@
                     }
                 }
             }
+            "{5EB83D71-FA18-4901-BE56-DE22E13CC478}:_7107BD3E99B349DCA5BCDC028CA335AC"
+            {
+            "Name" = "8:GxPT Skill"
+            "Description" = "8:GxPT skill archive."
+            "Extensions" = "8:gxsk"
+            "MIME" = "8:"
+            "Icon" = "8:_7FAF1DBC59F6409BAA36708961A22C49"
+            "IconIndex" = "3:0"
+                "Command"
+                {
+                "Command" = "8:_E0499EB368C445EBB017CB750C98F6FD"
+                }
+                "Verbs"
+                {
+                    "{95C0C507-CBF0-42B8-B119-07219E384A4A}:_614E42C085DA446A8A559794E57A24F0"
+                    {
+                    "Command" = "8:&Import"
+                    "Verb" = "8:import"
+                    "Arguments" = "8:\"%1\""
+                    "Order" = "3:0"
+                    }
+                }
+            }
         }
         "Folder"
         {
@@ -1002,14 +1025,14 @@
         {
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:GxPT"
-        "ProductCode" = "8:{ED9827A6-9DA0-45F2-B58B-E60E391C6D69}"
-        "PackageCode" = "8:{14B37D0E-E786-4E02-A12C-6A303F5CBCC7}"
+        "ProductCode" = "8:{23B6B101-37F1-42B1-9B4D-976B30779661}"
+        "PackageCode" = "8:{5F46F631-21A6-43E2-BA20-63A6B9E7640F}"
         "UpgradeCode" = "8:{18C05863-8BD9-4273-B9E8-061F771066DF}"
         "RestartWWWService" = "11:FALSE"
         "RemovePreviousVersions" = "11:TRUE"
         "DetectNewerInstalledVersion" = "11:TRUE"
         "InstallAllUsers" = "11:TRUE"
-        "ProductVersion" = "8:0.19.0"
+        "ProductVersion" = "8:0.19.1"
         "Manufacturer" = "8:IFM Innovations"
         "ARPHELPTELEPHONE" = "8:"
         "ARPHELPLINK" = "8:"

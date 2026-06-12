@@ -14,6 +14,7 @@ namespace GxPT
             list.Add(new ToolCommand());
             list.Add(new NewCommand());
             list.Add(new ExportCommand());
+            list.Add(new ImportCommand());
             list.Add(new CompactCommand());
             return list;
         }
@@ -192,15 +193,70 @@ namespace GxPT
         }
     }
 
-    // /export -- export conversations to a zip archive.
-    internal sealed class ExportCommand : ClientCommandBase
+    // /export [skill-slug] -- with no argument, export all conversations (.gxcv); with a slug, export
+    // that skill as a .gxsk archive. Either way the host opens a save-file dialog. Bundled skills are
+    // not exportable (they ship with every install), so they are hidden from completion and rejected
+    // when typed; only user and project skills are offered.
+    internal sealed class ExportCommand : ClientCommandBase, IArgumentCompleter
     {
         public override string Name { get { return "export"; } }
-        public override string Description { get { return "Export conversations to a zip"; } }
+        public override string Description { get { return "Export conversations, or one skill"; } }
+        public override string ArgumentHint { get { return "[skill-slug]"; } }
 
         public override SlashCommandResult Invoke(string args, ISlashCommandContext ctx)
         {
-            ctx.ExportConversations();
+            string a = (args ?? string.Empty).Trim();
+            if (a.Length == 0)
+            {
+                ctx.ExportConversations();
+                return SlashCommandResult.Handled();
+            }
+            if (a.IndexOf(' ') >= 0)
+                return SlashCommandResult.Fail("Usage: /export [skill-slug]");
+
+            SkillCatalog cat = SkillCommandShared.BuildCatalog(ctx);
+            Skill skill;
+            if (!SkillCommandShared.ResolveSkill(cat, a, out skill))
+                return SlashCommandResult.Fail("Unknown skill: " + a);
+            if (skill.Source == SkillSource.Bundled)
+                return SlashCommandResult.Fail("Skill '" + skill.Slug + "' is bundled with GxPT and can't be exported.");
+            ctx.ExportSkill(skill);
+            return SlashCommandResult.Handled();
+        }
+
+        public IList<ArgCompletion> CompleteArgument(string argText, ISlashCommandContext ctx)
+        {
+            List<ArgCompletion> result = new List<ArgCompletion>();
+            string a = argText ?? string.Empty;
+            if (a.IndexOf(' ') >= 0) return result; // single argument
+
+            // Bare /export (conversations) stays selectable from the popup, like the /skills list entry.
+            if (a.Length == 0)
+                result.Add(new ArgCompletion("(all conversations)", "", false));
+
+            SkillCatalog cat = SkillCommandShared.BuildCatalog(ctx);
+            IList<Skill> skills = cat.Skills;
+            for (int i = 0; i < skills.Count; i++)
+            {
+                if (skills[i].Source == SkillSource.Bundled) continue; // shipped with the app, not exportable
+                string slug = skills[i].Slug;
+                if (a.Length > 0 && !slug.StartsWith(a, StringComparison.OrdinalIgnoreCase)) continue;
+                result.Add(new ArgCompletion(slug + " - " + skills[i].Description, slug, false));
+            }
+            return result;
+        }
+    }
+
+    // /import -- import a conversation archive (.gxcv) or a skill (.gxsk) via an open-file dialog;
+    // the host routes the chosen file to the right importer.
+    internal sealed class ImportCommand : ClientCommandBase
+    {
+        public override string Name { get { return "import"; } }
+        public override string Description { get { return "Import conversations or a skill"; } }
+
+        public override SlashCommandResult Invoke(string args, ISlashCommandContext ctx)
+        {
+            ctx.ImportArchive();
             return SlashCommandResult.Handled();
         }
     }

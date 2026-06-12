@@ -47,6 +47,12 @@ namespace GxPT
         void NewConversation();
         void ExportConversations();
 
+        // Export one skill's folder as a .gxsk archive (the host shows a save-file dialog).
+        void ExportSkill(Skill skill);
+
+        // Import an archive - conversations (.gxcv) or a skill (.gxsk) - chosen via an open-file dialog.
+        void ImportArchive();
+
         // Summarize the current conversation and open the summary as context in a new conversation tab.
         // Runs asynchronously; the original conversation is left untouched.
         void Compact();

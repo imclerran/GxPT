@@ -72,8 +72,12 @@ namespace GxPT.Tests.Commands
         public void RefreshSkillsServer() { RefreshSkillsServerCount++; }
 
         public int CompactCount;
+        public List<Skill> ExportedSkills = new List<Skill>();
+        public int ImportCount;
         public void NewConversation() { NewConversationCount++; }
         public void ExportConversations() { ExportCount++; }
+        public void ExportSkill(Skill skill) { ExportedSkills.Add(skill); }
+        public void ImportArchive() { ImportCount++; }
         public void Compact() { CompactCount++; }
     }
 }
