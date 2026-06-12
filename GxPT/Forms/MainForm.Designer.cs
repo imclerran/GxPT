@@ -78,6 +78,7 @@
             this.ssMain = new System.Windows.Forms.StatusStrip();
             this.tspGenProgress = new System.Windows.Forms.ToolStripProgressBar();
             this.tsiStopGen = new GxPT.StopGenerationItem();
+            this.tslEnabled = new System.Windows.Forms.ToolStripStatusLabel();
             this.tslTools = new System.Windows.Forms.ToolStripStatusLabel();
             this.tslToolsValue = new System.Windows.Forms.ToolStripStatusLabel();
             this.tslSkills = new System.Windows.Forms.ToolStripStatusLabel();
@@ -552,6 +553,7 @@
             this.ssMain.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.tspGenProgress,
             this.tsiStopGen,
+            this.tslEnabled,
             this.tslTools,
             this.tslToolsValue,
             this.tslSkills,
@@ -591,12 +593,18 @@
             this.tsiStopGen.ToolTipText = "Stop generating";
             this.tsiStopGen.Visible = false;
             //
+            // tslEnabled
+            //
+            // The idle face of the left slot (with tslTools/tslSkills): an "Enabled -" prefix and the
+            // active conversation's tool/skill counts, swapped out for the progress bar + stop button
+            // while a request is in flight. Caption/value pairs mirror the usage panes on the right;
+            // texts are set by MainForm.UpdateToolSkillCounts.
+            this.tslEnabled.Margin = new System.Windows.Forms.Padding(5, 3, 0, 2);
+            this.tslEnabled.Name = "tslEnabled";
+            this.tslEnabled.Size = new System.Drawing.Size(0, 17);
+            //
             // tslTools
             //
-            // The idle face of the left slot (with tslSkills): the active conversation's tool/skill
-            // counts, swapped out for the progress bar + stop button while a request is in flight.
-            // Caption/value pairs mirror the usage panes on the right; texts are set by
-            // MainForm.UpdateToolSkillCounts.
             this.tslTools.Margin = new System.Windows.Forms.Padding(5, 3, 0, 2);
             this.tslTools.Name = "tslTools";
             this.tslTools.Size = new System.Drawing.Size(0, 17);
@@ -765,6 +773,7 @@
         private System.Windows.Forms.StatusStrip ssMain;
         private System.Windows.Forms.ToolStripProgressBar tspGenProgress;
         private StopGenerationItem tsiStopGen;
+        private System.Windows.Forms.ToolStripStatusLabel tslEnabled;
         private System.Windows.Forms.ToolStripStatusLabel tslTools;
         private System.Windows.Forms.ToolStripStatusLabel tslToolsValue;
         private System.Windows.Forms.ToolStripStatusLabel tslSkills;

@@ -813,6 +813,7 @@ namespace GxPT
                 // showing so a turn's side effects (a server faulting, a skill the model authored)
                 // are reflected the moment the indicator yields the slot back.
                 if (!busy) UpdateToolSkillCounts();
+                if (this.tslEnabled != null) this.tslEnabled.Visible = !busy;
                 if (this.tslTools != null) this.tslTools.Visible = !busy;
                 if (this.tslToolsValue != null) this.tslToolsValue.Visible = !busy;
                 if (this.tslSkills != null) this.tslSkills.Visible = !busy;
@@ -851,6 +852,7 @@ namespace GxPT
                 }
 
                 var inv = System.Globalization.CultureInfo.InvariantCulture;
+                if (this.tslEnabled != null) this.tslEnabled.Text = "Enabled -";
                 if (this.tslTools != null) this.tslTools.Text = "Tools:";
                 if (this.tslToolsValue != null) this.tslToolsValue.Text = toolCount.ToString(inv);
                 if (this.tslSkills != null) this.tslSkills.Text = "Skills:";
