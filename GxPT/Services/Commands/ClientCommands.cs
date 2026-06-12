@@ -194,7 +194,9 @@ namespace GxPT
     }
 
     // /export [skill-slug] -- with no argument, export all conversations (.gxcv); with a slug, export
-    // that skill as a .gxsk archive. Either way the host opens a save-file dialog.
+    // that skill as a .gxsk archive. Either way the host opens a save-file dialog. Bundled skills are
+    // not exportable (they ship with every install), so they are hidden from completion and rejected
+    // when typed; only user and project skills are offered.
     internal sealed class ExportCommand : ClientCommandBase, IArgumentCompleter
     {
         public override string Name { get { return "export"; } }
@@ -216,6 +218,8 @@ namespace GxPT
             Skill skill;
             if (!SkillCommandShared.ResolveSkill(cat, a, out skill))
                 return SlashCommandResult.Fail("Unknown skill: " + a);
+            if (skill.Source == SkillSource.Bundled)
+                return SlashCommandResult.Fail("Skill '" + skill.Slug + "' is bundled with GxPT and can't be exported.");
             ctx.ExportSkill(skill);
             return SlashCommandResult.Handled();
         }
@@ -234,6 +238,7 @@ namespace GxPT
             IList<Skill> skills = cat.Skills;
             for (int i = 0; i < skills.Count; i++)
             {
+                if (skills[i].Source == SkillSource.Bundled) continue; // shipped with the app, not exportable
                 string slug = skills[i].Slug;
                 if (a.Length > 0 && !slug.StartsWith(a, StringComparison.OrdinalIgnoreCase)) continue;
                 result.Add(new ArgCompletion(slug + " - " + skills[i].Description, slug, false));

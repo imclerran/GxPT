@@ -176,6 +176,35 @@ namespace GxPT.Tests.Commands
         }
 
         [Fact]
+        public void Export_rejects_and_hides_bundled_skills()
+        {
+            // The bundled root is <exe>/skills; for tests that's the test bin. Use a unique slug so
+            // parallel tests building catalogs never collide with it, and clean up afterwards.
+            string slug = "bundled-probe-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+            string dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "skills", slug);
+            try
+            {
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(Path.Combine(dir, "SKILL.md"), "---\ndescription: d.\n---\n\nb\n");
+
+                var ctx = new FakeSlashCommandContext(null);
+                var cmd = new ExportCommand();
+
+                var result = cmd.Invoke(slug, ctx);
+                Assert.NotNull(result.Error);
+                Assert.Empty(ctx.ExportedSkills);
+
+                var completions = cmd.CompleteArgument(slug, ctx);
+                Assert.Empty(completions);
+            }
+            finally
+            {
+                try { Directory.Delete(dir, true); }
+                catch { }
+            }
+        }
+
+        [Fact]
         public void Export_with_unknown_slug_fails()
         {
             var ctx = new FakeSlashCommandContext("/work");
