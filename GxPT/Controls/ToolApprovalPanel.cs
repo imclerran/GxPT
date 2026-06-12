@@ -426,6 +426,20 @@ namespace GxPT
             _onContinue = null;
         }
 
+        // Resolve any pending prompt as if the user had declined (Deny / Stop), then hide. Used when
+        // the prompting turn detaches from this panel's tab (the tab closed or was recycled
+        // mid-prompt): the worker blocked in TranscriptApprovalPrompt/TranscriptContinuationPrompt
+        // must be released - HidePanel alone clears the callbacks WITHOUT invoking them, which would
+        // leave that turn waiting forever (and its conversation never saved).
+        public void DenyPending()
+        {
+            Action<ApprovalChoice> choose = _onChoose;
+            Action<bool> cont = _onContinue;
+            HidePanel();
+            if (choose != null) choose(ApprovalChoice.Deny);
+            if (cont != null) cont(false);
+        }
+
         // The clamped natural height of the current details control's content, in [Min,Max].
         private int ClampedDetailsHeight(bool handled)
         {

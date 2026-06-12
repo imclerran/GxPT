@@ -451,6 +451,13 @@ namespace GxPT
 
             try
             {
+                // A pending approval/continuation prompt would be disposed with the page WITHOUT its
+                // callback firing, stranding the closed conversation's turn on its blocked worker
+                // forever (it would never finalize or save). Resolve it as Deny/Stop first; the
+                // now-detached turn then wraps up on its own.
+                try { if (ctx != null && ctx.ApprovalPanel != null) ctx.ApprovalPanel.DenyPending(); }
+                catch { }
+
                 int desiredIndex = -1;
                 if (_tabControl != null)
                 {

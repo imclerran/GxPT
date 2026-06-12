@@ -32,13 +32,19 @@ namespace GxPT
                 {
                     _uiMarshal.BeginInvoke((MethodInvoker)delegate
                     {
-                        ToolApprovalPanel panel = _getPanel();
-                        if (panel == null) { done.Set(); return; }
-                        panel.ShowContinuation(iterationsSoFar, delegate(bool cont)
+                        // Any UI failure (panel resolver, a disposed panel mid-show) must still
+                        // signal the waiting worker - an unset event strands the turn forever.
+                        try
                         {
-                            result[0] = cont;
-                            done.Set();
-                        });
+                            ToolApprovalPanel panel = _getPanel();
+                            if (panel == null) { done.Set(); return; }
+                            panel.ShowContinuation(iterationsSoFar, delegate(bool cont)
+                            {
+                                result[0] = cont;
+                                done.Set();
+                            });
+                        }
+                        catch { done.Set(); }
                     });
                 }
                 catch

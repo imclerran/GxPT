@@ -964,6 +964,12 @@ namespace GxPT
             // to is gone. The flag also keeps later tab-switch syncs from re-showing it.
             ctx.SendDetached = ctx.IsSending;
             SyncGenerationIndicatorFromActiveTab();
+            // A tool-approval / continuation prompt may already be showing for the closed
+            // conversation's now-detached turn: resolve it as Deny/Stop so the blocked worker is
+            // released and the turn wraps up and saves. (Prompts the turn raises AFTER detaching are
+            // auto-denied by the send path's panel gate.)
+            try { if (ctx.ApprovalPanel != null) ctx.ApprovalPanel.DenyPending(); }
+            catch { }
         }
 
         // Opens a conversation tab whose working folder is preset to 'dir'. Mirrors the
@@ -2700,10 +2706,21 @@ namespace GxPT
                     // Per-turn approval policy bound to THIS tab's panel, so the prompt appears on the
                     // conversation that requested the tool. The remembered-choice store is shared
                     // across tabs. Falls back to allow-all only if approvals couldn't be set up.
+                    // The panel resolver yields null once the tab no longer hosts this turn's
+                    // conversation (recycled mid-flight): a detached turn's prompts AUTO-DENY instead
+                    // of appearing on the new blank tab, and the turn wraps up and saves.
                     IToolApprovalPolicy approval = (_approvalStore != null && ctx.ApprovalPanel != null)
                         ? new ToolApprovalPolicy(
                             new ToolClassifier(),
-                            new TranscriptApprovalPrompt(this, delegate { return ctx.ApprovalPanel; }),
+                            new TranscriptApprovalPrompt(this, delegate
+                            {
+                                // Null (=> deny) when the tab was recycled away from this turn's
+                                // conversation, or closed outright (panel disposed with the page).
+                                ToolApprovalPanel p = ctx.ApprovalPanel;
+                                bool usable = ReferenceEquals(ctx.Conversation, convo)
+                                    && p != null && !p.IsDisposed;
+                                return usable ? p : null;
+                            }),
                             _approvalStore,
                             _mcpRegistry) // classify third-party tools by their declared readOnly/destructive hints
                         : (IToolApprovalPolicy)new AllowAllApprovalPolicy();
@@ -2742,7 +2759,14 @@ namespace GxPT
                     // wraps up by default.
                     if (ctx.ApprovalPanel != null)
                     {
-                        var contPrompt = new TranscriptContinuationPrompt(this, delegate { return ctx.ApprovalPanel; });
+                        var contPrompt = new TranscriptContinuationPrompt(this, delegate
+                        {
+                            // Same gate as the approval prompt: null (=> stop/wrap up) once detached.
+                            ToolApprovalPanel p = ctx.ApprovalPanel;
+                            bool usable = ReferenceEquals(ctx.Conversation, convo)
+                                && p != null && !p.IsDisposed;
+                            return usable ? p : null;
+                        });
                         orch.ContinuationDecider = delegate(int n) { return contPrompt.Ask(n); };
                     }
                     orch.RequestMessageTransform = delegate(IList<ChatMessage> h)
