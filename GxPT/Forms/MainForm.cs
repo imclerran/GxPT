@@ -596,6 +596,16 @@ namespace GxPT
 
             try
             {
+                if (this.tsiStopGen != null)
+                {
+                    this.tsiStopGen.Click -= tsiStopGen_Click;
+                    this.tsiStopGen.Click += tsiStopGen_Click;
+                }
+            }
+            catch { }
+
+            try
+            {
                 if (this.btnAttach != null)
                 {
                     this.btnAttach.Click -= btnAttach_Click;
@@ -624,6 +634,9 @@ namespace GxPT
             SyncMcpWorkingDirFromActiveTab();
             // Reflect the active conversation's usage/cost totals in the status bar.
             SyncUsageStatusFromActiveTab();
+            // And whether the active tab has a request in flight (the generation indicator is
+            // form-wide but tracks the active tab only).
+            SyncGenerationIndicatorFromActiveTab();
             if (_inputManager != null) _inputManager.FocusInputSoon();
         }
 
@@ -694,7 +707,6 @@ namespace GxPT
                 // Bottom approval panel. Add the docked siblings, then send the transcript to front.
                 ctx.Page.Controls.Add(strip);
                 AttachApprovalPanel(ctx);
-                AttachGenerationStatusBar(ctx);
                 if (ctx.Transcript != null) ctx.Transcript.BringToFront();
                 strip.SetWorkingDir(ctx.WorkingDir);
                 // Honor a persisted dismissal (only meaningful when no folder is set; setting one
@@ -723,27 +735,9 @@ namespace GxPT
             catch { }
         }
 
-        // Create this tab's generation status strip (marquee progress bar + stop button, docked below
-        // the transcript, hidden until a request is in flight). Each conversation gets its own strip so
-        // the bar and Stop button track the tab that's actually generating; Stop cancels that tab's
-        // in-flight request.
-        internal void AttachGenerationStatusBar(TabManager.ChatTabContext ctx)
-        {
-            if (ctx == null || ctx.Page == null) return;
-            try
-            {
-                var bar = new GenerationStatusBar();
-                ctx.GenerationStatusBar = bar;
-                var ctxRef = ctx;
-                bar.StopRequested += delegate { CancelActiveRequest(ctxRef); };
-                ctx.Page.Controls.Add(bar); // self-docks Bottom, starts hidden
-            }
-            catch { }
-        }
-
-        // Stop button on a tab's status strip: cancel that tab's in-flight model request. Killing the
-        // curl process drops the connection so the API stops generating; the streaming/orchestrator
-        // paths then finalize the turn cleanly (keeping any partial text) and hide the strip.
+        // Status bar Stop button: cancel a tab's in-flight model request. Killing the curl process
+        // drops the connection so the API stops generating; the streaming/orchestrator paths then
+        // finalize the turn cleanly (keeping any partial text) and hide the indicator.
         private void CancelActiveRequest(TabManager.ChatTabContext ctx)
         {
             if (ctx == null) return;
@@ -759,19 +753,64 @@ namespace GxPT
             catch { }
         }
 
-        // Show/hide this tab's generation status strip. Safe to call when the strip isn't present.
+        // Show/hide the status bar's generation indicator (marquee progress bar + stop button) for
+        // a tab's send. The indicator lives in the form-wide status strip while sends are per-tab,
+        // so it reflects the ACTIVE tab only: a background tab's turn must not flip the indicator
+        // under the foreground tab. Tab switches restore the right state from ctx.IsSending via
+        // SyncGenerationIndicatorFromActiveTab.
         private void ShowGenerationBar(TabManager.ChatTabContext ctx)
         {
-            if (ctx != null && ctx.GenerationStatusBar != null)
-                try { ctx.GenerationStatusBar.ShowBusy(); }
-                catch { }
+            try
+            {
+                var act = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                if (act != null && ReferenceEquals(act, ctx))
+                    SetGenerationIndicatorVisible(true);
+            }
+            catch { }
         }
 
         private void HideGenerationBar(TabManager.ChatTabContext ctx)
         {
-            if (ctx != null && ctx.GenerationStatusBar != null)
-                try { ctx.GenerationStatusBar.HideBusy(); }
-                catch { }
+            try
+            {
+                var act = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                if (act != null && ReferenceEquals(act, ctx))
+                    SetGenerationIndicatorVisible(false);
+            }
+            catch { }
+        }
+
+        private void SyncGenerationIndicatorFromActiveTab()
+        {
+            try
+            {
+                var act = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                SetGenerationIndicatorVisible(act != null && act.IsSending);
+            }
+            catch { }
+        }
+
+        private void SetGenerationIndicatorVisible(bool busy)
+        {
+            try
+            {
+                if (this.tspGenProgress != null)
+                {
+                    // Run the marquee only while shown (no point animating an invisible bar).
+                    this.tspGenProgress.MarqueeAnimationSpeed = busy ? 30 : 0;
+                    this.tspGenProgress.Visible = busy;
+                }
+                if (this.tsiStopGen != null) this.tsiStopGen.Visible = busy;
+            }
+            catch { }
+        }
+
+        // Stop button in the status bar: the indicator always shows the active tab's send, so
+        // cancel the active tab's request.
+        private void tsiStopGen_Click(object sender, EventArgs e)
+        {
+            try { CancelActiveRequest(_tabManager != null ? _tabManager.GetActiveContext() : null); }
+            catch { }
         }
 
         private void DismissWorkspaceStripForContext(TabManager.ChatTabContext ctx)

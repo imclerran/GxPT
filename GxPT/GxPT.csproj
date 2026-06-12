@@ -162,7 +162,7 @@
     <Compile Include="Controls\ToolApprovalPanel.cs">
       <SubType>Component</SubType>
     </Compile>
-    <Compile Include="Controls\GenerationStatusBar.cs">
+    <Compile Include="Controls\StopGenerationItem.cs">
       <SubType>Component</SubType>
     </Compile>
     <Compile Include="Controls\ContextMeterItem.cs">

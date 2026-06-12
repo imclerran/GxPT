@@ -76,6 +76,8 @@
             this.chatTranscript = new GxPT.ChatTranscriptControl();
             this.splitContainer1 = new System.Windows.Forms.SplitContainer();
             this.ssMain = new System.Windows.Forms.StatusStrip();
+            this.tspGenProgress = new System.Windows.Forms.ToolStripProgressBar();
+            this.tsiStopGen = new GxPT.StopGenerationItem();
             this.tslSpring = new System.Windows.Forms.ToolStripStatusLabel();
             this.tslContext = new System.Windows.Forms.ToolStripStatusLabel();
             this.tspContextMeter = new GxPT.ContextMeterItem();
@@ -544,6 +546,8 @@
             // ssMain
             //
             this.ssMain.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.tspGenProgress,
+            this.tsiStopGen,
             this.tslSpring,
             this.tslContext,
             this.tspContextMeter,
@@ -558,6 +562,26 @@
             this.ssMain.Size = new System.Drawing.Size(892, 22);
             this.ssMain.SizingGrip = false;
             this.ssMain.TabIndex = 3;
+            //
+            // tspGenProgress
+            //
+            // Shown (with tsiStopGen) only while the active tab has a request in flight; MainForm
+            // toggles them and (re)starts the marquee. Visual styles (enabled in Program.cs) are
+            // required for the marquee animation; without them it renders static.
+            this.tspGenProgress.AutoSize = false;
+            this.tspGenProgress.MarqueeAnimationSpeed = 0;
+            this.tspGenProgress.Margin = new System.Windows.Forms.Padding(5, 4, 0, 3);
+            this.tspGenProgress.Name = "tspGenProgress";
+            this.tspGenProgress.Size = new System.Drawing.Size(120, 15);
+            this.tspGenProgress.Style = System.Windows.Forms.ProgressBarStyle.Marquee;
+            this.tspGenProgress.Visible = false;
+            //
+            // tsiStopGen
+            //
+            this.tsiStopGen.Margin = new System.Windows.Forms.Padding(2, 3, 0, 3);
+            this.tsiStopGen.Name = "tsiStopGen";
+            this.tsiStopGen.ToolTipText = "Stop generating";
+            this.tsiStopGen.Visible = false;
             //
             // tslSpring
             //
@@ -697,6 +721,8 @@
         private System.Windows.Forms.ToolStripMenuItem miDarkMode;
         private System.Windows.Forms.ToolStripMenuItem miStatusBar;
         private System.Windows.Forms.StatusStrip ssMain;
+        private System.Windows.Forms.ToolStripProgressBar tspGenProgress;
+        private StopGenerationItem tsiStopGen;
         private System.Windows.Forms.ToolStripStatusLabel tslSpring;
         private System.Windows.Forms.ToolStripStatusLabel tslContext;
         private ContextMeterItem tspContextMeter;
