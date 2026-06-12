@@ -724,16 +724,32 @@ namespace GxPT
                     var info = _renamingItem.Tag as ConversationStore.ConversationListItem;
                     if (info != null)
                     {
-                        // Load the conversation, update the name, and save it
-                        var conversation = ConversationStore.Load(_mainForm.GetClient(), info.Path);
+                        // When the conversation is open in a tab, rename the LIVE object - it is the
+                        // authoritative copy for that tab. Renaming a disk-loaded clone here used to
+                        // be silently undone by the tab's next send, which saved the old in-memory
+                        // name back over this one. Closed conversations still load from disk.
+                        Conversation conversation = null;
+                        TabPage openPage = null;
+                        if (!string.IsNullOrEmpty(info.Id) && _openConversationsById.TryGetValue(info.Id, out openPage))
+                        {
+                            var tm = _mainForm.GetTabManager();
+                            TabManager.ChatTabContext ctx;
+                            if (tm != null && openPage != null &&
+                                tm.TabContexts.TryGetValue(openPage, out ctx) && ctx != null)
+                                conversation = ctx.Conversation;
+                        }
+                        if (conversation == null)
+                            conversation = ConversationStore.Load(_mainForm.GetClient(), info.Path);
                         if (conversation != null)
                         {
                             conversation.Name = newName;
-                            ConversationStore.Save(conversation);
+                            // A save that races an open tab's running turn can throw; the in-memory
+                            // rename has already stuck, and that tab's next save persists it.
+                            try { ConversationStore.Save(conversation); }
+                            catch { }
 
                             // Update any open tab with this conversation
-                            TabPage openPage;
-                            if (!string.IsNullOrEmpty(info.Id) && _openConversationsById.TryGetValue(info.Id, out openPage))
+                            if (openPage != null)
                             {
                                 openPage.Text = MainForm.ZdrTitle(conversation, newName);
                                 _mainForm.UpdateWindowTitle();
