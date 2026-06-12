@@ -1,6 +1,6 @@
 # GxPT
 
-> *Windows XP goes agentic!*
+![Windows XP Goes Agentic!](GxPT-banner.png)
 
 A native chatbot client and coding agent for Windows XP. GxPT aims to provide a modern and user-friendly chat interface on legacy Windows systems, with robust Markdown and code syntax highlighting support. It also brings agentic workflows to the era of Luna and Aero - autonomously chaining tools for agentic coding and web search via the Model Context Protocol (MCP), with per-conversation privacy controls.
 
@@ -8,14 +8,6 @@ A native chatbot client and coding agent for Windows XP. GxPT aims to provide a 
 
 ### Agentic Coding:
 ![GxPT Agentic Coding Screenshot](GxPT-agentic-coding.png)
-### Tool Approval:
-![GxPT Tool Approval Screenshot](GxPT-tool-approval.png)
-### Code Highlighting:
-![GxPT Code Highlighting Screenshot](GxPT-code-highlighting.png)
-### Dark Mode:
-![GxPT Dark Mode Screenshot](GxPT-dark.png)
-### Windows 7:
-![GxPT Windows 7 Screenshot](GxPT-win7.png)
 
 ## Features
 
@@ -31,13 +23,11 @@ A native chatbot client and coding agent for Windows XP. GxPT aims to provide a 
 - **Tool Approval & Sandboxing**: Every tool call is gated by an in-app approval prompt showing the exact tool and arguments before it runs, with approvals remembered per session. File/git/command tools are confined to the workspace you choose.
 - **Prompt Caching**: Requests are automatically structured into cache-friendly zones with provider cache breakpoints and sticky provider routing that keeps follow-up requests on the warm cache - cutting input costs by up to ~90% on long agentic sessions.
 - **Usage Status Bar**: Live per-conversation telemetry at the bottom of the window: a context meter showing how full the model's context window is, plus running cost and cache-savings totals reconciled against OpenRouter's billed usage.
-- **Stop & Retry**: Cancel an in-flight model request with the stop button next to the loading bar, and retry failed requests straight from the error notice in the transcript.
 - **Slash Commands**: Type `/` for quick actions with autocomplete, including `/model` (switch models), `/tool` (toggle MCP servers), `/new`, `/export`, and `/compact`.
 - **Recent Workspaces**: Quickly reattach to the workspaces you used most recently, with a workspace strip showing the active folder at a glance.
 - **File Attachments**: Add text file attachments to your messages to avoid cluttering up the conversation with long pasted text.
 - **Conversation Editing**: Don't like the response a model gave you? Go back and edit your message and get a new response.
 - **Privacy & Local Storage**: Conversations are stored locally and can be exported/imported to migrate across machines. Enforce **Zero Data Retention (ZDR)** per conversation to route only to providers that won't store your prompts or responses.
-- **Settings and Customization**: Customize settings with Visual settings UI or built-in JSON editor. 
 - **Frontier Model Support**: Support for a huge range of AI models, including frontier models, from the OpenRouter.ai API. 
 - **Legacy Compatibility**: Runs on Windows XP and .NET 3.5.
 
