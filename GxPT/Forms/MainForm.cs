@@ -2226,6 +2226,12 @@ namespace GxPT
                 return;
             }
 
+            // The turn's conversation, snapshotted NOW (UI thread, send start). Closing the last tab
+            // recycles the page and REPLACES ctx.Conversation with a fresh one mid-flight; this turn
+            // must keep appending to - and finally save - the conversation it was started for, and
+            // must stop painting into the recycled tab's transcript (#141).
+            Conversation convo = ctx.Conversation;
+
             // Add placeholder assistant message to stream into and capture its index
             int assistantIndex = ctx.Transcript.AddMessageGetIndex(MessageRole.Assistant, string.Empty);
             if (zdrForSend) ctx.Transcript.SetMessageZdrTag(assistantIndex, true);
@@ -2242,6 +2248,9 @@ namespace GxPT
             renderTimer.Interval = 75; // ~13 fps; adjust between 50-150ms if needed
             renderTimer.Tick += (s2, e2) =>
             {
+                // The recycled tab's transcript is not this turn's to draw on (the placeholder
+                // index points into a cleared list).
+                if (!ReferenceEquals(ctx.Conversation, convo)) return;
                 string snapshot;
                 int len;
                 lock (sbLock)
@@ -2266,7 +2275,7 @@ namespace GxPT
                 {
                     // Snapshot the history and log it
                     // Build a model snapshot where attachments are appended to content on-the-fly
-                    var snapshot = BuildMessagesForModel(ctx.Conversation.History);
+                    var snapshot = BuildMessagesForModel(convo.History);
                     // Prompt caching: the newest message carries the cache breakpoint, so each
                     // turn re-reads the prior turn's prefix and extends it. Snapshot messages are
                     // request-local clones - the flag never lands in persisted history.
@@ -2295,7 +2304,7 @@ namespace GxPT
                     // cache activity (a read or a write) sets or moves the preference; merely
                     // serving a request proves nothing. Usage/cost accounting (status bar)
                     // records on every model.
-                    Conversation usageConvo = ctx.Conversation;
+                    Conversation usageConvo = convo;
                     bool cachingModel = OpenRouterClient.ModelSupportsPromptCaching(modelToUse);
                     if (usageConvo != null)
                     {
@@ -2329,26 +2338,40 @@ namespace GxPT
                             {
                                 try { renderTimer.Stop(); renderTimer.Dispose(); }
                                 catch { }
-                                try { ctx.Transcript.StickToBottomDuringStreaming = false; }
-                                catch { }
+                                // Detached = the tab was recycled mid-flight: the transcript is not
+                                // this turn's to touch, but the response still belongs in the turn's
+                                // conversation (and its file).
+                                bool attached = ReferenceEquals(ctx.Conversation, convo);
+                                if (attached)
+                                {
+                                    try { ctx.Transcript.StickToBottomDuringStreaming = false; }
+                                    catch { }
+                                }
                                 // A user stop ends the stream via onDone (no error). If nothing
                                 // streamed yet, drop the empty placeholder rather than committing an
                                 // empty assistant message; otherwise keep the partial text as normal.
                                 bool cancelled = (cancel != null && cancel.IsCancelled);
                                 if (cancelled && finalText.Trim().Length == 0)
                                 {
-                                    if (assistantIndex == ctx.Transcript.MessageCount - 1)
+                                    if (attached && assistantIndex == ctx.Transcript.MessageCount - 1)
                                         ctx.Transcript.RemoveLastMessage();
                                     Logger.Log("Send", "Stream stopped by user before any output at index=" + assistantIndex);
                                 }
                                 else
                                 {
-                                    ctx.Transcript.UpdateMessageAt(assistantIndex, finalText);
-                                    ctx.Conversation.AddAssistantMessage(finalText);
-                                    ctx.Conversation.SelectedModel = ctx.SelectedModel;
-                                    // Save assistant completion if allowed
-                                    if (!ctx.NoSaveUntilUserSend)
-                                        ConversationStore.Save(ctx.Conversation); // save only after streaming completes
+                                    if (attached) ctx.Transcript.UpdateMessageAt(assistantIndex, finalText);
+                                    convo.AddAssistantMessage(finalText);
+                                    if (attached)
+                                    {
+                                        convo.SelectedModel = ctx.SelectedModel;
+                                        // Save assistant completion if allowed
+                                        if (!ctx.NoSaveUntilUserSend)
+                                            ConversationStore.Save(convo); // save only after streaming completes
+                                    }
+                                    else
+                                    {
+                                        SaveDetachedTurnConversation(convo);
+                                    }
                                     try { Logger.Log("Transcript", "Final assistant message at index=" + assistantIndex + ":\n" + (finalText ?? string.Empty)); }
                                     catch { }
                                     Logger.Log("Send", "Assistant finalized at index=" + assistantIndex + ", chars=" + (finalText != null ? finalText.Length : 0) + (cancelled ? " (stopped by user)" : string.Empty));
@@ -2368,15 +2391,20 @@ namespace GxPT
                             {
                                 try { renderTimer.Stop(); renderTimer.Dispose(); }
                                 catch { }
-                                try { ctx.Transcript.StickToBottomDuringStreaming = false; }
-                                catch { }
-                                // Keep any partial text in the assistant bubble; otherwise drop the
-                                // empty placeholder so only the red error notice shows.
-                                if (partial.Trim().Length > 0)
-                                    ctx.Transcript.UpdateMessageAt(assistantIndex, partial);
-                                else if (assistantIndex == ctx.Transcript.MessageCount - 1)
-                                    ctx.Transcript.RemoveLastMessage();
-                                ShowTranscriptError(ctx.Transcript, err);
+                                // Transcript writes only while the tab still hosts this turn's
+                                // conversation (see the success path).
+                                if (ReferenceEquals(ctx.Conversation, convo))
+                                {
+                                    try { ctx.Transcript.StickToBottomDuringStreaming = false; }
+                                    catch { }
+                                    // Keep any partial text in the assistant bubble; otherwise drop the
+                                    // empty placeholder so only the red error notice shows.
+                                    if (partial.Trim().Length > 0)
+                                        ctx.Transcript.UpdateMessageAt(assistantIndex, partial);
+                                    else if (assistantIndex == ctx.Transcript.MessageCount - 1)
+                                        ctx.Transcript.RemoveLastMessage();
+                                    ShowTranscriptError(ctx.Transcript, err);
+                                }
                                 Logger.Log("Send", "Stream error at index=" + assistantIndex + ": " + err);
                                 ctx.IsSending = false;
                                 ctx.Cancellation = null;
@@ -2395,13 +2423,17 @@ namespace GxPT
                     {
                         try { renderTimer.Stop(); renderTimer.Dispose(); }
                         catch { }
-                        try { ctx.Transcript.StickToBottomDuringStreaming = false; }
-                        catch { }
-                        if (partial.Trim().Length > 0)
-                            ctx.Transcript.UpdateMessageAt(assistantIndex, partial);
-                        else if (assistantIndex == ctx.Transcript.MessageCount - 1)
-                            ctx.Transcript.RemoveLastMessage();
-                        ShowTranscriptError(ctx.Transcript, ex.Message);
+                        // Transcript writes only while the tab still hosts this turn's conversation.
+                        if (ReferenceEquals(ctx.Conversation, convo))
+                        {
+                            try { ctx.Transcript.StickToBottomDuringStreaming = false; }
+                            catch { }
+                            if (partial.Trim().Length > 0)
+                                ctx.Transcript.UpdateMessageAt(assistantIndex, partial);
+                            else if (assistantIndex == ctx.Transcript.MessageCount - 1)
+                                ctx.Transcript.RemoveLastMessage();
+                            ShowTranscriptError(ctx.Transcript, ex.Message);
+                        }
                         Logger.Log("Send", "Exception in streaming worker: " + ex.Message);
                         ctx.IsSending = false;
                         ctx.Cancellation = null;
@@ -2629,6 +2661,12 @@ namespace GxPT
 
         private void BeginToolSend(TabManager.ChatTabContext ctx, string model, bool zdr)
         {
+            // The turn's conversation, snapshotted NOW (UI thread, send start). Closing the last tab
+            // recycles the page and REPLACES ctx.Conversation with a fresh one mid-flight; this turn
+            // must keep appending to - and finally save - the conversation it was started for, and
+            // must stop painting into the recycled tab's transcript (#141).
+            Conversation convo = ctx.Conversation;
+
             // Ordered transcript segments for this turn: assistant-text bubbles and chrome-less
             // tool-activity blocks, interleaved in arrival order so the view reads chronologically
             // (text, then the tools it triggered, then the next text, ...). A segment only becomes a
@@ -2639,7 +2677,12 @@ namespace GxPT
 
             var renderTimer = new System.Windows.Forms.Timer();
             renderTimer.Interval = 75;
-            renderTimer.Tick += delegate { MaterializeLiveSegs(ctx, sbLock, segs); };
+            // Stop materializing once the tab no longer hosts this turn's conversation (recycled):
+            // unmaterialized segments would otherwise ADD bubbles to the new blank transcript.
+            renderTimer.Tick += delegate
+            {
+                if (ReferenceEquals(ctx.Conversation, convo)) MaterializeLiveSegs(ctx, sbLock, segs);
+            };
             try { ctx.Transcript.StickToBottomDuringStreaming = true; }
             catch { }
             renderTimer.Start();
@@ -2671,7 +2714,7 @@ namespace GxPT
                     // Reveal state is per-conversation (recency-ordered; persisted with the
                     // conversation) so concurrent tabs don't churn each other's tools array - the
                     // array must stay byte-stable across requests for prompt caching to hit.
-                    Conversation revealConvo = ctx.Conversation;
+                    Conversation revealConvo = convo;
                     if (revealConvo != null)
                     {
                         if (revealConvo.RevealedTools == null)
@@ -2728,7 +2771,7 @@ namespace GxPT
                     // the enabled set. Rebuilt per send, so on-disk edits take effect on the next turn.
                     SkillCatalog skillCatalog =
                         SkillInjection.BuildCatalog(AppDomain.CurrentDomain.BaseDirectory, ctx.WorkingDir);
-                    Conversation skillConvo = ctx.Conversation;
+                    Conversation skillConvo = convo;
                     List<Skill> enabledSkills = SkillResolve.EnabledSkills(
                         skillCatalog.Skills, SkillEnablement.LoadGlobal(),
                         skillConvo != null ? skillConvo.SkillsFeatureOff : null,
@@ -2827,16 +2870,16 @@ namespace GxPT
                     Action onComplete = delegate
                     {
                         BeginInvoke((MethodInvoker)delegate
-                        { FinalizeToolSend(ctx, renderTimer, sbLock, segs, null); });
+                        { FinalizeToolSend(ctx, convo, renderTimer, sbLock, segs, null); });
                     };
                     Action<string> onErr = delegate(string err)
                     {
                         string e2 = string.IsNullOrEmpty(err) ? "Unknown error." : err;
                         BeginInvoke((MethodInvoker)delegate
-                        { FinalizeToolSend(ctx, renderTimer, sbLock, segs, e2); });
+                        { FinalizeToolSend(ctx, convo, renderTimer, sbLock, segs, e2); });
                     };
 
-                    orch.RunTurn(ctx.Conversation.History, new DelegateToolLoopUi(onAppend, onToolCall, onToolResult, onComplete, onErr));
+                    orch.RunTurn(convo.History, new DelegateToolLoopUi(onAppend, onToolCall, onToolResult, onComplete, onErr));
                 }
                 catch (Exception ex)
                 {
@@ -2847,39 +2890,69 @@ namespace GxPT
                     catch { }
                     string msg = ex.Message;
                     BeginInvoke((MethodInvoker)delegate
-                    { FinalizeToolSend(ctx, renderTimer, sbLock, segs, msg); });
+                    { FinalizeToolSend(ctx, convo, renderTimer, sbLock, segs, msg); });
                 }
             });
         }
 
         // Finalize a tool turn on the UI thread. error == null means success. The orchestrator has
         // already appended the structured assistant/tool messages to history, so we only flush the
-        // transcript bubbles and save.
-        private void FinalizeToolSend(TabManager.ChatTabContext ctx, System.Windows.Forms.Timer renderTimer,
+        // transcript bubbles and save. convo is the conversation the turn was STARTED for - when the
+        // tab was recycled mid-flight (last tab closed) it differs from ctx.Conversation, and the
+        // turn finishes detached: no transcript writes, but the response still reaches its file.
+        private void FinalizeToolSend(TabManager.ChatTabContext ctx, Conversation convo,
+                                      System.Windows.Forms.Timer renderTimer,
                                       object sbLock, List<LiveSeg> segs, string error)
         {
             try { renderTimer.Stop(); renderTimer.Dispose(); }
             catch { }
-            try { ctx.Transcript.StickToBottomDuringStreaming = false; }
-            catch { }
 
-            // Flush any pending segment content (final delta the timer may not have rendered yet).
-            MaterializeLiveSegs(ctx, sbLock, segs);
-
-            // A failed turn surfaces as a chrome-less red notice below whatever (if anything) the model
-            // managed to produce — never baked into a bubble.
-            if (error != null)
-                ShowTranscriptError(ctx.Transcript, error);
-
-            if (error == null)
+            bool attached = ReferenceEquals(ctx.Conversation, convo);
+            if (attached)
             {
-                ctx.Conversation.SelectedModel = ctx.SelectedModel;
-                if (!ctx.NoSaveUntilUserSend) ConversationStore.Save(ctx.Conversation);
+                try { ctx.Transcript.StickToBottomDuringStreaming = false; }
+                catch { }
+
+                // Flush any pending segment content (final delta the timer may not have rendered yet).
+                MaterializeLiveSegs(ctx, sbLock, segs);
+
+                // A failed turn surfaces as a chrome-less red notice below whatever (if anything) the
+                // model managed to produce — never baked into a bubble.
+                if (error != null)
+                    ShowTranscriptError(ctx.Transcript, error);
+            }
+
+            if (error == null && convo != null)
+            {
+                if (attached)
+                {
+                    convo.SelectedModel = ctx.SelectedModel;
+                    if (!ctx.NoSaveUntilUserSend) ConversationStore.Save(convo);
+                }
+                else
+                {
+                    SaveDetachedTurnConversation(convo);
+                }
             }
             ctx.IsSending = false;
             ctx.Cancellation = null;
             HideGenerationBar(ctx);
             if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
+        }
+
+        // Persist a detached turn's conversation (its tab was recycled out from under it). Update-only:
+        // never re-create a file the user deleted while the turn was running - the tab Delete action
+        // also routes through the recycle path, and its delete must stick.
+        private static void SaveDetachedTurnConversation(Conversation convo)
+        {
+            if (convo == null) return;
+            try
+            {
+                string path = ConversationStore.GetPathForId(convo.Id);
+                if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
+                    ConversationStore.Save(convo);
+            }
+            catch { }
         }
 
         // Create/update the transcript messages backing the ordered live segments. Each segment becomes
