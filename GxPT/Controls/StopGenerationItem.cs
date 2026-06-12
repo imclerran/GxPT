@@ -9,11 +9,11 @@ namespace GxPT
     // tab's RequestCancellation so the in-flight curl process is killed (dropping the connection);
     // the streaming/orchestrator paths then finalize the turn cleanly and the indicator is hidden.
     //
-    // Owner-drawn ToolStripItem (like ContextMeterItem) styled after the transcript's Retry button:
-    // the theme's code-block fill with a 1px code border, the copy-button hover/pressed fills, and
-    // a "Stop" label — drawn in the system control foreground rather than the Retry button's link
-    // color, since the strip is system chrome. Height matches tspGenProgress exactly so the pair
-    // reads as one row.
+    // Owner-drawn ToolStripItem (like ContextMeterItem) styled after the transcript's Retry button
+    // (a flat fill, a 1px border, a text label) but in SYSTEM colors, not the transcript theme: the
+    // strip is system chrome, so the border and "Stop" label use the control foreground and the
+    // fills stay neutral (the strip's own Control color at rest, the tab glyph buttons' light-grey
+    // hover/press shades). Height matches tspGenProgress exactly so the pair reads as one row.
     internal sealed class StopGenerationItem : ToolStripItem
     {
         private bool _hover;
@@ -59,25 +59,14 @@ namespace GxPT
             base.OnPaint(e);
             Graphics g = e.Graphics;
 
-            // Resolve the same theme palette the transcript's Retry button paints with, so the two
-            // buttons stay in step across light/dark theme switches.
-            ThemeColors tc;
-            try
-            {
-                string th = AppSettings.GetString("theme");
-                bool dark = !string.IsNullOrEmpty(th) &&
-                    th.Trim().Equals("dark", StringComparison.OrdinalIgnoreCase);
-                tc = ThemeService.GetColors(dark);
-            }
-            catch { tc = ThemeService.GetColors(false); }
-
             Rectangle bounds = new Rectangle(0, 0, this.Width, this.Height);
             Rectangle border = new Rectangle(0, 0, this.Width - 1, this.Height - 1);
 
-            Color fill = _pressed ? tc.CopyPressed : (_hover ? tc.CopyHover : tc.CodeBack);
+            Color fill = _pressed ? Color.FromArgb(210, 210, 210)
+                : (_hover ? Color.FromArgb(230, 230, 230) : SystemColors.Control);
             using (SolidBrush sb = new SolidBrush(fill))
                 g.FillRectangle(sb, bounds);
-            using (Pen pen = new Pen(tc.CodeBorder))
+            using (Pen pen = new Pen(SystemColors.ControlText))
                 g.DrawRectangle(pen, border);
 
             TextRenderer.DrawText(g, this.Text, this.Font, bounds, SystemColors.ControlText,
