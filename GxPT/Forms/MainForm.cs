@@ -103,6 +103,11 @@ namespace GxPT
                 // first visible tab shows empty usage stats until the user switches away and back.
                 try { SyncUsageStatusFromActiveTab(); }
                 catch { }
+                // Same for the tool/skill counts: the constructor's seed ran before the MCP servers
+                // connected (and registry events that fired before the handle existed were dropped),
+                // so re-derive them now that the form is live.
+                try { SyncGenerationIndicatorFromActiveTab(); }
+                catch { }
                 // After restoring tabs, if no API key is configured, open the API Keys Help tab and focus it
                 try
                 {
@@ -596,6 +601,16 @@ namespace GxPT
 
             try
             {
+                if (this.tsiStopGen != null)
+                {
+                    this.tsiStopGen.Click -= tsiStopGen_Click;
+                    this.tsiStopGen.Click += tsiStopGen_Click;
+                }
+            }
+            catch { }
+
+            try
+            {
                 if (this.btnAttach != null)
                 {
                     this.btnAttach.Click -= btnAttach_Click;
@@ -624,6 +639,9 @@ namespace GxPT
             SyncMcpWorkingDirFromActiveTab();
             // Reflect the active conversation's usage/cost totals in the status bar.
             SyncUsageStatusFromActiveTab();
+            // And whether the active tab has a request in flight (the generation indicator is
+            // form-wide but tracks the active tab only).
+            SyncGenerationIndicatorFromActiveTab();
             if (_inputManager != null) _inputManager.FocusInputSoon();
         }
 
@@ -641,6 +659,9 @@ namespace GxPT
             // saturate the thread pool and delay the visible tab's transcript from rendering. Servers
             // are launched lazily on first send (BeginToolSend) and pre-warmed once after restore.
             if (_restoringTabs) return;
+            // Every caller is a workdir-affecting path (folder set/clear, tab open/close/switch) and
+            // the status bar's tool count is workdir-scoped — refresh it alongside the servers.
+            UpdateToolSkillCounts();
             string active = null;
             var inUse = new List<string>();
             try
@@ -694,7 +715,6 @@ namespace GxPT
                 // Bottom approval panel. Add the docked siblings, then send the transcript to front.
                 ctx.Page.Controls.Add(strip);
                 AttachApprovalPanel(ctx);
-                AttachGenerationStatusBar(ctx);
                 if (ctx.Transcript != null) ctx.Transcript.BringToFront();
                 strip.SetWorkingDir(ctx.WorkingDir);
                 // Honor a persisted dismissal (only meaningful when no folder is set; setting one
@@ -723,27 +743,9 @@ namespace GxPT
             catch { }
         }
 
-        // Create this tab's generation status strip (marquee progress bar + stop button, docked below
-        // the transcript, hidden until a request is in flight). Each conversation gets its own strip so
-        // the bar and Stop button track the tab that's actually generating; Stop cancels that tab's
-        // in-flight request.
-        internal void AttachGenerationStatusBar(TabManager.ChatTabContext ctx)
-        {
-            if (ctx == null || ctx.Page == null) return;
-            try
-            {
-                var bar = new GenerationStatusBar();
-                ctx.GenerationStatusBar = bar;
-                var ctxRef = ctx;
-                bar.StopRequested += delegate { CancelActiveRequest(ctxRef); };
-                ctx.Page.Controls.Add(bar); // self-docks Bottom, starts hidden
-            }
-            catch { }
-        }
-
-        // Stop button on a tab's status strip: cancel that tab's in-flight model request. Killing the
-        // curl process drops the connection so the API stops generating; the streaming/orchestrator
-        // paths then finalize the turn cleanly (keeping any partial text) and hide the strip.
+        // Status bar Stop button: cancel a tab's in-flight model request. Killing the curl process
+        // drops the connection so the API stops generating; the streaming/orchestrator paths then
+        // finalize the turn cleanly (keeping any partial text) and hide the indicator.
         private void CancelActiveRequest(TabManager.ChatTabContext ctx)
         {
             if (ctx == null) return;
@@ -759,19 +761,128 @@ namespace GxPT
             catch { }
         }
 
-        // Show/hide this tab's generation status strip. Safe to call when the strip isn't present.
+        // Show/hide the status bar's generation indicator (marquee progress bar + stop button) for
+        // a tab's send. The indicator lives in the form-wide status strip while sends are per-tab,
+        // so it reflects the ACTIVE tab only: a background tab's turn must not flip the indicator
+        // under the foreground tab. Tab switches restore the right state from ctx.IsSending via
+        // SyncGenerationIndicatorFromActiveTab.
         private void ShowGenerationBar(TabManager.ChatTabContext ctx)
         {
-            if (ctx != null && ctx.GenerationStatusBar != null)
-                try { ctx.GenerationStatusBar.ShowBusy(); }
-                catch { }
+            try
+            {
+                var act = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                if (act != null && ReferenceEquals(act, ctx))
+                    SetGenerationIndicatorVisible(true);
+            }
+            catch { }
         }
 
         private void HideGenerationBar(TabManager.ChatTabContext ctx)
         {
-            if (ctx != null && ctx.GenerationStatusBar != null)
-                try { ctx.GenerationStatusBar.HideBusy(); }
-                catch { }
+            try
+            {
+                var act = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                if (act != null && ReferenceEquals(act, ctx))
+                    SetGenerationIndicatorVisible(false);
+            }
+            catch { }
+        }
+
+        private void SyncGenerationIndicatorFromActiveTab()
+        {
+            try
+            {
+                var act = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                SetGenerationIndicatorVisible(act != null && act.IsSending && !act.SendDetached);
+            }
+            catch { }
+        }
+
+        private void SetGenerationIndicatorVisible(bool busy)
+        {
+            try
+            {
+                if (this.tspGenProgress != null)
+                {
+                    // Run the marquee only while shown (no point animating an invisible bar).
+                    this.tspGenProgress.MarqueeAnimationSpeed = busy ? 30 : 0;
+                    this.tspGenProgress.Visible = busy;
+                }
+                if (this.tsiStopGen != null) this.tsiStopGen.Visible = busy;
+                // The slot's idle face: the active conversation's tool/skill counts. Refresh before
+                // showing so a turn's side effects (a server faulting, a skill the model authored)
+                // are reflected the moment the indicator yields the slot back.
+                if (!busy) UpdateToolSkillCounts();
+                if (this.tslTools != null) this.tslTools.Visible = !busy;
+                if (this.tslToolsValue != null) this.tslToolsValue.Visible = !busy;
+                if (this.tslSkills != null) this.tslSkills.Visible = !busy;
+                if (this.tslSkillsValue != null) this.tslSkillsValue.Visible = !busy;
+            }
+            catch { }
+        }
+
+        // Renders the idle half of the status bar's left slot: how many MCP tools and skills the
+        // active conversation would get on its next turn. Mirrors the send path's math — tools are
+        // the registry names usable for the tab's working directory minus the skill-gated hidden
+        // set; skills resolve the on-disk catalog through the global-default + per-conversation
+        // override ladder (SkillResolve), exactly like the turn setup does.
+        private void UpdateToolSkillCounts()
+        {
+            try
+            {
+                var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                Conversation convo = (ctx != null) ? ctx.Conversation : null;
+                string workdir = (ctx != null) ? ctx.WorkingDir : null;
+
+                SkillCatalog catalog =
+                    SkillInjection.BuildCatalog(AppDomain.CurrentDomain.BaseDirectory, workdir);
+                List<Skill> enabledSkills = SkillResolve.EnabledSkills(
+                    catalog.Skills, SkillEnablement.LoadGlobal(),
+                    (convo != null) ? convo.SkillsFeatureOff : null,
+                    (convo != null) ? convo.SkillOverrides : null);
+
+                int toolCount = 0;
+                if (_mcpRegistry != null)
+                {
+                    IList<string> names = _mcpRegistry.NamesForWorkdir(workdir);
+                    ICollection<string> hidden = SkillToolGate.HiddenTools(enabledSkills);
+                    for (int i = 0; i < names.Count; i++)
+                        if (!hidden.Contains(names[i])) toolCount++;
+                }
+
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                if (this.tslTools != null) this.tslTools.Text = "Tools enabled:";
+                if (this.tslToolsValue != null) this.tslToolsValue.Text = toolCount.ToString(inv);
+                if (this.tslSkills != null) this.tslSkills.Text = "Skills:";
+                if (this.tslSkillsValue != null)
+                    this.tslSkillsValue.Text = enabledSkills.Count.ToString(inv);
+            }
+            catch { }
+        }
+
+        // The tool registry changed (a server connected, refreshed its tools, or went away) on a
+        // connection reader thread: marshal to the UI thread and repaint the status bar's tool
+        // count so it tracks servers coming online after launch / workdir changes.
+        private void McpRegistry_Changed()
+        {
+            try
+            {
+                if (IsDisposed || !IsHandleCreated) return;
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    try { UpdateToolSkillCounts(); }
+                    catch { }
+                });
+            }
+            catch { }
+        }
+
+        // Stop button in the status bar: the indicator always shows the active tab's send, so
+        // cancel the active tab's request.
+        private void tsiStopGen_Click(object sender, EventArgs e)
+        {
+            try { CancelActiveRequest(_tabManager != null ? _tabManager.GetActiveContext() : null); }
+            catch { }
         }
 
         private void DismissWorkspaceStripForContext(TabManager.ChatTabContext ctx)
@@ -847,6 +958,12 @@ namespace GxPT
             // ZDR: the new conversation is unlatched and not per-tab ZDR, so re-sync the checkbox view
             // (it reverts to the global default's checked/disabled state).
             SyncZdrCheckboxFromActiveTab();
+            // Generation indicator: the closed conversation's turn may still be in flight on this
+            // recycled context. It keeps running detached (IsSending still gates new sends until it
+            // finalizes), but the indicator must stop advertising it — the conversation it belongs
+            // to is gone. The flag also keeps later tab-switch syncs from re-showing it.
+            ctx.SendDetached = ctx.IsSending;
+            SyncGenerationIndicatorFromActiveTab();
         }
 
         // Opens a conversation tab whose working folder is preset to 'dir'. Mirrors the
@@ -1164,6 +1281,9 @@ namespace GxPT
                 clientInfo.Version = "1.0";
 
                 _mcpRegistry = new McpToolRegistry(LoggerSink.Instance);
+                // Keep the status bar's tool count tracking this (new) registry; the old registry's
+                // teardown events may still fire but the handler always reads the current field.
+                _mcpRegistry.Changed += McpRegistry_Changed;
                 var connector = new DefaultServerConnector(clientInfo, curlPath, caBundle, LoggerSink.Instance);
                 _mcpHost = new McpHost(connector, _mcpRegistry, LoggerSink.Instance);
 
@@ -1537,6 +1657,8 @@ namespace GxPT
         {
             if (ActiveConversationHasEnabledSkills() != _skillsServerEnabled)
                 RebuildMcpHost();
+            // Per-skill toggles change the counts even when they don't cross the server boundary.
+            UpdateToolSkillCounts();
         }
 
         internal IDictionary<string, bool> SlashGetConversationSkillOverrides()
@@ -1989,6 +2111,7 @@ namespace GxPT
 
             // Lock sending immediately to avoid duplicate sends from rapid clicks/Enter
             ctx.IsSending = true;
+            ctx.SendDetached = false; // this send belongs to the live conversation on this tab
             // Fresh cancellation handle for this turn, and show the in-flight status strip (covers both
             // the plain stream below and the tool-loop path in BeginToolSend, including the wait before
             // the first token while the model thinks / assembles a long tool call).
@@ -2317,6 +2440,7 @@ namespace GxPT
             ctx.Transcript.RemoveTrailingErrorNotices();
 
             ctx.IsSending = true;
+            ctx.SendDetached = false; // this send belongs to the live conversation on this tab
             ctx.Cancellation = new RequestCancellation();
             ShowGenerationBar(ctx);
             try
@@ -4780,6 +4904,9 @@ namespace GxPT
                 if (this.miStatusBar != null) this.miStatusBar.Checked = visible;
                 ApplyThemeToStatusBar();
                 SyncUsageStatusFromActiveTab();
+                // Seed the left slot too (idle at startup): captions + counts, so the labels don't
+                // sit empty until the first tab switch or send.
+                SyncGenerationIndicatorFromActiveTab();
             }
             catch { }
         }

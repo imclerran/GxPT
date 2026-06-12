@@ -65,6 +65,21 @@ namespace GxPT
         private string _manifestCache;
         private bool _manifestDirty = true;
 
+        // Raised after any catalog mutation (a server's tools added, refreshed, or removed) so UI
+        // surfaces (the status bar's tool count) can repaint. Fired on connection reader threads —
+        // listeners must marshal to the UI thread themselves.
+        public event Action Changed;
+
+        private void RaiseChanged()
+        {
+            Action h = Changed;
+            if (h != null)
+            {
+                try { h(); }
+                catch { }
+            }
+        }
+
         public McpToolRegistry(ILogSink log)
         {
             _log = log != null ? log : NullLogSink.Instance;
@@ -113,6 +128,7 @@ namespace GxPT
                 }
                 _manifestDirty = true;
             }
+            RaiseChanged();
         }
 
         public void RefreshConnection(McpServerConnection conn)
@@ -147,6 +163,7 @@ namespace GxPT
                 }
                 _manifestDirty = true;
             }
+            RaiseChanged();
         }
 
         public void RemoveConnection(McpServerConnection conn)
@@ -157,6 +174,7 @@ namespace GxPT
                 RemoveConnectionLocked(conn);
                 _manifestDirty = true;
             }
+            RaiseChanged();
         }
 
         // Append (or replace, on refresh) this connection's entry for a function name. Several
@@ -384,6 +402,20 @@ namespace GxPT
                 }
             }
             return result;
+        }
+
+        // The tool names usable on a turn with this working directory — the same set the names
+        // manifest advertises (NamesManifestSystemMessage(workdir)), returned as a list so callers
+        // can count or filter (the status bar's tool count) without parsing manifest text.
+        public IList<string> NamesForWorkdir(string workdir)
+        {
+            List<string> names = new List<string>();
+            lock (_lock)
+            {
+                foreach (KeyValuePair<string, List<CatalogEntry>> kv in _byFunctionName)
+                    if (ResolvableForWorkdirLocked(kv.Value, workdir)) names.Add(kv.Key);
+            }
+            return names;
         }
 
         // Any tool usable on a turn with this working directory (an exact workdir match or a workdir-

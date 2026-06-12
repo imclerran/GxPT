@@ -26,6 +26,11 @@ namespace GxPT
         // types after a leading '/').
         private SlashAutocompleteController _autocomplete;
 
+        // Designer height of the model row (pnlModelRow). The row may grow so the combo isn't
+        // clipped at larger fonts/DPI, but never shrinks below this — the ZDR checkbox and the
+        // 75px input floor are sized against it.
+        private int _modelRowBaseHeight = -1;
+
         // Automatic property with both getter and setter
         public bool TextIsHint { get; private set; }
 
@@ -202,9 +207,44 @@ namespace GxPT
             catch { }
         }
 
+        // The owner-drawn model combo snaps to its font-driven height regardless of how the row
+        // docks it, so the row must be at least that tall or the combo's bottom border is clipped
+        // by the row's edge.
+        private void SyncModelRowHeight()
+        {
+            try
+            {
+                var row = (_cmbModel != null) ? _cmbModel.Parent : null;
+                if (row == null) return;
+                if (_modelRowBaseHeight < 0) _modelRowBaseHeight = row.Height;
+                int wanted = Math.Max(_modelRowBaseHeight, _cmbModel.Height);
+                if (row.Height != wanted) row.Height = wanted;
+            }
+            catch { }
+        }
+
+        // Send stays flush with the top of the input box only while the panel's floor matches the
+        // docked right-column stack (button row + model row) exactly, so derive the floor from the
+        // live heights instead of assuming the designer's 52 + 23.
+        private int GetMinInputHeight()
+        {
+            try
+            {
+                var buttons = (_btnSend != null) ? _btnSend.Parent : null;
+                var row = (_cmbModel != null) ? _cmbModel.Parent : null;
+                if (buttons != null && row != null)
+                    return Math.Max(MinInputHeightPx, buttons.Height + row.Height);
+            }
+            catch { }
+            return MinInputHeightPx;
+        }
+
         public void AdjustInputBoxHeight()
         {
             if (_txtMessage == null || _pnlInput == null) return;
+
+            // Make sure the model row fits the combo before using its height in the floor math.
+            SyncModelRowHeight();
 
             // Available area: the right panel that hosts the transcript + input, minus any banner
             int available = GetAvailableChatAreaHeight();
@@ -222,12 +262,12 @@ namespace GxPT
             int desired = measured.Height + 8;
 
             // The right column (button row above the model row) is laid out by docking inside the
-            // panel and clamps to fill it, so the panel only needs the MinInputHeightPx floor. This
-            // previously added btnSend/cmbModel PreferredSize, which over-reported and made the panel
-            // taller than the docked button stack — leaving the gap above Send.
-            int minHeight = MinInputHeightPx;
+            // panel and clamps to fill it, so the panel only needs the docked stack's height as a
+            // floor. This previously added btnSend/cmbModel PreferredSize, which over-reported and
+            // made the panel taller than the docked button stack — leaving the gap above Send.
+            int minHeight = GetMinInputHeight();
 
-            // Clamp to [MinInputHeightPx, maxHeight]
+            // Clamp to [minHeight, maxHeight]
             int newHeight = Math.Max(minHeight, Math.Min(desired, maxHeight));
 
             // Apply height to the container panel (textbox is Dock:Fill)

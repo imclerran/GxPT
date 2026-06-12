@@ -18,6 +18,8 @@ namespace GxPT
         private ToolStripMenuItem _miTabClose;
         private ToolStripMenuItem _miTabCloseOthers;
         private ToolStripMenuItem _miTabWorkdir;
+        private ToolStripMenuItem _miTabRename;
+        private ToolStripMenuItem _miTabExport;
         private ToolStripMenuItem _miTabDelete;
         private TabPage _tabCtxTarget;
 
@@ -45,12 +47,14 @@ namespace GxPT
             // The per-tab tool-approval panel docked at the bottom of this tab's transcript (set by
             // MainForm). A pending approval shows only on the conversation that requested it.
             public ToolApprovalPanel ApprovalPanel;
-            // The per-tab status strip (marquee progress bar + stop button) docked below the transcript,
-            // shown only while this tab has a request in flight (set by MainForm).
-            public GenerationStatusBar GenerationStatusBar;
-            // The in-flight request's cancellation handle (null when idle). The status strip's Stop
+            // The in-flight request's cancellation handle (null when idle). The status bar's Stop
             // button calls Cancel() on it to kill the model request.
             public RequestCancellation Cancellation;
+            // True when this tab was recycled (last tab closed) out from under an in-flight send:
+            // the turn keeps running detached (IsSending still gates new sends until it finalizes),
+            // but the status bar's generation indicator must not show for it — the conversation it
+            // belongs to is closed. Cleared when the next send starts.
+            public bool SendDetached;
             // True when this tab's conversation has been opened but its transcript has NOT yet been
             // built (deferred at startup so only the visible tab pays the cost; built on first view).
             public bool NeedsTranscriptRebuild;
@@ -111,6 +115,8 @@ namespace GxPT
                 _miTabClose = new ToolStripMenuItem("Close");
                 _miTabCloseOthers = new ToolStripMenuItem("Close Others");
                 _miTabWorkdir = new ToolStripMenuItem("Set Working Folder...");
+                _miTabRename = new ToolStripMenuItem("Rename");
+                _miTabExport = new ToolStripMenuItem("Export");
                 _miTabDelete = new ToolStripMenuItem("Delete");
                 _miTabDelete.Image = ResourceManager.TryGetAssemblyImage("ExplorerDelete.png");
 
@@ -118,9 +124,11 @@ namespace GxPT
                 _miTabClose.Click += delegate { if (_tabCtxTarget != null) CloseConversationTab(_tabCtxTarget); };
                 _miTabCloseOthers.Click += delegate { if (_tabCtxTarget != null) CloseOtherTabs(_tabCtxTarget); };
                 _miTabWorkdir.Click += delegate { if (_tabCtxTarget != null) _mainForm.SetWorkingFolderForTab(_tabCtxTarget); };
+                _miTabRename.Click += delegate { if (_tabCtxTarget != null) RenameConversationTab(_tabCtxTarget); };
+                _miTabExport.Click += delegate { if (_tabCtxTarget != null) ExportConversationTab(_tabCtxTarget); };
                 _miTabDelete.Click += delegate { if (_tabCtxTarget != null) DeleteConversationTab(_tabCtxTarget); };
 
-                _tabCtxMenu.Items.AddRange(new ToolStripItem[] { _miTabNew, new ToolStripSeparator(), _miTabWorkdir, new ToolStripSeparator(), _miTabClose, _miTabCloseOthers, new ToolStripSeparator(), _miTabDelete });
+                _tabCtxMenu.Items.AddRange(new ToolStripItem[] { _miTabNew, new ToolStripSeparator(), _miTabWorkdir, _miTabRename, _miTabExport, new ToolStripSeparator(), _miTabClose, _miTabCloseOthers, new ToolStripSeparator(), _miTabDelete });
             }
             catch { }
         }
@@ -275,6 +283,105 @@ namespace GxPT
                 return !string.IsNullOrEmpty(path) && System.IO.File.Exists(path);
             }
             catch { return false; }
+        }
+
+        // Export the conversation backing a tab: the single-conversation export, identical to the
+        // sidebar's Export (same .gxcv SaveFileDialog flow). It packages the SAVED file, so the
+        // menu item is gated on ConversationHasSavedFile like Delete.
+        public void ExportConversationTab(TabPage page)
+        {
+            try
+            {
+                ChatTabContext ctx;
+                if (page == null || !_tabContexts.TryGetValue(page, out ctx) || ctx == null || ctx.Conversation == null)
+                    return;
+                string path = ConversationStore.GetPathForId(ctx.Conversation.Id);
+                if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return;
+
+                var info = new ConversationStore.ConversationListItem();
+                info.Id = ctx.Conversation.Id;
+                info.Name = ctx.Conversation.Name;
+                info.Path = path;
+                ImportExportManager.ExportSingle(_mainForm, info);
+            }
+            catch { }
+        }
+
+        // Rename the conversation backing a tab via a small prompt dialog (tabs have no room for
+        // the sidebar's inline edit). Renames the LIVE conversation object - for an open tab it is
+        // the authoritative copy - then persists update-only: an unsaved tab keeps the new name in
+        // memory and it lands on disk with the conversation's first regular save.
+        public void RenameConversationTab(TabPage page)
+        {
+            try
+            {
+                ChatTabContext ctx;
+                if (page == null || !_tabContexts.TryGetValue(page, out ctx) || ctx == null || ctx.Conversation == null)
+                    return;
+
+                string newName = PromptForConversationName(ctx.Conversation.Name);
+                if (newName == null || newName.Length == 0) return;
+                if (string.Equals(newName, ctx.Conversation.Name ?? string.Empty, StringComparison.Ordinal)) return;
+
+                ctx.Conversation.Name = newName;
+                try { page.Text = MainForm.ZdrTitle(ctx.Conversation, newName); }
+                catch { }
+                _mainForm.UpdateWindowTitle();
+
+                // Update-only save (never create a file for an unsaved tab); a save that races a
+                // running turn's history mutation throws and is skipped - the next save catches up.
+                try
+                {
+                    string path = ConversationStore.GetPathForId(ctx.Conversation.Id);
+                    if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
+                    {
+                        ConversationStore.Save(ctx.Conversation);
+                        var sidebar = _mainForm.GetSidebarManager();
+                        if (sidebar != null) sidebar.RefreshSidebarList();
+                    }
+                }
+                catch { }
+            }
+            catch { }
+        }
+
+        // Modal name prompt for RenameConversationTab. Returns the trimmed name, or null on cancel.
+        private string PromptForConversationName(string current)
+        {
+            using (Form dlg = new Form())
+            using (TextBox tb = new TextBox())
+            using (Button ok = new Button())
+            using (Button cancel = new Button())
+            {
+                dlg.Text = "Rename Conversation";
+                dlg.FormBorderStyle = FormBorderStyle.FixedDialog;
+                dlg.MinimizeBox = false;
+                dlg.MaximizeBox = false;
+                dlg.ShowInTaskbar = false;
+                dlg.StartPosition = FormStartPosition.CenterParent;
+                dlg.ClientSize = new Size(360, 77);
+
+                tb.Bounds = new Rectangle(12, 12, dlg.ClientSize.Width - 24, 20);
+                tb.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+                tb.Text = current ?? string.Empty;
+
+                ok.Text = "OK";
+                ok.DialogResult = DialogResult.OK;
+                ok.Bounds = new Rectangle(dlg.ClientSize.Width - 168, 42, 75, 23);
+                cancel.Text = "Cancel";
+                cancel.DialogResult = DialogResult.Cancel;
+                cancel.Bounds = new Rectangle(dlg.ClientSize.Width - 87, 42, 75, 23);
+
+                dlg.Controls.Add(tb);
+                dlg.Controls.Add(ok);
+                dlg.Controls.Add(cancel);
+                dlg.AcceptButton = ok;
+                dlg.CancelButton = cancel;
+
+                tb.SelectAll();
+                if (dlg.ShowDialog(_mainForm) != DialogResult.OK) return null;
+                return (tb.Text ?? string.Empty).Trim();
+            }
         }
 
         // Delete the conversation backing a tab: remove its saved file, close the tab, and
@@ -450,8 +557,11 @@ namespace GxPT
                 bool hasTarget = (_tabCtxTarget != null);
                 _miTabClose.Enabled = hasTarget;
                 _miTabCloseOthers.Enabled = hasTarget && _tabControl.TabPages.Count > 1;
-                // Only allow Delete once the conversation has been saved (i.e. it actually
-                // shows in the sidebar). A brand-new, message-less tab has nothing to delete.
+                _miTabRename.Enabled = hasTarget;
+                // Export packages the conversation's saved file (like the sidebar's Export), and
+                // Delete removes it - both need the file to exist. A brand-new, message-less tab
+                // has nothing to export or delete.
+                _miTabExport.Enabled = hasTarget && ConversationHasSavedFile(_tabCtxTarget);
                 _miTabDelete.Enabled = hasTarget && ConversationHasSavedFile(_tabCtxTarget);
 
                 _tabCtxMenu.Show(_tabControl, e.Location);
