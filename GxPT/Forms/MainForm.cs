@@ -785,7 +785,7 @@ namespace GxPT
             try
             {
                 var act = _tabManager != null ? _tabManager.GetActiveContext() : null;
-                SetGenerationIndicatorVisible(act != null && act.IsSending);
+                SetGenerationIndicatorVisible(act != null && act.IsSending && !act.SendDetached);
             }
             catch { }
         }
@@ -886,6 +886,12 @@ namespace GxPT
             // ZDR: the new conversation is unlatched and not per-tab ZDR, so re-sync the checkbox view
             // (it reverts to the global default's checked/disabled state).
             SyncZdrCheckboxFromActiveTab();
+            // Generation indicator: the closed conversation's turn may still be in flight on this
+            // recycled context. It keeps running detached (IsSending still gates new sends until it
+            // finalizes), but the indicator must stop advertising it — the conversation it belongs
+            // to is gone. The flag also keeps later tab-switch syncs from re-showing it.
+            ctx.SendDetached = ctx.IsSending;
+            SyncGenerationIndicatorFromActiveTab();
         }
 
         // Opens a conversation tab whose working folder is preset to 'dir'. Mirrors the
@@ -2028,6 +2034,7 @@ namespace GxPT
 
             // Lock sending immediately to avoid duplicate sends from rapid clicks/Enter
             ctx.IsSending = true;
+            ctx.SendDetached = false; // this send belongs to the live conversation on this tab
             // Fresh cancellation handle for this turn, and show the in-flight status strip (covers both
             // the plain stream below and the tool-loop path in BeginToolSend, including the wait before
             // the first token while the model thinks / assembles a long tool call).
@@ -2356,6 +2363,7 @@ namespace GxPT
             ctx.Transcript.RemoveTrailingErrorNotices();
 
             ctx.IsSending = true;
+            ctx.SendDetached = false; // this send belongs to the live conversation on this tab
             ctx.Cancellation = new RequestCancellation();
             ShowGenerationBar(ctx);
             try

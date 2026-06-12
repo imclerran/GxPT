@@ -48,6 +48,11 @@ namespace GxPT
             // The in-flight request's cancellation handle (null when idle). The status bar's Stop
             // button calls Cancel() on it to kill the model request.
             public RequestCancellation Cancellation;
+            // True when this tab was recycled (last tab closed) out from under an in-flight send:
+            // the turn keeps running detached (IsSending still gates new sends until it finalizes),
+            // but the status bar's generation indicator must not show for it — the conversation it
+            // belongs to is closed. Cleared when the next send starts.
+            public bool SendDetached;
             // True when this tab's conversation has been opened but its transcript has NOT yet been
             // built (deferred at startup so only the visible tab pays the cost; built on first view).
             public bool NeedsTranscriptRebuild;
