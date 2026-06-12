@@ -61,6 +61,23 @@ namespace GxPT
             get { return _sidebarExpanded; }
         }
 
+        // Expanded width grows 5% per font point above the default size so longer
+        // row text at larger fonts still fits. Default mirrors GetChatDefaultFontSize
+        // in SettingsForm: an unparented control's font, i.e. Control.DefaultFont.
+        private static int GetExpandedWidth()
+        {
+            int width = SidebarMaxWidth;
+            try
+            {
+                double fs = AppSettings.GetDouble("font_size", 0);
+                double def = Control.DefaultFont.Size;
+                if (fs > def)
+                    width = (int)Math.Round(SidebarMaxWidth * (1.0 + 0.05 * (fs - def)));
+            }
+            catch { }
+            return width;
+        }
+
         private void InitializeSidebar()
         {
             if (_splitContainer != null)
@@ -127,7 +144,7 @@ namespace GxPT
             if (_splitContainer == null || _sidebarAnimating) return;
 
             _sidebarStartWidth = _splitContainer.SplitterDistance;
-            _sidebarTargetWidth = _sidebarExpanded ? SidebarMinWidth : SidebarMaxWidth;
+            _sidebarTargetWidth = _sidebarExpanded ? SidebarMinWidth : GetExpandedWidth();
             _sidebarAnimating = true;
 
             try
@@ -191,7 +208,7 @@ namespace GxPT
                     _sidebarTimer.Stop();
                     _sidebarAnimWatch.Stop();
                     _sidebarAnimating = false;
-                    _sidebarExpanded = (_sidebarTargetWidth >= SidebarMaxWidth);
+                    _sidebarExpanded = (_sidebarTargetWidth > SidebarMinWidth);
 
                     if (_sidebarArrowPanel != null)
                         _sidebarArrowPanel.Invalidate();
@@ -849,6 +866,21 @@ namespace GxPT
                     var current = _lvConversations.SmallImageList;
                     _lvConversations.SmallImageList = null;
                     _lvConversations.SmallImageList = _lvRowHeightImages;
+                }
+                catch { }
+
+                // Re-apply the font-scaled expanded width if currently expanded
+                try
+                {
+                    if (_sidebarExpanded && !_sidebarAnimating && _splitContainer != null)
+                    {
+                        int expandedW = GetExpandedWidth();
+                        if (_splitContainer.SplitterDistance != expandedW)
+                        {
+                            _splitContainer.SplitterDistance = expandedW;
+                            LayoutSidebarChildren();
+                        }
+                    }
                 }
                 catch { }
 
