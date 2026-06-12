@@ -687,11 +687,9 @@ namespace GxPT
             }
         }
 
-        // Log-friendly copy of the request body: only the last two entries of the messages array
-        // are kept (a long transcript would otherwise dominate the log), with a placeholder string
-        // recording how many earlier messages were dropped. Two because the orchestrator appends an
-        // ephemeral context tail after the real user message - keeping just one would log only that
-        // tail. Everything else is left intact.
+        // Log-friendly copy of the request body: the messages array is replaced wholesale with a
+        // one-string placeholder recording how many messages it held - even one transcript message
+        // bloats the log too much to be worth keeping. Everything else is left intact.
         internal static string TruncateMessagesForLog(string jsonBody)
         {
             if (string.IsNullOrEmpty(jsonBody)) return jsonBody;
@@ -699,12 +697,10 @@ namespace GxPT
             {
                 var obj = JObject.Parse(jsonBody);
                 var msgs = obj["messages"] as JArray;
-                if (msgs != null && msgs.Count > 2)
+                if (msgs != null && msgs.Count > 0)
                 {
                     var truncated = new JArray();
-                    truncated.Add("... " + (msgs.Count - 2) + " earlier message(s) omitted ...");
-                    truncated.Add(msgs[msgs.Count - 2]);
-                    truncated.Add(msgs[msgs.Count - 1]);
+                    truncated.Add("... " + msgs.Count + " message(s) omitted ...");
                     obj["messages"] = truncated;
                 }
                 return obj.ToString(Formatting.None);
@@ -720,7 +716,7 @@ namespace GxPT
         {
             tempFiles = new List<string>();
 
-            try { if (Logger.Enabled) Logger.Log("Stream", "Request JSON (older messages omitted): " + TruncateMessagesForLog(jsonBody)); }
+            try { if (Logger.Enabled) Logger.Log("Stream", "Request JSON (messages omitted): " + TruncateMessagesForLog(jsonBody)); }
             catch { }
             try { Logger.Log("Stream", "Request JSON length=" + (jsonBody != null ? jsonBody.Length : 0)); }
             catch { }
