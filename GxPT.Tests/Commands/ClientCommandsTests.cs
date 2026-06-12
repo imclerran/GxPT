@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using GxPT;
 using Xunit;
@@ -146,6 +148,50 @@ namespace GxPT.Tests.Commands
             var ctx = new FakeSlashCommandContext("/work");
             new ExportCommand().Invoke("", ctx);
             Assert.Equal(1, ctx.ExportCount);
+        }
+
+        [Fact]
+        public void Export_with_slug_exports_that_skill()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "gxpt_exportcmd_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                string dir = Path.Combine(root, ".gxpt", "skills", "exp-demo");
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(Path.Combine(dir, "SKILL.md"), "---\ndescription: d.\n---\n\nb\n");
+
+                var ctx = new FakeSlashCommandContext(root);
+                var result = new ExportCommand().Invoke("exp-demo", ctx);
+
+                Assert.Null(result.Error);
+                Assert.Single(ctx.ExportedSkills);
+                Assert.Equal("exp-demo", ctx.ExportedSkills[0].Slug);
+                Assert.Equal(0, ctx.ExportCount); // skill export, not the conversations export
+            }
+            finally
+            {
+                try { Directory.Delete(root, true); }
+                catch { }
+            }
+        }
+
+        [Fact]
+        public void Export_with_unknown_slug_fails()
+        {
+            var ctx = new FakeSlashCommandContext("/work");
+            var result = new ExportCommand().Invoke("no-such-skill-zzz", ctx);
+            Assert.NotNull(result.Error);
+            Assert.Equal(0, ctx.ExportCount);
+            Assert.Empty(ctx.ExportedSkills);
+        }
+
+        [Fact]
+        public void Import_triggers_import()
+        {
+            var ctx = new FakeSlashCommandContext("/work");
+            var result = new ImportCommand().Invoke("", ctx);
+            Assert.False(result.SendToModel);
+            Assert.Equal(1, ctx.ImportCount);
         }
 
         [Fact]

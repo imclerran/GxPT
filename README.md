@@ -23,7 +23,7 @@ A native chatbot client and coding agent for Windows XP. GxPT aims to provide a 
 - **Tool Approval & Sandboxing**: Every tool call is gated by an in-app approval prompt showing the exact tool and arguments before it runs, with approvals remembered per session. File/git/command tools are confined to the workspace you choose.
 - **Prompt Caching**: Requests are automatically structured into cache-friendly zones with provider cache breakpoints and sticky provider routing that keeps follow-up requests on the warm cache - cutting input costs by up to ~90% on long agentic sessions.
 - **Usage Status Bar**: Live per-conversation telemetry at the bottom of the window: a context meter showing how full the model's context window is, plus running cost and cache-savings totals reconciled against OpenRouter's billed usage.
-- **Slash Commands**: Type `/` for quick actions with autocomplete, including `/model` (switch models), `/tool` (toggle MCP servers), `/new`, `/export`, and `/compact`.
+- **Slash Commands**: Type `/` for quick actions with autocomplete, including `/model` (switch models), `/tool` (toggle MCP servers), `/new`, `/export` (conversations, or a single skill as a shareable `.gxsk` archive), `/import`, and `/compact`.
 - **Recent Workspaces**: Quickly reattach to the workspaces you used most recently, with a workspace strip showing the active folder at a glance.
 - **File Attachments**: Add text file attachments to your messages to avoid cluttering up the conversation with long pasted text.
 - **Conversation Editing**: Don't like the response a model gave you? Go back and edit your message and get a new response.

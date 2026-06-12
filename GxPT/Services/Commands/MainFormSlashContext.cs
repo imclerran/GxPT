@@ -32,6 +32,8 @@ namespace GxPT
 
         public void NewConversation() { _form.SlashNewConversation(); }
         public void ExportConversations() { _form.SlashExportConversations(); }
+        public void ExportSkill(Skill skill) { _form.SlashExportSkill(skill); }
+        public void ImportArchive() { _form.SlashImportArchive(); }
         public void Compact() { _form.SlashCompact(); }
     }
 }

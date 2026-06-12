@@ -883,6 +883,29 @@
                     }
                 }
             }
+            "{5EB83D71-FA18-4901-BE56-DE22E13CC478}:_7107BD3E99B349DCA5BCDC028CA335AC"
+            {
+            "Name" = "8:GxPT Skill"
+            "Description" = "8:GxPT skill archive."
+            "Extensions" = "8:gxsk"
+            "MIME" = "8:"
+            "Icon" = "8:_7FAF1DBC59F6409BAA36708961A22C49"
+            "IconIndex" = "3:0"
+                "Command"
+                {
+                "Command" = "8:_E0499EB368C445EBB017CB750C98F6FD"
+                }
+                "Verbs"
+                {
+                    "{95C0C507-CBF0-42B8-B119-07219E384A4A}:_614E42C085DA446A8A559794E57A24F0"
+                    {
+                    "Command" = "8:&Import"
+                    "Verb" = "8:import"
+                    "Arguments" = "8:\"%1\""
+                    "Order" = "3:0"
+                    }
+                }
+            }
         }
         "Folder"
         {

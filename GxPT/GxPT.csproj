@@ -100,6 +100,7 @@
     </Compile>
     <Compile Include="Controls\SafeToolStripRenderer.cs" />
     <Compile Include="Managers\ImportExportManager.cs" />
+    <Compile Include="Managers\SkillImportExportManager.cs" />
     <Compile Include="Services\AppSettings.cs" />
     <Compile Include="Services\RecentWorkDirs.cs" />
     <Compile Include="Services\Skills\SkillSlug.cs" />
@@ -145,6 +146,7 @@
     <Compile Include="Managers\InputManager.cs" />
     <Compile Include="Managers\SlashAutocompleteController.cs" />
     <Compile Include="Services\ImportExportService.cs" />
+    <Compile Include="Services\SkillImportExportService.cs" />
     <Compile Include="Services\Logger.cs" />
     <Compile Include="Services\OpenRouterClient.cs">
     </Compile>

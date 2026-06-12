@@ -1287,13 +1287,26 @@ namespace GxPT
             }
         }
 
-        // Called by Program.cs after the form is shown when the app is launched by double-clicking a .gxpt/.gxcv file
+        // Called by Program.cs after the form is shown when the app is launched by double-clicking a
+        // .gxpt/.gxcv/.gxsk file; also the dispatch point for /import. A .gxsk (or a generic .zip that
+        // holds a SKILL.md) routes to the skill importer, everything else to the conversation importer.
         public void ImportArchiveFromShell(string archivePath)
         {
             if (string.IsNullOrEmpty(archivePath)) return;
             try
             {
                 if (!System.IO.File.Exists(archivePath)) return;
+
+                string ext = null;
+                try { ext = System.IO.Path.GetExtension(archivePath); }
+                catch { }
+                if (ext != null) ext = ext.ToLowerInvariant();
+                if (ext == ".gxsk" || (ext == ".zip" && SkillImportExportService.ArchiveContainsSkill(archivePath)))
+                {
+                    if (SkillImportExportManager.ImportSkillFromFile(this, archivePath))
+                        SlashRefreshSkillsServer(); // the imported skill may flip "any skill enabled"
+                    return;
+                }
 
                 // Warn about overwrite if there are existing conversations
                 try
@@ -1571,6 +1584,31 @@ namespace GxPT
         internal void SlashExportConversations()
         {
             ImportExportManager.ExportAll(this);
+        }
+
+        internal void SlashExportSkill(Skill skill)
+        {
+            SkillImportExportManager.ExportSkill(this, skill);
+        }
+
+        // /import: one open-file dialog covering both archive kinds; ImportArchiveFromShell routes the
+        // chosen file to the skill or conversation importer.
+        internal void SlashImportArchive()
+        {
+            using (var ofd = new OpenFileDialog
+            {
+                Title = "Import",
+                Filter = "GxPT Archives (*.gxcv;*.gxsk)|*.gxcv;*.gxsk"
+                    + "|GxPT Conversation Archive (*.gxcv)|*.gxcv"
+                    + "|GxPT Skill (*.gxsk)|*.gxsk"
+                    + "|Zip Archive (*.zip)|*.zip",
+                CheckFileExists = true,
+                Multiselect = false
+            })
+            {
+                if (ofd.ShowDialog(this) != DialogResult.OK) return;
+                ImportArchiveFromShell(ofd.FileName);
+            }
         }
 
         // ===== /compact: summarize the current conversation into a new tab =====
