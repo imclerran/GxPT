@@ -103,6 +103,11 @@ namespace GxPT
                 // first visible tab shows empty usage stats until the user switches away and back.
                 try { SyncUsageStatusFromActiveTab(); }
                 catch { }
+                // Same for the tool/skill counts: the constructor's seed ran before the MCP servers
+                // connected (and registry events that fired before the handle existed were dropped),
+                // so re-derive them now that the form is live.
+                try { SyncGenerationIndicatorFromActiveTab(); }
+                catch { }
                 // After restoring tabs, if no API key is configured, open the API Keys Help tab and focus it
                 try
                 {
@@ -654,6 +659,9 @@ namespace GxPT
             // saturate the thread pool and delay the visible tab's transcript from rendering. Servers
             // are launched lazily on first send (BeginToolSend) and pre-warmed once after restore.
             if (_restoringTabs) return;
+            // Every caller is a workdir-affecting path (folder set/clear, tab open/close/switch) and
+            // the status bar's tool count is workdir-scoped — refresh it alongside the servers.
+            UpdateToolSkillCounts();
             string active = null;
             var inUse = new List<string>();
             try
@@ -801,6 +809,70 @@ namespace GxPT
                     this.tspGenProgress.Visible = busy;
                 }
                 if (this.tsiStopGen != null) this.tsiStopGen.Visible = busy;
+                // The slot's idle face: the active conversation's tool/skill counts. Refresh before
+                // showing so a turn's side effects (a server faulting, a skill the model authored)
+                // are reflected the moment the indicator yields the slot back.
+                if (!busy) UpdateToolSkillCounts();
+                if (this.tslTools != null) this.tslTools.Visible = !busy;
+                if (this.tslToolsValue != null) this.tslToolsValue.Visible = !busy;
+                if (this.tslSkills != null) this.tslSkills.Visible = !busy;
+                if (this.tslSkillsValue != null) this.tslSkillsValue.Visible = !busy;
+            }
+            catch { }
+        }
+
+        // Renders the idle half of the status bar's left slot: how many MCP tools and skills the
+        // active conversation would get on its next turn. Mirrors the send path's math — tools are
+        // the registry names usable for the tab's working directory minus the skill-gated hidden
+        // set; skills resolve the on-disk catalog through the global-default + per-conversation
+        // override ladder (SkillResolve), exactly like the turn setup does.
+        private void UpdateToolSkillCounts()
+        {
+            try
+            {
+                var ctx = _tabManager != null ? _tabManager.GetActiveContext() : null;
+                Conversation convo = (ctx != null) ? ctx.Conversation : null;
+                string workdir = (ctx != null) ? ctx.WorkingDir : null;
+
+                SkillCatalog catalog =
+                    SkillInjection.BuildCatalog(AppDomain.CurrentDomain.BaseDirectory, workdir);
+                List<Skill> enabledSkills = SkillResolve.EnabledSkills(
+                    catalog.Skills, SkillEnablement.LoadGlobal(),
+                    (convo != null) ? convo.SkillsFeatureOff : null,
+                    (convo != null) ? convo.SkillOverrides : null);
+
+                int toolCount = 0;
+                if (_mcpRegistry != null)
+                {
+                    IList<string> names = _mcpRegistry.NamesForWorkdir(workdir);
+                    ICollection<string> hidden = SkillToolGate.HiddenTools(enabledSkills);
+                    for (int i = 0; i < names.Count; i++)
+                        if (!hidden.Contains(names[i])) toolCount++;
+                }
+
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                if (this.tslTools != null) this.tslTools.Text = "Tools:";
+                if (this.tslToolsValue != null) this.tslToolsValue.Text = toolCount.ToString(inv);
+                if (this.tslSkills != null) this.tslSkills.Text = "Skills:";
+                if (this.tslSkillsValue != null)
+                    this.tslSkillsValue.Text = enabledSkills.Count.ToString(inv);
+            }
+            catch { }
+        }
+
+        // The tool registry changed (a server connected, refreshed its tools, or went away) on a
+        // connection reader thread: marshal to the UI thread and repaint the status bar's tool
+        // count so it tracks servers coming online after launch / workdir changes.
+        private void McpRegistry_Changed()
+        {
+            try
+            {
+                if (IsDisposed || !IsHandleCreated) return;
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    try { UpdateToolSkillCounts(); }
+                    catch { }
+                });
             }
             catch { }
         }
@@ -1209,6 +1281,9 @@ namespace GxPT
                 clientInfo.Version = "1.0";
 
                 _mcpRegistry = new McpToolRegistry(LoggerSink.Instance);
+                // Keep the status bar's tool count tracking this (new) registry; the old registry's
+                // teardown events may still fire but the handler always reads the current field.
+                _mcpRegistry.Changed += McpRegistry_Changed;
                 var connector = new DefaultServerConnector(clientInfo, curlPath, caBundle, LoggerSink.Instance);
                 _mcpHost = new McpHost(connector, _mcpRegistry, LoggerSink.Instance);
 
@@ -1582,6 +1657,8 @@ namespace GxPT
         {
             if (ActiveConversationHasEnabledSkills() != _skillsServerEnabled)
                 RebuildMcpHost();
+            // Per-skill toggles change the counts even when they don't cross the server boundary.
+            UpdateToolSkillCounts();
         }
 
         internal IDictionary<string, bool> SlashGetConversationSkillOverrides()
@@ -4827,6 +4904,9 @@ namespace GxPT
                 if (this.miStatusBar != null) this.miStatusBar.Checked = visible;
                 ApplyThemeToStatusBar();
                 SyncUsageStatusFromActiveTab();
+                // Seed the left slot too (idle at startup): captions + counts, so the labels don't
+                // sit empty until the first tab switch or send.
+                SyncGenerationIndicatorFromActiveTab();
             }
             catch { }
         }

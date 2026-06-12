@@ -443,6 +443,44 @@ namespace GxPT.Tests.Mcp
             Assert.DoesNotContain("reveal_tools", ManifestNames(reg));
         }
 
+        // ---- NamesForWorkdir / Changed (the status bar's tool count) ----
+
+        [Fact]
+        public void NamesForWorkdir_matches_the_manifests_workdir_filtering()
+        {
+            var reg = NewRegistry();
+            reg.AddConnection(FakeConn.Ready("web", new ToolDef("search")), null);       // workdir-independent
+            reg.AddConnection(FakeConn.Ready("files", new ToolDef("read")), "C:\\proj"); // scoped to a folder
+
+            var folderless = new List<string>(reg.NamesForWorkdir(null));
+            folderless.Sort();
+            Assert.Equal(ManifestNamesFor(reg, null), folderless);
+
+            var inFolder = new List<string>(reg.NamesForWorkdir("C:\\proj"));
+            inFolder.Sort();
+            Assert.Equal(ManifestNamesFor(reg, "C:\\proj"), inFolder);
+        }
+
+        [Fact]
+        public void Changed_fires_on_add_refresh_and_remove()
+        {
+            var reg = NewRegistry();
+            int fired = 0;
+            reg.Changed += delegate { fired++; };
+
+            RegistryFakeTransport ft;
+            var conn = FakeConn.Ready("s", out ft, new ToolDef("a"));
+            reg.AddConnection(conn);
+            Assert.Equal(1, fired);
+
+            ft.Tools = new List<ToolDef> { new ToolDef("b") };
+            reg.RefreshConnection(conn);
+            Assert.Equal(2, fired);
+
+            reg.RemoveConnection(conn);
+            Assert.Equal(3, fired);
+        }
+
         // ---- git-over-command preference note ----
 
         private const string GitPreferNote = "prefer the dedicated git__ tools";

@@ -78,6 +78,10 @@
             this.ssMain = new System.Windows.Forms.StatusStrip();
             this.tspGenProgress = new System.Windows.Forms.ToolStripProgressBar();
             this.tsiStopGen = new GxPT.StopGenerationItem();
+            this.tslTools = new System.Windows.Forms.ToolStripStatusLabel();
+            this.tslToolsValue = new System.Windows.Forms.ToolStripStatusLabel();
+            this.tslSkills = new System.Windows.Forms.ToolStripStatusLabel();
+            this.tslSkillsValue = new System.Windows.Forms.ToolStripStatusLabel();
             this.tslSpring = new System.Windows.Forms.ToolStripStatusLabel();
             this.tslContext = new System.Windows.Forms.ToolStripStatusLabel();
             this.tspContextMeter = new GxPT.ContextMeterItem();
@@ -548,6 +552,10 @@
             this.ssMain.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.tspGenProgress,
             this.tsiStopGen,
+            this.tslTools,
+            this.tslToolsValue,
+            this.tslSkills,
+            this.tslSkillsValue,
             this.tslSpring,
             this.tslContext,
             this.tspContextMeter,
@@ -582,6 +590,40 @@
             this.tsiStopGen.Name = "tsiStopGen";
             this.tsiStopGen.ToolTipText = "Stop generating";
             this.tsiStopGen.Visible = false;
+            //
+            // tslTools
+            //
+            // The idle face of the left slot (with tslSkills): the active conversation's tool/skill
+            // counts, swapped out for the progress bar + stop button while a request is in flight.
+            // Caption/value pairs mirror the usage panes on the right; texts are set by
+            // MainForm.UpdateToolSkillCounts.
+            this.tslTools.Margin = new System.Windows.Forms.Padding(5, 3, 0, 2);
+            this.tslTools.Name = "tslTools";
+            this.tslTools.Size = new System.Drawing.Size(0, 17);
+            this.tslTools.ToolTipText = "MCP tools available to this conversation";
+            //
+            // tslToolsValue
+            //
+            this.tslToolsValue.Margin = new System.Windows.Forms.Padding(-2, 3, 0, 2);
+            this.tslToolsValue.Name = "tslToolsValue";
+            this.tslToolsValue.Size = new System.Drawing.Size(0, 17);
+            this.tslToolsValue.ToolTipText = "MCP tools available to this conversation";
+            //
+            // tslSkills
+            //
+            this.tslSkills.BorderSides = System.Windows.Forms.ToolStripStatusLabelBorderSides.Left;
+            this.tslSkills.Margin = new System.Windows.Forms.Padding(5, 3, 0, 2);
+            this.tslSkills.Name = "tslSkills";
+            this.tslSkills.Padding = new System.Windows.Forms.Padding(5, 0, 0, 0);
+            this.tslSkills.Size = new System.Drawing.Size(0, 17);
+            this.tslSkills.ToolTipText = "Skills enabled for this conversation";
+            //
+            // tslSkillsValue
+            //
+            this.tslSkillsValue.Margin = new System.Windows.Forms.Padding(-2, 3, 0, 2);
+            this.tslSkillsValue.Name = "tslSkillsValue";
+            this.tslSkillsValue.Size = new System.Drawing.Size(0, 17);
+            this.tslSkillsValue.ToolTipText = "Skills enabled for this conversation";
             //
             // tslSpring
             //
@@ -723,6 +765,10 @@
         private System.Windows.Forms.StatusStrip ssMain;
         private System.Windows.Forms.ToolStripProgressBar tspGenProgress;
         private StopGenerationItem tsiStopGen;
+        private System.Windows.Forms.ToolStripStatusLabel tslTools;
+        private System.Windows.Forms.ToolStripStatusLabel tslToolsValue;
+        private System.Windows.Forms.ToolStripStatusLabel tslSkills;
+        private System.Windows.Forms.ToolStripStatusLabel tslSkillsValue;
         private System.Windows.Forms.ToolStripStatusLabel tslSpring;
         private System.Windows.Forms.ToolStripStatusLabel tslContext;
         private ContextMeterItem tspContextMeter;
