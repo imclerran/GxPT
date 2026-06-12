@@ -1585,8 +1585,10 @@ namespace GxPT
             "The following is a summary of an earlier conversation, provided as context so you can "
             + "continue it seamlessly:\n\n";
 
-        // Compaction always summarizes with gemini-flash (fast/cheap), regardless of the chat model.
-        private const string CompactionModel = "~google/gemini-flash-latest";
+        // Compaction always summarizes with deepseek-v4-flash (an order of magnitude cheaper than
+        // comparable models, which matters when summarizing very long conversations), regardless of
+        // the chat model.
+        private const string CompactionModel = "deepseek/deepseek-v4-flash";
 
         // Chromeless marker shown atop a conversation that /compact created. Persisted via
         // Conversation.ContinuedFromCompaction, so it re-renders on reopen (see RebuildTranscriptAsync).
