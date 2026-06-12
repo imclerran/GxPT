@@ -9,31 +9,44 @@ namespace GxPT
     // tab's RequestCancellation so the in-flight curl process is killed (dropping the connection);
     // the streaming/orchestrator paths then finalize the turn cleanly and the indicator is hidden.
     //
-    // Owner-drawn ToolStripItem (like ContextMeterItem) styled to match the tab strip's new/close
-    // glyph buttons (GlyphToolStripButton): a dark-grey filled-square glyph, a light-grey
-    // hover/press fill with a matching border, and a thin resting border. The glyph is painted
-    // (not a font character) so it stays a crisp square and never clips.
+    // Owner-drawn ToolStripItem (like ContextMeterItem) styled after the transcript's Retry button:
+    // the theme's code-block fill with a 1px code border, the copy-button hover/pressed fills, and
+    // a "Stop" label — drawn in the system control foreground rather than the Retry button's link
+    // color, since the strip is system chrome. Height matches tspGenProgress exactly so the pair
+    // reads as one row.
     internal sealed class StopGenerationItem : ToolStripItem
     {
         private bool _hover;
         private bool _pressed;
 
-        public const int ItemSide = 16; // square; fits the 22px strip with 3px margins
-
-        // Mirrors GlyphToolStripButton's palette so the two button families look identical.
-        private static readonly Color GlyphColor = Color.FromArgb(80, 80, 80);
-        private static readonly Color HoverBorder = Color.FromArgb(210, 210, 210);
-        private static readonly Color RestBorder = Color.FromArgb(128, 128, 128); // thin dark-grey resting border
+        private const int PadX = 8;        // horizontal label padding, matching RetryBtnPadX
+        public const int ItemHeight = 15;  // tspGenProgress's height
 
         public StopGenerationItem()
         {
             this.AutoSize = false;
-            this.Size = new Size(ItemSide, ItemSide);
+            this.Text = "Stop";
+            this.Size = new Size(PreferredWidth(), ItemHeight);
         }
 
         protected override Size DefaultSize
         {
-            get { return new Size(ItemSide, ItemSide); }
+            get { return new Size(PreferredWidth(), ItemHeight); }
+        }
+
+        private int PreferredWidth()
+        {
+            try { return TextRenderer.MeasureText(this.Text, this.Font).Width + 2 * PadX; }
+            catch { return 44; }
+        }
+
+        // The strip's font can change after construction (it is inherited); keep the width fitting
+        // the label so "Stop" never clips at other font sizes/DPI.
+        protected override void OnFontChanged(EventArgs e)
+        {
+            base.OnFontChanged(e);
+            try { this.Width = PreferredWidth(); }
+            catch { }
         }
 
         protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
@@ -45,35 +58,31 @@ namespace GxPT
         {
             base.OnPaint(e);
             Graphics g = e.Graphics;
-            Rectangle r = new Rectangle(0, 0, this.Width - 1, this.Height - 1);
 
-            // Paint the full rect each pass (the strip's renderer doesn't clear behind plain items).
-            using (SolidBrush bg = new SolidBrush(this.BackColor))
-                g.FillRectangle(bg, 0, 0, this.Width, this.Height);
-
-            // Hover/press fill + border, matching the tab glyph buttons.
-            if (_hover || _pressed)
+            // Resolve the same theme palette the transcript's Retry button paints with, so the two
+            // buttons stay in step across light/dark theme switches.
+            ThemeColors tc;
+            try
             {
-                int shade = _pressed ? 210 : 230;
-                using (SolidBrush sb = new SolidBrush(Color.FromArgb(shade, shade, shade)))
-                    g.FillRectangle(sb, r);
-                using (Pen hp = new Pen(HoverBorder))
-                    g.DrawRectangle(hp, r);
+                string th = AppSettings.GetString("theme");
+                bool dark = !string.IsNullOrEmpty(th) &&
+                    th.Trim().Equals("dark", StringComparison.OrdinalIgnoreCase);
+                tc = ThemeService.GetColors(dark);
             }
-            else
-            {
-                // Thin dark-grey resting border.
-                using (Pen rp = new Pen(RestBorder))
-                    g.DrawRectangle(rp, r);
-            }
+            catch { tc = ThemeService.GetColors(false); }
 
-            // Centered filled square (the "stop" glyph), in the tab buttons' glyph colour.
-            int side = Math.Min(r.Width, r.Height) - 8;
-            if (side < 6) side = 6;
-            int x = r.Left + (r.Width - side) / 2;
-            int y = r.Top + (r.Height - side) / 2;
-            using (SolidBrush gb = new SolidBrush(GlyphColor))
-                g.FillRectangle(gb, new Rectangle(x, y, side, side));
+            Rectangle bounds = new Rectangle(0, 0, this.Width, this.Height);
+            Rectangle border = new Rectangle(0, 0, this.Width - 1, this.Height - 1);
+
+            Color fill = _pressed ? tc.CopyPressed : (_hover ? tc.CopyHover : tc.CodeBack);
+            using (SolidBrush sb = new SolidBrush(fill))
+                g.FillRectangle(sb, bounds);
+            using (Pen pen = new Pen(tc.CodeBorder))
+                g.DrawRectangle(pen, border);
+
+            TextRenderer.DrawText(g, this.Text, this.Font, bounds, SystemColors.ControlText,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter |
+                TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
         }
     }
 }

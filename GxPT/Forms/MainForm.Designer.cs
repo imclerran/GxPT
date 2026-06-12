@@ -586,7 +586,9 @@
             //
             // tsiStopGen
             //
-            this.tsiStopGen.Margin = new System.Windows.Forms.Padding(2, 3, 0, 3);
+            // Top/bottom margins match tspGenProgress's so the button's 15px height lines up with
+            // the bar exactly.
+            this.tsiStopGen.Margin = new System.Windows.Forms.Padding(2, 4, 0, 3);
             this.tsiStopGen.Name = "tsiStopGen";
             this.tsiStopGen.ToolTipText = "Stop generating";
             this.tsiStopGen.Visible = false;
