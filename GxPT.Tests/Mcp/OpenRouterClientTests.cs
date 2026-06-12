@@ -291,6 +291,36 @@ namespace GxPT.Tests.Mcp
             Assert.Null(OpenRouterClient.ExtractGenerationStats(null));
         }
 
+        // ---- log truncation: the messages array collapses to a single omission marker ----
+
+        [Fact]
+        public void TruncateMessagesForLog_replaces_messages_with_count_marker()
+        {
+            var body = OpenRouterClient.BuildRequestBody("m", new List<ChatMessage>
+            {
+                new ChatMessage("user", "first"),
+                new ChatMessage("assistant", "second"),
+                new ChatMessage("user", "last"),
+            }, null, new ClientProperties());
+
+            var logged = JObject.Parse(OpenRouterClient.TruncateMessagesForLog(body));
+            var msgs = (JArray)logged["messages"];
+
+            // 4 originals (emoji system message + 3) collapse to the marker alone
+            Assert.Equal(1, msgs.Count);
+            Assert.Equal("... 4 message(s) omitted ...", (string)msgs[0]);
+
+            // everything outside messages is untouched
+            Assert.Equal("m", (string)logged["model"]);
+        }
+
+        [Fact]
+        public void TruncateMessagesForLog_leaves_bad_json_alone()
+        {
+            Assert.Equal("not json", OpenRouterClient.TruncateMessagesForLog("not json"));
+            Assert.Null(OpenRouterClient.TruncateMessagesForLog(null));
+        }
+
         // ---- streaming chunk parsing under Newtonsoft ----
 
         [Fact]
