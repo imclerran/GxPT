@@ -969,6 +969,10 @@ namespace GxPT
             // to is gone. The flag also keeps later tab-switch syncs from re-showing it.
             ctx.SendDetached = ctx.IsSending;
             SyncGenerationIndicatorFromActiveTab();
+            // Usage status bar (context / cost / savings): recycling reuses the same selected tab, so
+            // no tab-switch fires to refresh it - without this the bar keeps showing the closed
+            // conversation's totals. The fresh conversation's totals are zero, so the bar clears.
+            SyncUsageStatusFromActiveTab();
             // A tool-approval / continuation prompt may already be showing for the closed
             // conversation's now-detached turn: resolve it as Deny/Stop so the blocked worker is
             // released and the turn wraps up and saves. (Prompts the turn raises AFTER detaching are
