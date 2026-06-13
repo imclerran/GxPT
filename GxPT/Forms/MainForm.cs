@@ -994,9 +994,9 @@ namespace GxPT
                 ctx.Conversation.WorkingDir = dir;
                 ctx.Conversation.WorkspaceStripDismissed = false;
             }
-            PersistWorkingDir(ctx);
+            PersistWorkingDir(ctx); // holds the folder in memory; a blank tab isn't written until first send
             // (The tab is already registered in the open-by-id dedup map from when its conversation was
-            // assigned - see TabManager.WireConversationTracking - and it persists under that same id.)
+            // assigned - see TabManager.WireConversationTracking - under the id it will save with.)
             ApplyLoadedWorkingDir(ctx); // shows the workspace strip + binds MCP; also re-adds to recents
             try { SelectTab(ctx.Page); } catch { }
         }
@@ -1024,8 +1024,18 @@ namespace GxPT
         private void PersistWorkingDir(TabManager.ChatTabContext ctx)
         {
             if (ctx == null || ctx.Conversation == null) return;
+            // Always hold the folder in memory; the first user send persists the conversation (with this
+            // folder) like any other blank tab.
             ctx.Conversation.WorkingDir = ctx.WorkingDir;
-            try { if (!ctx.NoSaveUntilUserSend) ConversationStore.Save(ctx.Conversation); }
+            // Don't write a blank, never-sent conversation to disk just because a workspace folder was
+            // set - that littered the history sidebar with empty "New Conversation" entries (and created
+            // invisible empty files on the strip path, which doesn't refresh the sidebar). A conversation
+            // that already has messages still persists the folder change immediately.
+            try
+            {
+                if (!ctx.NoSaveUntilUserSend && ctx.Conversation.History.Count > 0)
+                    ConversationStore.Save(ctx.Conversation);
+            }
             catch { }
         }
 
