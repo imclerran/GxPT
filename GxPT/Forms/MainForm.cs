@@ -810,7 +810,12 @@ namespace GxPT
                 if (this.tspGenProgress != null)
                 {
                     // Run the marquee only while shown (no point animating an invisible bar).
-                    this.tspGenProgress.MarqueeAnimationSpeed = busy ? 30 : 0;
+                    // MarqueeAnimationSpeed is the native PBM_SETMARQUEE interval (ms between
+                    // updates), which XP/Luna honors literally while Vista+/Aero drives the
+                    // animation from the theme engine and effectively ignores it. A short interval
+                    // therefore scrolls far too fast on XP; 120ms reads like the Win7 pace there and
+                    // leaves the (ignored) Aero animation unchanged.
+                    this.tspGenProgress.MarqueeAnimationSpeed = busy ? 120 : 0;
                     this.tspGenProgress.Visible = busy;
                 }
                 if (this.tsiStopGen != null) this.tsiStopGen.Visible = busy;
