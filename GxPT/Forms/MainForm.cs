@@ -4680,8 +4680,11 @@ namespace GxPT
             catch { }
 
             // The tab was selected before the conversation was assigned, so re-sync the per-tab ZDR
-            // checkbox now that we know this conversation's ZDR/latched state.
+            // checkbox and the usage status bar (context / cost / savings) now that we know this
+            // conversation - the OnTabSelected that fired on creation saw the empty placeholder, so
+            // without this the bar stays empty until the next tab switch.
             SyncZdrCheckboxFromActiveTab();
+            SyncUsageStatusFromActiveTab();
 
             // Focus input when a new tab opens from history
             if (_inputManager != null) _inputManager.FocusInputSoon();
@@ -4752,8 +4755,10 @@ namespace GxPT
                 catch { }
 
                 // Reusing the active blank tab won't re-fire OnTabSelected, so sync the ZDR checkbox
-                // to the loaded conversation's state explicitly.
+                // and the usage status bar (context / cost / savings) to the loaded conversation's
+                // state explicitly - otherwise the bar stays empty until the next tab switch.
                 SyncZdrCheckboxFromActiveTab();
+                SyncUsageStatusFromActiveTab();
 
                 if (_inputManager != null) _inputManager.FocusInputSoon();
                 if (_sidebarManager != null) _sidebarManager.RefreshSidebarList();
