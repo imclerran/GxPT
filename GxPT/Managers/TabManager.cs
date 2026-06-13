@@ -35,7 +35,26 @@ namespace GxPT
         {
             public TabPage Page;
             public ChatTranscriptControl Transcript;
-            public Conversation Conversation;
+            // Backing field for Conversation. Assignment goes through the property so that putting a
+            // conversation on a tab is the SAME action as registering it in the sidebar's open-by-id
+            // dedup map - no open-path can do one without the other. See ConversationAssigned.
+            private Conversation _conversation;
+            public Conversation Conversation
+            {
+                get { return _conversation; }
+                set
+                {
+                    _conversation = value;
+                    Action<ChatTabContext> h = ConversationAssigned;
+                    if (h != null) h(this);
+                }
+            }
+            // Fired whenever this tab's Conversation reference is (re)assigned. TabManager wires this
+            // (WireConversationTracking) to the host's open-by-id tracking, so every current and future
+            // way of opening a tab keeps the dedup map in sync just by assigning the property. Set after
+            // construction, so the object-initializer assignment in the creators does not fire it -
+            // those assign the conversation explicitly once the callback is wired.
+            internal Action<ChatTabContext> ConversationAssigned;
             public bool IsSending;
             public string SelectedModel;
             public bool NoSaveUntilUserSend;
@@ -162,6 +181,16 @@ namespace GxPT
             catch { }
         }
 
+        // Wire a context so any (re)assignment of its Conversation keeps the host's sidebar open-by-id
+        // dedup map in sync. This is the single chokepoint: every path that puts a conversation on a tab
+        // does so through the Conversation property, so none can open a tab without registering it - the
+        // class of bug where a new open-path silently forks a duplicate becomes structurally impossible.
+        private void WireConversationTracking(ChatTabContext ctx)
+        {
+            if (ctx == null) return;
+            ctx.ConversationAssigned = delegate(ChatTabContext c) { _mainForm.OnTabConversationAssigned(c); };
+        }
+
         public ChatTabContext SetupInitialConversationTab(TabPage initialTab, ChatTranscriptControl initialTranscript)
         {
             try
@@ -176,12 +205,16 @@ namespace GxPT
                 {
                     Page = initialTab,
                     Transcript = initialTranscript,
-                    Conversation = new Conversation(_mainForm.GetClient()),
                     IsSending = false,
                     SelectedModel = _mainForm.GetConfiguredDefaultModel()
                 };
-                ctx.Conversation.SelectedModel = ctx.SelectedModel;
-                _mainForm.EnsureConversationId(ctx.Conversation);
+                WireConversationTracking(ctx);
+                // Ensure the id before assigning, so the property setter registers a real id in the
+                // dedup map (a brand-new Conversation has no id until EnsureConversationId runs).
+                var initialConvo = new Conversation(_mainForm.GetClient());
+                initialConvo.SelectedModel = ctx.SelectedModel;
+                _mainForm.EnsureConversationId(initialConvo);
+                ctx.Conversation = initialConvo;
                 // Wire edit-request, retry and name-generated handlers for this tab
                 HookEditRequest(ctx);
                 HookRetryRequest(ctx);
@@ -218,12 +251,16 @@ namespace GxPT
             {
                 Page = page,
                 Transcript = transcript,
-                Conversation = new Conversation(_mainForm.GetClient()),
                 IsSending = false,
                 SelectedModel = _mainForm.GetConfiguredDefaultModel()
             };
-            ctx.Conversation.SelectedModel = ctx.SelectedModel;
-            _mainForm.EnsureConversationId(ctx.Conversation);
+            WireConversationTracking(ctx);
+            // Ensure the id before assigning, so the property setter registers a real id in the dedup
+            // map (a brand-new Conversation has no id until EnsureConversationId runs).
+            var convo = new Conversation(_mainForm.GetClient());
+            convo.SelectedModel = ctx.SelectedModel;
+            _mainForm.EnsureConversationId(convo);
+            ctx.Conversation = convo;
 
             // Wire edit-request, retry and name-generated handlers for this tab
             HookEditRequest(ctx);
@@ -424,7 +461,11 @@ namespace GxPT
                         try { _mainForm.UntrackOpenConversation(page); }
                         catch { }
                         if (ctx.Transcript != null) ctx.Transcript.ClearMessages();
-                        ctx.Conversation = new Conversation(_mainForm.GetClient());
+                        // Fresh blank conversation for the recycled tab; ensure its id before assigning
+                        // so the property setter re-registers this page under the new id.
+                        var recycled = new Conversation(_mainForm.GetClient());
+                        _mainForm.EnsureConversationId(recycled);
+                        ctx.Conversation = recycled;
                         // Reset model to default on a fresh blank tab
                         try
                         {

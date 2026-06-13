@@ -995,9 +995,8 @@ namespace GxPT
                 ctx.Conversation.WorkspaceStripDismissed = false;
             }
             PersistWorkingDir(ctx);
-            // PersistWorkingDir just wrote this conversation to disk, so it now shows in the sidebar:
-            // track it so re-opening it from there focuses this tab instead of forking a duplicate.
-            TrackOpenConversationForTab(ctx);
+            // (The tab is already registered in the open-by-id dedup map from when its conversation was
+            // assigned - see TabManager.WireConversationTracking - and it persists under that same id.)
             ApplyLoadedWorkingDir(ctx); // shows the workspace strip + binds MCP; also re-adds to recents
             try { SelectTab(ctx.Page); } catch { }
         }
@@ -1030,17 +1029,28 @@ namespace GxPT
             catch { }
         }
 
-        // Register a tab's conversation in the sidebar's open-by-id map once it has a file on disk,
-        // so double-clicking its sidebar entry focuses THIS tab instead of loading a duplicate copy.
-        // Conversations created in-app (a new tab's first send, /new, opening a recent workspace) were
-        // previously tracked only when opened FROM the sidebar, so they slipped the dedup: a second
-        // copy would open in a blank tab, and the two same-id tabs would then clobber each other's
-        // saves (usage/cost included). Idempotent; skips conversations not yet persisted (no sidebar
-        // entry exists to dedup against) and the initial/help tabs already tracked elsewhere.
+        // Single point that registers a tab's conversation in the sidebar's open-by-id dedup map, so
+        // re-opening that conversation focuses THIS tab instead of loading a duplicate copy. Driven by
+        // ChatTabContext.ConversationAssigned (wired in TabManager.WireConversationTracking), so it runs
+        // for EVERY way a conversation is put on a tab - new tab, /new, recycle, opening from the
+        // sidebar/history, help, or opening a recent workspace - and any future path gets it for free.
+        // Tracking an id before its file exists is harmless: the dedup only ever looks up ids that have a
+        // saved sidebar entry, and a brand-new conversation keeps the same id through to its first save.
+        // Idempotent (overwrites the id->page entry). The id is ensured at creation/load before the
+        // assignment fires, so it is non-empty here in practice; guarded anyway.
+        internal void OnTabConversationAssigned(TabManager.ChatTabContext ctx)
+        {
+            if (ctx == null) return;
+            // Atomic re-point: drop whatever id this page mapped to before (e.g. the blank conversation
+            // a reused tab started with) and register the new one, so the page maps to exactly its
+            // current conversation and no stale entries accumulate.
+            UntrackOpenConversation(ctx.Page);
+            TrackOpenConversationForTab(ctx);
+        }
+
         private void TrackOpenConversationForTab(TabManager.ChatTabContext ctx)
         {
             if (_sidebarManager == null || ctx == null || ctx.Conversation == null) return;
-            if (ctx.NoSaveUntilUserSend) return;
             if (string.IsNullOrEmpty(ctx.Conversation.Id)) return;
             _sidebarManager.TrackOpenConversation(ctx.Conversation.Id, ctx.Page);
         }
@@ -2208,10 +2218,8 @@ namespace GxPT
                     ctx.NoSaveUntilUserSend = false;
                 }
                 ConversationStore.Save(ctx.Conversation); // save when a new user message starts/continues a convo
-                // Now that this conversation has a file (and a sidebar entry), make sure the sidebar's
-                // open-by-id dedup knows it's open here - new-tab/in-app conversations were never tracked,
-                // so re-opening one from the sidebar would fork it into a duplicate tab.
-                TrackOpenConversationForTab(ctx);
+                // (No explicit open-by-id tracking here: the tab was registered when its conversation was
+                // assigned - see TabManager.WireConversationTracking - under the same id it saves with.)
                 Logger.Log("Send", "User message added. HistoryCount=" + ctx.Conversation.History.Count);
                 if (_inputManager != null)
                 {
