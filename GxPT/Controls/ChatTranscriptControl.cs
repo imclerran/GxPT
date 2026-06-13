@@ -2556,12 +2556,17 @@ namespace GxPT
                         g.DrawRectangle(pen, bg);
                     }
 
-                    // Skip the segments we just processed
+                    // Advance past the entire run we just consumed. We must add the
+                    // full run width (endX - startX), not just the last segment's
+                    // width: otherwise currentX is left short by the rest of the run
+                    // and any later inline-code background on the same line is shifted
+                    // left, overlapping preceding text and ending mid-word.
+                    currentX = endX;
                     i = j - 1; // -1 because the loop will increment
+                    continue;
                 }
 
-                if (i < lineEnd)
-                    currentX += segments[i].Rect.Width;
+                currentX += seg.Rect.Width;
             }
         }
 
