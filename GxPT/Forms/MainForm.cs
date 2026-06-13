@@ -354,10 +354,15 @@ namespace GxPT
                 {
                 // We'll reuse the initial blank tab for the first item if suitable
                 bool firstUsed = false;
+                // A conversation must not open into two tabs: duplicates fork the in-memory copy and
+                // their saves clobber each other (a prior bug could already have written the same id
+                // twice into session.json), so skip ids we've already opened this restore.
+                var seenIds = new HashSet<string>(StringComparer.Ordinal);
                 for (int i = 0; i < ids.Count; i++)
                 {
                     string id = ids[i];
                     if (string.IsNullOrEmpty(id)) continue;
+                    if (!seenIds.Add(id)) continue;
                     try
                     {
                         if (IsHelpConversationId(id))
@@ -990,6 +995,9 @@ namespace GxPT
                 ctx.Conversation.WorkspaceStripDismissed = false;
             }
             PersistWorkingDir(ctx);
+            // PersistWorkingDir just wrote this conversation to disk, so it now shows in the sidebar:
+            // track it so re-opening it from there focuses this tab instead of forking a duplicate.
+            TrackOpenConversationForTab(ctx);
             ApplyLoadedWorkingDir(ctx); // shows the workspace strip + binds MCP; also re-adds to recents
             try { SelectTab(ctx.Page); } catch { }
         }
@@ -1020,6 +1028,21 @@ namespace GxPT
             ctx.Conversation.WorkingDir = ctx.WorkingDir;
             try { if (!ctx.NoSaveUntilUserSend) ConversationStore.Save(ctx.Conversation); }
             catch { }
+        }
+
+        // Register a tab's conversation in the sidebar's open-by-id map once it has a file on disk,
+        // so double-clicking its sidebar entry focuses THIS tab instead of loading a duplicate copy.
+        // Conversations created in-app (a new tab's first send, /new, opening a recent workspace) were
+        // previously tracked only when opened FROM the sidebar, so they slipped the dedup: a second
+        // copy would open in a blank tab, and the two same-id tabs would then clobber each other's
+        // saves (usage/cost included). Idempotent; skips conversations not yet persisted (no sidebar
+        // entry exists to dedup against) and the initial/help tabs already tracked elsewhere.
+        private void TrackOpenConversationForTab(TabManager.ChatTabContext ctx)
+        {
+            if (_sidebarManager == null || ctx == null || ctx.Conversation == null) return;
+            if (ctx.NoSaveUntilUserSend) return;
+            if (string.IsNullOrEmpty(ctx.Conversation.Id)) return;
+            _sidebarManager.TrackOpenConversation(ctx.Conversation.Id, ctx.Page);
         }
 
         private void OnTabsChanged()
@@ -2185,6 +2208,10 @@ namespace GxPT
                     ctx.NoSaveUntilUserSend = false;
                 }
                 ConversationStore.Save(ctx.Conversation); // save when a new user message starts/continues a convo
+                // Now that this conversation has a file (and a sidebar entry), make sure the sidebar's
+                // open-by-id dedup knows it's open here - new-tab/in-app conversations were never tracked,
+                // so re-opening one from the sidebar would fork it into a duplicate tab.
+                TrackOpenConversationForTab(ctx);
                 Logger.Log("Send", "User message added. HistoryCount=" + ctx.Conversation.History.Count);
                 if (_inputManager != null)
                 {
