@@ -91,7 +91,6 @@
             this.tslSaved = new System.Windows.Forms.ToolStripStatusLabel();
             this.tslSavedValue = new System.Windows.Forms.ToolStripStatusLabel();
             this.msMain.SuspendLayout();
-            this.ssMain.SuspendLayout();
             this.pnlInput.SuspendLayout();
             this.pnlInputRight.SuspendLayout();
             this.pnlButtonsFill.SuspendLayout();
@@ -104,6 +103,7 @@
             this.tabPage1.SuspendLayout();
             this.splitContainer1.Panel2.SuspendLayout();
             this.splitContainer1.SuspendLayout();
+            this.ssMain.SuspendLayout();
             this.SuspendLayout();
             // 
             // msMain
@@ -266,16 +266,16 @@
             this.miDarkMode.Size = new System.Drawing.Size(228, 22);
             this.miDarkMode.Text = "&Dark Mode";
             this.miDarkMode.Click += new System.EventHandler(this.miDarkMode_Click);
-            //
+            // 
             // miStatusBar
-            //
+            // 
             this.miStatusBar.Checked = true;
             this.miStatusBar.CheckState = System.Windows.Forms.CheckState.Checked;
             this.miStatusBar.Name = "miStatusBar";
             this.miStatusBar.Size = new System.Drawing.Size(228, 22);
             this.miStatusBar.Text = "&Status Bar";
             this.miStatusBar.Click += new System.EventHandler(this.miStatusBar_Click);
-            //
+            // 
             // miHelp
             // 
             this.miHelp.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
@@ -410,9 +410,6 @@
             this.cmbModel.DrawMode = System.Windows.Forms.DrawMode.OwnerDrawFixed;
             this.cmbModel.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cmbModel.FormattingEnabled = true;
-            // Items are populated at runtime by MainForm.PopulateModelsFromSettings (from the user's
-            // settings, or ModelDefaults on a fresh install) - not hardcoded here, so the default
-            // catalog lives in one place.
             this.cmbModel.Location = new System.Drawing.Point(0, 0);
             this.cmbModel.Margin = new System.Windows.Forms.Padding(0);
             this.cmbModel.Name = "cmbModel";
@@ -439,7 +436,7 @@
             this.pnlBottom.Controls.Add(this.pnlAttachmentsBanner);
             this.pnlBottom.Controls.Add(this.pnlInput);
             this.pnlBottom.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.pnlBottom.Location = new System.Drawing.Point(0, 646);
+            this.pnlBottom.Location = new System.Drawing.Point(0, 624);
             this.pnlBottom.Margin = new System.Windows.Forms.Padding(0, 3, 3, 3);
             this.pnlBottom.Name = "pnlBottom";
             this.pnlBottom.Size = new System.Drawing.Size(885, 96);
@@ -504,7 +501,7 @@
             this.tabControl1.Location = new System.Drawing.Point(0, 0);
             this.tabControl1.Name = "tabControl1";
             this.tabControl1.SelectedIndex = 0;
-            this.tabControl1.Size = new System.Drawing.Size(885, 646);
+            this.tabControl1.Size = new System.Drawing.Size(885, 624);
             this.tabControl1.TabIndex = 4;
             // 
             // tabPage1
@@ -512,7 +509,7 @@
             this.tabPage1.Controls.Add(this.chatTranscript);
             this.tabPage1.Location = new System.Drawing.Point(4, 22);
             this.tabPage1.Name = "tabPage1";
-            this.tabPage1.Size = new System.Drawing.Size(877, 620);
+            this.tabPage1.Size = new System.Drawing.Size(877, 598);
             this.tabPage1.TabIndex = 0;
             this.tabPage1.Text = "New Conversation";
             this.tabPage1.UseVisualStyleBackColor = true;
@@ -526,7 +523,7 @@
             this.chatTranscript.Location = new System.Drawing.Point(0, 0);
             this.chatTranscript.Margin = new System.Windows.Forms.Padding(0);
             this.chatTranscript.Name = "chatTranscript";
-            this.chatTranscript.Size = new System.Drawing.Size(877, 620);
+            this.chatTranscript.Size = new System.Drawing.Size(877, 598);
             this.chatTranscript.TabIndex = 0;
             // 
             // splitContainer1
@@ -542,13 +539,13 @@
             // 
             this.splitContainer1.Panel2.Controls.Add(this.tabControl1);
             this.splitContainer1.Panel2.Controls.Add(this.pnlBottom);
-            this.splitContainer1.Size = new System.Drawing.Size(892, 742);
+            this.splitContainer1.Size = new System.Drawing.Size(892, 720);
             this.splitContainer1.SplitterDistance = 6;
             this.splitContainer1.SplitterWidth = 1;
             this.splitContainer1.TabIndex = 1;
-            //
+            // 
             // ssMain
-            //
+            // 
             this.ssMain.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.tspGenProgress,
             this.tsiStopGen,
@@ -570,120 +567,112 @@
             this.ssMain.Size = new System.Drawing.Size(892, 22);
             this.ssMain.SizingGrip = false;
             this.ssMain.TabIndex = 3;
-            //
+            // 
             // tspGenProgress
-            //
-            // Shown (with tsiStopGen) only while the active tab has a request in flight; MainForm
-            // toggles them and (re)starts the marquee. Visual styles (enabled in Program.cs) are
-            // required for the marquee animation; without them it renders static.
+            // 
             this.tspGenProgress.AutoSize = false;
-            this.tspGenProgress.MarqueeAnimationSpeed = 0;
             this.tspGenProgress.Margin = new System.Windows.Forms.Padding(5, 4, 0, 3);
+            this.tspGenProgress.MarqueeAnimationSpeed = 0;
             this.tspGenProgress.Name = "tspGenProgress";
             this.tspGenProgress.Size = new System.Drawing.Size(120, 15);
             this.tspGenProgress.Style = System.Windows.Forms.ProgressBarStyle.Marquee;
             this.tspGenProgress.Visible = false;
-            //
+            // 
             // tsiStopGen
-            //
-            // Top/bottom margins match tspGenProgress's so the button's 15px height lines up with
-            // the bar exactly.
+            // 
+            this.tsiStopGen.AutoSize = false;
             this.tsiStopGen.Margin = new System.Windows.Forms.Padding(2, 4, 0, 3);
             this.tsiStopGen.Name = "tsiStopGen";
+            this.tsiStopGen.Size = new System.Drawing.Size(47, 15);
+            this.tsiStopGen.Text = "Stop";
             this.tsiStopGen.ToolTipText = "Stop generating";
             this.tsiStopGen.Visible = false;
-            //
+            // 
             // tslTools
-            //
-            // The idle face of the left slot (with tslSkills): the active conversation's tool/skill
-            // counts, swapped out for the progress bar + stop button while a request is in flight.
-            // Caption/value pairs mirror the usage panes on the right; texts are set by
-            // MainForm.UpdateToolSkillCounts.
+            // 
             this.tslTools.Margin = new System.Windows.Forms.Padding(5, 3, 0, 2);
             this.tslTools.Name = "tslTools";
             this.tslTools.Size = new System.Drawing.Size(0, 17);
             this.tslTools.ToolTipText = "MCP tools available to this conversation";
-            //
+            // 
             // tslToolsValue
-            //
+            // 
             this.tslToolsValue.Margin = new System.Windows.Forms.Padding(-2, 3, 0, 2);
             this.tslToolsValue.Name = "tslToolsValue";
             this.tslToolsValue.Size = new System.Drawing.Size(0, 17);
             this.tslToolsValue.ToolTipText = "MCP tools available to this conversation";
-            //
+            // 
             // tslSkills
-            //
+            // 
             this.tslSkills.BorderSides = System.Windows.Forms.ToolStripStatusLabelBorderSides.Left;
             this.tslSkills.Margin = new System.Windows.Forms.Padding(5, 3, 0, 2);
             this.tslSkills.Name = "tslSkills";
             this.tslSkills.Padding = new System.Windows.Forms.Padding(5, 0, 0, 0);
-            this.tslSkills.Size = new System.Drawing.Size(0, 17);
+            this.tslSkills.Size = new System.Drawing.Size(9, 17);
             this.tslSkills.ToolTipText = "Skills enabled for this conversation";
-            //
+            // 
             // tslSkillsValue
-            //
+            // 
             this.tslSkillsValue.Margin = new System.Windows.Forms.Padding(-2, 3, 0, 2);
             this.tslSkillsValue.Name = "tslSkillsValue";
             this.tslSkillsValue.Size = new System.Drawing.Size(0, 17);
             this.tslSkillsValue.ToolTipText = "Skills enabled for this conversation";
-            //
+            // 
             // tslSpring
-            //
+            // 
             this.tslSpring.Name = "tslSpring";
-            this.tslSpring.Size = new System.Drawing.Size(700, 17);
+            this.tslSpring.Size = new System.Drawing.Size(830, 17);
             this.tslSpring.Spring = true;
-            //
+            // 
             // tslContext
-            //
+            // 
             this.tslContext.Name = "tslContext";
             this.tslContext.Size = new System.Drawing.Size(0, 17);
-            //
+            // 
             // tspContextMeter
-            //
-            // Right margin offsets tslContextValue's -2 (which tucks the value against the
-            // caption when the meter is hidden) so a 3px gap survives when the meter shows.
+            // 
+            this.tspContextMeter.AutoSize = false;
             this.tspContextMeter.Margin = new System.Windows.Forms.Padding(5, 4, 5, 3);
             this.tspContextMeter.Name = "tspContextMeter";
-            // Width is dictated by the item's block geometry (ContextMeterItem.MeterWidth).
             this.tspContextMeter.Size = new System.Drawing.Size(81, 15);
             this.tspContextMeter.Visible = false;
-            //
+            // 
             // tslContextValue
-            //
+            // 
             this.tslContextValue.Margin = new System.Windows.Forms.Padding(-2, 3, 0, 2);
             this.tslContextValue.Name = "tslContextValue";
             this.tslContextValue.Size = new System.Drawing.Size(0, 17);
-            //
+            // 
             // tslCost
-            //
+            // 
             this.tslCost.BorderSides = System.Windows.Forms.ToolStripStatusLabelBorderSides.Left;
             this.tslCost.Margin = new System.Windows.Forms.Padding(5, 3, 0, 2);
             this.tslCost.Name = "tslCost";
             this.tslCost.Padding = new System.Windows.Forms.Padding(5, 0, 0, 0);
-            this.tslCost.Size = new System.Drawing.Size(0, 17);
-            //
+            this.tslCost.Size = new System.Drawing.Size(9, 17);
+            // 
             // tslCostValue
-            //
+            // 
             this.tslCostValue.Margin = new System.Windows.Forms.Padding(-2, 3, 0, 2);
             this.tslCostValue.Name = "tslCostValue";
             this.tslCostValue.Size = new System.Drawing.Size(0, 17);
-            //
+            // 
             // tslSaved
-            //
+            // 
             this.tslSaved.BorderSides = System.Windows.Forms.ToolStripStatusLabelBorderSides.Left;
             this.tslSaved.Margin = new System.Windows.Forms.Padding(5, 3, 0, 2);
             this.tslSaved.Name = "tslSaved";
             this.tslSaved.Padding = new System.Windows.Forms.Padding(5, 0, 0, 0);
-            this.tslSaved.Size = new System.Drawing.Size(0, 17);
-            //
+            this.tslSaved.Size = new System.Drawing.Size(9, 17);
+            // 
             // tslSavedValue
-            //
+            // 
             this.tslSavedValue.Margin = new System.Windows.Forms.Padding(-2, 3, 0, 2);
             this.tslSavedValue.Name = "tslSavedValue";
             this.tslSavedValue.Size = new System.Drawing.Size(0, 17);
-            //
+            // 
             // MainForm
-            //
+            // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(892, 766);
@@ -697,8 +686,6 @@
             this.Text = "GxPT - New Conversation";
             this.msMain.ResumeLayout(false);
             this.msMain.PerformLayout();
-            this.ssMain.ResumeLayout(false);
-            this.ssMain.PerformLayout();
             this.pnlInput.ResumeLayout(false);
             this.pnlInput.PerformLayout();
             this.pnlInputRight.ResumeLayout(false);
@@ -716,6 +703,8 @@
             this.splitContainer1.Panel2.ResumeLayout(false);
             this.splitContainer1.Panel2.PerformLayout();
             this.splitContainer1.ResumeLayout(false);
+            this.ssMain.ResumeLayout(false);
+            this.ssMain.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
 

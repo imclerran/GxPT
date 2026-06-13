@@ -810,7 +810,7 @@ namespace GxPT
                 if (this.tspGenProgress != null)
                 {
                     // Run the marquee only while shown (no point animating an invisible bar).
-                    this.tspGenProgress.MarqueeAnimationSpeed = busy ? 30 : 0;
+                    this.tspGenProgress.MarqueeAnimationSpeed = busy ? 120 : 0;
                     this.tspGenProgress.Visible = busy;
                 }
                 if (this.tsiStopGen != null) this.tsiStopGen.Visible = busy;
