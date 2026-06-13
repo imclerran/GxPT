@@ -354,10 +354,15 @@ namespace GxPT
                 {
                 // We'll reuse the initial blank tab for the first item if suitable
                 bool firstUsed = false;
+                // A conversation must not open into two tabs: duplicates fork the in-memory copy and
+                // their saves clobber each other (a prior bug could already have written the same id
+                // twice into session.json), so skip ids we've already opened this restore.
+                var seenIds = new HashSet<string>(StringComparer.Ordinal);
                 for (int i = 0; i < ids.Count; i++)
                 {
                     string id = ids[i];
                     if (string.IsNullOrEmpty(id)) continue;
+                    if (!seenIds.Add(id)) continue;
                     try
                     {
                         if (IsHelpConversationId(id))
@@ -964,6 +969,10 @@ namespace GxPT
             // to is gone. The flag also keeps later tab-switch syncs from re-showing it.
             ctx.SendDetached = ctx.IsSending;
             SyncGenerationIndicatorFromActiveTab();
+            // Usage status bar (context / cost / savings): recycling reuses the same selected tab, so
+            // no tab-switch fires to refresh it - without this the bar keeps showing the closed
+            // conversation's totals. The fresh conversation's totals are zero, so the bar clears.
+            SyncUsageStatusFromActiveTab();
             // A tool-approval / continuation prompt may already be showing for the closed
             // conversation's now-detached turn: resolve it as Deny/Stop so the blocked worker is
             // released and the turn wraps up and saves. (Prompts the turn raises AFTER detaching are
@@ -989,7 +998,9 @@ namespace GxPT
                 ctx.Conversation.WorkingDir = dir;
                 ctx.Conversation.WorkspaceStripDismissed = false;
             }
-            PersistWorkingDir(ctx);
+            PersistWorkingDir(ctx); // holds the folder in memory; a blank tab isn't written until first send
+            // (The tab is already registered in the open-by-id dedup map from when its conversation was
+            // assigned - see TabManager.WireConversationTracking - under the id it will save with.)
             ApplyLoadedWorkingDir(ctx); // shows the workspace strip + binds MCP; also re-adds to recents
             try { SelectTab(ctx.Page); } catch { }
         }
@@ -1017,9 +1028,45 @@ namespace GxPT
         private void PersistWorkingDir(TabManager.ChatTabContext ctx)
         {
             if (ctx == null || ctx.Conversation == null) return;
+            // Always hold the folder in memory; the first user send persists the conversation (with this
+            // folder) like any other blank tab.
             ctx.Conversation.WorkingDir = ctx.WorkingDir;
-            try { if (!ctx.NoSaveUntilUserSend) ConversationStore.Save(ctx.Conversation); }
+            // Don't write a blank, never-sent conversation to disk just because a workspace folder was
+            // set - that littered the history sidebar with empty "New Conversation" entries (and created
+            // invisible empty files on the strip path, which doesn't refresh the sidebar). A conversation
+            // that already has messages still persists the folder change immediately.
+            try
+            {
+                if (!ctx.NoSaveUntilUserSend && ctx.Conversation.History.Count > 0)
+                    ConversationStore.Save(ctx.Conversation);
+            }
             catch { }
+        }
+
+        // Single point that registers a tab's conversation in the sidebar's open-by-id dedup map, so
+        // re-opening that conversation focuses THIS tab instead of loading a duplicate copy. Driven by
+        // ChatTabContext.ConversationAssigned (wired in TabManager.WireConversationTracking), so it runs
+        // for EVERY way a conversation is put on a tab - new tab, /new, recycle, opening from the
+        // sidebar/history, help, or opening a recent workspace - and any future path gets it for free.
+        // Tracking an id before its file exists is harmless: the dedup only ever looks up ids that have a
+        // saved sidebar entry, and a brand-new conversation keeps the same id through to its first save.
+        // Idempotent (overwrites the id->page entry). The id is ensured at creation/load before the
+        // assignment fires, so it is non-empty here in practice; guarded anyway.
+        internal void OnTabConversationAssigned(TabManager.ChatTabContext ctx)
+        {
+            if (ctx == null) return;
+            // Atomic re-point: drop whatever id this page mapped to before (e.g. the blank conversation
+            // a reused tab started with) and register the new one, so the page maps to exactly its
+            // current conversation and no stale entries accumulate.
+            UntrackOpenConversation(ctx.Page);
+            TrackOpenConversationForTab(ctx);
+        }
+
+        private void TrackOpenConversationForTab(TabManager.ChatTabContext ctx)
+        {
+            if (_sidebarManager == null || ctx == null || ctx.Conversation == null) return;
+            if (string.IsNullOrEmpty(ctx.Conversation.Id)) return;
+            _sidebarManager.TrackOpenConversation(ctx.Conversation.Id, ctx.Page);
         }
 
         private void OnTabsChanged()
@@ -2185,6 +2232,8 @@ namespace GxPT
                     ctx.NoSaveUntilUserSend = false;
                 }
                 ConversationStore.Save(ctx.Conversation); // save when a new user message starts/continues a convo
+                // (No explicit open-by-id tracking here: the tab was registered when its conversation was
+                // assigned - see TabManager.WireConversationTracking - under the same id it saves with.)
                 Logger.Log("Send", "User message added. HistoryCount=" + ctx.Conversation.History.Count);
                 if (_inputManager != null)
                 {
