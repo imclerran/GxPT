@@ -1025,14 +1025,14 @@
         {
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:GxPT"
-        "ProductCode" = "8:{6D7BD0F1-9659-4E19-BE5E-7B443CE7FB82}"
-        "PackageCode" = "8:{668350B5-011F-4B58-AE9A-7BBA76FF4401}"
+        "ProductCode" = "8:{A9E9164F-AB0D-4EDF-A51E-D4FC1C42F031}"
+        "PackageCode" = "8:{4765389D-6248-42DA-A119-1242D5AC961D}"
         "UpgradeCode" = "8:{18C05863-8BD9-4273-B9E8-061F771066DF}"
         "RestartWWWService" = "11:FALSE"
         "RemovePreviousVersions" = "11:TRUE"
         "DetectNewerInstalledVersion" = "11:TRUE"
         "InstallAllUsers" = "11:TRUE"
-        "ProductVersion" = "8:0.19.3"
+        "ProductVersion" = "8:0.19.4"
         "Manufacturer" = "8:IFM Innovations"
         "ARPHELPTELEPHONE" = "8:"
         "ARPHELPLINK" = "8:"
@@ -1125,6 +1125,42 @@
             {
                 "Keys"
                 {
+                    "{60EA8692-D2D5-43EB-80DC-7906BF13D6EF}:_A1B2C3D4E5F60718293A4B5C6D7E8F90"
+                    {
+                    "Name" = "8:GxPT Skill"
+                    "Condition" = "8:"
+                    "AlwaysCreate" = "11:FALSE"
+                    "DeleteAtUninstall" = "11:FALSE"
+                    "Transitive" = "11:FALSE"
+                        "Keys"
+                        {
+                            "{60EA8692-D2D5-43EB-80DC-7906BF13D6EF}:_B2C3D4E5F6071829304A5B6C7D8E9F01"
+                            {
+                            "Name" = "8:DefaultIcon"
+                            "Condition" = "8:"
+                            "AlwaysCreate" = "11:FALSE"
+                            "DeleteAtUninstall" = "11:FALSE"
+                            "Transitive" = "11:FALSE"
+                                "Keys"
+                                {
+                                }
+                                "Values"
+                                {
+                                    "{ADCFDA98-8FDD-45E4-90BC-E3D20B029870}:_C3D4E5F60718293A4B5C6D7E8F901234"
+                                    {
+                                    "Name" = "8:"
+                                    "Condition" = "8:"
+                                    "Transitive" = "11:FALSE"
+                                    "ValueTypes" = "3:1"
+                                    "Value" = "8:[#gxpt-document.ico]"
+                                    }
+                                }
+                            }
+                        }
+                        "Values"
+                        {
+                        }
+                    }
                     "{60EA8692-D2D5-43EB-80DC-7906BF13D6EF}:_C8F3673929CB408CB17B01685CCCFBC1"
                     {
                     "Name" = "8:GxPT Archive"
