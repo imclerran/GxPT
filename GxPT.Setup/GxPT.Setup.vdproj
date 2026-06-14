@@ -1161,6 +1161,42 @@
                         {
                         }
                     }
+                    "{60EA8692-D2D5-43EB-80DC-7906BF13D6EF}:_A1B2C3D4E5F60718293A4B5C6D7E8F90"
+                    {
+                    "Name" = "8:GxPT Skill"
+                    "Condition" = "8:"
+                    "AlwaysCreate" = "11:FALSE"
+                    "DeleteAtUninstall" = "11:FALSE"
+                    "Transitive" = "11:FALSE"
+                        "Keys"
+                        {
+                            "{60EA8692-D2D5-43EB-80DC-7906BF13D6EF}:_B2C3D4E5F6071829304A5B6C7D8E9F01"
+                            {
+                            "Name" = "8:DefaultIcon"
+                            "Condition" = "8:"
+                            "AlwaysCreate" = "11:FALSE"
+                            "DeleteAtUninstall" = "11:FALSE"
+                            "Transitive" = "11:FALSE"
+                                "Keys"
+                                {
+                                }
+                                "Values"
+                                {
+                                    "{ADCFDA98-8FDD-45E4-90BC-E3D20B029870}:_C3D4E5F60718293A4B5C6D7E8F901234"
+                                    {
+                                    "Name" = "8:"
+                                    "Condition" = "8:"
+                                    "Transitive" = "11:FALSE"
+                                    "ValueTypes" = "3:1"
+                                    "Value" = "8:[#gxpt-document.ico]"
+                                    }
+                                }
+                            }
+                        }
+                        "Values"
+                        {
+                        }
+                    }
                 }
             }
             "HKU"
